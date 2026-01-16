@@ -1,0 +1,164 @@
+require('dotenv').config();
+const bcrypt = require('bcryptjs');
+const db = require('../config/database');
+
+async function seed() {
+  const client = await db.getClient();
+
+  try {
+    console.log('Seeding database with test data...\n');
+
+    // Generate password hash for all test users
+    const passwordHash = await bcrypt.hash('password123', 10);
+
+    await client.query('BEGIN');
+
+    // Clear existing data
+    console.log('Clearing existing data...');
+    await client.query(`
+      TRUNCATE attachments, schedule_items, daily_reports, change_orders,
+               submittals, rfis, projects, users RESTART IDENTITY CASCADE
+    `);
+
+    // Insert users
+    console.log('Creating users...');
+    await client.query(`
+      INSERT INTO users (email, password, first_name, last_name, role) VALUES
+      ('admin@tweetgarot.com', $1, 'Mike', 'Johnson', 'admin'),
+      ('jsmith@tweetgarot.com', $1, 'John', 'Smith', 'manager'),
+      ('sgarcia@tweetgarot.com', $1, 'Sarah', 'Garcia', 'manager'),
+      ('bwilson@tweetgarot.com', $1, 'Bob', 'Wilson', 'user'),
+      ('emartinez@tweetgarot.com', $1, 'Elena', 'Martinez', 'user')
+    `, [passwordHash]);
+
+    // Insert projects
+    console.log('Creating projects...');
+    await client.query(`
+      INSERT INTO projects (name, number, client, address, start_date, end_date, status, description, manager_id) VALUES
+      ('Downtown Medical Center HVAC', 'P-2024-001', 'Metro Healthcare Systems', '500 Main Street, Downtown', '2024-01-15', '2024-12-31', 'active', 'Complete HVAC system installation for new 6-story medical facility including clean rooms and surgical suites.', 2),
+      ('Riverside Office Complex', 'P-2024-002', 'Riverside Development LLC', '1200 River Road, Suite 100', '2024-03-01', '2024-09-30', 'active', 'Mechanical systems for 3-building office campus with central plant.', 2),
+      ('Lincoln High School Renovation', 'P-2024-003', 'Lincoln School District', '800 Education Blvd', '2024-02-01', '2024-08-15', 'active', 'HVAC modernization for existing school building, including new rooftop units and controls.', 3),
+      ('Marriott Hotel Downtown', 'P-2023-015', 'Marriott International', '250 Convention Center Dr', '2023-06-01', '2024-02-28', 'completed', '200-room hotel with restaurant, conference center, and pool mechanical systems.', 3),
+      ('Tech Park Data Center', 'P-2024-004', 'CloudFirst Technologies', '5000 Innovation Way', '2024-04-01', '2025-03-31', 'active', 'Precision cooling systems for Tier III data center facility.', 2)
+    `);
+
+    // Insert RFIs
+    console.log('Creating RFIs...');
+    await client.query(`
+      INSERT INTO rfis (project_id, number, subject, question, response, priority, status, due_date, assigned_to, created_by, responded_by, responded_at) VALUES
+      (1, 1, 'Chiller Plant Room Clearances', 'Drawing M-101 shows 3ft clearance on north side of chiller. Can this be reduced to 2.5ft to accommodate structural column?', 'Approved. 2.5ft clearance is acceptable provided service access panel can fully open.', 'high', 'closed', '2024-02-01', 2, 4, 2, '2024-01-28 14:30:00'),
+      (1, 2, 'Operating Room Air Change Requirements', 'Confirm required air changes per hour for OR suites 3 and 4. Specs show 20 ACH but code requires 25 ACH minimum.', 'Confirmed: All OR suites require 25 ACH per ASHRAE 170.', 'urgent', 'closed', '2024-02-05', 2, 4, 2, '2024-02-03 09:15:00'),
+      (1, 3, 'VAV Box Sizing Discrepancy', 'VAV-2-15 shown as 12" on drawings but schedule calls for 10". Please clarify correct size.', NULL, 'normal', 'open', '2024-02-15', 2, 4, NULL, NULL),
+      (1, 4, 'Ductwork Routing at Grid Line 5', 'Conflict between supply duct and structural beam at grid 5/C. Request routing alternatives.', NULL, 'high', 'open', '2024-02-20', 2, 5, NULL, NULL),
+      (2, 1, 'Cooling Tower Location', 'Proposed cooling tower location conflicts with future building phase. Can we relocate to east side?', 'Approved relocation to east side. Revise piping routing accordingly.', 'normal', 'answered', '2024-04-01', 2, 4, 2, '2024-03-28 11:00:00'),
+      (2, 2, 'BAS Integration Protocol', 'Confirm communication protocol for BAS integration. Specs mention both BACnet and Modbus.', NULL, 'normal', 'open', '2024-04-15', 3, 5, NULL, NULL),
+      (3, 1, 'Existing Ductwork Reuse', 'Can existing main trunk ductwork in Gymnasium be reused?', 'May be reused after cleaning and inspection. Replace all flex connections.', 'normal', 'closed', '2024-03-01', 3, 5, 3, '2024-02-25 16:45:00'),
+      (3, 2, 'Rooftop Unit Structural Support', 'Structural engineer requesting equipment weights for new RTUs.', NULL, 'high', 'open', '2024-03-15', 3, 4, NULL, NULL)
+    `);
+
+    // Insert Submittals
+    console.log('Creating submittals...');
+    await client.query(`
+      INSERT INTO submittals (project_id, number, spec_section, description, subcontractor, status, due_date, review_notes, created_by, reviewed_by, reviewed_at) VALUES
+      (1, 1, '23 64 00', 'Centrifugal Chillers - Trane CVGF 400 Ton', 'ABC Mechanical', 'approved', '2024-02-01', 'Approved as submitted.', 4, 2, '2024-01-28 10:00:00'),
+      (1, 2, '23 37 13', 'Air Handling Units - AHU-1 through AHU-4', 'ABC Mechanical', 'approved_as_noted', '2024-02-10', 'Approved as noted. Add smoke detectors at return air openings.', 4, 2, '2024-02-08 14:30:00'),
+      (1, 3, '23 09 00', 'Building Automation System - Johnson Controls', 'Control Systems Inc', 'under_review', '2024-02-20', NULL, 5, NULL, NULL),
+      (1, 4, '23 33 00', 'Ductwork - Sheet Metal Shop Drawings', 'Metro Sheet Metal', 'revise_resubmit', '2024-02-15', 'Revise to show coordination with plumbing and electrical.', 4, 2, '2024-02-12 09:00:00'),
+      (1, 5, '23 21 13', 'Hydronic Piping - Victaulic Fittings', 'ABC Mechanical', 'pending', '2024-02-25', NULL, 4, NULL, NULL),
+      (2, 1, '23 65 00', 'Cooling Towers - BAC Series 3000', 'Johnson Cooling', 'approved', '2024-04-01', 'Approved.', 4, 2, '2024-03-28 11:30:00'),
+      (2, 2, '23 73 00', 'Rooftop Units - Carrier 50XC', 'Comfort Air Systems', 'approved_as_noted', '2024-04-10', 'Provide seismic calculations.', 5, 3, '2024-04-08 15:00:00'),
+      (2, 3, '23 09 00', 'DDC Controls - Tridium Niagara', 'Smart Building Controls', 'pending', '2024-04-20', NULL, 5, NULL, NULL),
+      (3, 1, '23 73 00', 'Rooftop Units - Gymnasium and Cafeteria', 'School HVAC Specialists', 'approved', '2024-03-01', 'Approved as submitted.', 5, 3, '2024-02-26 10:00:00'),
+      (3, 2, '23 82 16', 'Coils - Replacement Heating Coils', 'Metro Coil Company', 'approved', '2024-03-05', 'Approved.', 5, 3, '2024-03-02 14:00:00')
+    `);
+
+    // Insert Change Orders
+    console.log('Creating change orders...');
+    await client.query(`
+      INSERT INTO change_orders (project_id, number, title, description, reason, amount, days_added, status, created_by, approved_by, approved_at) VALUES
+      (1, 1, 'Additional Isolation Room', 'Add negative pressure isolation room on 3rd floor', 'Owner requested scope change', 45000.00, 5, 'approved', 2, 1, '2024-02-15 10:00:00'),
+      (1, 2, 'Upgrade to Variable Speed Chillers', 'Replace constant speed chillers with VFD units', 'Value engineering', 78500.00, 0, 'approved', 2, 1, '2024-02-20 14:00:00'),
+      (1, 3, 'Emergency Generator Connection', 'Add mechanical equipment to emergency power', 'Code requirement', 32000.00, 3, 'pending', 2, NULL, NULL),
+      (1, 4, 'Premium Efficiency Motors', 'Upgrade motors above 5HP to premium efficiency', 'LEED points', 15750.00, 0, 'draft', 4, NULL, NULL),
+      (2, 1, 'Extended Piping to Building C', 'Additional 200ft underground CHW piping', 'Master plan coordination', 67500.00, 7, 'approved', 2, 1, '2024-04-10 09:00:00'),
+      (2, 2, 'Delete Economizer on RTU-3', 'Remove economizer due to loading dock proximity', 'Design coordination', -4500.00, 0, 'approved', 4, 2, '2024-04-12 11:00:00'),
+      (3, 1, 'Asbestos Abatement Delay', 'Time extension for unforeseen asbestos', 'Concealed condition', 0.00, 14, 'approved', 3, 1, '2024-03-10 15:00:00'),
+      (3, 2, 'Add CO2 Sensors to Classrooms', 'Install CO2 demand ventilation sensors', 'Sustainability initiative', 18200.00, 0, 'pending', 5, NULL, NULL)
+    `);
+
+    // Insert Daily Reports
+    console.log('Creating daily reports...');
+    await client.query(`
+      INSERT INTO daily_reports (project_id, report_date, weather, temperature, work_performed, materials, equipment, visitors, issues, created_by) VALUES
+      (1, '2024-02-12', 'Sunny', '45°F', 'Continued installation of chilled water piping on Level 2. Completed 150 LF of 6" main. Started hanging ductwork in corridor 2A.', '6" copper pipe, Victaulic couplings, Pipe hangers', 'Scissor lift, Pipe threader', 'Owner rep (J. Anderson)', 'Minor delay waiting for steel at grid 7.', 4),
+      (1, '2024-02-13', 'Cloudy', '42°F', 'Completed CHW piping Level 2 east wing. Set AHU-2 on housekeeping pad.', 'AHU-2 unit, Flex connectors, Vibration isolators', 'Crane, Forklift', 'Mechanical inspector - passed', 'None', 4),
+      (1, '2024-02-14', 'Rain', '38°F', 'Indoor work only. Ductwork installation Level 3. Insulation started Level 1.', 'Ductwork sections, Fiberglass insulation, Mastic', 'Scissor lift, Duct lift', 'None', 'Rain delayed rooftop work.', 4),
+      (2, '2024-04-08', 'Sunny', '62°F', 'Cooling tower foundation pour complete. Underground piping 80% complete.', 'Concrete, Rebar, Underground pipe', 'Concrete pump, Excavator', 'Structural engineer', 'None', 4),
+      (2, '2024-04-09', 'Sunny', '65°F', 'Underground piping complete. RTU curbs delivered and staged.', 'RTU curbs, Flashing material', 'Forklift', 'Owner walk-through', 'RTU-4 curb damaged, replacement ordered.', 5),
+      (3, '2024-03-11', 'Cloudy', '52°F', 'Demo of existing RTU-1 complete. New curb adapter installed.', 'Curb adapter, Sheet metal, Fasteners', 'Crane, Demo equipment', 'Abatement supervisor', 'Work stop 2-4pm for school assembly.', 5),
+      (3, '2024-03-12', 'Sunny', '55°F', 'Set new RTU-1. Electrical and controls connections in progress.', 'RTU-1 unit, Conduit, Control wire', 'Crane, Scissor lift', 'Mechanical inspector', 'None', 5)
+    `);
+
+    // Insert Schedule Items
+    console.log('Creating schedule items...');
+    await client.query(`
+      INSERT INTO schedule_items (project_id, parent_id, name, description, start_date, end_date, percent_complete, assigned_to, created_by) VALUES
+      (1, NULL, 'Underground Rough-in', 'Below slab mechanical rough-in', '2024-01-15', '2024-02-15', 100, 4, 2),
+      (1, NULL, 'Level 1 Mechanical', 'First floor mechanical installation', '2024-02-01', '2024-04-30', 75, 4, 2),
+      (1, NULL, 'Level 2 Mechanical', 'Second floor mechanical installation', '2024-03-01', '2024-05-31', 60, 4, 2),
+      (1, NULL, 'Level 3 Mechanical', 'Third floor mechanical installation', '2024-04-01', '2024-06-30', 40, 5, 2),
+      (1, NULL, 'Penthouse Equipment', 'Rooftop and penthouse mechanical', '2024-05-01', '2024-07-31', 20, 4, 2),
+      (1, NULL, 'Controls & TAB', 'Building automation and test/balance', '2024-07-01', '2024-09-30', 0, 5, 2),
+      (1, NULL, 'Commissioning', 'System commissioning and training', '2024-09-01', '2024-11-30', 0, 2, 2),
+      (2, NULL, 'Site Utilities', 'Underground utilities and central plant prep', '2024-03-01', '2024-04-15', 95, 4, 2),
+      (2, NULL, 'Central Plant', 'Cooling tower and pump installation', '2024-04-01', '2024-05-31', 50, 4, 2),
+      (2, NULL, 'Building A HVAC', 'Complete mechanical for Building A', '2024-04-15', '2024-07-15', 35, 5, 2),
+      (2, NULL, 'Building B HVAC', 'Complete mechanical for Building B', '2024-05-01', '2024-08-15', 15, 5, 2),
+      (2, NULL, 'Building C HVAC', 'Complete mechanical for Building C', '2024-06-01', '2024-09-15', 0, 4, 2),
+      (3, NULL, 'Abatement', 'Hazardous material removal', '2024-02-01', '2024-03-15', 100, NULL, 3),
+      (3, NULL, 'Demo Existing Equipment', 'Remove existing HVAC equipment', '2024-02-15', '2024-03-31', 100, 5, 3),
+      (3, NULL, 'New Equipment Installation', 'Install new RTUs and ductwork', '2024-03-15', '2024-06-15', 65, 5, 3),
+      (3, NULL, 'Controls Upgrade', 'New DDC controls throughout', '2024-05-01', '2024-07-15', 20, 5, 3),
+      (3, NULL, 'Testing & Closeout', 'TAB, commissioning, documentation', '2024-07-01', '2024-08-15', 0, 3, 3)
+    `);
+
+    // Add child schedule items for Level 2 Mechanical (id=3)
+    await client.query(`
+      INSERT INTO schedule_items (project_id, parent_id, name, description, start_date, end_date, percent_complete, assigned_to, created_by) VALUES
+      (1, 3, 'Piping Rough-in', 'Hydronic piping installation', '2024-03-01', '2024-04-15', 80, 4, 2),
+      (1, 3, 'Ductwork Installation', 'Supply and return ductwork', '2024-03-15', '2024-05-01', 60, 4, 2),
+      (1, 3, 'Equipment Setting', 'VAV boxes and terminal units', '2024-04-01', '2024-05-15', 40, 5, 2),
+      (1, 3, 'Insulation', 'Pipe and duct insulation', '2024-04-15', '2024-05-31', 30, 4, 2)
+    `);
+
+    await client.query('COMMIT');
+
+    console.log('\n✓ Seed data inserted successfully!\n');
+    console.log('Test Accounts:');
+    console.log('─────────────────────────────────────────');
+    console.log('Admin:   admin@tweetgarot.com / password123');
+    console.log('Manager: jsmith@tweetgarot.com / password123');
+    console.log('Manager: sgarcia@tweetgarot.com / password123');
+    console.log('User:    bwilson@tweetgarot.com / password123');
+    console.log('User:    emartinez@tweetgarot.com / password123');
+    console.log('─────────────────────────────────────────\n');
+    console.log('Sample Data Created:');
+    console.log('• 5 Users (1 admin, 2 managers, 2 users)');
+    console.log('• 5 Projects (4 active, 1 completed)');
+    console.log('• 8 RFIs');
+    console.log('• 10 Submittals');
+    console.log('• 8 Change Orders');
+    console.log('• 7 Daily Reports');
+    console.log('• 21 Schedule Items');
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Seed failed:', error);
+    process.exit(1);
+  } finally {
+    client.release();
+    process.exit(0);
+  }
+}
+
+seed();

@@ -1,0 +1,253 @@
+.estimating-dashboard {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.breadcrumb-link {
+  color: var(--secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  display: inline-block;
+  margin-bottom: 1rem;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: var(--primary);
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text);
+}
+
+.page-subtitle {
+  color: var(--secondary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.estimating-modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.estimating-module-card {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  text-decoration: none;
+  color: var(--text);
+  border: 2px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.estimating-module-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: var(--module-color);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+  transform-origin: left;
+}
+
+.estimating-module-card:hover {
+  border-color: var(--module-color);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.estimating-module-card:hover::before {
+  transform: scaleX(1);
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.module-icon-large {
+  font-size: 4rem;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.estimating-module-card:hover .module-icon-large {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.module-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text);
+}
+
+.module-description {
+  font-size: 0.9375rem;
+  color: var(--secondary);
+  margin: 0;
+}
+
+.module-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--module-color);
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.module-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.action-text {
+  font-weight: 600;
+  color: var(--module-color);
+}
+
+.action-arrow {
+  font-size: 1.5rem;
+  color: var(--module-color);
+  transition: transform 0.3s ease;
+}
+
+.estimating-module-card:hover .action-arrow {
+  transform: translateX(8px);
+}
+
+.quick-stats-section,
+.recent-activity-section {
+  margin-bottom: 3rem;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: var(--text);
+}
+
+.quick-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+  transform: translateY(-4px);
+}
+
+.stat-icon {
+  font-size: 3rem;
+  flex-shrink: 0;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--secondary);
+}
+
+.empty-state p {
+  margin: 0.5rem 0;
+}
+
+.empty-state-hint {
+  font-size: 0.875rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .estimating-dashboard {
+    padding: 1rem;
+  }
+
+  .estimating-modules-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .module-title {
+    font-size: 1.25rem;
+  }
+
+  .module-icon-large {
+    font-size: 3rem;
+  }
+
+  .module-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .quick-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}

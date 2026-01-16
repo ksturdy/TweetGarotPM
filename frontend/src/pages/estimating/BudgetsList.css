@@ -1,0 +1,8 @@
+.budgets-filters {
+  background: white;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--secondary);
+}
