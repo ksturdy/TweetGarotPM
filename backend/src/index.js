@@ -57,8 +57,11 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-app.listen(config.port, () => {
-  console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
-});
+// Only listen on a port if not running in serverless environment
+if (process.env.VERCEL !== '1') {
+  app.listen(config.port, () => {
+    console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
+  });
+}
 
 module.exports = app;
