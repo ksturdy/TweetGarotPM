@@ -55,13 +55,18 @@ router.post('/import', async (req, res, next) => {
     };
 
     // Map Excel column names to database field names and clean all values
-    const mappedProjects = projects.map(project => {
+    const mappedProjects = projects
+      .filter(project => {
+        // Skip rows without a name (empty rows or header rows)
+        return project['Name'] && typeof project['Name'] === 'string' && project['Name'].trim() !== '';
+      })
+      .map(project => {
       // Create a helper to get and clean values
       const getClean = (key) => cleanNumeric(project[key]);
       const getInt = (key) => cleanInteger(project[key]);
 
       return {
-      name: project['Name'],
+      name: project['Name'].trim(),
       bid_date: excelDateToJSDate(project['Bid Date']),
       building_type: project['Building Type'],
       project_type: project['Project Type'],
@@ -268,12 +273,19 @@ router.post('/import', async (req, res, next) => {
       };
     });
 
+    // Track stats
+    const totalRows = projects.length;
+    const validRows = mappedProjects.length;
+    const skippedRows = totalRows - validRows;
+
     // Bulk insert all projects
     const inserted = await HistoricalProject.bulkCreate(mappedProjects);
 
     res.json({
-      message: `Successfully imported ${inserted.length} historical projects`,
-      count: inserted.length
+      message: `Successfully imported ${inserted.length} historical projects${skippedRows > 0 ? ` (skipped ${skippedRows} empty rows)` : ''}`,
+      count: inserted.length,
+      skipped: skippedRows,
+      total: totalRows
     });
   } catch (error) {
     next(error);
