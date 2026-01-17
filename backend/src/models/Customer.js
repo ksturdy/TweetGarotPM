@@ -109,16 +109,18 @@ const Customer = {
         c.customer_score,
         COUNT(DISTINCT p.id) as total_projects,
         COALESCE(SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_projects,
-        COUNT(DISTINCT hp.id) as total_bids,
-        COALESCE(SUM(hp.total_cost), 0) as total_revenue,
+        COUNT(DISTINCT e.id) as total_bids,
+        COUNT(CASE WHEN e.status = 'won' THEN 1 END) as won_estimates,
+        COUNT(CASE WHEN e.status IN ('won', 'lost') THEN 1 END) as decided_estimates,
+        COALESCE(SUM(CASE WHEN e.status = 'won' THEN e.total_cost ELSE 0 END), 0) as total_revenue,
         CASE
-          WHEN COUNT(DISTINCT hp.id) > 0
-          THEN ROUND((COUNT(DISTINCT p.id)::numeric / COUNT(DISTINCT hp.id)::numeric * 100), 2)
+          WHEN COUNT(DISTINCT e.id) > 0
+          THEN ROUND((COUNT(CASE WHEN e.status = 'won' THEN 1 END)::numeric / COUNT(DISTINCT e.id)::numeric * 100), 2)
           ELSE 0
         END as hit_rate
       FROM customers c
       LEFT JOIN projects p ON p.customer_id = c.id
-      LEFT JOIN historical_projects hp ON hp.customer_id = c.id
+      LEFT JOIN estimates e ON e.customer_id = c.id
       WHERE c.id = $1
       GROUP BY c.id, c.customer_score
     `, [customerId]);
@@ -128,6 +130,8 @@ const Customer = {
       total_projects: 0,
       completed_projects: 0,
       total_bids: 0,
+      won_estimates: 0,
+      decided_estimates: 0,
       total_revenue: 0,
       hit_rate: 0
     };
@@ -153,16 +157,19 @@ const Customer = {
   async getBids(customerId) {
     const result = await db.query(`
       SELECT
-        hp.id,
-        hp.name,
-        hp.bid_date as date,
-        hp.total_cost as value,
-        0 as gm_percent,
-        hp.building_type,
-        hp.project_type
-      FROM historical_projects hp
-      WHERE hp.customer_id = $1
-      ORDER BY hp.bid_date DESC NULLS LAST
+        e.id,
+        e.estimate_number || ' - ' || e.project_name as name,
+        e.bid_date as date,
+        e.total_cost as value,
+        CASE
+          WHEN e.total_cost > 0 THEN ROUND((e.profit_amount / e.total_cost * 100)::numeric, 1)
+          ELSE 0
+        END as gm_percent,
+        e.building_type,
+        e.status
+      FROM estimates e
+      WHERE e.customer_id = $1
+      ORDER BY e.bid_date DESC NULLS LAST, e.created_at DESC
     `, [customerId]);
     return result.rows;
   },
@@ -196,6 +203,21 @@ const Customer = {
       data.created_by
     ]);
     return result.rows[0];
+  },
+
+  async getAllContacts() {
+    const result = await db.query(`
+      SELECT
+        cc.*,
+        c.customer_facility,
+        c.customer_owner,
+        c.city,
+        c.state
+      FROM customer_contacts cc
+      JOIN customers c ON cc.customer_id = c.id
+      ORDER BY c.customer_facility ASC, cc.is_primary DESC, cc.last_name ASC, cc.first_name ASC
+    `);
+    return result.rows;
   },
 
   async getContacts(customerId) {

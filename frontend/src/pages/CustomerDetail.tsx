@@ -3,19 +3,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCustomer, getCustomerMetrics, getCustomerProjects, getCustomerBids, getCustomerTouchpoints } from '../services/customers';
 import TouchpointModal from '../components/modals/TouchpointModal';
-import ContactModal from '../components/modals/ContactModal';
-import EstimateModal from '../components/modals/EstimateModal';
 import ProjectModal from '../components/modals/ProjectModal';
+import CustomerFormModal from '../components/modals/CustomerFormModal';
 import './CustomerDetail.css';
 
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'projects' | 'bids' | 'touchpoints'>('projects');
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [showEstimateModal, setShowEstimateModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
@@ -72,7 +69,12 @@ const CustomerDetail: React.FC = () => {
       action: 'Create Estimate',
       colorStart: '#3b82f6',
       colorEnd: '#2563eb',
-      onClick: () => setShowEstimateModal(true),
+      onClick: () => navigate('/estimating/estimates/new', {
+        state: {
+          customerId: parseInt(id!),
+          customerName: customer.customer_facility,
+        }
+      }),
     },
     {
       title: 'Log Touchpoint',
@@ -84,13 +86,13 @@ const CustomerDetail: React.FC = () => {
       onClick: () => setShowTouchpointModal(true),
     },
     {
-      title: 'Add Contact',
+      title: 'Contacts',
       icon: '👤',
-      description: 'Add a new contact person for this customer',
-      action: 'New Contact',
+      description: 'View and manage customer contacts',
+      action: 'View Contacts',
       colorStart: '#8b5cf6',
       colorEnd: '#7c3aed',
-      onClick: () => setShowContactModal(true),
+      onClick: () => navigate(`/customers/${id}/contacts`),
     },
     {
       title: 'Create Project',
@@ -100,26 +102,6 @@ const CustomerDetail: React.FC = () => {
       colorStart: '#f59e0b',
       colorEnd: '#d97706',
       onClick: () => setShowProjectModal(true),
-    },
-    {
-      title: 'View Reports',
-      icon: '📈',
-      description: 'Customer analytics and performance reports',
-      action: 'View Reports',
-      colorStart: '#ec4899',
-      colorEnd: '#db2777',
-      onClick: () => {/* TODO: Navigate to reports */},
-      comingSoon: true,
-    },
-    {
-      title: 'Send Communication',
-      icon: '✉️',
-      description: 'Email or message customer contacts',
-      action: 'Send Message',
-      colorStart: '#06b6d4',
-      colorEnd: '#0891b2',
-      onClick: () => {/* TODO: Open communication modal */},
-      comingSoon: true,
     },
   ];
 
@@ -155,6 +137,26 @@ const CustomerDetail: React.FC = () => {
               )}
             </div>
           </div>
+          <button
+            onClick={() => setShowEditModal(true)}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+          >
+            ✏️ Edit Customer
+          </button>
         </div>
       </div>
 
@@ -162,11 +164,11 @@ const CustomerDetail: React.FC = () => {
       <div className="metrics-grid">
         <div className="metric-card" style={{ '--metric-color': '#667eea' } as React.CSSProperties}>
           <div className="metric-header">
-            <div className="metric-label">Total Revenue</div>
+            <div className="metric-label">Total Awarded</div>
             <div className="metric-icon">💰</div>
           </div>
           <div className="metric-value">{formatCurrency(metrics?.total_revenue || 0)}</div>
-          <div className="metric-subtitle">Lifetime value</div>
+          <div className="metric-subtitle">Won estimates value</div>
         </div>
 
         <div className="metric-card" style={{ '--metric-color': '#10b981' } as React.CSSProperties}>
@@ -175,7 +177,7 @@ const CustomerDetail: React.FC = () => {
             <div className="metric-icon">🎯</div>
           </div>
           <div className="metric-value">{metrics?.hit_rate || 0}%</div>
-          <div className="metric-subtitle">{metrics?.total_projects || 0} of {metrics?.total_bids || 0} bids won</div>
+          <div className="metric-subtitle">{metrics?.won_estimates || 0} won of {metrics?.total_bids || 0} total</div>
         </div>
 
         <div className="metric-card" style={{ '--metric-color': '#f59e0b' } as React.CSSProperties}>
@@ -233,159 +235,168 @@ const CustomerDetail: React.FC = () => {
         ))}
       </div>
 
-      {/* Data Section with Tabs */}
-      <div className="data-section">
-        <div className="section-header">
-          <h2 className="section-title">
-            📂 Customer Data
-          </h2>
-        </div>
-
-        <div className="data-tabs">
-          <button
-            className={`tab-button ${activeTab === 'projects' ? 'active' : ''}`}
-            onClick={() => setActiveTab('projects')}
-          >
-            Projects <span className="tab-count">{projects.length}</span>
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'bids' ? 'active' : ''}`}
-            onClick={() => setActiveTab('bids')}
-          >
-            Bids <span className="tab-count">{bids.length}</span>
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'touchpoints' ? 'active' : ''}`}
-            onClick={() => setActiveTab('touchpoints')}
-          >
-            Touchpoints <span className="tab-count">{touchpoints.length}</span>
-          </button>
-        </div>
-
-        <div className="data-content">
-          {/* Projects Tab */}
-          {activeTab === 'projects' && (
-            <>
-              {projects.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">🏗️</div>
-                  <div className="empty-state-text">No projects yet</div>
-                  <p>Create your first project for this customer</p>
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Project Name</th>
-                      <th>Date</th>
-                      <th>Value</th>
-                      <th>GM%</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {projects.map((project: any) => (
-                      <tr key={project.id}>
-                        <td>
-                          <strong>{project.name}</strong>
-                          {project.description && (
-                            <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>
-                              {project.description}
-                            </div>
-                          )}
-                        </td>
-                        <td>{formatDate(project.date)}</td>
-                        <td><strong>{formatCurrency(project.value)}</strong></td>
-                        <td>{project.gm_percent}%</td>
-                        <td>
-                          <span className={`status-badge status-${project.status}`}>
-                            {project.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-
-          {/* Bids Tab */}
-          {activeTab === 'bids' && (
-            <>
-              {bids.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">📊</div>
-                  <div className="empty-state-text">No bids recorded</div>
-                  <p>Historical bids will appear here</p>
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Bid Name</th>
-                      <th>Bid Date</th>
-                      <th>Value</th>
-                      <th>GM%</th>
-                      <th>Building Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bids.map((bid: any) => (
-                      <tr key={bid.id}>
-                        <td><strong>{bid.name}</strong></td>
-                        <td>{formatDate(bid.date)}</td>
-                        <td><strong>{formatCurrency(bid.value)}</strong></td>
-                        <td>{bid.gm_percent}%</td>
-                        <td>{bid.building_type || 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-
-          {/* Touchpoints Tab */}
-          {activeTab === 'touchpoints' && (
-            <>
-              {touchpoints.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">📝</div>
-                  <div className="empty-state-text">No touchpoints logged</div>
-                  <p>Start tracking customer interactions</p>
-                </div>
-              ) : (
-                <div className="touchpoint-list">
-                  {touchpoints.map((touchpoint: any) => (
-                    <div key={touchpoint.id} className="touchpoint-item">
-                      <div className="touchpoint-header">
-                        <div>
-                          <div className="touchpoint-type">
-                            {touchpoint.touchpoint_type}
-                            {touchpoint.contact_person && (
-                              <span style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
-                                with {touchpoint.contact_person}
-                              </span>
-                            )}
+      {/* Data Sections Grid */}
+      <div className="data-sections-grid">
+        {/* Projects Section */}
+        <div
+          className="data-section"
+          onClick={() => navigate(`/customers/${id}/projects`)}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="section-header">
+            <h2 className="section-title">
+              🏗️ Projects <span className="tab-count">{projects.length}</span>
+            </h2>
+          </div>
+          <div className="data-content">
+            {projects.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">🏗️</div>
+                <div className="empty-state-text">No projects yet</div>
+                <p>Create your first project for this customer</p>
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Project Name</th>
+                    <th>Date</th>
+                    <th>Value</th>
+                    <th>GM%</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.map((project: any) => (
+                    <tr key={project.id}>
+                      <td>
+                        <strong>{project.name}</strong>
+                        {project.description && (
+                          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                            {project.description}
                           </div>
-                        </div>
-                        <div className="touchpoint-date">{formatDate(touchpoint.touchpoint_date)}</div>
-                      </div>
-                      {touchpoint.notes && (
-                        <div className="touchpoint-notes">{touchpoint.notes}</div>
-                      )}
-                      {touchpoint.created_by_name && (
-                        <div className="touchpoint-meta">
-                          <span>👤</span> {touchpoint.created_by_name}
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </td>
+                      <td>{formatDate(project.date)}</td>
+                      <td><strong>{formatCurrency(project.value)}</strong></td>
+                      <td>{project.gm_percent}%</td>
+                      <td>
+                        <span className={`status-badge status-${project.status}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              )}
-            </>
-          )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Estimates Section */}
+        <div
+          className="data-section"
+          onClick={() => navigate(`/customers/${id}/estimates`)}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="section-header">
+            <h2 className="section-title">
+              📊 Estimates <span className="tab-count">{bids.length}</span>
+            </h2>
+          </div>
+          <div className="data-content">
+            {bids.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">📊</div>
+                <div className="empty-state-text">No estimates recorded</div>
+                <p>Historical estimates will appear here</p>
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Estimate Name</th>
+                    <th>Date</th>
+                    <th>Value</th>
+                    <th>GM%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bids.map((bid: any) => (
+                    <tr key={bid.id}>
+                      <td>
+                        <Link
+                          to={`/estimating/estimates/${bid.id}`}
+                          style={{
+                            color: '#1e40af',
+                            textDecoration: 'none',
+                            fontWeight: '600',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                          onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}
+                        >
+                          {bid.name.includes(' - ') ? bid.name.split(' - ').slice(1).join(' - ') : bid.name}
+                        </Link>
+                      </td>
+                      <td>{formatDate(bid.date)}</td>
+                      <td><strong>{formatCurrency(bid.value)}</strong></td>
+                      <td>{bid.gm_percent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Touchpoints Section */}
+        <div
+          className="data-section"
+          onClick={() => navigate(`/customers/${id}/touchpoints`)}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="section-header">
+            <h2 className="section-title">
+              📝 Touchpoints <span className="tab-count">{touchpoints.length}</span>
+            </h2>
+          </div>
+          <div className="data-content">
+            {touchpoints.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">📝</div>
+                <div className="empty-state-text">No touchpoints logged</div>
+                <p>Start tracking customer interactions</p>
+              </div>
+            ) : (
+              <div className="touchpoint-list">
+                {touchpoints.map((touchpoint: any) => (
+                  <div key={touchpoint.id} className="touchpoint-item">
+                    <div className="touchpoint-header">
+                      <div>
+                        <div className="touchpoint-type">
+                          {touchpoint.touchpoint_type}
+                          {touchpoint.contact_person && (
+                            <span style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
+                              with {touchpoint.contact_person}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="touchpoint-date">{formatDate(touchpoint.touchpoint_date)}</div>
+                    </div>
+                    {touchpoint.notes && (
+                      <div className="touchpoint-notes">{touchpoint.notes}</div>
+                    )}
+                    {touchpoint.created_by_name && (
+                      <div className="touchpoint-meta">
+                        <span>👤</span> {touchpoint.created_by_name}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -398,27 +409,18 @@ const CustomerDetail: React.FC = () => {
         />
       )}
 
-      {showContactModal && (
-        <ContactModal
-          customerId={parseInt(id!)}
-          customerName={customer.customer_facility}
-          onClose={() => setShowContactModal(false)}
-        />
-      )}
-
-      {showEstimateModal && (
-        <EstimateModal
-          customerId={parseInt(id!)}
-          customerName={customer.customer_facility}
-          onClose={() => setShowEstimateModal(false)}
-        />
-      )}
-
       {showProjectModal && (
         <ProjectModal
           customerId={parseInt(id!)}
           customerName={customer.customer_facility}
           onClose={() => setShowProjectModal(false)}
+        />
+      )}
+
+      {showEditModal && (
+        <CustomerFormModal
+          customer={customer}
+          onClose={() => setShowEditModal(false)}
         />
       )}
     </div>
