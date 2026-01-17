@@ -21,8 +21,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <header className="header">
         <div className="header-content">
           <Link to="/" className="logo">
-            <div className="logo-titan">TITAN</div>
-            <div className="logo-subtitle">BY TWEET GAROT</div>
+            <img src="/Titan Logo.png" alt="Titan Shield" className="logo-shield" />
+            <div className="logo-text">
+              <div className="logo-titan">TITAN</div>
+              <div className="logo-subtitle">BY TWEET GAROT</div>
+            </div>
           </Link>
           <nav className="nav">
             {navItems.map((item) => (

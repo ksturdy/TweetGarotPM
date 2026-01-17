@@ -29,8 +29,11 @@ const Login: React.FC = () => {
   return (
     <div className="login-page">
       <div className="login-card card">
-        <h1 className="login-title">Tweet Garot PM</h1>
-        <p className="login-subtitle">Project Management System</p>
+        <div className="login-logo">
+          <img src="/Titan Logo.png" alt="Titan Shield" className="login-shield" />
+        </div>
+        <h1 className="login-title">TITAN</h1>
+        <p className="login-subtitle">by Tweet Garot</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 
