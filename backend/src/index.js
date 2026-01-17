@@ -19,6 +19,7 @@ const dailyReportRoutes = require('./routes/dailyReports');
 const scheduleRoutes = require('./routes/schedule');
 const historicalProjectRoutes = require('./routes/historicalProjects');
 const customerRoutes = require('./routes/customers');
+const chatRoutes = require('./routes/chat');
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/daily-reports', dailyReportRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/historical-projects', historicalProjectRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

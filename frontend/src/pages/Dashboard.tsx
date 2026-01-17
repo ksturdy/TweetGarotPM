@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
+import { chatService } from '../services/chat';
 import './Dashboard.css';
 
 interface Message {
@@ -66,29 +67,36 @@ const Dashboard: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const messageText = inputValue;
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        'I can help you analyze project data and identify trends. Would you like me to review your active projects?',
-        'Based on your system data, I can provide insights on project timelines, budgets, and resource allocation.',
-        'I can assist with generating reports, tracking metrics, and providing strategic recommendations.',
-        'Let me help you with that. I can analyze trends, review performance metrics, and suggest optimizations.',
-        'Great question! I can provide insights on operations, help with data analysis, and answer questions about your projects.',
-      ];
+    try {
+      // Call the real Claude API
+      const response = await chatService.sendMessage(messageText, messages);
 
       const titanResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: responses[Math.floor(Math.random() * responses.length)],
+        text: response.response,
         sender: 'titan',
         timestamp: new Date(),
       };
 
       setMessages((prev) => [...prev, titanResponse]);
+    } catch (error: any) {
+      console.error('Chat error:', error);
+
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: error.response?.data?.error || 'Sorry, I encountered an error. Please try again.',
+        sender: 'titan',
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, errorResponse]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+    }
   };
 
   if (isLoading) {
