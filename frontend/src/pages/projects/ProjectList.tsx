@@ -5,11 +5,57 @@ import { projectsApi, Project } from '../../services/projects';
 
 const ProjectList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [clientFilter, setClientFilter] = useState<string>('');
+  const [projectNameFilter, setProjectNameFilter] = useState<string>('');
+  const [pmFilter, setPmFilter] = useState<string>('');
+  const [sortField, setSortField] = useState<keyof Project | 'manager_name'>('number');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const { data: projects, isLoading } = useQuery({
-    queryKey: ['projects', statusFilter],
-    queryFn: () => projectsApi.getAll({ status: statusFilter || undefined }).then((res) => res.data),
+  const { data: allProjects, isLoading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
+
+  // Client-side filtering
+  const filteredProjects = allProjects?.filter((project: Project) => {
+    if (statusFilter && project.status !== statusFilter) return false;
+    if (clientFilter && !project.client?.toLowerCase().includes(clientFilter.toLowerCase())) return false;
+    if (projectNameFilter && !project.name?.toLowerCase().includes(projectNameFilter.toLowerCase())) return false;
+    if (pmFilter && !project.manager_name?.toLowerCase().includes(pmFilter.toLowerCase())) return false;
+    return true;
+  });
+
+  // Client-side sorting
+  const projects = filteredProjects?.sort((a, b) => {
+    let aValue = a[sortField as keyof Project];
+    let bValue = b[sortField as keyof Project];
+
+    // Handle null/undefined values
+    if (aValue == null) aValue = '';
+    if (bValue == null) bValue = '';
+
+    // Convert to lowercase for string comparison
+    if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+    if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (field: keyof Project | 'manager_name') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: keyof Project | 'manager_name') => {
+    if (sortField !== field) return ' ↕';
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  };
 
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
@@ -35,32 +81,98 @@ const ProjectList: React.FC = () => {
       </div>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Filter by Status</label>
-          <select
-            className="form-input"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ maxWidth: '200px' }}
-          >
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="on_hold">On Hold</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Filter by Status</label>
+            <select
+              className="form-input"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Filter by Client</label>
+            <input
+              type="text"
+              className="form-input"
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              placeholder="Search client..."
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Filter by Project Name</label>
+            <input
+              type="text"
+              className="form-input"
+              value={projectNameFilter}
+              onChange={(e) => setProjectNameFilter(e.target.value)}
+              placeholder="Search project name..."
+            />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Filter by PM</label>
+            <input
+              type="text"
+              className="form-input"
+              value={pmFilter}
+              onChange={(e) => setPmFilter(e.target.value)}
+              placeholder="Search PM..."
+            />
+          </div>
         </div>
       </div>
 
       <div className="card">
-        <table className="table">
+        <table className="table" style={{ tableLayout: 'auto' }}>
+          <colgroup>
+            <col style={{ width: '120px' }} />
+            <col style={{ width: 'auto', minWidth: '200px' }} />
+            <col style={{ width: 'auto', minWidth: '200px' }} />
+            <col style={{ width: '120px' }} />
+            <col style={{ width: '150px' }} />
+          </colgroup>
           <thead>
             <tr>
-              <th>Number</th>
-              <th>Name</th>
-              <th>Client</th>
-              <th>Status</th>
-              <th>Manager</th>
+              <th
+                onClick={() => handleSort('number')}
+                style={{ cursor: 'pointer', userSelect: 'none', resize: 'horizontal', overflow: 'hidden' }}
+              >
+                Number{getSortIcon('number')}
+              </th>
+              <th
+                onClick={() => handleSort('name')}
+                style={{ cursor: 'pointer', userSelect: 'none', resize: 'horizontal', overflow: 'hidden' }}
+              >
+                Project Name{getSortIcon('name')}
+              </th>
+              <th
+                onClick={() => handleSort('client')}
+                style={{ cursor: 'pointer', userSelect: 'none', resize: 'horizontal', overflow: 'hidden' }}
+              >
+                Client{getSortIcon('client')}
+              </th>
+              <th
+                onClick={() => handleSort('status')}
+                style={{ cursor: 'pointer', userSelect: 'none', resize: 'horizontal', overflow: 'hidden' }}
+              >
+                Status{getSortIcon('status')}
+              </th>
+              <th
+                onClick={() => handleSort('manager_name')}
+                style={{ cursor: 'pointer', userSelect: 'none', resize: 'horizontal', overflow: 'hidden' }}
+              >
+                PM{getSortIcon('manager_name')}
+              </th>
             </tr>
           </thead>
           <tbody>

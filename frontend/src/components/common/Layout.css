@@ -28,6 +28,11 @@
   text-decoration: none;
 }
 
+.logo:hover {
+  text-decoration: none;
+  color: var(--white);
+}
+
 .logo-shield {
   font-size: 2.5rem;
   line-height: 1;

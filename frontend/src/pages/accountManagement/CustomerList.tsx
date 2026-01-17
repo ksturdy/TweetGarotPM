@@ -238,13 +238,13 @@ const CustomerList: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      <button
+                      <Link
+                        to={`/customers/${customer.id}`}
                         className="btn-icon"
-                        onClick={() => setSelectedCustomer(customer)}
-                        title="View details"
+                        title="View customer details"
                       >
                         👁️
-                      </button>
+                      </Link>
                     </td>
                   </tr>
                 ))

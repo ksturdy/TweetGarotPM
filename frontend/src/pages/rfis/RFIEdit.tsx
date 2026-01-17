@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { rfisApi } from '../../services/rfis';
 import { usersApi } from '../../services/users';
 import { companiesApi } from '../../services/companies';
 import { contactsApi } from '../../services/contacts';
 
-const RFIForm: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+const RFIEdit: React.FC = () => {
+  const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const { data: rfi, isLoading } = useQuery({
+    queryKey: ['rfi', id],
+    queryFn: () => rfisApi.getById(Number(id)).then((res) => res.data),
+  });
 
   const { data: users } = useQuery({
     queryKey: ['users'],
@@ -27,11 +32,11 @@ const RFIForm: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    projectId: Number(projectId),
     subject: '',
     question: '',
     priority: 'normal',
     due_date: '',
+    status: 'open',
     assigned_to: '',
     ball_in_court: '',
     recipient_company_id: '',
@@ -57,33 +62,86 @@ const RFIForm: React.FC = () => {
     has_spec_pages: false,
     has_shop_drawings: false,
     attachment_notes: '',
+    // Response Information
+    response: '',
+    response_classification: '',
+    response_reference: '',
+    responded_by_company_id: '',
+    responded_by_contact_id: '',
+    responded_at: '',
   });
 
-  const createMutation = useMutation({
-    mutationFn: rfisApi.create,
+  React.useEffect(() => {
+    if (rfi) {
+      setFormData({
+        subject: rfi.subject,
+        question: rfi.question,
+        priority: rfi.priority,
+        due_date: rfi.due_date || '',
+        status: rfi.status,
+        assigned_to: rfi.assigned_to?.toString() || '',
+        ball_in_court: rfi.ball_in_court?.toString() || '',
+        recipient_company_id: rfi.recipient_company_id?.toString() || '',
+        recipient_contact_id: rfi.recipient_contact_id?.toString() || '',
+        // Reference Information
+        spec_section: rfi.spec_section || '',
+        drawing_sheet: rfi.drawing_sheet || '',
+        detail_grid_ref: rfi.detail_grid_ref || '',
+        discipline: rfi.discipline || '',
+        discipline_other: rfi.discipline_other || '',
+        // Suggested Solution
+        suggested_solution: rfi.suggested_solution || '',
+        // Impact Information
+        schedule_impact: rfi.schedule_impact || false,
+        schedule_impact_days: rfi.schedule_impact_days?.toString() || '',
+        cost_impact: rfi.cost_impact || false,
+        cost_impact_amount: rfi.cost_impact_amount?.toString() || '',
+        affects_other_trades: rfi.affects_other_trades || false,
+        affected_trades: rfi.affected_trades || '',
+        // Attachments
+        has_sketches: rfi.has_sketches || false,
+        has_photos: rfi.has_photos || false,
+        has_spec_pages: rfi.has_spec_pages || false,
+        has_shop_drawings: rfi.has_shop_drawings || false,
+        attachment_notes: rfi.attachment_notes || '',
+        // Response Information
+        response: rfi.response || '',
+        response_classification: rfi.response_classification || '',
+        response_reference: rfi.response_reference || '',
+        responded_by_company_id: rfi.responded_by_company_id?.toString() || '',
+        responded_by_contact_id: rfi.responded_by_contact_id?.toString() || '',
+        responded_at: rfi.responded_at || '',
+      });
+    }
+  }, [rfi]);
+
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => rfisApi.update(Number(id), data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rfi', id] });
       queryClient.invalidateQueries({ queryKey: ['rfis', projectId] });
-      navigate(`/projects/${projectId}/rfis`);
+      navigate(`/projects/${projectId}/rfis/${id}`);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const submitData = {
-      projectId: formData.projectId,
+      projectId: Number(projectId),
       subject: formData.subject,
       question: formData.question,
       priority: formData.priority,
+      dueDate: formData.due_date || undefined,
+      status: formData.status,
       assignedTo: formData.assigned_to ? Number(formData.assigned_to) : undefined,
       ballInCourt: formData.ball_in_court ? Number(formData.ball_in_court) : undefined,
-      dueDate: formData.due_date || undefined,
       recipientCompanyId: formData.recipient_company_id ? Number(formData.recipient_company_id) : undefined,
       recipientContactId: formData.recipient_contact_id ? Number(formData.recipient_contact_id) : undefined,
       // Reference Information
       specSection: formData.spec_section || undefined,
       drawingSheet: formData.drawing_sheet || undefined,
       detailGridRef: formData.detail_grid_ref || undefined,
-      discipline: (formData.discipline as 'plumbing' | 'hvac' | 'piping' | 'equipment' | 'controls' | 'other' | '') || undefined,
+      discipline: formData.discipline || undefined,
       disciplineOther: formData.discipline_other || undefined,
       // Suggested Solution
       suggestedSolution: formData.suggested_solution || undefined,
@@ -100,8 +158,15 @@ const RFIForm: React.FC = () => {
       hasSpecPages: formData.has_spec_pages,
       hasShopDrawings: formData.has_shop_drawings,
       attachmentNotes: formData.attachment_notes || undefined,
+      // Response Information
+      response: formData.response || undefined,
+      responseClassification: formData.response_classification || undefined,
+      responseReference: formData.response_reference || undefined,
+      respondedByCompanyId: formData.responded_by_company_id ? Number(formData.responded_by_company_id) : undefined,
+      respondedByContactId: formData.responded_by_contact_id ? Number(formData.responded_by_contact_id) : undefined,
+      respondedAt: formData.responded_at || undefined,
     };
-    createMutation.mutate(submitData);
+    updateMutation.mutate(submitData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -110,15 +175,29 @@ const RFIForm: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  if (isLoading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  if (!rfi) {
+    return <div className="card">RFI not found</div>;
+  }
+
+  const availableContacts = projectContacts?.filter(
+    (contact) => contact.company_id === Number(formData.recipient_company_id)
+  ) || [];
+
+  const availableResponseContacts = projectContacts?.filter(
+    (contact) => contact.company_id === Number(formData.responded_by_company_id)
+  ) || [];
+
   return (
     <div>
       <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/rfis`}>&larr; Back to RFIs</Link>
+        <Link to={`/projects/${projectId}/rfis/${id}`}>&larr; Back to RFI #{rfi.number}</Link>
       </div>
 
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>New RFI</h1>
-      </div>
+      <h1 className="page-title">Edit RFI #{rfi.number}</h1>
 
       <div className="card">
         <form onSubmit={handleSubmit}>
@@ -159,6 +238,20 @@ const RFIForm: React.FC = () => {
                 <option value="normal">Normal</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select
+                name="status"
+                className="form-input"
+                value={formData.status}
+                onChange={handleChange}
+              >
+                <option value="open">Open</option>
+                <option value="answered">Answered</option>
+                <option value="closed">Closed</option>
               </select>
             </div>
 
@@ -451,23 +544,19 @@ const RFIForm: React.FC = () => {
                   name="recipient_company_id"
                   className="form-input"
                   value={formData.recipient_company_id}
-                  onChange={(e) => {
-                    handleChange(e);
-                    // Clear contact when company changes
-                    setFormData((prev) => ({ ...prev, recipient_contact_id: '' }));
-                  }}
+                  onChange={handleChange}
                 >
                   <option value="">Select Company</option>
                   {projectCompanies?.map((company) => (
                     <option key={company.id} value={company.id}>
-                      {company.name} ({company.role.replace('_', ' ')})
+                      {company.name} ({company.role.replace(/_/g, ' ')})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Contact Person</label>
+                <label className="form-label">Send To (Contact)</label>
                 <select
                   name="recipient_contact_id"
                   className="form-input"
@@ -476,52 +565,129 @@ const RFIForm: React.FC = () => {
                   disabled={!formData.recipient_company_id}
                 >
                   <option value="">Select Contact</option>
-                  {projectContacts
-                    ?.filter((contact) => contact.company_id === Number(formData.recipient_company_id))
-                    .map((contact) => (
-                      <option key={contact.id} value={contact.id}>
-                        {contact.first_name} {contact.last_name}
-                        {contact.title && ` - ${contact.title}`}
-                      </option>
-                    ))}
+                  {availableContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.first_name} {contact.last_name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-
-            {!projectCompanies || projectCompanies.length === 0 ? (
-              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)', marginTop: '0.5rem' }}>
-                No companies added to this project yet.{' '}
-                <Link to={`/projects/${projectId}/companies`}>Add companies</Link> to enable recipient selection.
-              </div>
-            ) : null}
           </div>
 
-          <div className="form-actions">
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '1rem' }}>
+            <h3 style={{ fontSize: '1rem', marginBottom: '1rem' }}>Response (Optional)</h3>
+
+            <div className="form-group">
+              <label className="form-label">Response / Direction</label>
+              <textarea
+                name="response"
+                className="form-input"
+                rows={6}
+                value={formData.response}
+                onChange={handleChange}
+                placeholder="Enter response or direction..."
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Response Classification</label>
+                <select
+                  name="response_classification"
+                  className="form-input"
+                  value={formData.response_classification}
+                  onChange={handleChange}
+                >
+                  <option value="">Select Classification</option>
+                  <option value="clarification_only">Clarification Only - No Action Required</option>
+                  <option value="submit_cor">Submit COR</option>
+                  <option value="proceed_suggested">Proceed as Suggested</option>
+                  <option value="see_attached">See Attached</option>
+                  <option value="refer_to">Refer to</option>
+                </select>
+              </div>
+
+              {formData.response_classification === 'refer_to' && (
+                <div className="form-group">
+                  <label className="form-label">Refer To</label>
+                  <input
+                    type="text"
+                    name="response_reference"
+                    className="form-input"
+                    value={formData.response_reference}
+                    onChange={handleChange}
+                    placeholder="Enter reference"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Responded By (Company)</label>
+                <select
+                  name="responded_by_company_id"
+                  className="form-input"
+                  value={formData.responded_by_company_id}
+                  onChange={handleChange}
+                >
+                  <option value="">Select Company</option>
+                  {projectCompanies?.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name} ({company.role.replace(/_/g, ' ')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Responded By (Contact)</label>
+                <select
+                  name="responded_by_contact_id"
+                  className="form-input"
+                  value={formData.responded_by_contact_id}
+                  onChange={handleChange}
+                  disabled={!formData.responded_by_company_id}
+                >
+                  <option value="">Select Contact</option>
+                  {availableResponseContacts.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.first_name} {contact.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Response Date</label>
+                <input
+                  type="date"
+                  name="responded_at"
+                  className="form-input"
+                  value={formData.responded_at}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => navigate(`/projects/${projectId}/rfis`)}
+              onClick={() => navigate(`/projects/${projectId}/rfis/${id}`)}
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create RFI'}
+            <button type="submit" className="btn btn-primary">
+              Save Changes
             </button>
           </div>
-
-          {createMutation.isError && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              Error creating RFI. Please try again.
-            </div>
-          )}
         </form>
       </div>
     </div>
   );
 };
 
-export default RFIForm;
+export default RFIEdit;

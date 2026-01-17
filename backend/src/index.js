@@ -13,6 +13,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const projectRoutes = require('./routes/projects');
 const rfiRoutes = require('./routes/rfis');
+const rfiActionRoutes = require('./routes/rfiActions');
 const submittalRoutes = require('./routes/submittals');
 const changeOrderRoutes = require('./routes/changeOrders');
 const dailyReportRoutes = require('./routes/dailyReports');
@@ -20,6 +21,9 @@ const scheduleRoutes = require('./routes/schedule');
 const historicalProjectRoutes = require('./routes/historicalProjects');
 const customerRoutes = require('./routes/customers');
 const chatRoutes = require('./routes/chat');
+const companyRoutes = require('./routes/companies');
+const contactRoutes = require('./routes/contacts');
+const estimateRoutes = require('./routes/estimates');
 
 const app = express();
 
@@ -38,6 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/rfis', rfiRoutes);
+app.use('/api/rfi-actions', rfiActionRoutes);
 app.use('/api/submittals', submittalRoutes);
 app.use('/api/change-orders', changeOrderRoutes);
 app.use('/api/daily-reports', dailyReportRoutes);
@@ -45,6 +50,9 @@ app.use('/api/schedule', scheduleRoutes);
 app.use('/api/historical-projects', historicalProjectRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/companies', companyRoutes);
+app.use('/api/contacts', contactRoutes);
+app.use('/api/estimates', estimateRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -67,3 +75,4 @@ if (process.env.VERCEL !== '1') {
 }
 
 module.exports = app;
+

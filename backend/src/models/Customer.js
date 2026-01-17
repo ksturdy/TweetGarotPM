@@ -101,6 +101,158 @@ const Customer = {
       FROM customers
     `);
     return result.rows[0];
+  },
+
+  async getMetrics(customerId) {
+    const result = await db.query(`
+      SELECT
+        c.customer_score,
+        COUNT(DISTINCT p.id) as total_projects,
+        COALESCE(SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END), 0) as completed_projects,
+        COUNT(DISTINCT hp.id) as total_bids,
+        COALESCE(SUM(hp.total_cost), 0) as total_revenue,
+        CASE
+          WHEN COUNT(DISTINCT hp.id) > 0
+          THEN ROUND((COUNT(DISTINCT p.id)::numeric / COUNT(DISTINCT hp.id)::numeric * 100), 2)
+          ELSE 0
+        END as hit_rate
+      FROM customers c
+      LEFT JOIN projects p ON p.customer_id = c.id
+      LEFT JOIN historical_projects hp ON hp.customer_id = c.id
+      WHERE c.id = $1
+      GROUP BY c.id, c.customer_score
+    `, [customerId]);
+
+    return result.rows[0] || {
+      customer_score: 0,
+      total_projects: 0,
+      completed_projects: 0,
+      total_bids: 0,
+      total_revenue: 0,
+      hit_rate: 0
+    };
+  },
+
+  async getProjects(customerId) {
+    const result = await db.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.start_date as date,
+        0 as value,
+        0 as gm_percent,
+        p.status,
+        p.description
+      FROM projects p
+      WHERE p.customer_id = $1
+      ORDER BY p.start_date DESC NULLS LAST
+    `, [customerId]);
+    return result.rows;
+  },
+
+  async getBids(customerId) {
+    const result = await db.query(`
+      SELECT
+        hp.id,
+        hp.name,
+        hp.bid_date as date,
+        hp.total_cost as value,
+        0 as gm_percent,
+        hp.building_type,
+        hp.project_type
+      FROM historical_projects hp
+      WHERE hp.customer_id = $1
+      ORDER BY hp.bid_date DESC NULLS LAST
+    `, [customerId]);
+    return result.rows;
+  },
+
+  async getTouchpoints(customerId) {
+    const result = await db.query(`
+      SELECT
+        ct.*,
+        u.first_name || ' ' || u.last_name as created_by_name
+      FROM customer_touchpoints ct
+      LEFT JOIN users u ON ct.created_by = u.id
+      WHERE ct.customer_id = $1
+      ORDER BY ct.touchpoint_date DESC, ct.created_at DESC
+    `, [customerId]);
+    return result.rows;
+  },
+
+  async createTouchpoint(customerId, data) {
+    const result = await db.query(`
+      INSERT INTO customer_touchpoints (
+        customer_id, touchpoint_date, touchpoint_type,
+        contact_person, notes, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [
+      customerId,
+      data.touchpoint_date,
+      data.touchpoint_type,
+      data.contact_person,
+      data.notes,
+      data.created_by
+    ]);
+    return result.rows[0];
+  },
+
+  async getContacts(customerId) {
+    const result = await db.query(`
+      SELECT *
+      FROM customer_contacts
+      WHERE customer_id = $1
+      ORDER BY is_primary DESC, last_name ASC, first_name ASC
+    `, [customerId]);
+    return result.rows;
+  },
+
+  async createContact(customerId, data) {
+    const result = await db.query(`
+      INSERT INTO customer_contacts (
+        customer_id, first_name, last_name, title,
+        email, phone, mobile, is_primary, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `, [
+      customerId,
+      data.first_name,
+      data.last_name,
+      data.title,
+      data.email,
+      data.phone,
+      data.mobile,
+      data.is_primary,
+      data.notes
+    ]);
+    return result.rows[0];
+  },
+
+  async updateContact(contactId, data) {
+    const result = await db.query(`
+      UPDATE customer_contacts SET
+        first_name = $1, last_name = $2, title = $3,
+        email = $4, phone = $5, mobile = $6, is_primary = $7, notes = $8,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $9
+      RETURNING *
+    `, [
+      data.first_name,
+      data.last_name,
+      data.title,
+      data.email,
+      data.phone,
+      data.mobile,
+      data.is_primary,
+      data.notes,
+      contactId
+    ]);
+    return result.rows[0];
+  },
+
+  async deleteContact(contactId) {
+    await db.query('DELETE FROM customer_contacts WHERE id = $1', [contactId]);
   }
 };
 

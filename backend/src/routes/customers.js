@@ -66,6 +66,96 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+// Get customer metrics (revenue, hit rate, etc.)
+router.get('/:id/metrics', async (req, res, next) => {
+  try {
+    const metrics = await Customer.getMetrics(req.params.id);
+    res.json(metrics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customer projects
+router.get('/:id/projects', async (req, res, next) => {
+  try {
+    const projects = await Customer.getProjects(req.params.id);
+    res.json(projects);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customer bids (historical projects)
+router.get('/:id/bids', async (req, res, next) => {
+  try {
+    const bids = await Customer.getBids(req.params.id);
+    res.json(bids);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customer touchpoints
+router.get('/:id/touchpoints', async (req, res, next) => {
+  try {
+    const touchpoints = await Customer.getTouchpoints(req.params.id);
+    res.json(touchpoints);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create touchpoint for customer
+router.post('/:id/touchpoints', async (req, res, next) => {
+  try {
+    const touchpoint = await Customer.createTouchpoint(req.params.id, req.body);
+    res.status(201).json(touchpoint);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customer contacts
+router.get('/:id/contacts', async (req, res, next) => {
+  try {
+    const contacts = await Customer.getContacts(req.params.id);
+    res.json(contacts);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create contact for customer
+router.post('/:id/contacts', async (req, res, next) => {
+  try {
+    const contact = await Customer.createContact(req.params.id, req.body);
+    res.status(201).json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update contact
+router.put('/contacts/:contactId', async (req, res, next) => {
+  try {
+    const contact = await Customer.updateContact(req.params.contactId, req.body);
+    res.json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete contact
+router.delete('/contacts/:contactId', async (req, res, next) => {
+  try {
+    await Customer.deleteContact(req.params.contactId);
+    res.json({ message: 'Contact deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Create new customer
 router.post('/', async (req, res, next) => {
   try {

@@ -90,3 +90,23 @@ export const customersApi = {
     return response.data;
   }
 };
+
+// Additional convenience functions
+export const getCustomer = (id: string) => customersApi.getById(parseInt(id));
+export const getCustomerMetrics = async (id: string) => {
+  const response = await api.get(`/customers/${id}/metrics`);
+  return response.data;
+};
+export const getCustomerProjects = async (id: string) => {
+  const response = await api.get(`/customers/${id}/projects`);
+  return response.data;
+};
+export const getCustomerBids = async (id: string) => {
+  const response = await api.get(`/customers/${id}/bids`);
+  return response.data;
+};
+export const getCustomerTouchpoints = async (id: string) => {
+  const response = await api.get(`/customers/${id}/touchpoints`);
+  return response.data;
+};
+
