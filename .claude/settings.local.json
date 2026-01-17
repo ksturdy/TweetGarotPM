@@ -23,7 +23,9 @@
       "Bash(cmd /c taskkill:*)",
       "Bash(powershell -Command \"Stop-Process -Id 27224 -Force\")",
       "Bash(timeout /t 5 /nobreak)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 16268 -Force\")",
+      "Bash(set)"
     ],
     "deny": [],
     "ask": []
