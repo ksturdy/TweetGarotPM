@@ -52,7 +52,7 @@ Don't give overly generic responses - engage with the user's actual question and
 
     // Call Claude API
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
       system: systemPrompt,
       messages: messages
