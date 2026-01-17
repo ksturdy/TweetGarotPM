@@ -30,7 +30,7 @@ const Login: React.FC = () => {
     <div className="login-page">
       <div className="login-card card">
         <div className="login-logo">
-          <img src="/Titan Logo.png" alt="Titan Shield" className="login-shield" />
+          <div className="login-shield">🛡️</div>
         </div>
         <h1 className="login-title">TITAN</h1>
         <p className="login-subtitle">by Tweet Garot</p>

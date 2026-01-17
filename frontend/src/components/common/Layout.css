@@ -29,8 +29,8 @@
 }
 
 .logo-shield {
-  height: 50px;
-  width: auto;
+  font-size: 2.5rem;
+  line-height: 1;
 }
 
 .logo-text {

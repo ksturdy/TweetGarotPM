@@ -18,8 +18,8 @@
 }
 
 .login-shield {
-  height: 120px;
-  width: auto;
+  font-size: 6rem;
+  line-height: 1;
 }
 
 .login-title {
