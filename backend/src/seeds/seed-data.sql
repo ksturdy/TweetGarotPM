@@ -9,7 +9,7 @@ TRUNCATE attachments, schedule_items, daily_reports, change_orders, submittals, 
 -- ============================================
 -- Password for all users: "password123" (bcrypt hash)
 INSERT INTO users (email, password, first_name, last_name, role) VALUES
-('admin@tweetgarot.com', '$2a$10$rQEY9zS8rXK8rZJ8vX8pทอeH0rV5wX5uZ5uZ5uZ5uZ5uZ5uZ5uZ5u', 'Mike', 'Johnson', 'admin'),
+('admin@tweetgarot.com', '$2a$10$rQEY9zS8rXK8rZJ8vX8pทอeH0rV5wX5uZ5uZ5uZ5uZ5uZ5uZ5uZ5u', 'Kipp', 'Sturdivant', 'admin'),
 ('jsmith@tweetgarot.com', '$2a$10$rQEY9zS8rXK8rZJ8vX8pทอeH0rV5wX5uZ5uZ5uZ5uZ5uZ5uZ5uZ5u', 'John', 'Smith', 'manager'),
 ('sgarcia@tweetgarot.com', '$2a$10$rQEY9zS8rXK8rZJ8vX8pทอeH0rV5wX5uZ5uZ5uZ5uZ5uZ5uZ5uZ5u', 'Sarah', 'Garcia', 'manager'),
 ('bwilson@tweetgarot.com', '$2a$10$rQEY9zS8rXK8rZJ8vX8pทอeH0rV5wX5uZ5uZ5uZ5uZ5uZ5uZ5uZ5u', 'Bob', 'Wilson', 'user'),
