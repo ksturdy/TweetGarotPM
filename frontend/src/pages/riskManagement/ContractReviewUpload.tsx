@@ -161,28 +161,28 @@ const ContractReviewUpload: React.FC = () => {
             {
               category: 'payment_terms',
               title: 'Payment Terms',
-              level: 'MODERATE',
+              risk_level: 'MODERATE',
               finding: 'Net 45 payment terms identified.',
               recommendation: 'Negotiate to Net 30 standard terms.',
             },
             {
               category: 'liquidated_damages',
               title: 'Liquidated Damages',
-              level: 'HIGH',
+              risk_level: 'HIGH',
               finding: 'Uncapped liquidated damages at $5,000 per day.',
               recommendation: 'Add cap at 10% of contract value.',
             },
             {
               category: 'consequential_damages',
               title: 'Consequential Damages',
-              level: 'HIGH',
+              risk_level: 'HIGH',
               finding: 'No mutual waiver of consequential damages.',
               recommendation: 'Add mutual waiver clause.',
             },
             {
               category: 'indemnification',
               title: 'Indemnification',
-              level: 'MODERATE',
+              risk_level: 'MODERATE',
               finding: 'Broad indemnification scope including owner negligence.',
               recommendation: 'Limit indemnification to own negligence only.',
             },
@@ -190,11 +190,9 @@ const ContractReviewUpload: React.FC = () => {
         };
       }
 
-      setResults(analysisResults);
-
       // Determine if legal review is needed
       const needsLegalReview =
-        analysisResults.risks?.some((r: any) => r.level === 'HIGH') ||
+        analysisResults.risks?.some((r: any) => r.risk_level === 'HIGH') ||
         analysisResults.contractValue > 2000000;
 
       // Save to database
@@ -210,18 +208,24 @@ const ContractReviewUpload: React.FC = () => {
         findings: analysisResults.risks,
       };
 
-      await createMutation.mutateAsync(reviewData);
+      console.log('Saving contract review:', reviewData);
+      const savedReview = await createMutation.mutateAsync(reviewData);
+      console.log('Contract review saved:', savedReview);
+
+      // Only show results after successful save
+      setResults(analysisResults);
     } catch (err: any) {
-      setError(err.message || 'Failed to analyze contract');
+      console.error('Error during analysis or save:', err);
+      setError(err.message || 'Failed to analyze or save contract');
     } finally {
       setAnalyzing(false);
     }
   };
 
   if (results) {
-    const highRisks = results.risks?.filter((r: any) => r.level === 'HIGH').length || 0;
-    const moderateRisks = results.risks?.filter((r: any) => r.level === 'MODERATE').length || 0;
-    const lowRisks = results.risks?.filter((r: any) => r.level === 'LOW').length || 0;
+    const highRisks = results.risks?.filter((r: any) => r.risk_level === 'HIGH').length || 0;
+    const moderateRisks = results.risks?.filter((r: any) => r.risk_level === 'MODERATE').length || 0;
+    const lowRisks = results.risks?.filter((r: any) => r.risk_level === 'LOW').length || 0;
 
     return (
       <div className="contract-upload">
@@ -276,8 +280,8 @@ const ContractReviewUpload: React.FC = () => {
             {results.risks?.map((risk: any, i: number) => (
               <details key={i} className="finding-item">
                 <summary>
-                  <span className={`finding-badge risk-${risk.level?.toLowerCase()}`}>
-                    {risk.level}
+                  <span className={`finding-badge risk-${risk.risk_level?.toLowerCase()}`}>
+                    {risk.risk_level}
                   </span>
                   <span className="finding-title">{risk.title}</span>
                 </summary>
