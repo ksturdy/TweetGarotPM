@@ -2,24 +2,29 @@ const db = require('../config/database');
 
 const ContractRiskFinding = {
   async create(data) {
+    console.log('ContractRiskFinding.create - Input data:', data);
+    const params = [
+      data.contract_review_id,
+      data.category,
+      data.title,
+      data.risk_level,
+      data.finding,
+      data.recommendation || null,
+      data.status || 'open',
+      data.resolution_notes || null,
+      data.resolved_by || null
+    ];
+    console.log('ContractRiskFinding.create - SQL params:', params);
+
     const result = await db.query(
       `INSERT INTO contract_risk_findings (
         contract_review_id, category, title, risk_level, finding,
         recommendation, status, resolution_notes, resolved_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
-      [
-        data.contract_review_id,
-        data.category,
-        data.title,
-        data.risk_level,
-        data.finding,
-        data.recommendation,
-        data.status || 'open',
-        data.resolution_notes,
-        data.resolved_by
-      ]
+      params
     );
+    console.log('ContractRiskFinding.create - Result:', result.rows[0]);
     return result.rows[0];
   },
 
