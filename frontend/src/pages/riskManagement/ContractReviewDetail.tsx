@@ -14,7 +14,12 @@ const ContractReviewDetail: React.FC = () => {
 
   const { data: review, isLoading } = useQuery({
     queryKey: ['contractReview', id],
-    queryFn: () => contractReviewsApi.getById(Number(id)).then((res) => res.data),
+    queryFn: () => contractReviewsApi.getById(Number(id)).then((res) => {
+      console.log('Contract Review API Response:', res.data);
+      console.log('Findings array:', res.data.findings);
+      console.log('Findings length:', res.data.findings?.length);
+      return res.data;
+    }),
     enabled: !!id,
   });
 
@@ -64,9 +69,16 @@ const ContractReviewDetail: React.FC = () => {
     );
   }
 
+  console.log('Review object in render:', review);
+  console.log('Review.findings in render:', review.findings);
+
   const highRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'HIGH') || [];
   const moderateRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'MODERATE') || [];
   const lowRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'LOW') || [];
+
+  console.log('High risks count:', highRisks.length);
+  console.log('Moderate risks count:', moderateRisks.length);
+  console.log('Low risks count:', lowRisks.length);
 
   return (
     <div className="contract-detail">

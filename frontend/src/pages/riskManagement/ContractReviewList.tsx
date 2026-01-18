@@ -26,6 +26,9 @@ const ContractReviewList: React.FC = () => {
 
   return (
     <div className="contract-review-list">
+      <div className="breadcrumb" style={{ marginBottom: '1rem' }}>
+        <Link to="/risk-management">← Back to Risk Management</Link>
+      </div>
       <div className="page-header">
         <div>
           <h1>Contract Reviews</h1>
