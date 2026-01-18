@@ -35,7 +35,7 @@ router.post(
       }
 
       const user = await User.create({ email, password, firstName, lastName });
-      const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, config.jwt.secret, {
+      const token = jwt.sign({ id: user.id, email: user.email, role: user.role, hrAccess: user.hr_access }, config.jwt.secret, {
         expiresIn: config.jwt.expiresIn,
       });
 
@@ -65,12 +65,12 @@ router.post(
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, config.jwt.secret, {
+      const token = jwt.sign({ id: user.id, email: user.email, role: user.role, hrAccess: user.hr_access }, config.jwt.secret, {
         expiresIn: config.jwt.expiresIn,
       });
 
       res.json({
-        user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, role: user.role },
+        user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, role: user.role, hrAccess: user.hr_access },
         token,
       });
     } catch (error) {

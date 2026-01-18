@@ -19,6 +19,13 @@ router.get('/', async (req, res, next) => {
       search: req.query.search,
     };
     const estimates = await Estimate.findAll(filters);
+
+    console.log('=== ESTIMATES LIST DEBUG ===');
+    estimates.forEach(est => {
+      console.log(`${est.estimate_number}: total_cost=${est.total_cost}, subtotal=${est.subtotal}`);
+    });
+    console.log('===========================');
+
     res.json(estimates);
   } catch (error) {
     next(error);
@@ -51,6 +58,13 @@ router.get('/:id', async (req, res, next) => {
       ...section,
       items: lineItems.filter(item => item.section_id === section.id),
     }));
+
+    console.log('=== GET ESTIMATE DEBUG ===');
+    console.log('Estimate ID:', req.params.id);
+    console.log('Estimate Number:', estimate.estimate_number);
+    console.log('Total Cost from DB:', estimate.total_cost);
+    console.log('Subtotal from DB:', estimate.subtotal);
+    console.log('===========================');
 
     res.json({
       ...estimate,
@@ -121,11 +135,112 @@ router.post('/', async (req, res, next) => {
 // Update estimate
 router.put('/:id', async (req, res, next) => {
   try {
+    console.log('=== PUT ESTIMATE START ===');
+    console.log('Estimate ID:', req.params.id);
+    console.log('Has sections in request?', !!req.body.sections);
+    console.log('Sections length:', req.body.sections?.length);
+    console.log('===========================');
+
+    // Update estimate header
     const estimate = await Estimate.update(req.params.id, req.body);
     if (!estimate) {
       return res.status(404).json({ error: 'Estimate not found' });
     }
-    res.json(estimate);
+
+    // Update sections if provided
+    if (req.body.sections && req.body.sections.length > 0) {
+      // Get existing sections
+      const existingSections = await EstimateSection.findByEstimate(req.params.id);
+      const existingSectionIds = existingSections.map(s => s.id);
+
+      // Track which sections are in the update
+      const updatedSectionIds = [];
+
+      for (const section of req.body.sections) {
+        let createdSection;
+        if (section.id && existingSectionIds.includes(section.id)) {
+          // Update existing section
+          await EstimateSection.update(section.id, section);
+          createdSection = { id: section.id };
+          updatedSectionIds.push(section.id);
+        } else {
+          // Create new section
+          createdSection = await EstimateSection.create({
+            estimate_id: req.params.id,
+            ...section,
+          });
+          updatedSectionIds.push(createdSection.id);
+        }
+
+        // Handle line items for this section
+        if (section.items && section.items.length > 0) {
+          // Get existing items for this section
+          const existingItems = await EstimateLineItem.findBySection(createdSection.id);
+          const existingItemIds = existingItems.map(item => item.id);
+          const updatedItemIds = [];
+
+          for (const item of section.items) {
+            if (item.id && existingItemIds.includes(item.id)) {
+              // Update existing item
+              await EstimateLineItem.update(item.id, item);
+              updatedItemIds.push(item.id);
+            } else {
+              // Create new item
+              const createdItem = await EstimateLineItem.create({
+                estimate_id: req.params.id,
+                section_id: createdSection.id,
+                ...item,
+              });
+              updatedItemIds.push(createdItem.id);
+            }
+          }
+
+          // Delete items that were removed
+          const itemsToDelete = existingItemIds.filter(id => !updatedItemIds.includes(id));
+          for (const itemId of itemsToDelete) {
+            await EstimateLineItem.delete(itemId);
+          }
+        } else {
+          // No items provided, delete all existing items for this section
+          const existingItems = await EstimateLineItem.findBySection(createdSection.id);
+          for (const item of existingItems) {
+            await EstimateLineItem.delete(item.id);
+          }
+        }
+      }
+
+      // Delete sections that were removed
+      const sectionsToDelete = existingSectionIds.filter(id => !updatedSectionIds.includes(id));
+      for (const sectionId of sectionsToDelete) {
+        await EstimateSection.delete(sectionId);
+      }
+    }
+
+    // Fetch complete estimate with updated totals
+    const completeEstimate = await Estimate.findById(req.params.id);
+    const sections = await EstimateSection.findByEstimate(req.params.id);
+    const lineItems = await EstimateLineItem.findByEstimate(req.params.id);
+
+    const sectionsWithItems = sections.map(section => ({
+      ...section,
+      items: lineItems.filter(item => item.section_id === section.id),
+    }));
+
+    console.log('=== ESTIMATE UPDATE DEBUG ===');
+    console.log('Estimate ID:', req.params.id);
+    console.log('Estimate Number:', completeEstimate.estimate_number);
+    console.log('Total Cost from DB:', completeEstimate.total_cost);
+    console.log('Subtotal from DB:', completeEstimate.subtotal);
+    console.log('Labor Cost from DB:', completeEstimate.labor_cost);
+    console.log('Material Cost from DB:', completeEstimate.material_cost);
+    console.log('Number of Sections:', sections.length);
+    console.log('Number of Line Items:', lineItems.length);
+    console.log('===========================');
+
+    res.json({
+      ...completeEstimate,
+      sections: sectionsWithItems,
+    });
   } catch (error) {
     next(error);
   }

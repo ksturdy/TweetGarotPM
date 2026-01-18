@@ -4,17 +4,19 @@ import RFIPreview from './RFIPreview';
 
 interface RFIPreviewModalProps {
   rfi: RFI;
+  isOpen: boolean;
   onClose: () => void;
-  onPrint?: () => void;
 }
 
-const RFIPreviewModal: React.FC<RFIPreviewModalProps> = ({ rfi, onClose, onPrint }) => {
+const RFIPreviewModal: React.FC<RFIPreviewModalProps> = ({
+  rfi,
+  isOpen,
+  onClose,
+}) => {
+  if (!isOpen) return null;
+
   const handlePrint = () => {
-    if (onPrint) {
-      onPrint();
-    } else {
-      window.print();
-    }
+    window.print();
   };
 
   return (
@@ -25,81 +27,87 @@ const RFIPreviewModal: React.FC<RFIPreviewModalProps> = ({ rfi, onClose, onPrint
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '20px',
-        overflowY: 'auto',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        zIndex: 9999,
+        overflow: 'auto',
       }}
       onClick={onClose}
     >
       <div
         style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '8px',
+          position: 'relative',
+          margin: '20px auto',
           maxWidth: '900px',
-          width: '100%',
-          maxHeight: '90vh',
-          overflow: 'auto',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+          backgroundColor: '#fff',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
+        {/* Action Buttons (hide when printing) */}
         <div
           style={{
             position: 'sticky',
             top: 0,
-            backgroundColor: '#ffffff',
-            borderBottom: '1px solid #e5e7eb',
-            padding: '20px',
+            backgroundColor: '#002356',
+            padding: '10px 20px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             zIndex: 10,
           }}
+          className="no-print"
         >
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>RFI Preview</h2>
+          <h2 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>
+            RFI Preview
+          </h2>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={handlePrint}
-              className="btn btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: '#fff',
+                color: '#002356',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
             >
-              <span>🖨️</span> Print
+              Print / PDF
             </button>
-            <button onClick={onClose} className="btn btn-secondary">
-              ✕ Close
+            <button
+              onClick={onClose}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Close
             </button>
           </div>
         </div>
 
         {/* Preview Content */}
-        <div style={{ padding: '20px' }}>
-          <RFIPreview rfi={rfi} />
-        </div>
+        <RFIPreview rfi={rfi} />
       </div>
 
-      <style>
-        {`
-          @media print {
-            body * {
-              visibility: hidden;
-            }
-            .rfi-print-content, .rfi-print-content * {
-              visibility: visible;
-            }
-            .rfi-print-content {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-            }
+      {/* Print Styles */}
+      <style>{`
+        @media print {
+          .no-print {
+            display: none !important;
           }
-        `}
-      </style>
+          body {
+            margin: 0;
+            padding: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 };

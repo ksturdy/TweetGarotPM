@@ -17,7 +17,7 @@ const Estimate = {
         data.estimate_number, data.project_name, data.customer_id, data.customer_name,
         data.building_type, data.square_footage, data.location, data.bid_date,
         data.project_start_date, data.project_duration,
-        data.estimator_id, data.estimator_name, data.status || 'draft',
+        data.estimator_id, data.estimator_name, data.status || 'in progress',
         data.overhead_percentage || 10.00, data.profit_percentage || 10.00,
         data.contingency_percentage || 5.00, data.bond_percentage || 0,
         data.scope_of_work, data.exclusions, data.assumptions, data.notes,

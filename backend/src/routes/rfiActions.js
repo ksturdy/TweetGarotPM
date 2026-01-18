@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const RFI = require('../models/RFI');
+const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { generateRFIPdfHtml } = require('../utils/rfiPdfGenerator');
+const { generateRFILogPdfHtml } = require('../utils/rfiLogPdfGenerator');
 
 // Generate PDF for RFI
 router.get('/:id/pdf', authenticate, async (req, res, next) => {
@@ -76,6 +78,36 @@ router.get('/:id/preview', authenticate, async (req, res, next) => {
     }
 
     res.json(rfi);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate RFI Log PDF Report for a project
+router.get('/project/:projectId/log-report', authenticate, async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId;
+    const status = req.query.status; // optional filter
+
+    // Get project info
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Get all RFIs for the project
+    let rfis = await RFI.findByProject(projectId);
+
+    // Apply status filter if provided
+    if (status && status !== 'all') {
+      rfis = rfis.filter(rfi => rfi.status === status);
+    }
+
+    const html = generateRFILogPdfHtml(rfis, project.name);
+
+    // Return HTML that can be printed to PDF by the browser
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   } catch (error) {
     next(error);
   }

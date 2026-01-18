@@ -24,6 +24,13 @@ const chatRoutes = require('./routes/chat');
 const companyRoutes = require('./routes/companies');
 const contactRoutes = require('./routes/contacts');
 const estimateRoutes = require('./routes/estimates');
+const departmentRoutes = require('./routes/departments');
+const officeLocationRoutes = require('./routes/officeLocations');
+const employeeRoutes = require('./routes/employees');
+const specificationRoutes = require('./routes/specifications');
+const drawingRoutes = require('./routes/drawings');
+const feedbackRoutes = require('./routes/feedback');
+const contractReviewRoutes = require('./routes/contractReviews');
 
 const app = express();
 
@@ -53,6 +60,13 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/estimates', estimateRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/office-locations', officeLocationRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/specifications', specificationRoutes);
+app.use('/api/drawings', drawingRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/contract-reviews', contractReviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -75,4 +89,3 @@ if (process.env.VERCEL !== '1') {
 }
 
 module.exports = app;
-

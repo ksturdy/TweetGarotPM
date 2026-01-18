@@ -88,6 +88,8 @@ const ProjectDetail: React.FC = () => {
 
   const modules = [
     { path: 'companies', label: 'Companies', description: 'Stakeholders and contacts' },
+    { path: 'specifications', label: 'Specifications', description: 'Project specifications with Q&A' },
+    { path: 'drawings', label: 'Drawings', description: 'Construction drawings and plans' },
     { path: 'rfis', label: 'RFIs', description: 'Requests for Information' },
     { path: 'submittals', label: 'Submittals', description: 'Shop drawings and product data' },
     { path: 'change-orders', label: 'Change Orders', description: 'Contract modifications' },

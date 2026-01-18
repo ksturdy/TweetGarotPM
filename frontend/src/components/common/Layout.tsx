@@ -11,10 +11,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
 
+  // Only show HR nav if user has HR access (not 'none') or is admin
+  const hasHRAccess = user?.role === 'admin' || (user?.hrAccess && user.hrAccess !== 'none');
+
   const navItems = [
     { path: '/', label: 'Dashboard' },
     { path: '/projects', label: 'Projects' },
   ];
+
+  if (hasHRAccess) {
+    navItems.push({ path: '/hr', label: 'HR' });
+  }
 
   return (
     <div className="layout">
@@ -39,6 +46,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             ))}
           </nav>
           <div className="user-menu">
+            <Link to="/feedback" className="btn btn-primary btn-sm">
+              Feedback
+            </Link>
             <span className="user-name">
               {user?.firstName} {user?.lastName}
             </span>

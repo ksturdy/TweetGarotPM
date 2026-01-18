@@ -17,7 +17,6 @@ const AccountManagementList: React.FC = () => {
       path: '/account-management/contacts',
       desc: 'Individual contact management',
       color: '#8b5cf6',
-      comingSoon: true,
     },
     {
       name: 'Sales Pipeline',
@@ -80,14 +79,14 @@ const AccountManagementList: React.FC = () => {
         <div className="stat-card card">
           <div className="stat-icon">✅</div>
           <div>
-            <div className="stat-value">1</div>
+            <div className="stat-value">2</div>
             <div className="stat-label">Active Modules</div>
           </div>
         </div>
         <div className="stat-card card">
           <div className="stat-icon">🚀</div>
           <div>
-            <div className="stat-value">3</div>
+            <div className="stat-value">2</div>
             <div className="stat-label">Coming Soon</div>
           </div>
         </div>

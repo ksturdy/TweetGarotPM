@@ -23,11 +23,34 @@ import Branding from './pages/marketing/Branding';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
+import EstimateDetail from './pages/estimating/EstimateDetail';
 import BudgetsList from './pages/estimating/BudgetsList';
 import CostDatabase from './pages/estimating/CostDatabase';
 import AccountManagementList from './pages/accountManagement/AccountManagementList';
+import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
 import CustomerDetail from './pages/CustomerDetail';
+import CustomerContacts from './pages/CustomerContacts';
+import CustomerProjects from './pages/CustomerProjects';
+import CustomerEstimates from './pages/CustomerEstimates';
+import CustomerTouchpoints from './pages/CustomerTouchpoints';
+import HRDashboard from './pages/hr/HRDashboard';
+import EmployeeList from './pages/hr/EmployeeList';
+import EmployeeDetail from './pages/hr/EmployeeDetail';
+import EmployeeForm from './pages/hr/EmployeeForm';
+import DepartmentList from './pages/hr/DepartmentList';
+import LocationList from './pages/hr/LocationList';
+import UserManagement from './pages/UserManagement';
+import ProjectSpecifications from './pages/projects/ProjectSpecifications';
+import SpecificationDetail from './pages/projects/SpecificationDetail';
+import ProjectDrawings from './pages/projects/ProjectDrawings';
+import DrawingDetail from './pages/projects/DrawingDetail';
+import FeedbackPage from './pages/FeedbackPage';
+import AdministrationDashboard from './pages/administration/AdministrationDashboard';
+import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashboard';
+import ContractReviewList from './pages/riskManagement/ContractReviewList';
+import ContractReviewUpload from './pages/riskManagement/ContractReviewUpload';
+import ContractReviewDetail from './pages/riskManagement/ContractReviewDetail';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -55,11 +78,31 @@ const App: React.FC = () => {
                 <Route path="/estimating" element={<EstimatingDashboard />} />
                 <Route path="/estimating/estimates" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />
+                <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />
                 <Route path="/estimating/budgets" element={<BudgetsList />} />
                 <Route path="/estimating/cost-database" element={<CostDatabase />} />
                 <Route path="/account-management" element={<AccountManagementList />} />
+                <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />
                 <Route path="/customers/:id" element={<CustomerDetail />} />
+                <Route path="/customers/:id/contacts" element={<CustomerContacts />} />
+                <Route path="/customers/:id/projects" element={<CustomerProjects />} />
+                <Route path="/customers/:id/estimates" element={<CustomerEstimates />} />
+                <Route path="/customers/:id/touchpoints" element={<CustomerTouchpoints />} />
+                <Route path="/hr" element={<HRDashboard />} />
+                <Route path="/hr/employees" element={<EmployeeList />} />
+                <Route path="/hr/employees/new" element={<EmployeeForm />} />
+                <Route path="/hr/employees/:id" element={<EmployeeDetail />} />
+                <Route path="/hr/employees/:id/edit" element={<EmployeeDetail />} />
+                <Route path="/hr/departments" element={<DepartmentList />} />
+                <Route path="/hr/locations" element={<LocationList />} />
+                <Route path="/users" element={<UserManagement />} />
+                <Route path="/feedback" element={<FeedbackPage />} />
+                <Route path="/administration" element={<AdministrationDashboard />} />
+                <Route path="/risk-management" element={<RiskManagementDashboard />} />
+                <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
+                <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
+                <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />
                 <Route path="/projects" element={<ProjectList />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
@@ -74,6 +117,10 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/change-orders" element={<ChangeOrderList />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
+                <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />
+                <Route path="/projects/:id/drawings" element={<ProjectDrawings />} />
+                <Route path="/projects/:id/drawings/:drawingId" element={<DrawingDetail />} />
               </Routes>
             </Layout>
           </PrivateRoute>

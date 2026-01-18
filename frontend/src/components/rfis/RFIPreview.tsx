@@ -4,10 +4,9 @@ import { format } from 'date-fns';
 
 interface RFIPreviewProps {
   rfi: RFI;
-  onClose?: () => void;
 }
 
-const RFIPreview: React.FC<RFIPreviewProps> = ({ rfi, onClose }) => {
+const RFIPreview: React.FC<RFIPreviewProps> = ({ rfi }) => {
   const checkbox = (checked: boolean) => (checked ? '☑' : '☐');
 
   const disciplineLabel = (discipline: string | null, disciplineOther: string | null) => {
@@ -639,26 +638,6 @@ const RFIPreview: React.FC<RFIPreviewProps> = ({ rfi, onClose }) => {
           Generated on {format(new Date(), 'MMM d, yyyy')} at {format(new Date(), 'h:mm a')}
         </div>
       </div>
-
-      {/* Close Button (only if onClose is provided) */}
-      {onClose && (
-        <div style={{ textAlign: 'center', marginTop: '20px', pageBreakBefore: 'avoid' }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              backgroundColor: '#002356',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Close Preview
-          </button>
-        </div>
-      )}
     </div>
   );
 };

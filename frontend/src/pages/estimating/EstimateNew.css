@@ -28,9 +28,43 @@
   margin-bottom: 1rem;
 }
 
+/* Add dollar sign styling to money input cells */
+.line-items-table td:nth-child(6),
+.line-items-table td:nth-child(7),
+.line-items-table td:nth-child(8),
+.line-items-table td:nth-child(9) {
+  position: relative;
+}
+
+.line-items-table td:nth-child(6)::before,
+.line-items-table td:nth-child(7)::before,
+.line-items-table td:nth-child(8)::before,
+.line-items-table td:nth-child(9)::before {
+  content: '$';
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.line-items-table td:nth-child(6) input,
+.line-items-table td:nth-child(7) input,
+.line-items-table td:nth-child(8) input,
+.line-items-table td:nth-child(9) input {
+  padding-left: 1.25rem;
+}
+
 .line-items-table table {
   width: 100%;
   min-width: 1200px;
+  table-layout: fixed;
+}
+
+.line-items-table tbody tr:hover {
+  background-color: #6b7280 !important;
 }
 
 .form-input-sm {
@@ -44,6 +78,17 @@
 .form-input-sm:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+/* Remove number input spinners */
+.form-input-sm[type="number"]::-webkit-inner-spin-button,
+.form-input-sm[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.form-input-sm[type="number"] {
+  -moz-appearance: textfield;
 }
 
 .btn-icon-danger {
@@ -73,7 +118,6 @@
 
 .summary-table .amount {
   text-align: right;
-  font-family: 'Courier New', monospace;
 }
 
 .summary-table .subtotal-row td {

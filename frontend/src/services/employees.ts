@@ -60,7 +60,7 @@ export const employeesApi = {
 
   getByUserId: (userId: number) => api.get<{ data: Employee }>(`/employees/user/${userId}`),
 
-  create: (data: EmployeeInput) => {
+  create: (data: any) => {
     const payload = {
       user_id: data.userId || null,
       first_name: data.firstName,
@@ -75,11 +75,14 @@ export const employeesApi = {
       employment_status: data.employmentStatus || 'active',
       role: data.role || 'user',
       notes: data.notes || null,
+      createUserAccount: data.createUserAccount,
+      userPassword: data.userPassword,
+      userRole: data.userRole,
     };
     return api.post<{ data: Employee }>('/employees', payload);
   },
 
-  update: (id: number, data: EmployeeInput) => {
+  update: (id: number, data: any) => {
     const payload = {
       user_id: data.userId || null,
       first_name: data.firstName,
@@ -94,6 +97,9 @@ export const employeesApi = {
       employment_status: data.employmentStatus || 'active',
       role: data.role || 'user',
       notes: data.notes || null,
+      createUserAccount: data.createUserAccount,
+      userPassword: data.userPassword,
+      userRole: data.userRole,
     };
     return api.put<{ data: Employee }>(`/employees/${id}`, payload);
   },

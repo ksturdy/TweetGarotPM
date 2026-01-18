@@ -47,7 +47,7 @@ const EstimateNew: React.FC = () => {
     bid_date: '',
     project_start_date: '',
     project_duration: undefined,
-    status: 'draft',
+    status: 'in progress',
     overhead_percentage: 10.00,
     profit_percentage: 10.00,
     contingency_percentage: 5.00,
@@ -121,7 +121,8 @@ const EstimateNew: React.FC = () => {
     onSuccess: (response) => {
       // Clear localStorage on successful save
       localStorage.removeItem('estimateInProgress');
-      navigate(`/estimating/estimates/${response.data.id}`);
+      // Navigate back to estimates list
+      navigate('/estimating/estimates');
     },
     onError: (error: any) => {
       console.error('Failed to create estimate:', error);
@@ -310,6 +311,38 @@ const EstimateNew: React.FC = () => {
     const estimateData: Estimate = {
       ...formData,
       status: submitStatus,
+      sections: sections.map((section) => ({
+        ...section,
+        items: section.items || [],
+      })),
+    };
+
+    createMutation.mutate(estimateData);
+  };
+
+  const handleSaveDraft = () => {
+    const estimateData: Estimate = {
+      ...formData,
+      // Convert empty strings to undefined for date fields
+      bid_date: formData.bid_date || undefined,
+      project_start_date: formData.project_start_date || undefined,
+      status: 'in progress',
+      sections: sections.map((section) => ({
+        ...section,
+        items: section.items || [],
+      })),
+    };
+
+    createMutation.mutate(estimateData);
+  };
+
+  const handleSubmitEstimate = () => {
+    const estimateData: Estimate = {
+      ...formData,
+      // Convert empty strings to undefined for date fields
+      bid_date: formData.bid_date || undefined,
+      project_start_date: formData.project_start_date || undefined,
+      status: 'pending',
       sections: sections.map((section) => ({
         ...section,
         items: section.items || [],
@@ -929,18 +962,18 @@ const EstimateNew: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={(e) => handleSubmit(e, 'draft')}
+            onClick={handleSaveDraft}
             disabled={createMutation.isPending}
           >
-            Save as Draft
+            {createMutation.isPending ? 'Saving...' : 'Save as Draft'}
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={(e) => handleSubmit(e, 'pending')}
+            onClick={handleSubmitEstimate}
             disabled={createMutation.isPending}
           >
-            Submit Estimate
+            {createMutation.isPending ? 'Submitting...' : 'Submit Estimate'}
           </button>
         </div>
       </form>

@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const OfficeLocation = require('../models/OfficeLocation');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, authorizeHR } = require('../middleware/auth');
 
-// Get all office locations
-router.get('/', authenticate, async (req, res) => {
+// Get all office locations - requires HR read access
+router.get('/', authenticate, authorizeHR('read'), async (req, res) => {
   try {
     const locations = await OfficeLocation.getAll();
     res.json({ data: locations });
@@ -14,8 +14,8 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get office location by ID
-router.get('/:id', authenticate, async (req, res) => {
+// Get office location by ID - requires HR read access
+router.get('/:id', authenticate, authorizeHR('read'), async (req, res) => {
   try {
     const location = await OfficeLocation.getById(req.params.id);
     if (!location) {
@@ -33,8 +33,8 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Create office location - Admin only
-router.post('/', authenticate, authorize('admin'), async (req, res) => {
+// Create office location - requires HR write access
+router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     const location = await OfficeLocation.create(req.body);
     res.status(201).json({ data: location });
@@ -44,8 +44,8 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// Update office location - Admin only
-router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
+// Update office location - requires HR write access
+router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     const location = await OfficeLocation.update(req.params.id, req.body);
     if (!location) {
@@ -58,8 +58,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// Delete office location - Admin only
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// Delete office location - requires HR write access
+router.delete('/:id', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     // Check if location has employees
     const employeeCount = await OfficeLocation.getEmployeeCount(req.params.id);

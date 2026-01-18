@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Department = require('../models/Department');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, authorizeHR } = require('../middleware/auth');
 
-// Get all departments
-router.get('/', authenticate, async (req, res) => {
+// Get all departments - requires HR read access
+router.get('/', authenticate, authorizeHR('read'), async (req, res) => {
   try {
     const departments = await Department.getAll();
     res.json({ data: departments });
@@ -14,8 +14,8 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get department by ID
-router.get('/:id', authenticate, async (req, res) => {
+// Get department by ID - requires HR read access
+router.get('/:id', authenticate, authorizeHR('read'), async (req, res) => {
   try {
     const department = await Department.getById(req.params.id);
     if (!department) {
@@ -33,8 +33,8 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Create department - Admin only
-router.post('/', authenticate, authorize('admin'), async (req, res) => {
+// Create department - requires HR write access
+router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     const department = await Department.create(req.body);
     res.status(201).json({ data: department });
@@ -44,8 +44,8 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// Update department - Admin only
-router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
+// Update department - requires HR write access
+router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     const department = await Department.update(req.params.id, req.body);
     if (!department) {
@@ -58,8 +58,8 @@ router.put('/:id', authenticate, authorize('admin'), async (req, res) => {
   }
 });
 
-// Delete department - Admin only
-router.delete('/:id', authenticate, authorize('admin'), async (req, res) => {
+// Delete department - requires HR write access
+router.delete('/:id', authenticate, authorizeHR('write'), async (req, res) => {
   try {
     // Check if department has employees
     const employeeCount = await Department.getEmployeeCount(req.params.id);

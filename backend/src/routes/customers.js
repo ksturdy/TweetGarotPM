@@ -29,6 +29,16 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// Get all customer contacts (across all customers)
+router.get('/contacts/all', async (req, res, next) => {
+  try {
+    const contacts = await Customer.getAllContacts();
+    res.json(contacts);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get customer statistics
 router.get('/stats', async (req, res, next) => {
   try {

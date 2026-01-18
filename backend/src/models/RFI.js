@@ -40,12 +40,16 @@ const RFI = {
   async findByProject(projectId, filters = {}) {
     let query = `
       SELECT r.*,
+             p.name as project_name, p.number as project_number, p.client as project_client,
              u1.first_name || ' ' || u1.last_name as assigned_to_name,
              u2.first_name || ' ' || u2.last_name as created_by_name,
              ball_comp.name as ball_in_court_name,
              comp.name as recipient_company_name,
-             cont.first_name || ' ' || cont.last_name as recipient_contact_name
+             cont.first_name || ' ' || cont.last_name as recipient_contact_name,
+             cont.email as recipient_contact_email,
+             cont.phone as recipient_contact_phone
       FROM rfis r
+      JOIN projects p ON r.project_id = p.id
       LEFT JOIN users u1 ON r.assigned_to = u1.id
       LEFT JOIN users u2 ON r.created_by = u2.id
       LEFT JOIN companies ball_comp ON r.ball_in_court = ball_comp.id

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { customersApi, Customer } from '../../services/customers';
+import CustomerFormModal from '../../components/modals/CustomerFormModal';
 import './CustomerList.css';
 
 const CustomerList: React.FC = () => {
@@ -11,6 +12,7 @@ const CustomerList: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -102,6 +104,13 @@ const CustomerList: React.FC = () => {
             accept=".xlsx,.xls"
             style={{ display: 'none' }}
           />
+          <button
+            onClick={() => setShowNewCustomerModal(true)}
+            className="btn btn-primary"
+            style={{ marginRight: '0.75rem' }}
+          >
+            ➕ New Customer
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-primary"
@@ -205,13 +214,12 @@ const CustomerList: React.FC = () => {
                 <th>City</th>
                 <th>State</th>
                 <th>Status</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div className="empty-state">
                       <div className="empty-icon">📋</div>
                       <h3>No customers found</h3>
@@ -223,7 +231,18 @@ const CustomerList: React.FC = () => {
                 filteredCustomers.map((customer) => (
                   <tr key={customer.id}>
                     <td>
-                      <strong>{customer.customer_facility}</strong>
+                      <Link
+                        to={`/customers/${customer.id}`}
+                        style={{
+                          color: '#1e40af',
+                          textDecoration: 'none',
+                          fontWeight: '600',
+                        }}
+                        onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        {customer.customer_facility}
+                      </Link>
                       {customer.address && (
                         <div className="text-muted small">{customer.address}</div>
                       )}
@@ -236,15 +255,6 @@ const CustomerList: React.FC = () => {
                       <span className={`badge ${customer.active_customer ? 'badge-success' : 'badge-secondary'}`}>
                         {customer.active_customer ? 'Active' : 'Inactive'}
                       </span>
-                    </td>
-                    <td>
-                      <Link
-                        to={`/customers/${customer.id}`}
-                        className="btn-icon"
-                        title="View customer details"
-                      >
-                        👁️
-                      </Link>
                     </td>
                   </tr>
                 ))
@@ -318,6 +328,13 @@ const CustomerList: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* New Customer Modal */}
+      {showNewCustomerModal && (
+        <CustomerFormModal
+          onClose={() => setShowNewCustomerModal(false)}
+        />
       )}
     </div>
   );

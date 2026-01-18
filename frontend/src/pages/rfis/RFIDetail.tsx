@@ -5,12 +5,14 @@ import { rfisApi } from '../../services/rfis';
 import { projectsApi } from '../../services/projects';
 import { usersApi } from '../../services/users';
 import { format } from 'date-fns';
+import RFIPreviewModal from '../../components/rfis/RFIPreviewModal';
 
 const RFIDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -114,11 +116,18 @@ const RFIDetail: React.FC = () => {
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
         <h1 className="page-title" style={{ margin: 0 }}>RFI #{rfi.number}</h1>
-        {!isEditing && (
-          <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {!isEditing && (
+            <>
+              <button className="btn btn-primary" onClick={() => setIsPreviewOpen(true)}>
+                View RFI
+              </button>
+              <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>
+                Edit
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -318,6 +327,13 @@ const RFIDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      <RFIPreviewModal
+        rfi={rfi}
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+      />
     </div>
   );
 };

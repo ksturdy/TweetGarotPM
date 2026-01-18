@@ -7,10 +7,26 @@ const api = axios.create({
   },
 });
 
+// Request interceptor to always include token from localStorage
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Only redirect to login on 401 if it's NOT the /auth/me check
+    // The AuthContext handles /auth/me failures gracefully
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/me')) {
       localStorage.removeItem('token');
       window.location.href = '/login';
     }

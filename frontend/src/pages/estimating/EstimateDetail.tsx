@@ -34,7 +34,7 @@ const EstimateDetail: React.FC = () => {
     bid_date: '',
     project_start_date: '',
     project_duration: undefined,
-    status: 'draft',
+    status: 'in progress',
     overhead_percentage: 10,
     profit_percentage: 10,
     contingency_percentage: 5,
@@ -63,7 +63,7 @@ const EstimateDetail: React.FC = () => {
         bid_date: estimate.bid_date ? estimate.bid_date.split('T')[0] : '',
         project_start_date: estimate.project_start_date ? estimate.project_start_date.split('T')[0] : '',
         project_duration: estimate.project_duration || undefined,
-        status: estimate.status || 'draft',
+        status: estimate.status || 'in progress',
         overhead_percentage: estimate.overhead_percentage || 10,
         profit_percentage: estimate.profit_percentage || 10,
         contingency_percentage: estimate.contingency_percentage || 5,
@@ -310,7 +310,7 @@ const EstimateDetail: React.FC = () => {
       ...formData,
       bid_date: formData.bid_date || undefined,
       project_start_date: formData.project_start_date || undefined,
-      status: formData.status || 'draft',
+      status: formData.status || 'in progress',
       sections: sections.map((section) => ({
         ...section,
         items: section.items || [],
@@ -332,14 +332,13 @@ const EstimateDetail: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
-      draft: 'badge-info',
-      pending: 'badge-warning',
-      approved: 'badge-success',
-      rejected: 'badge-danger',
-      won: 'badge-success',
-      lost: 'badge-danger',
+      'in progress': 'badge-info',
+      'submitted': 'badge-warning',
+      'awarded': 'badge-success',
+      'lost': 'badge-danger',
+      'cancelled': 'badge-secondary',
     };
-    return `badge ${classes[status] || 'badge-info'}`;
+    return `badge ${classes[status.toLowerCase()] || 'badge-info'}`;
   };
 
   if (isLoading) {
@@ -385,7 +384,7 @@ const EstimateDetail: React.FC = () => {
             Edit Estimate: {estimate.estimate_number}
           </h1>
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span className={getStatusBadge(estimate.status || 'draft')} style={{ fontSize: '0.875rem' }}>
+            <span className={getStatusBadge(estimate.status || 'in progress')} style={{ fontSize: '0.875rem', textTransform: 'capitalize' }}>
               {estimate.status}
             </span>
             <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary)' }}>
@@ -393,58 +392,29 @@ const EstimateDetail: React.FC = () => {
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             className="btn btn-primary"
             onClick={() => setIsPreviewOpen(true)}
           >
             View Proposal
           </button>
-          {estimate.status === 'draft' && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => handleStatusChange('pending')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 500 }}>Change Status:</label>
+            <select
+              value={estimate.status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="form-input"
+              style={{ fontSize: '0.875rem', padding: '0.5rem' }}
               disabled={updateStatusMutation.isPending}
             >
-              Submit for Approval
-            </button>
-          )}
-          {estimate.status === 'pending' && (
-            <>
-              <button
-                className="btn btn-success"
-                onClick={() => handleStatusChange('approved')}
-                disabled={updateStatusMutation.isPending}
-              >
-                Approve
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={() => handleStatusChange('rejected')}
-                disabled={updateStatusMutation.isPending}
-              >
-                Reject
-              </button>
-            </>
-          )}
-          {estimate.status === 'approved' && (
-            <>
-              <button
-                className="btn btn-success"
-                onClick={() => handleStatusChange('won')}
-                disabled={updateStatusMutation.isPending}
-              >
-                Mark as Won
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={() => handleStatusChange('lost')}
-                disabled={updateStatusMutation.isPending}
-              >
-                Mark as Lost
-              </button>
-            </>
-          )}
+              <option value="in progress">In Progress</option>
+              <option value="submitted">Submitted</option>
+              <option value="awarded">Awarded</option>
+              <option value="lost">Lost</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
       </div>
 

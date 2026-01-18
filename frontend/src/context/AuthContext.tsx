@@ -7,6 +7,7 @@ interface User {
   firstName: string;
   lastName: string;
   role: string;
+  hrAccess?: string;
 }
 
 interface AuthContextType {
@@ -42,11 +43,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             firstName: res.data.first_name,
             lastName: res.data.last_name,
             role: res.data.role,
+            hrAccess: res.data.hr_access,
           });
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('Auth check failed:', error);
           localStorage.removeItem('token');
           delete api.defaults.headers.common['Authorization'];
+          setUser(null);
         })
         .finally(() => setLoading(false));
     } else {
@@ -77,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       firstName: res.data.user.first_name,
       lastName: res.data.user.last_name,
       role: res.data.user.role,
+      hrAccess: res.data.user.hr_access,
     });
   }, []);
 

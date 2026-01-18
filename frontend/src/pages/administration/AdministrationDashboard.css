@@ -1,0 +1,153 @@
+.administration-dashboard {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.administration-header {
+  margin-bottom: 2rem;
+}
+
+.administration-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #002356;
+  margin: 0 0 0.5rem 0;
+}
+
+.administration-subtitle {
+  color: #747678;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.administration-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.admin-module-card {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 2rem;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  position: relative;
+  min-height: 140px;
+}
+
+.admin-module-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 35, 86, 0.15);
+  border-color: #002356;
+}
+
+.admin-module-card.disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-module-card.disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #e2e8f0;
+}
+
+.coming-soon-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #F37B03;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-module-icon {
+  font-size: 3.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 0.5rem;
+}
+
+.admin-module-content {
+  flex: 1;
+}
+
+.admin-module-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #002356;
+  margin: 0 0 0.5rem 0;
+}
+
+.admin-module-desc {
+  font-size: 0.875rem;
+  color: #747678;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.administration-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 3rem;
+}
+
+.info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #002356;
+  margin: 0 0 0.75rem 0;
+}
+
+.info-card p {
+  font-size: 0.875rem;
+  color: #747678;
+  margin: 0;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .administration-dashboard {
+    padding: 1rem;
+  }
+
+  .administration-modules {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-module-card {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .administration-info {
+    grid-template-columns: 1fr;
+  }
+}
