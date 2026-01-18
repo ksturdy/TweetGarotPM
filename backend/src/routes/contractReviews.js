@@ -57,31 +57,42 @@ router.get('/:id', async (req, res, next) => {
 // Create new contract review
 router.post('/', async (req, res, next) => {
   try {
+    console.log('POST /contract-reviews - Request body:', JSON.stringify(req.body, null, 2));
+    console.log('POST /contract-reviews - User:', req.user);
+
     const reviewData = {
       ...req.body,
       uploaded_by: req.user.id,
     };
 
+    console.log('Creating contract review with data:', JSON.stringify(reviewData, null, 2));
+
     const review = await ContractReview.create(reviewData);
+    console.log('Contract review created:', review);
 
     // Create risk findings if provided
     if (req.body.findings && req.body.findings.length > 0) {
+      console.log(`Creating ${req.body.findings.length} risk findings...`);
       for (const finding of req.body.findings) {
-        await ContractRiskFinding.create({
+        const findingData = {
           contract_review_id: review.id,
           ...finding,
-        });
+        };
+        console.log('Creating finding:', findingData);
+        await ContractRiskFinding.create(findingData);
       }
     }
 
     // Fetch the complete review with findings
     const findings = await ContractRiskFinding.findByContractReview(review.id);
+    console.log(`Fetched ${findings.length} findings for review ${review.id}`);
 
     res.status(201).json({
       ...review,
       findings,
     });
   } catch (error) {
+    console.error('Error in POST /contract-reviews:', error);
     next(error);
   }
 });

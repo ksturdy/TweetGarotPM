@@ -2,6 +2,23 @@ const db = require('../config/database');
 
 const ContractReview = {
   async create(data) {
+    console.log('ContractReview.create - Input data:', data);
+    const params = [
+      data.file_name,
+      data.file_size,
+      data.file_path,
+      data.project_name,
+      data.general_contractor,
+      data.contract_value,
+      data.overall_risk,
+      data.analysis_completed_at || new Date(),
+      data.status || 'pending',
+      data.needs_legal_review || false,
+      data.uploaded_by,
+      data.review_notes
+    ];
+    console.log('ContractReview.create - SQL params:', params);
+
     const result = await db.query(
       `INSERT INTO contract_reviews (
         file_name, file_size, file_path, project_name, general_contractor,
@@ -9,21 +26,9 @@ const ContractReview = {
         needs_legal_review, uploaded_by, review_notes
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
-      [
-        data.file_name,
-        data.file_size,
-        data.file_path,
-        data.project_name,
-        data.general_contractor,
-        data.contract_value,
-        data.overall_risk,
-        data.analysis_completed_at || new Date(),
-        data.status || 'pending',
-        data.needs_legal_review || false,
-        data.uploaded_by,
-        data.review_notes
-      ]
+      params
     );
+    console.log('ContractReview.create - Result:', result.rows[0]);
     return result.rows[0];
   },
 
