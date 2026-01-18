@@ -2,13 +2,19 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  // Check for token in Authorization header first, then query parameter
+  let token = null;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required' });
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token;
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
 
   try {
     const decoded = jwt.verify(token, config.jwt.secret);
@@ -33,4 +39,31 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorize };
+const authorizeHR = (requiredAccess = 'read') => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Admin always has full HR access
+    if (req.user.role === 'admin') {
+      return next();
+    }
+
+    // Check hr_access from JWT token
+    const hrAccess = req.user.hrAccess;
+
+    if (!hrAccess || hrAccess === 'none') {
+      return res.status(403).json({ error: 'No HR access' });
+    }
+
+    // If write access is required, check for it
+    if (requiredAccess === 'write' && hrAccess !== 'write') {
+      return res.status(403).json({ error: 'HR write access required' });
+    }
+
+    next();
+  };
+};
+
+module.exports = { authenticate, authorize, authorizeHR };
