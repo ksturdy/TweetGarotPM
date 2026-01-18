@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { contractReviewsApi } from '../../services/contractReviews';
+import { contractReviewsApi, ContractRiskFinding } from '../../services/contractReviews';
 import './ContractReviewDetail.css';
 
 const ContractReviewDetail: React.FC = () => {
@@ -64,9 +64,9 @@ const ContractReviewDetail: React.FC = () => {
     );
   }
 
-  const highRisks = review.findings?.filter((f) => f.risk_level === 'HIGH') || [];
-  const moderateRisks = review.findings?.filter((f) => f.risk_level === 'MODERATE') || [];
-  const lowRisks = review.findings?.filter((f) => f.risk_level === 'LOW') || [];
+  const highRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'HIGH') || [];
+  const moderateRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'MODERATE') || [];
+  const lowRisks = review.findings?.filter((f: ContractRiskFinding) => f.risk_level === 'LOW') || [];
 
   return (
     <div className="contract-detail">
@@ -176,7 +176,7 @@ const ContractReviewDetail: React.FC = () => {
           <div className="card-body">
             {review.findings && review.findings.length > 0 ? (
               <div className="findings-list">
-                {review.findings.map((finding) => (
+                {review.findings.map((finding: ContractRiskFinding) => (
                   <div key={finding.id} className="finding-card">
                     <div className="finding-header">
                       <div>
