@@ -87,12 +87,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create triggers
+-- Create triggers (drop first if they exist)
+DROP TRIGGER IF EXISTS trigger_update_feedback_votes_count ON feedback_votes;
 CREATE TRIGGER trigger_update_feedback_votes_count
     AFTER INSERT OR UPDATE OR DELETE ON feedback_votes
     FOR EACH ROW
     EXECUTE FUNCTION update_feedback_votes_count();
 
+DROP TRIGGER IF EXISTS trigger_update_feedback_comments_count ON feedback_comments;
 CREATE TRIGGER trigger_update_feedback_comments_count
     AFTER INSERT OR DELETE ON feedback_comments
     FOR EACH ROW
@@ -107,11 +109,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_feedback_updated_at ON feedback;
 CREATE TRIGGER trigger_feedback_updated_at
     BEFORE UPDATE ON feedback
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS trigger_feedback_comments_updated_at ON feedback_comments;
 CREATE TRIGGER trigger_feedback_comments_updated_at
     BEFORE UPDATE ON feedback_comments
     FOR EACH ROW
