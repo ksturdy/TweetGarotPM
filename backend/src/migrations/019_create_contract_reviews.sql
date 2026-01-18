@@ -84,13 +84,13 @@ CREATE TABLE IF NOT EXISTS contract_review_settings (
 INSERT INTO contract_review_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- Indexes for performance
-CREATE INDEX idx_contract_reviews_status ON contract_reviews(status);
-CREATE INDEX idx_contract_reviews_risk ON contract_reviews(overall_risk);
-CREATE INDEX idx_contract_reviews_uploaded_by ON contract_reviews(uploaded_by);
-CREATE INDEX idx_contract_reviews_created_at ON contract_reviews(created_at DESC);
-CREATE INDEX idx_risk_findings_contract ON contract_risk_findings(contract_review_id);
-CREATE INDEX idx_risk_findings_level ON contract_risk_findings(risk_level);
-CREATE INDEX idx_risk_findings_status ON contract_risk_findings(status);
+CREATE INDEX IF NOT EXISTS idx_contract_reviews_status ON contract_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_contract_reviews_risk ON contract_reviews(overall_risk);
+CREATE INDEX IF NOT EXISTS idx_contract_reviews_uploaded_by ON contract_reviews(uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_contract_reviews_created_at ON contract_reviews(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_risk_findings_contract ON contract_risk_findings(contract_review_id);
+CREATE INDEX IF NOT EXISTS idx_risk_findings_level ON contract_risk_findings(risk_level);
+CREATE INDEX IF NOT EXISTS idx_risk_findings_status ON contract_risk_findings(status);
 
 -- Update timestamp trigger function (if not exists)
 CREATE OR REPLACE FUNCTION update_updated_at_column()
