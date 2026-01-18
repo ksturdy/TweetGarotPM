@@ -1,5 +1,5 @@
 -- Create specifications table with version tracking
-CREATE TABLE specifications (
+CREATE TABLE IF NOT EXISTS specifications (
   id SERIAL PRIMARY KEY,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title VARCHAR(255) NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE specifications (
 );
 
 -- Create specification questions table for Q&A
-CREATE TABLE specification_questions (
+CREATE TABLE IF NOT EXISTS specification_questions (
   id SERIAL PRIMARY KEY,
   specification_id INTEGER NOT NULL REFERENCES specifications(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE specification_questions (
 );
 
 -- Create drawings table with version tracking
-CREATE TABLE drawings (
+CREATE TABLE IF NOT EXISTS drawings (
   id SERIAL PRIMARY KEY,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   drawing_number VARCHAR(100) NOT NULL,
@@ -60,10 +60,10 @@ CREATE TABLE drawings (
 );
 
 -- Create indexes for performance
-CREATE INDEX idx_specifications_project_id ON specifications(project_id);
-CREATE INDEX idx_specifications_is_latest ON specifications(is_latest);
-CREATE INDEX idx_specification_questions_spec_id ON specification_questions(specification_id);
-CREATE INDEX idx_specification_questions_status ON specification_questions(status);
-CREATE INDEX idx_drawings_project_id ON drawings(project_id);
-CREATE INDEX idx_drawings_is_latest ON drawings(is_latest);
-CREATE INDEX idx_drawings_drawing_number ON drawings(drawing_number);
+CREATE INDEX IF NOT EXISTS idx_specifications_project_id ON specifications(project_id);
+CREATE INDEX IF NOT EXISTS idx_specifications_is_latest ON specifications(is_latest);
+CREATE INDEX IF NOT EXISTS idx_specification_questions_spec_id ON specification_questions(specification_id);
+CREATE INDEX IF NOT EXISTS idx_specification_questions_status ON specification_questions(status);
+CREATE INDEX IF NOT EXISTS idx_drawings_project_id ON drawings(project_id);
+CREATE INDEX IF NOT EXISTS idx_drawings_is_latest ON drawings(is_latest);
+CREATE INDEX IF NOT EXISTS idx_drawings_drawing_number ON drawings(drawing_number);
