@@ -1,19 +1,19 @@
 -- Auto-generated production data restore
--- Generated: 2026-01-19T13:36:57.106Z
+-- Generated: 2026-01-19T13:48:35.347Z
 -- This migration restores production data if the database is wiped
 
 
 -- Restore users (8 rows)
 INSERT INTO users (id, email, password, first_name, last_name, role, created_at, updated_at, is_active, hr_access)
 VALUES
-  (1, 'admin@tweetgarot.com', '$2a$10$NLIjKY/Q1EUTT5DZZ/Snyu2xiGRzBbbVMo79Wpr61YeBr8hYvo0W.', 'Kipp', 'Sturdivant', 'admin', '2026-01-17T00:31:54.144Z', '2026-01-17T00:31:54.144Z', true, 'write'),
   (2, 'jsmith@tweetgarot.com', '$2a$10$NLIjKY/Q1EUTT5DZZ/Snyu2xiGRzBbbVMo79Wpr61YeBr8hYvo0W.', 'John', 'Smith', 'admin', '2026-01-17T00:31:54.144Z', '2026-01-18T02:47:51.171Z', true, 'write'),
   (3, 'sgarcia@tweetgarot.com', '$2a$10$NLIjKY/Q1EUTT5DZZ/Snyu2xiGRzBbbVMo79Wpr61YeBr8hYvo0W.', 'Sarah', 'Garcia', 'manager', '2026-01-17T00:31:54.144Z', '2026-01-18T01:44:03.999Z', false, 'read'),
   (4, 'bwilson@tweetgarot.com', '$2a$10$NLIjKY/Q1EUTT5DZZ/Snyu2xiGRzBbbVMo79Wpr61YeBr8hYvo0W.', 'Bob', 'Wilson', 'user', '2026-01-17T00:31:54.144Z', '2026-01-18T01:44:39.248Z', false, 'none'),
   (5, 'emartinez@tweetgarot.com', '$2a$10$NLIjKY/Q1EUTT5DZZ/Snyu2xiGRzBbbVMo79Wpr61YeBr8hYvo0W.', 'Elena', 'Martinez', 'user', '2026-01-17T00:31:54.144Z', '2026-01-18T01:44:08.229Z', false, 'none'),
   (6, 'brian.smith@tweetgarot.com', '$2a$10$IWxQdt3hW1VrXJIoBgv52OhaMfMY90xMcjhstnLfn1zkZc73nblYe', 'Brian', 'Smith', 'user', '2026-01-17T17:21:44.572Z', '2026-01-19T12:15:49.273Z', true, 'none'),
-  (7, 'kipp.sturdivant@tweetgarot.com', '$2a$10$99c3qI3.3ewMy1qTTCGmeeSYIKJRPQxEtL7h4yAsgAikindRj11Wi', 'Kipp', 'Sturdivant', 'admin', '2026-01-17T17:47:11.407Z', '2026-01-19T12:15:49.273Z', true, 'write'),
-  (13, 'christopher.howald@tweetgarot.com', '$2a$10$KnAaHNwIa80E2LLU2P.F0uzoLaX8oEZV7jsq7Wg/kdwLa5Vzu2WgK', 'Christopher', 'Howald', 'manager', '2026-01-18T01:58:40.550Z', '2026-01-19T12:15:49.273Z', true, 'read')
+  (13, 'christopher.howald@tweetgarot.com', '$2a$10$KnAaHNwIa80E2LLU2P.F0uzoLaX8oEZV7jsq7Wg/kdwLa5Vzu2WgK', 'Christopher', 'Howald', 'manager', '2026-01-18T01:58:40.550Z', '2026-01-19T12:15:49.273Z', true, 'read'),
+  (1, 'admin@tweetgarot.com', '$2a$10$WFQAzr1GvukI/P5E3HLoredsUCPv.EXLPNa2C8dxtmnGJN3Doa6Q6', 'Kipp', 'Sturdivant', 'admin', '2026-01-17T00:31:54.144Z', '2026-01-17T00:31:54.144Z', true, 'write'),
+  (7, 'kipp.sturdivant@tweetgarot.com', '$2a$10$WFQAzr1GvukI/P5E3HLoredsUCPv.EXLPNa2C8dxtmnGJN3Doa6Q6', 'Kipp', 'Sturdivant', 'admin', '2026-01-17T17:47:11.407Z', '2026-01-19T12:15:49.273Z', true, 'write')
 ON CONFLICT (id) DO UPDATE SET
   email = EXCLUDED.email,
   password = EXCLUDED.password,
@@ -26,23 +26,40 @@ ON CONFLICT (id) DO UPDATE SET
   hr_access = EXCLUDED.hr_access;
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
--- Restore departments (9 rows)
-INSERT INTO departments (id, name, description, manager_id, created_at, updated_at, department_number)
+-- Restore office_locations (4 rows)
+INSERT INTO office_locations (id, name, address, city, state, zip_code, phone, created_at, updated_at)
 VALUES
-  (1, 'Executive', 'Executive leadership and management', NULL, '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', '01-01'),
+  (2, 'Central Wisconsin', '456 North Ave', 'Carmel', 'IN', '46032', '(317) 555-0200', '2026-01-17T15:15:59.718Z', '2026-01-17T15:38:07.341Z'),
+  (3, 'Tomahawk', '789 South Blvd', 'Greenwood', 'IN', '46143', '(317) 555-0300', '2026-01-17T15:15:59.718Z', '2026-01-17T15:38:23.963Z'),
+  (1, 'DePere', '325 Reid St. ', 'Depere', 'WI', '54115', '9204980400', '2026-01-17T15:15:59.718Z', '2026-01-17T15:56:19.588Z'),
+  (4, 'Tempe', '712 Hacienda Dr. ', 'Phoenix', 'AZ', '85288', NULL, '2026-01-17T15:57:05.459Z', '2026-01-17T15:57:05.459Z')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  address = EXCLUDED.address,
+  city = EXCLUDED.city,
+  state = EXCLUDED.state,
+  zip_code = EXCLUDED.zip_code,
+  phone = EXCLUDED.phone,
+  created_at = EXCLUDED.created_at,
+  updated_at = EXCLUDED.updated_at;
+SELECT setval('office_locations_id_seq', (SELECT MAX(id) FROM office_locations));
+
+-- Restore departments (9 rows)
+INSERT INTO departments (id, name, description, created_at, updated_at, department_number)
+VALUES
+  (1, 'Executive', 'Executive leadership and management', '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', '01-01'),
   (2, 'Central Operations', 'Estimating, Virtual Construction, Engineering, and Purchasing
-', NULL, '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', '01-03'),
-  (5, 'Human Resources', 'HR and employee relations', NULL, '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', NULL),
-  (6, 'Administration', 'Accounting, IT, Risk', NULL, '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', NULL),
-  (9, 'CW Accounts', 'Central Wisconsin Accounts', NULL, '2026-01-17T15:35:48.203Z', '2026-01-19T12:15:49.273Z', NULL),
-  (13, 'NEW Accounts (Commercial)', '', NULL, '2026-01-17T17:17:46.911Z', '2026-01-19T12:15:49.273Z', '10-60'),
-  (10, 'Project Construction', '', 1, '2026-01-17T15:48:57.861Z', '2026-01-19T12:15:49.273Z', '10-30'),
-  (11, 'NEW Accounts (Industrial)', '', 2, '2026-01-17T15:49:24.836Z', '2026-01-19T12:15:49.273Z', '10-50'),
-  (12, 'Tempe', '', 4, '2026-01-17T15:58:20.715Z', '2026-01-19T12:15:49.273Z', '40-30')
+', '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', '01-03'),
+  (5, 'Human Resources', 'HR and employee relations', '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', NULL),
+  (6, 'Administration', 'Accounting, IT, Risk', '2026-01-17T15:15:59.718Z', '2026-01-19T12:15:49.273Z', NULL),
+  (9, 'CW Accounts', 'Central Wisconsin Accounts', '2026-01-17T15:35:48.203Z', '2026-01-19T12:15:49.273Z', NULL),
+  (13, 'NEW Accounts (Commercial)', '', '2026-01-17T17:17:46.911Z', '2026-01-19T12:15:49.273Z', '10-60'),
+  (10, 'Project Construction', '', '2026-01-17T15:48:57.861Z', '2026-01-19T12:15:49.273Z', '10-30'),
+  (11, 'NEW Accounts (Industrial)', '', '2026-01-17T15:49:24.836Z', '2026-01-19T12:15:49.273Z', '10-50'),
+  (12, 'Tempe', '', '2026-01-17T15:58:20.715Z', '2026-01-19T12:15:49.273Z', '40-30')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
-  manager_id = EXCLUDED.manager_id,
   created_at = EXCLUDED.created_at,
   updated_at = EXCLUDED.updated_at,
   department_number = EXCLUDED.department_number;
@@ -74,24 +91,6 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = EXCLUDED.updated_at,
   role = EXCLUDED.role;
 SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees));
-
--- Restore office_locations (4 rows)
-INSERT INTO office_locations (id, name, address, city, state, zip_code, phone, created_at, updated_at)
-VALUES
-  (2, 'Central Wisconsin', '456 North Ave', 'Carmel', 'IN', '46032', '(317) 555-0200', '2026-01-17T15:15:59.718Z', '2026-01-17T15:38:07.341Z'),
-  (3, 'Tomahawk', '789 South Blvd', 'Greenwood', 'IN', '46143', '(317) 555-0300', '2026-01-17T15:15:59.718Z', '2026-01-17T15:38:23.963Z'),
-  (1, 'DePere', '325 Reid St. ', 'Depere', 'WI', '54115', '9204980400', '2026-01-17T15:15:59.718Z', '2026-01-17T15:56:19.588Z'),
-  (4, 'Tempe', '712 Hacienda Dr. ', 'Phoenix', 'AZ', '85288', NULL, '2026-01-17T15:57:05.459Z', '2026-01-17T15:57:05.459Z')
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  address = EXCLUDED.address,
-  city = EXCLUDED.city,
-  state = EXCLUDED.state,
-  zip_code = EXCLUDED.zip_code,
-  phone = EXCLUDED.phone,
-  created_at = EXCLUDED.created_at,
-  updated_at = EXCLUDED.updated_at;
-SELECT setval('office_locations_id_seq', (SELECT MAX(id) FROM office_locations));
 
 -- Restore customers (2487 rows)
 INSERT INTO customers (id, customer_facility, customer_owner, account_manager, field_leads, customer_number, address, city, state, zip_code, controls, department, customer_score, active_customer, notes, created_at, updated_at)
@@ -2749,3 +2748,10 @@ ON CONFLICT (id) DO UPDATE SET
   location_end = EXCLUDED.location_end,
   quoted_text = EXCLUDED.quoted_text;
 SELECT setval('contract_risk_findings_id_seq', (SELECT MAX(id) FROM contract_risk_findings));
+
+-- Deferred updates for circular dependencies
+
+-- Update departments.manager_id (after employees was inserted)
+UPDATE departments SET manager_id = 1 WHERE id = 10;
+UPDATE departments SET manager_id = 2 WHERE id = 11;
+UPDATE departments SET manager_id = 4 WHERE id = 12;

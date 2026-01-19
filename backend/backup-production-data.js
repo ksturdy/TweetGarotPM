@@ -15,9 +15,9 @@ async function backupDatabase() {
     // Tables to backup in dependency order
     const tables = [
       'users',
+      'office_locations',
       'departments',
       'employees',
-      'office_locations',
       'customers',
       'vendors',
       'companies',
@@ -30,11 +30,18 @@ async function backupDatabase() {
       'contract_annotations',
     ];
 
+    // Tables with circular dependencies that need special handling
+    const circularDependencyTables = {
+      'departments': { column: 'manager_id', referencesTable: 'employees' }
+    };
+
     let migrationSql = `-- Auto-generated production data restore
 -- Generated: ${new Date().toISOString()}
 -- This migration restores production data if the database is wiped
 
 `;
+
+    const deferredUpdates = [];
 
     for (const table of tables) {
       console.log(`Backing up table: ${table}`);
@@ -64,13 +71,18 @@ async function backupDatabase() {
       console.log(`  ✓ Found ${result.rows.length} rows`);
 
       // Get column names
-      const columns = Object.keys(result.rows[0]);
+      let columns = Object.keys(result.rows[0]);
+      const circularDep = circularDependencyTables[table];
+
+      // For tables with circular dependencies, exclude the circular column initially
+      const excludedColumn = circularDep ? circularDep.column : null;
+      const insertColumns = excludedColumn ? columns.filter(c => c !== excludedColumn) : columns;
 
       migrationSql += `\n-- Restore ${table} (${result.rows.length} rows)\n`;
-      migrationSql += `INSERT INTO ${table} (${columns.join(', ')})\nVALUES\n`;
+      migrationSql += `INSERT INTO ${table} (${insertColumns.join(', ')})\nVALUES\n`;
 
       const valueRows = result.rows.map(row => {
-        const values = columns.map(col => {
+        const values = insertColumns.map(col => {
           const val = row[col];
           if (val === null) return 'NULL';
           if (typeof val === 'number') return val;
@@ -85,7 +97,7 @@ async function backupDatabase() {
       migrationSql += valueRows.join(',\n');
       migrationSql += '\nON CONFLICT (id) DO UPDATE SET\n';
 
-      const updateClauses = columns
+      const updateClauses = insertColumns
         .filter(col => col !== 'id')
         .map(col => `  ${col} = EXCLUDED.${col}`);
 
@@ -94,6 +106,30 @@ async function backupDatabase() {
 
       // Update sequence
       migrationSql += `SELECT setval('${table}_id_seq', (SELECT MAX(id) FROM ${table}));\n`;
+
+      // If this table has a circular dependency, save updates for later
+      if (excludedColumn) {
+        const updates = result.rows
+          .filter(row => row[excludedColumn] !== null)
+          .map(row => `UPDATE ${table} SET ${excludedColumn} = ${row[excludedColumn]} WHERE id = ${row.id};`);
+        if (updates.length > 0) {
+          deferredUpdates.push({
+            table,
+            column: excludedColumn,
+            afterTable: circularDep.referencesTable,
+            updates
+          });
+        }
+      }
+    }
+
+    // Add deferred updates after all tables
+    if (deferredUpdates.length > 0) {
+      migrationSql += `\n-- Deferred updates for circular dependencies\n`;
+      for (const deferred of deferredUpdates) {
+        migrationSql += `\n-- Update ${deferred.table}.${deferred.column} (after ${deferred.afterTable} was inserted)\n`;
+        migrationSql += deferred.updates.join('\n') + '\n';
+      }
     }
 
     // Write to migration file
