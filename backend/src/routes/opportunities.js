@@ -64,6 +64,17 @@ router.get('/analytics', async (req, res, next) => {
   }
 });
 
+// Get pipeline trend data (monthly values over time)
+router.get('/trend', async (req, res, next) => {
+  try {
+    const months = req.query.months || 7; // Default to 7 months
+    const trendData = await opportunities.getPipelineTrend(months);
+    res.json(trendData);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single opportunity
 router.get('/:id', async (req, res, next) => {
   try {

@@ -64,6 +64,12 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => opportunitiesService.getAll()
   });
 
+  // Fetch pipeline trend data
+  const { data: trendData = [], isLoading: isTrendLoading } = useQuery({
+    queryKey: ['opportunities-trend'],
+    queryFn: () => opportunitiesService.getTrend(7)
+  });
+
   // Helper function to get market icon
   const getMarketIcon = (market?: string): string => {
     const marketIcons: { [key: string]: string } = {
@@ -349,13 +355,13 @@ const SalesPipeline: React.FC = () => {
 
   const maxStageValue = Math.max(...Object.values(stageValues));
 
-  // Chart data
+  // Chart data - use real trend data from API
   const trendChartData = {
-    labels: ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+    labels: trendData.map(d => d.month_label),
     datasets: [
       {
         label: 'Pipeline Value',
-        data: [12.5, 14.2, 13.8, 15.6, 16.4, 17.2, 18.4],
+        data: trendData.map(d => d.pipeline_value / 1000000), // Convert to millions
         borderColor: '#3b82f6',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         tension: 0.4,

@@ -288,6 +288,40 @@ const opportunities = {
 
     const result = await pool.query(query, params);
     return result.rows[0];
+  },
+
+  // Get pipeline trend over time (monthly snapshots)
+  async getPipelineTrend(months = 7) {
+    const query = `
+      WITH RECURSIVE months AS (
+        -- Generate the last N months
+        SELECT
+          DATE_TRUNC('month', CURRENT_DATE - (generate_series(0, $1 - 1) || ' months')::interval) as month
+      ),
+      monthly_pipeline AS (
+        SELECT
+          DATE_TRUNC('month', o.created_at) as month,
+          SUM(o.estimated_value) as pipeline_value,
+          COUNT(*) as opportunity_count
+        FROM opportunities o
+        WHERE
+          o.created_at >= DATE_TRUNC('month', CURRENT_DATE - ($1 || ' months')::interval)
+          AND o.stage_id != (SELECT id FROM pipeline_stages WHERE name = 'Lost' LIMIT 1)
+        GROUP BY DATE_TRUNC('month', o.created_at)
+      )
+      SELECT
+        TO_CHAR(m.month, 'Mon') as month_label,
+        EXTRACT(YEAR FROM m.month) as year,
+        EXTRACT(MONTH FROM m.month) as month_num,
+        COALESCE(mp.pipeline_value, 0) as pipeline_value,
+        COALESCE(mp.opportunity_count, 0) as opportunity_count
+      FROM months m
+      LEFT JOIN monthly_pipeline mp ON m.month = mp.month
+      ORDER BY m.month ASC
+    `;
+
+    const result = await pool.query(query, [months]);
+    return result.rows;
   }
 };
 

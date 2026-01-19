@@ -78,6 +78,14 @@ export interface OpportunityAnalytics {
   avg_days_to_close: number;
 }
 
+export interface PipelineTrendData {
+  month_label: string;
+  year: number;
+  month_num: number;
+  pipeline_value: number;
+  opportunity_count: number;
+}
+
 export interface OpportunityFilters {
   stage_id?: number;
   assigned_to?: number;
@@ -161,6 +169,12 @@ const opportunitiesService = {
 
     const queryString = params.toString();
     const response = await api.get(`/opportunities/analytics${queryString ? `?${queryString}` : ''}`);
+    return response.data;
+  },
+
+  // Get pipeline trend data
+  async getTrend(months: number = 7): Promise<PipelineTrendData[]> {
+    const response = await api.get(`/opportunities/trend?months=${months}`);
     return response.data;
   },
 
