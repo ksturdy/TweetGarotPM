@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+// Version: 2026-01-19 - Added auth debugging and Claude API fixes
 
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
