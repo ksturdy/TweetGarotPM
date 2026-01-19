@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { contractReviewsApi, ContractRiskFinding } from '../../services/contractReviews';
+import { contractReviewsApi, ContractRiskFinding, ContractAnnotation } from '../../services/contractReviews';
+import ContractViewerNew from '../../components/contractReview/ContractViewerNew';
 import './ContractReviewDetail.css';
 
 const ContractReviewDetail: React.FC = () => {
@@ -11,6 +12,8 @@ const ContractReviewDetail: React.FC = () => {
 
   const [reviewNotes, setReviewNotes] = useState('');
   const [approvalNotes, setApprovalNotes] = useState('');
+  const [selectedFinding, setSelectedFinding] = useState<ContractRiskFinding | null>(null);
+  const [showViewer, setShowViewer] = useState(true);
 
   const { data: review, isLoading } = useQuery({
     queryKey: ['contractReview', id],
@@ -36,6 +39,22 @@ const ContractReviewDetail: React.FC = () => {
     mutationFn: () => contractReviewsApi.delete(Number(id)),
     onSuccess: () => {
       navigate('/risk-management/contract-reviews');
+    },
+  });
+
+  const addAnnotationMutation = useMutation({
+    mutationFn: (annotation: Partial<ContractAnnotation>) =>
+      contractReviewsApi.addAnnotation(Number(id), annotation as ContractAnnotation),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contractReview', id] });
+    },
+  });
+
+  const deleteAnnotationMutation = useMutation({
+    mutationFn: (annotationId: number) =>
+      contractReviewsApi.deleteAnnotation(Number(id), annotationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contractReview', id] });
     },
   });
 
@@ -80,8 +99,25 @@ const ContractReviewDetail: React.FC = () => {
   console.log('Moderate risks count:', moderateRisks.length);
   console.log('Low risks count:', lowRisks.length);
 
+  const handleFindingClick = (finding: ContractRiskFinding) => {
+    setSelectedFinding(finding);
+    if (!showViewer) {
+      setShowViewer(true);
+    }
+  };
+
+  const handleAddAnnotation = (annotation: Partial<ContractAnnotation>) => {
+    addAnnotationMutation.mutate(annotation);
+  };
+
+  const handleDeleteAnnotation = (annotationId: number) => {
+    deleteAnnotationMutation.mutate(annotationId);
+  };
+
+  const fileUrl = `http://localhost:3001${contractReviewsApi.getFileUrl(Number(id))}`;
+
   return (
-    <div className="contract-detail">
+    <div className={`contract-detail ${showViewer ? 'split-view' : ''}`}>
       <div className="detail-header">
         <div>
           <div className="breadcrumb">
@@ -94,6 +130,12 @@ const ContractReviewDetail: React.FC = () => {
           <h1>{review.file_name}</h1>
         </div>
         <div className="header-actions">
+          <button
+            onClick={() => setShowViewer(!showViewer)}
+            className="btn btn-secondary"
+          >
+            {showViewer ? 'Hide Viewer' : 'Show Viewer'}
+          </button>
           <button onClick={handleDelete} className="btn btn-danger">
             Delete
           </button>
@@ -130,7 +172,7 @@ const ContractReviewDetail: React.FC = () => {
                 <span className="label">Contract Value</span>
                 <span className="value">
                   {review.contract_value
-                    ? `$${review.contract_value.toLocaleString()}`
+                    ? `$${review.contract_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                     : '—'}
                 </span>
               </div>
@@ -189,13 +231,25 @@ const ContractReviewDetail: React.FC = () => {
             {review.findings && review.findings.length > 0 ? (
               <div className="findings-list">
                 {review.findings.map((finding: ContractRiskFinding) => (
-                  <div key={finding.id} className="finding-card">
+                  <div
+                    key={finding.id}
+                    className={`finding-card ${selectedFinding?.id === finding.id ? 'selected' : ''}`}
+                    onClick={() => handleFindingClick(finding)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div className="finding-header">
                       <div>
                         <span className={`finding-badge risk-${finding.risk_level.toLowerCase()}`}>
                           {finding.risk_level}
                         </span>
                         <span className="finding-title">{finding.title}</span>
+                        {(finding.page_number || finding.location_start) && (
+                          <span className="finding-location">
+                            {finding.page_number && `Page ${finding.page_number}`}
+                            {finding.page_number && finding.location_start && ', '}
+                            {finding.location_start && `Para ${finding.location_start}`}
+                          </span>
+                        )}
                       </div>
                       <span className="finding-category">{finding.category}</span>
                     </div>
@@ -208,6 +262,14 @@ const ContractReviewDetail: React.FC = () => {
                         <div className="finding-section">
                           <strong>Recommendation:</strong>
                           <p>{finding.recommendation}</p>
+                        </div>
+                      )}
+                      {finding.quoted_text && (
+                        <div className="finding-section">
+                          <strong>Quoted Text:</strong>
+                          <p style={{ fontStyle: 'italic', color: '#666', background: '#f9fafb', padding: '0.5rem', borderRadius: '4px' }}>
+                            "{finding.quoted_text}"
+                          </p>
                         </div>
                       )}
                     </div>
@@ -328,6 +390,25 @@ const ContractReviewDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Contract Viewer Panel */}
+      {showViewer && (
+        <div className="viewer-panel">
+          {review.file_path ? (
+            <ContractViewerNew
+              fileUrl={fileUrl}
+              selectedFinding={selectedFinding}
+            />
+          ) : (
+            <div className="no-file-message">
+              <div className="no-file-icon">📄</div>
+              <h3>No Contract File Available</h3>
+              <p>This contract review does not have an associated PDF file.</p>
+              <p className="hint">Upload a contract file to view and annotate it here.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

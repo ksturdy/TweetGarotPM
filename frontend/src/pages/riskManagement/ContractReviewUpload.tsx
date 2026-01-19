@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractReviewsApi, ContractReview } from '../../services/contractReviews';
@@ -23,80 +23,37 @@ const RISK_CATEGORIES = [
   { id: 'lien_rights', label: 'Lien Rights' },
 ];
 
-// Claude API integration for real contract analysis
-async function analyzeContractWithClaude(contractText: string, apiKey: string) {
-  const systemPrompt = `You are a contract review specialist for Tweet Garot Mechanical, a mechanical contracting company specializing in plumbing, HVAC, and piping for commercial and industrial projects. Analyze subcontracts from general contractors to identify risk factors.
+// Call backend proxy for Claude API analysis
+async function analyzeContractWithClaude(contractText: string, apiKey: string, pageTexts?: Array<{page: number, text: string}>) {
+  try {
+    // Get JWT token from localStorage
+    const token = localStorage.getItem('token');
 
-Analyze the provided contract and identify risks in these categories:
-- Payment Terms, Retainage, Liquidated Damages, Consequential Damages
-- Indemnification, Flow-Down Provisions, Warranty, Termination
-- Dispute Resolution, Notice Requirements, Change Orders, Schedule/Delays
-- Insurance, Bonding, Lien Rights
+    const response = await fetch('/api/contract-reviews/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: JSON.stringify({
+        contractText,
+        pageTexts,
+        apiKey,
+      }),
+    });
 
-For each risk found, provide:
-1. category (use snake_case matching categories above)
-2. title (human readable name)
-3. level (HIGH, MODERATE, or LOW)
-4. finding (specific text or issue from the contract)
-5. recommendation (what to negotiate or change)
-
-Also extract:
-- contractValue (number, if stated)
-- projectName (string)
-- generalContractor (string)
-- overallRisk (HIGH, MODERATE, or LOW based on findings)
-
-Respond ONLY with valid JSON in this format:
-{
-  "contractValue": 1500000,
-  "projectName": "Project Name",
-  "generalContractor": "GC Name",
-  "overallRisk": "HIGH",
-  "risks": [
-    {
-      "category": "payment_terms",
-      "title": "Payment Terms",
-      "level": "MODERATE",
-      "finding": "Net 45 payment terms...",
-      "recommendation": "Negotiate to Net 30..."
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Analysis failed (${response.status})`);
     }
-  ]
-}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this contract and respond with JSON only:\n\n${contractText}`,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    return await response.json();
+  } catch (error: any) {
+    if (error.message.includes('Failed to fetch')) {
+      throw new Error('Unable to connect to server. Please check your connection.');
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  const responseText = data.content[0].text;
-
-  // Extract JSON from response (handle potential markdown code blocks)
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('No valid JSON found in response');
-  }
-
-  return JSON.parse(jsonMatch[0]);
 }
 
 const ContractReviewUpload: React.FC = () => {
@@ -108,11 +65,37 @@ const ContractReviewUpload: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [claudeApiKey, setClaudeApiKey] = useState('');
+  const [claudeApiKey, setClaudeApiKey] = useState(() => {
+    // Load API key from localStorage on initial render
+    return localStorage.getItem('claudeApiKey') || '';
+  });
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [serverHasKey, setServerHasKey] = useState(false);
+
+  // Check if server has Claude API key configured
+  useEffect(() => {
+    fetch('/api/contract-reviews/claude-config', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+      .then(res => res.json())
+      .then(data => setServerHasKey(data.hasServerKey))
+      .catch(err => console.error('Failed to check Claude config:', err));
+  }, []);
+
+  // Save API key to localStorage whenever it changes
+  useEffect(() => {
+    if (claudeApiKey) {
+      localStorage.setItem('claudeApiKey', claudeApiKey);
+    } else {
+      localStorage.removeItem('claudeApiKey');
+    }
+  }, [claudeApiKey]);
 
   const createMutation = useMutation({
-    mutationFn: (data: ContractReview) => contractReviewsApi.create(data),
+    mutationFn: ({ data, file }: { data: ContractReview; file?: File }) =>
+      contractReviewsApi.create(data, file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contractReviews'] });
       queryClient.invalidateQueries({ queryKey: ['contractReviewStats'] });
@@ -142,14 +125,47 @@ const ContractReviewUpload: React.FC = () => {
     setError(null);
 
     try {
-      const contractText = await file.text();
+      let contractText = '';
+      let pageTexts: Array<{page: number, text: string}> = [];
+
+      // Extract text based on file type
+      const isPDF = file.name.toLowerCase().endsWith('.pdf');
+
+      if (isPDF) {
+        // Extract PDF text with page tracking using pdf.js
+        const pdfjsLib = await import('pdfjs-dist');
+        // Use local worker file that matches the library version
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        const textParts: string[] = [];
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ');
+
+          pageTexts.push({ page: pageNum, text: pageText });
+          textParts.push(pageText);
+        }
+
+        contractText = textParts.join('\n\n');
+      } else {
+        // For text files
+        contractText = await file.text();
+      }
 
       let analysisResults;
       if (claudeApiKey) {
-        // Real Claude API analysis
-        analysisResults = await analyzeContractWithClaude(contractText, claudeApiKey);
+        // Real Claude API analysis with page tracking
+        analysisResults = await analyzeContractWithClaude(contractText, claudeApiKey, pageTexts.length > 0 ? pageTexts : undefined);
       } else {
-        // Demo mode - mock analysis
+        // Demo mode - mock analysis with realistic data
+        const isPDF = file.name.toLowerCase().endsWith('.pdf');
         analysisResults = {
           contractValue: Math.floor(Math.random() * 5000000) + 500000,
           projectName: file.name.replace(/\.[^/.]+$/, ''),
@@ -164,6 +180,8 @@ const ContractReviewUpload: React.FC = () => {
               risk_level: 'MODERATE',
               finding: 'Net 45 payment terms identified.',
               recommendation: 'Negotiate to Net 30 standard terms.',
+              page_number: isPDF ? 1 : null,
+              quoted_text: 'Payment shall be made within forty-five (45) days',
             },
             {
               category: 'liquidated_damages',
@@ -171,6 +189,8 @@ const ContractReviewUpload: React.FC = () => {
               risk_level: 'HIGH',
               finding: 'Uncapped liquidated damages at $5,000 per day.',
               recommendation: 'Add cap at 10% of contract value.',
+              page_number: isPDF ? 2 : null,
+              quoted_text: 'liquidated damages of Five Thousand Dollars ($5,000) per day',
             },
             {
               category: 'consequential_damages',
@@ -178,6 +198,8 @@ const ContractReviewUpload: React.FC = () => {
               risk_level: 'HIGH',
               finding: 'No mutual waiver of consequential damages.',
               recommendation: 'Add mutual waiver clause.',
+              page_number: isPDF ? 3 : null,
+              quoted_text: 'consequential damages',
             },
             {
               category: 'indemnification',
@@ -185,6 +207,8 @@ const ContractReviewUpload: React.FC = () => {
               risk_level: 'MODERATE',
               finding: 'Broad indemnification scope including owner negligence.',
               recommendation: 'Limit indemnification to own negligence only.',
+              page_number: isPDF ? 2 : null,
+              quoted_text: 'indemnify and hold harmless',
             },
           ],
         };
@@ -195,7 +219,7 @@ const ContractReviewUpload: React.FC = () => {
         analysisResults.risks?.some((r: any) => r.risk_level === 'HIGH') ||
         analysisResults.contractValue > 2000000;
 
-      // Save to database
+      // Save to database with file upload
       const reviewData: ContractReview = {
         file_name: file.name,
         file_size: file.size,
@@ -209,7 +233,10 @@ const ContractReviewUpload: React.FC = () => {
       };
 
       console.log('Saving contract review:', reviewData);
-      const savedReview = await createMutation.mutateAsync(reviewData);
+      const savedReview = await createMutation.mutateAsync({
+        data: reviewData,
+        file
+      });
       console.log('Contract review saved:', savedReview);
 
       // Only show results after successful save
@@ -370,29 +397,71 @@ const ContractReviewUpload: React.FC = () => {
           </div>
         )}
 
-        <div className="api-key-section">
-          {!showApiKeyInput ? (
-            <button
-              onClick={() => setShowApiKeyInput(true)}
-              className="btn-link"
-            >
-              Use Claude API for real analysis (optional)
-            </button>
-          ) : (
-            <div className="api-key-input-group">
-              <input
-                type="password"
-                placeholder="Enter your Claude API key"
-                value={claudeApiKey}
-                onChange={(e) => setClaudeApiKey(e.target.value)}
-                className="api-key-input"
-              />
-              <p className="api-key-note">
-                Without an API key, a demo analysis will be generated
-              </p>
-            </div>
-          )}
-        </div>
+        {!claudeApiKey && !serverHasKey && (
+          <div className="warning-banner" style={{
+            background: '#fff3cd',
+            border: '1px solid #ffc107',
+            borderRadius: '4px',
+            padding: '1rem',
+            marginBottom: '1rem',
+            color: '#856404'
+          }}>
+            <strong>⚠️ Demo Mode</strong>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+              Without a Claude API key, this will generate random demo data with inaccurate findings.
+              For real contract analysis, enter your API key below.
+            </p>
+          </div>
+        )}
+
+        {serverHasKey && (
+          <div className="warning-banner" style={{
+            background: '#d4edda',
+            border: '1px solid #c3e6cb',
+            borderRadius: '4px',
+            padding: '1rem',
+            marginBottom: '1rem',
+            color: '#155724'
+          }}>
+            <strong>✓ AI Analysis Enabled</strong>
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+              This application is configured with Claude AI for accurate contract analysis.
+            </p>
+          </div>
+        )}
+
+        {!serverHasKey && (
+          <div className="api-key-section">
+            {!showApiKeyInput ? (
+              <button
+                onClick={() => setShowApiKeyInput(true)}
+                className="btn-link"
+              >
+                Use Claude API for accurate analysis (enter API key)
+              </button>
+            ) : (
+              <div className="api-key-input-group">
+                <input
+                  type="password"
+                  placeholder="Enter your Claude API key (from console.anthropic.com)"
+                  value={claudeApiKey}
+                  onChange={(e) => setClaudeApiKey(e.target.value)}
+                  className="api-key-input"
+                />
+                {claudeApiKey && (
+                  <p className="api-key-note" style={{ color: '#28a745' }}>
+                    ✓ API key entered - will use real AI analysis
+                  </p>
+                )}
+                {!claudeApiKey && (
+                  <p className="api-key-note">
+                    Get your API key from <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {analyzing && (
           <div className="analyzing-overlay">

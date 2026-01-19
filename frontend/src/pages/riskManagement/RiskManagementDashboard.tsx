@@ -137,7 +137,7 @@ const RiskManagementDashboard: React.FC = () => {
                           )}
                           {review.contract_value && (
                             <span className="review-value">
-                              ${review.contract_value.toLocaleString()}
+                              ${review.contract_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                             </span>
                           )}
                         </div>
@@ -208,13 +208,13 @@ const RiskManagementDashboard: React.FC = () => {
                 <div className="value-item">
                   <span className="value-label">Total Value Under Review</span>
                   <span className="value-amount">
-                    ${(stats?.total_contract_value || 0).toLocaleString()}
+                    ${(stats?.total_contract_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
                 <div className="value-item">
                   <span className="value-label">Average Contract Value</span>
                   <span className="value-amount">
-                    ${(stats?.avg_contract_value || 0).toLocaleString()}
+                    ${(stats?.avg_contract_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               </div>

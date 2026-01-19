@@ -12,15 +12,20 @@ const ContractRiskFinding = {
       data.recommendation || null,
       data.status || 'open',
       data.resolution_notes || null,
-      data.resolved_by || null
+      data.resolved_by || null,
+      data.page_number || null,
+      data.location_start || null,
+      data.location_end || null,
+      data.quoted_text || null
     ];
     console.log('ContractRiskFinding.create - SQL params:', params);
 
     const result = await db.query(
       `INSERT INTO contract_risk_findings (
         contract_review_id, category, title, risk_level, finding,
-        recommendation, status, resolution_notes, resolved_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        recommendation, status, resolution_notes, resolved_by,
+        page_number, location_start, location_end, quoted_text
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       params
     );
@@ -66,7 +71,8 @@ const ContractRiskFinding = {
 
     const allowedFields = [
       'status', 'resolution_notes', 'resolved_by', 'resolved_at',
-      'category', 'title', 'risk_level', 'finding', 'recommendation'
+      'category', 'title', 'risk_level', 'finding', 'recommendation',
+      'page_number', 'location_start', 'location_end', 'quoted_text'
     ];
 
     allowedFields.forEach((field) => {

@@ -45,7 +45,11 @@ const ContractReview = {
        WHERE cr.id = $1`,
       [id]
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    if (row && row.contract_value) {
+      row.contract_value = parseFloat(row.contract_value);
+    }
+    return row;
   },
 
   async findAll(filters = {}) {
@@ -90,7 +94,12 @@ const ContractReview = {
     query += ' ORDER BY cr.created_at DESC';
 
     const result = await db.query(query, params);
-    return result.rows;
+    return result.rows.map(row => {
+      if (row.contract_value) {
+        row.contract_value = parseFloat(row.contract_value);
+      }
+      return row;
+    });
   },
 
   async update(id, data) {
@@ -145,7 +154,14 @@ const ContractReview = {
         AVG(contract_value) as avg_contract_value
       FROM contract_reviews
     `);
-    return result.rows[0];
+    const stats = result.rows[0];
+    if (stats.total_contract_value) {
+      stats.total_contract_value = parseFloat(stats.total_contract_value);
+    }
+    if (stats.avg_contract_value) {
+      stats.avg_contract_value = parseFloat(stats.avg_contract_value);
+    }
+    return stats;
   }
 };
 

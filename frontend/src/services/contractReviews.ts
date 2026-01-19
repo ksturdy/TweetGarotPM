@@ -13,6 +13,27 @@ export interface ContractRiskFinding {
   resolved_by?: number;
   resolved_by_name?: string;
   resolved_at?: string;
+  page_number?: number;
+  location_start?: number;
+  location_end?: number;
+  quoted_text?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ContractAnnotation {
+  id?: number;
+  contract_review_id?: number;
+  annotation_type: 'strikethrough' | 'comment' | 'highlight' | 'note';
+  page_number?: number;
+  location_start?: number;
+  location_end?: number;
+  quoted_text?: string;
+  content?: string;
+  color?: string;
+  risk_finding_id?: number;
+  created_by?: number;
+  created_by_name?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -42,6 +63,7 @@ export interface ContractReview {
   reviewed_at?: string;
   approved_at?: string;
   findings?: ContractRiskFinding[];
+  annotations?: ContractAnnotation[];
 }
 
 export interface ContractReviewStats {
@@ -88,7 +110,26 @@ export const contractReviewsApi = {
   getById: (id: number) => api.get(`/contract-reviews/${id}`),
 
   // Create new contract review
-  create: (data: ContractReview) => api.post('/contract-reviews', data),
+  create: (data: ContractReview, file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('file_name', data.file_name);
+      if (data.file_size) formData.append('file_size', data.file_size.toString());
+      if (data.project_name) formData.append('project_name', data.project_name);
+      if (data.general_contractor) formData.append('general_contractor', data.general_contractor);
+      if (data.contract_value) formData.append('contract_value', data.contract_value.toString());
+      if (data.overall_risk) formData.append('overall_risk', data.overall_risk);
+      if (data.status) formData.append('status', data.status);
+      if (data.needs_legal_review !== undefined) formData.append('needs_legal_review', data.needs_legal_review.toString());
+      if (data.findings) formData.append('findings', JSON.stringify(data.findings));
+
+      return api.post('/contract-reviews', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    }
+    return api.post('/contract-reviews', data);
+  },
 
   // Update contract review
   update: (id: number, data: Partial<ContractReview>) =>
@@ -106,4 +147,20 @@ export const contractReviewsApi = {
 
   deleteFinding: (reviewId: number, findingId: number) =>
     api.delete(`/contract-reviews/${reviewId}/findings/${findingId}`),
+
+  // Annotation operations
+  getAnnotations: (reviewId: number) =>
+    api.get(`/contract-reviews/${reviewId}/annotations`),
+
+  addAnnotation: (reviewId: number, annotation: ContractAnnotation) =>
+    api.post(`/contract-reviews/${reviewId}/annotations`, annotation),
+
+  updateAnnotation: (reviewId: number, annotationId: number, data: Partial<ContractAnnotation>) =>
+    api.put(`/contract-reviews/${reviewId}/annotations/${annotationId}`, data),
+
+  deleteAnnotation: (reviewId: number, annotationId: number) =>
+    api.delete(`/contract-reviews/${reviewId}/annotations/${annotationId}`),
+
+  // Get contract file URL
+  getFileUrl: (reviewId: number) => `/api/contract-reviews/${reviewId}/file`,
 };

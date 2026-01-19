@@ -1,9 +1,44 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs').promises;
+const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const ContractReview = require('../models/ContractReview');
 const ContractRiskFinding = require('../models/ContractRiskFinding');
+const ContractAnnotation = require('../models/ContractAnnotation');
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/contracts');
+    try {
+      await fs.mkdir(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(error, uploadDir);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.pdf', '.docx', '.txt'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, DOCX, and TXT files are allowed.'));
+    }
+  }
+});
 
 // Apply auth middleware to all routes
 router.use(authenticate);
@@ -35,7 +70,123 @@ router.get('/stats', async (req, res, next) => {
   }
 });
 
-// Get single contract review with risk findings
+// Check if server has Claude API key configured
+router.get('/claude-config', async (req, res) => {
+  res.json({
+    hasServerKey: !!process.env.ANTHROPIC_API_KEY
+  });
+});
+
+// Analyze contract with Claude API (proxy endpoint) - MUST BE BEFORE /:id route
+router.post('/analyze', async (req, res, next) => {
+  try {
+    const { contractText, pageTexts, apiKey: userApiKey } = req.body;
+
+    // Use server-side API key from environment variable (same as chatbot), or fall back to user-provided key
+    const apiKey = process.env.ANTHROPIC_API_KEY || userApiKey;
+
+    if (!apiKey) {
+      return res.status(400).json({
+        error: 'Claude API key not configured. Please contact your administrator or provide your own API key.'
+      });
+    }
+
+    if (!contractText) {
+      return res.status(400).json({ error: 'Contract text is required' });
+    }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey });
+
+    const systemPrompt = `You are a contract review specialist for Tweet Garot Mechanical, a mechanical contracting company specializing in plumbing, HVAC, and piping for commercial and industrial projects. Analyze subcontracts from general contractors to identify risk factors.
+
+Analyze the provided contract and identify risks in these categories:
+- Payment Terms, Retainage, Liquidated Damages, Consequential Damages
+- Indemnification, Flow-Down Provisions, Warranty, Termination
+- Dispute Resolution, Notice Requirements, Change Orders, Schedule/Delays
+- Insurance, Bonding, Lien Rights
+
+CRITICAL INSTRUCTIONS:
+1. Read the contract text VERY CAREFULLY and extract exact information
+2. For payment terms, find the EXACT number of days stated in the contract
+3. For each risk, quote the EXACT text from the contract
+4. Identify the correct page number where each issue appears
+5. Do NOT make assumptions or use placeholder values
+6. If page-by-page text is provided, use it to determine accurate page numbers
+
+For each risk found, provide:
+1. category (use snake_case matching categories above)
+2. title (human readable name)
+3. risk_level (HIGH, MODERATE, or LOW)
+4. finding (specific and accurate description of the issue)
+5. recommendation (what to negotiate or change)
+6. quoted_text (EXACT text from contract, minimum 10 words)
+7. page_number (actual page where this text appears, if determinable)
+
+Also extract:
+- contractValue (number, extract exact value if stated, otherwise null)
+- projectName (exact name from contract)
+- generalContractor (exact name from contract)
+- overallRisk (HIGH, MODERATE, or LOW based on findings)
+
+Respond ONLY with valid JSON in this format:
+{
+  "contractValue": 1500000,
+  "projectName": "Project Name",
+  "generalContractor": "GC Name",
+  "overallRisk": "HIGH",
+  "risks": [
+    {
+      "category": "payment_terms",
+      "title": "Payment Terms",
+      "risk_level": "MODERATE",
+      "finding": "Payment terms are Net 75 days from invoice date, which is longer than industry standard",
+      "recommendation": "Negotiate to Net 30 days to improve cash flow",
+      "quoted_text": "Payment shall be made within seventy-five (75) days of receipt of invoice",
+      "page_number": 3
+    }
+  ]
+}`;
+
+    let userContent = 'Analyze this contract and respond with JSON only:\n\n';
+
+    if (pageTexts && pageTexts.length > 0) {
+      userContent += 'CONTRACT TEXT BY PAGE:\n\n';
+      pageTexts.forEach((page) => {
+        userContent += `=== PAGE ${page.page} ===\n${page.text}\n\n`;
+      });
+    } else {
+      userContent += contractText;
+    }
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: userContent,
+        },
+      ],
+    });
+
+    const responseText = message.content[0].text;
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      return res.status(500).json({ error: 'No valid JSON found in Claude response' });
+    }
+
+    const analysisResults = JSON.parse(jsonMatch[0]);
+    res.json(analysisResults);
+  } catch (error) {
+    console.error('Claude API error:', error);
+    next(error);
+  }
+});
+
+// Get single contract review with risk findings and annotations
 router.get('/:id', async (req, res, next) => {
   try {
     const review = await ContractReview.findById(req.params.id);
@@ -44,25 +195,29 @@ router.get('/:id', async (req, res, next) => {
     }
 
     const findings = await ContractRiskFinding.findByContractReview(req.params.id);
+    const annotations = await ContractAnnotation.findByContractReview(req.params.id);
 
     res.json({
       ...review,
       findings,
+      annotations,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Create new contract review
-router.post('/', async (req, res, next) => {
+// Create new contract review with optional file upload
+router.post('/', upload.single('file'), async (req, res, next) => {
   try {
     console.log('POST /contract-reviews - Request body:', JSON.stringify(req.body, null, 2));
     console.log('POST /contract-reviews - User:', req.user);
+    console.log('POST /contract-reviews - File:', req.file);
 
     const reviewData = {
       ...req.body,
       uploaded_by: req.user.id,
+      file_path: req.file ? req.file.path : null,
     };
 
     console.log('Creating contract review with data:', JSON.stringify(reviewData, null, 2));
@@ -71,9 +226,10 @@ router.post('/', async (req, res, next) => {
     console.log('Contract review created:', review);
 
     // Create risk findings if provided
-    if (req.body.findings && req.body.findings.length > 0) {
-      console.log(`Creating ${req.body.findings.length} risk findings...`);
-      for (const finding of req.body.findings) {
+    const findings = req.body.findings ? JSON.parse(req.body.findings) : [];
+    if (findings && findings.length > 0) {
+      console.log(`Creating ${findings.length} risk findings...`);
+      for (const finding of findings) {
         const findingData = {
           contract_review_id: review.id,
           ...finding,
@@ -84,12 +240,12 @@ router.post('/', async (req, res, next) => {
     }
 
     // Fetch the complete review with findings
-    const findings = await ContractRiskFinding.findByContractReview(review.id);
-    console.log(`Fetched ${findings.length} findings for review ${review.id}`);
+    const fetchedFindings = await ContractRiskFinding.findByContractReview(review.id);
+    console.log(`Fetched ${fetchedFindings.length} findings for review ${review.id}`);
 
     res.status(201).json({
       ...review,
-      findings,
+      findings: fetchedFindings,
     });
   } catch (error) {
     console.error('Error in POST /contract-reviews:', error);
@@ -201,6 +357,101 @@ router.delete('/:id/findings/:findingId', async (req, res, next) => {
 
     await ContractRiskFinding.delete(req.params.findingId);
     res.json({ message: 'Risk finding deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Annotation Routes
+
+// Get all annotations for a contract review
+router.get('/:id/annotations', async (req, res, next) => {
+  try {
+    const annotations = await ContractAnnotation.findByContractReview(req.params.id);
+    res.json(annotations);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new annotation
+router.post('/:id/annotations', async (req, res, next) => {
+  try {
+    const review = await ContractReview.findById(req.params.id);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
+    const annotation = await ContractAnnotation.create({
+      contract_review_id: req.params.id,
+      created_by: req.user.id,
+      ...req.body,
+    });
+
+    res.status(201).json(annotation);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update annotation
+router.put('/:id/annotations/:annotationId', async (req, res, next) => {
+  try {
+    const annotation = await ContractAnnotation.findById(req.params.annotationId);
+    if (!annotation) {
+      return res.status(404).json({ error: 'Annotation not found' });
+    }
+
+    const updated = await ContractAnnotation.update(req.params.annotationId, req.body);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete annotation
+router.delete('/:id/annotations/:annotationId', async (req, res, next) => {
+  try {
+    const annotation = await ContractAnnotation.findById(req.params.annotationId);
+    if (!annotation) {
+      return res.status(404).json({ error: 'Annotation not found' });
+    }
+
+    await ContractAnnotation.delete(req.params.annotationId);
+    res.json({ message: 'Annotation deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Serve contract file
+router.get('/:id/file', async (req, res, next) => {
+  try {
+    const review = await ContractReview.findById(req.params.id);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
+    if (!review.file_path) {
+      return res.status(404).json({ error: 'Contract file not found' });
+    }
+
+    // Resolve the file path (assuming it's stored relative to the uploads directory)
+    const filePath = path.resolve(review.file_path);
+
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      return res.status(404).json({ error: 'Contract file not found on server' });
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${review.file_name}"`);
+
+    // Stream the file
+    res.sendFile(filePath);
   } catch (error) {
     next(error);
   }

@@ -120,7 +120,7 @@ const ContractReviewList: React.FC = () => {
                   <td>{review.general_contractor || '—'}</td>
                   <td>
                     {review.contract_value
-                      ? `$${review.contract_value.toLocaleString()}`
+                      ? `$${review.contract_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                       : '—'}
                   </td>
                   <td>
