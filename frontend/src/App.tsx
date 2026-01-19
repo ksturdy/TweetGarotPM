@@ -53,6 +53,7 @@ import ContractReviewList from './pages/riskManagement/ContractReviewList';
 import ContractReviewUpload from './pages/riskManagement/ContractReviewUpload';
 import ContractReviewDetail from './pages/riskManagement/ContractReviewDetail';
 import SalesPipeline from './pages/SalesPipeline';
+import MobileSales from './pages/MobileSales';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -76,6 +77,7 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/sales" element={<SalesPipeline />} />
+                <Route path="/sales/mobile" element={<MobileSales />} />
                 <Route path="/marketing" element={<MarketingList />} />
                 <Route path="/marketing/branding" element={<Branding />} />
                 <Route path="/estimating" element={<EstimatingDashboard />} />
