@@ -133,15 +133,19 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_pipeline_stages_updated_at ON pipeline_stages;
 CREATE TRIGGER update_pipeline_stages_updated_at BEFORE UPDATE ON pipeline_stages
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_opportunities_updated_at ON opportunities;
 CREATE TRIGGER update_opportunities_updated_at BEFORE UPDATE ON opportunities
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_opportunity_activities_updated_at ON opportunity_activities;
 CREATE TRIGGER update_opportunity_activities_updated_at BEFORE UPDATE ON opportunity_activities
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_opportunity_contacts_updated_at ON opportunity_contacts;
 CREATE TRIGGER update_opportunity_contacts_updated_at BEFORE UPDATE ON opportunity_contacts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -156,5 +160,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_last_activity ON opportunity_activities;
 CREATE TRIGGER update_last_activity AFTER INSERT ON opportunity_activities
   FOR EACH ROW EXECUTE FUNCTION update_opportunity_last_activity();
