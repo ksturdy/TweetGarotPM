@@ -210,7 +210,7 @@
   justify-content: center;
 }
 
-/* Market Chart Full Width */
+/* Market Chart - Smaller to show labels */
 .sales-market-chart-full {
   width: 100%;
   height: 220px;
@@ -218,6 +218,11 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
+}
+
+.sales-market-chart-full canvas {
+  max-width: 180px !important;
+  max-height: 180px !important;
 }
 
 .sales-funnel-stage {
