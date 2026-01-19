@@ -112,7 +112,22 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+
+    // Special handling for estimated_value to format with commas
+    if (name === 'estimated_value') {
+      // Remove all non-digit characters
+      const numericValue = value.replace(/[^\d]/g, '');
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  // Format number with commas
+  const formatNumberWithCommas = (value: string | number): string => {
+    if (!value) return '';
+    const numStr = value.toString();
+    return numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -227,10 +242,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   <div className="form-group">
                     <label htmlFor="estimated_value">Estimated Value</label>
                     <input
-                      type="number"
+                      type="text"
                       id="estimated_value"
                       name="estimated_value"
-                      value={formData.estimated_value}
+                      value={formatNumberWithCommas(formData.estimated_value)}
                       onChange={handleChange}
                       placeholder="$"
                     />
