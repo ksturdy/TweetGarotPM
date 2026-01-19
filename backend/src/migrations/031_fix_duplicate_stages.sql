@@ -15,6 +15,7 @@ WHERE EXISTS (
 DELETE FROM pipeline_stages WHERE name NOT IN ('Lead', 'Opportunity Received', 'Quoted', 'Awarded', 'Lost', 'Passed');
 
 -- Update existing stages to have correct values and mark as active
+-- This migration runs AFTER 029, so probability column is now VARCHAR
 UPDATE pipeline_stages SET color = '#6B7280', probability = 'Low', display_order = 1, is_active = true WHERE name = 'Lead';
 UPDATE pipeline_stages SET color = '#3B82F6', probability = 'Low', display_order = 2, is_active = true WHERE name = 'Opportunity Received';
 UPDATE pipeline_stages SET color = '#8B5CF6', probability = 'Medium', display_order = 3, is_active = true WHERE name = 'Quoted';
