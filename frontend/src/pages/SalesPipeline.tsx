@@ -407,8 +407,17 @@ const SalesPipeline: React.FC = () => {
 
   const doughnutOptions: any = {
     responsive: true,
-    maintainAspectRatio: false,
+    maintainAspectRatio: true,
+    aspectRatio: 1.5,
     cutout: '60%',
+    layout: {
+      padding: {
+        top: 20,
+        right: 60,
+        bottom: 20,
+        left: 20
+      }
+    },
     plugins: {
       legend: {
         display: false
@@ -430,7 +439,7 @@ const SalesPipeline: React.FC = () => {
           return getSectorColor(context.chart.data.labels[context.dataIndex]);
         },
         font: {
-          size: 11,
+          size: 10,
           weight: 'bold'
         },
         formatter: function(value: number, context: any) {
@@ -441,8 +450,9 @@ const SalesPipeline: React.FC = () => {
         },
         anchor: 'end',
         align: 'end',
-        offset: 15,
-        textAlign: 'center'
+        offset: 8,
+        textAlign: 'left',
+        clamp: false
       }
     }
   };
