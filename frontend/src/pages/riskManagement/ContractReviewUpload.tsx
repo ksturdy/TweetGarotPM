@@ -28,8 +28,9 @@ async function analyzeContractWithClaude(contractText: string, apiKey: string, p
   try {
     // Get JWT token from localStorage
     const token = localStorage.getItem('token');
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-    const response = await fetch('/api/contract-reviews/analyze', {
+    const response = await fetch(`${apiUrl}/contract-reviews/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -74,7 +75,8 @@ const ContractReviewUpload: React.FC = () => {
 
   // Check if server has Claude API key configured
   useEffect(() => {
-    fetch('/api/contract-reviews/claude-config', {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    fetch(`${apiUrl}/contract-reviews/claude-config`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
