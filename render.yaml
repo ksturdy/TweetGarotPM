@@ -19,7 +19,7 @@ services:
   - type: web
     name: tweetgarot-frontend
     env: static
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && npm install && npm install react-chartjs-2 chart.js && npm run build
     staticPublishPath: frontend/build
     envVars:
       - key: REACT_APP_API_URL
