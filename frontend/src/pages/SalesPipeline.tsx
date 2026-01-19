@@ -136,7 +136,7 @@ const SalesPipeline: React.FC = () => {
       date: new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       name: opp.title,
       description: opp.description || '',
-      value: opp.estimated_value || 0,
+      value: Number(opp.estimated_value) || 0,
       stage: stageKey,
       stageName: opp.stage_name || 'Lead',
       probability: opp.probability || opp.stage_probability || 0,
