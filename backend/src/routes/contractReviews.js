@@ -40,6 +40,13 @@ const upload = multer({
   }
 });
 
+// Check if server has Claude API key configured (before auth middleware)
+router.get('/claude-config', async (req, res) => {
+  res.json({
+    hasServerKey: !!process.env.ANTHROPIC_API_KEY
+  });
+});
+
 // Apply auth middleware to all routes
 router.use(authenticate);
 
@@ -68,13 +75,6 @@ router.get('/stats', async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
-
-// Check if server has Claude API key configured
-router.get('/claude-config', async (req, res) => {
-  res.json({
-    hasServerKey: !!process.env.ANTHROPIC_API_KEY
-  });
 });
 
 // Analyze contract with Claude API (proxy endpoint) - MUST BE BEFORE /:id route
