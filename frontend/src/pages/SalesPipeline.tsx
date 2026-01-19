@@ -297,23 +297,17 @@ const SalesPipeline: React.FC = () => {
     }
   ];
 
-  // Group by market sector based on description keywords
-  const getMarketSector = (description: string): string => {
-    const desc = description.toLowerCase();
-    if (desc.includes('healthcare') || desc.includes('hospital') || desc.includes('medical') || desc.includes('health') || desc.includes('clinic')) return 'Healthcare';
-    if (desc.includes('education') || desc.includes('school') || desc.includes('college') || desc.includes('university') || desc.includes('k-12')) return 'Education';
-    if (desc.includes('industrial') || desc.includes('manufacturing') || desc.includes('process')) return 'Industrial';
-    if (desc.includes('retail') || desc.includes('marketplace')) return 'Retail';
-    return 'Commercial';
-  };
+  // Group by market sector using the market field from API opportunities
+  const marketData = apiOpportunities.reduce((acc, opp) => {
+    // Use the market field directly, or skip if not set
+    const sector = opp.market;
+    if (!sector) return acc;
 
-  const marketData = opportunities.reduce((acc, opp) => {
-    const sector = getMarketSector(opp.description);
     if (!acc[sector]) {
       acc[sector] = { count: 0, value: 0 };
     }
     acc[sector].count += 1;
-    acc[sector].value += opp.value;
+    acc[sector].value += Number(opp.estimated_value) || 0;
     return acc;
   }, {} as { [key: string]: { count: number; value: number } });
 
