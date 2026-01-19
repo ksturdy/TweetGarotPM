@@ -5,11 +5,18 @@ import './AccountManagementList.css';
 const AccountManagementList: React.FC = () => {
   const modules = [
     {
-      name: 'Customer List',
+      name: 'Customers',
       icon: '👥',
       path: '/account-management/customers',
-      desc: 'Manage customer database and contacts',
+      desc: 'Accounts Receivable',
       color: '#3b82f6',
+    },
+    {
+      name: 'Vendors & Subcontractors',
+      icon: '🏗️',
+      path: '/account-management/vendors',
+      desc: 'Accounts Payable',
+      color: '#f97316',
     },
     {
       name: 'Contacts',
@@ -20,11 +27,11 @@ const AccountManagementList: React.FC = () => {
     },
     {
       name: 'Sales Pipeline',
-      icon: '📊',
-      path: '/account-management/pipeline',
+      icon: '💰',
+      path: '/sales',
       desc: 'Track sales opportunities',
       color: '#10b981',
-      comingSoon: true,
+      comingSoon: false,
     },
     {
       name: 'Account Reports',
@@ -72,21 +79,21 @@ const AccountManagementList: React.FC = () => {
         <div className="stat-card card">
           <div className="stat-icon">🎯</div>
           <div>
-            <div className="stat-value">4</div>
+            <div className="stat-value">5</div>
             <div className="stat-label">Total Modules</div>
           </div>
         </div>
         <div className="stat-card card">
           <div className="stat-icon">✅</div>
           <div>
-            <div className="stat-value">2</div>
+            <div className="stat-value">4</div>
             <div className="stat-label">Active Modules</div>
           </div>
         </div>
         <div className="stat-card card">
           <div className="stat-icon">🚀</div>
           <div>
-            <div className="stat-value">2</div>
+            <div className="stat-value">1</div>
             <div className="stat-label">Coming Soon</div>
           </div>
         </div>

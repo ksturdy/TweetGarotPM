@@ -31,6 +31,8 @@ const specificationRoutes = require('./routes/specifications');
 const drawingRoutes = require('./routes/drawings');
 const feedbackRoutes = require('./routes/feedback');
 const contractReviewRoutes = require('./routes/contractReviews');
+const opportunityRoutes = require('./routes/opportunities');
+const vendorRoutes = require('./routes/vendors');
 
 const app = express();
 
@@ -67,6 +69,8 @@ app.use('/api/specifications', specificationRoutes);
 app.use('/api/drawings', drawingRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/contract-reviews', contractReviewRoutes);
+app.use('/api/opportunities', opportunityRoutes);
+app.use('/api/vendors', vendorRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -1,0 +1,303 @@
+const express = require('express');
+const router = express.Router();
+const opportunities = require('../models/opportunities');
+const opportunityActivities = require('../models/opportunityActivities');
+const { authenticate } = require('../middleware/auth');
+const { body, validationResult } = require('express-validator');
+
+// Apply authentication to all routes
+router.use(authenticate);
+
+// Get all opportunities (with optional filters)
+router.get('/', async (req, res, next) => {
+  try {
+    const filters = {
+      stage_id: req.query.stage_id,
+      assigned_to: req.query.assigned_to,
+      priority: req.query.priority,
+      search: req.query.search
+    };
+
+    const allOpportunities = await opportunities.findAll(filters);
+    res.json(allOpportunities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get opportunities grouped by pipeline stages (Kanban view)
+router.get('/kanban', async (req, res, next) => {
+  try {
+    const stages = await opportunities.findByStages();
+    res.json(stages);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get pipeline analytics
+router.get('/analytics', async (req, res, next) => {
+  try {
+    const filters = {
+      assigned_to: req.query.assigned_to,
+      date_from: req.query.date_from,
+      date_to: req.query.date_to
+    };
+
+    const analytics = await opportunities.getAnalytics(filters);
+    res.json(analytics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get single opportunity
+router.get('/:id', async (req, res, next) => {
+  try {
+    const opportunity = await opportunities.findById(req.params.id);
+
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
+    res.json(opportunity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new opportunity
+router.post('/',
+  [
+    body('title').trim().notEmpty().withMessage('Title is required'),
+    body('client_name').trim().notEmpty().withMessage('Client name is required'),
+    body('client_email').optional().isEmail().withMessage('Valid email required'),
+    body('estimated_value').optional().isNumeric().withMessage('Estimated value must be a number'),
+    body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority')
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.create(req.body, req.user.id);
+      res.status(201).json(opportunity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update opportunity
+router.put('/:id',
+  [
+    body('client_email').optional().isEmail().withMessage('Valid email required'),
+    body('estimated_value').optional().isNumeric().withMessage('Estimated value must be a number'),
+    body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority')
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.update(req.params.id, req.body);
+
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      res.json(opportunity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Move opportunity to different stage
+router.patch('/:id/stage',
+  [body('stage_id').isInt().withMessage('Valid stage_id required')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id);
+
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      res.json(opportunity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Convert opportunity to project
+router.post('/:id/convert',
+  [body('project_id').isInt().withMessage('Valid project_id required')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.convertToProject(req.params.id, req.body.project_id);
+
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      res.json(opportunity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Mark opportunity as lost
+router.post('/:id/lost',
+  [body('reason').optional().trim()],
+  async (req, res, next) => {
+    try {
+      const opportunity = await opportunities.markAsLost(req.params.id, req.body.reason);
+
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      res.json(opportunity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Delete opportunity
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const opportunity = await opportunities.delete(req.params.id);
+
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
+    res.json({ message: 'Opportunity deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Activity Routes =====
+
+// Get all activities for an opportunity
+router.get('/:id/activities', async (req, res, next) => {
+  try {
+    const activities = await opportunityActivities.findByOpportunityId(req.params.id);
+    res.json(activities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new activity
+router.post('/:id/activities',
+  [
+    body('activity_type').isIn(['call', 'meeting', 'email', 'note', 'task', 'voice_note']).withMessage('Invalid activity type'),
+    body('subject').optional().trim()
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const activityData = {
+        ...req.body,
+        opportunity_id: req.params.id
+      };
+
+      const activity = await opportunityActivities.create(activityData, req.user.id);
+      res.status(201).json(activity);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update activity
+router.put('/:opportunityId/activities/:activityId', async (req, res, next) => {
+  try {
+    const activity = await opportunityActivities.update(req.params.activityId, req.body);
+
+    if (!activity) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+
+    res.json(activity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Mark activity as complete
+router.patch('/:opportunityId/activities/:activityId/complete', async (req, res, next) => {
+  try {
+    const activity = await opportunityActivities.markComplete(req.params.activityId);
+
+    if (!activity) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+
+    res.json(activity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete activity
+router.delete('/:opportunityId/activities/:activityId', async (req, res, next) => {
+  try {
+    const activity = await opportunityActivities.delete(req.params.activityId);
+
+    if (!activity) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+
+    res.json({ message: 'Activity deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get upcoming activities across all opportunities
+router.get('/activities/upcoming', async (req, res, next) => {
+  try {
+    const limit = req.query.limit || 10;
+    const activities = await opportunityActivities.findUpcoming(req.user.id, limit);
+    res.json(activities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get overdue activities
+router.get('/activities/overdue', async (req, res, next) => {
+  try {
+    const activities = await opportunityActivities.findOverdue(req.user.id);
+    res.json(activities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+module.exports = router;

@@ -29,6 +29,7 @@ import CostDatabase from './pages/estimating/CostDatabase';
 import AccountManagementList from './pages/accountManagement/AccountManagementList';
 import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
+import VendorList from './pages/accountManagement/VendorList';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerContacts from './pages/CustomerContacts';
 import CustomerProjects from './pages/CustomerProjects';
@@ -51,6 +52,7 @@ import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashbo
 import ContractReviewList from './pages/riskManagement/ContractReviewList';
 import ContractReviewUpload from './pages/riskManagement/ContractReviewUpload';
 import ContractReviewDetail from './pages/riskManagement/ContractReviewDetail';
+import SalesPipeline from './pages/SalesPipeline';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -73,6 +75,7 @@ const App: React.FC = () => {
             <Layout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/sales" element={<SalesPipeline />} />
                 <Route path="/marketing" element={<MarketingList />} />
                 <Route path="/marketing/branding" element={<Branding />} />
                 <Route path="/estimating" element={<EstimatingDashboard />} />
@@ -84,6 +87,7 @@ const App: React.FC = () => {
                 <Route path="/account-management" element={<AccountManagementList />} />
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />
+                <Route path="/account-management/vendors" element={<VendorList />} />
                 <Route path="/customers/:id" element={<CustomerDetail />} />
                 <Route path="/customers/:id/contacts" element={<CustomerContacts />} />
                 <Route path="/customers/:id/projects" element={<CustomerProjects />} />

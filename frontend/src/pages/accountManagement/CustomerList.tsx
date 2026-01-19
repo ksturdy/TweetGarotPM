@@ -93,8 +93,8 @@ const CustomerList: React.FC = () => {
       <div className="page-header">
         <div>
           <Link to="/account-management" className="breadcrumb-link">&larr; Back to Account Management</Link>
-          <h1 className="page-title">Customer List</h1>
-          <p className="page-subtitle">Manage your customer database</p>
+          <h1 className="page-title">Customers</h1>
+          <p className="page-subtitle">Accounts Receivable</p>
         </div>
         <div className="header-actions">
           <input
