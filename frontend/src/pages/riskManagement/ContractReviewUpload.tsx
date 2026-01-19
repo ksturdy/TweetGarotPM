@@ -162,8 +162,9 @@ const ContractReviewUpload: React.FC = () => {
       }
 
       let analysisResults;
-      if (claudeApiKey) {
+      if (claudeApiKey || serverHasKey) {
         // Real Claude API analysis with page tracking
+        // Pass claudeApiKey (may be empty string) - backend will use server key if user key is empty
         analysisResults = await analyzeContractWithClaude(contractText, claudeApiKey, pageTexts.length > 0 ? pageTexts : undefined);
       } else {
         // Demo mode - mock analysis with realistic data

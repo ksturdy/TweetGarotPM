@@ -5,8 +5,8 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { ContractRiskFinding } from '../../services/contractReviews';
 import './ContractViewerNew.css';
 
-// Configure PDF.js worker - use CDN version matching react-pdf's pdfjs version
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Configure PDF.js worker - use local worker file for better reliability
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 interface ContractViewerProps {
   fileUrl: string;

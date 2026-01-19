@@ -8,6 +8,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Set this as a secret in Render dashboard
+      - key: DATABASE_URL
+        sync: false  # Already configured via Render database connection
+      - key: JWT_SECRET
+        sync: false  # Set this as a secret in Render dashboard
 
   # Frontend Static Site
   - type: web
