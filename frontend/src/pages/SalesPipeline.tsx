@@ -168,6 +168,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Medium',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
       owner: 'City of Phoenix',
+      market: 'Commercial',
       icon: '🏢',
       iconGradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)'
     },
@@ -182,6 +183,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Medium',
       salesperson: { name: 'Tom Henderson', initials: 'TH', color: '#f59e0b' },
       owner: 'Banner Health',
+      market: 'Healthcare',
       icon: '🏥',
       iconGradient: 'linear-gradient(135deg, #10b981, #06b6d4)'
     },
@@ -196,6 +198,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'High',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
       owner: 'Chandler USD',
+      market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #f59e0b, #f43f5e)'
     },
@@ -210,6 +213,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Medium',
       salesperson: { name: 'Jake Davis', initials: 'JD', color: '#10b981' },
       owner: 'Arizona State University',
+      market: 'Education',
       icon: '🏛',
       iconGradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)'
     },
@@ -224,6 +228,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Low',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
       owner: 'Vestar Development',
+      market: 'Retail',
       icon: '🏬',
       iconGradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)'
     },
@@ -238,6 +243,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'High',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
       owner: 'Macerich Company',
+      market: 'Commercial',
       icon: '🏢',
       iconGradient: 'linear-gradient(135deg, #10b981, #06b6d4)'
     },
@@ -252,6 +258,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'High',
       salesperson: { name: 'Tom Henderson', initials: 'TH', color: '#f59e0b' },
       owner: 'Dignity Health',
+      market: 'Healthcare',
       icon: '🏥',
       iconGradient: 'linear-gradient(135deg, #f43f5e, #f59e0b)'
     },
@@ -266,6 +273,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Low',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
       owner: 'Maricopa Community Colleges',
+      market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
     },
@@ -280,6 +288,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'Low',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
       owner: 'Intel Corporation',
+      market: 'Industrial',
       icon: '🏭',
       iconGradient: 'linear-gradient(135deg, #06b6d4, #10b981)'
     },
@@ -294,6 +303,7 @@ const SalesPipeline: React.FC = () => {
       probability: 'High',
       salesperson: { name: 'Jake Davis', initials: 'JD', color: '#10b981' },
       owner: 'Mesa Public Schools',
+      market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #10b981, #3b82f6)'
     }
