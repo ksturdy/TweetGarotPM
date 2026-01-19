@@ -25,19 +25,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({ opportunity, onUpdate }) =>
   });
 
   const handleCall = () => {
-    if (opportunity.client_phone) {
-      // Open phone dialer
-      window.location.href = `tel:${opportunity.client_phone}`;
-      setShowCallModal(true);
-    }
+    // Log a call activity
+    setShowCallModal(true);
   };
 
   const handleEmail = () => {
-    if (opportunity.client_email) {
-      // Open email client
-      window.location.href = `mailto:${opportunity.client_email}`;
-      setShowEmailModal(true);
-    }
+    // Log an email activity
+    setShowEmailModal(true);
   };
 
   const handleLogCall = () => {
@@ -96,21 +90,19 @@ const QuickActions: React.FC<QuickActionsProps> = ({ opportunity, onUpdate }) =>
         <button
           className="quick-action-btn call"
           onClick={handleCall}
-          disabled={!opportunity.client_phone}
-          title="Call client"
+          title="Log call"
         >
           <span className="action-icon">📞</span>
-          <span className="action-label">Call</span>
+          <span className="action-label">Log Call</span>
         </button>
 
         <button
           className="quick-action-btn email"
           onClick={handleEmail}
-          disabled={!opportunity.client_email}
-          title="Email client"
+          title="Log email"
         >
           <span className="action-icon">✉️</span>
-          <span className="action-label">Email</span>
+          <span className="action-label">Log Email</span>
         </button>
 
         <button

@@ -8,6 +8,19 @@ const { body, validationResult } = require('express-validator');
 // Apply authentication to all routes
 router.use(authenticate);
 
+// Get all pipeline stages
+router.get('/stages', async (req, res, next) => {
+  try {
+    const pool = require('../config/database');
+    const result = await pool.query(
+      'SELECT id, name, color, probability, display_order FROM pipeline_stages WHERE is_active = true ORDER BY display_order'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get all opportunities (with optional filters)
 router.get('/', async (req, res, next) => {
   try {
@@ -70,21 +83,24 @@ router.get('/:id', async (req, res, next) => {
 router.post('/',
   [
     body('title').trim().notEmpty().withMessage('Title is required'),
-    body('client_name').trim().notEmpty().withMessage('Client name is required'),
-    body('client_email').optional().isEmail().withMessage('Valid email required'),
-    body('estimated_value').optional().isNumeric().withMessage('Estimated value must be a number'),
-    body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority')
+    body('estimated_value').optional({ values: 'falsy' }).isNumeric().withMessage('Estimated value must be a number'),
+    body('priority').optional({ values: 'falsy' }).isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority'),
+    body('construction_type').optional({ values: 'falsy' }).isString().withMessage('Construction type must be a string'),
+    body('market').optional({ values: 'falsy' }).isString().withMessage('Market must be a string')
   ],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.error('Validation errors:', errors.array());
         return res.status(400).json({ errors: errors.array() });
       }
 
+      console.log('Creating opportunity with data:', req.body);
       const opportunity = await opportunities.create(req.body, req.user.id);
       res.status(201).json(opportunity);
     } catch (error) {
+      console.error('Error creating opportunity:', error);
       next(error);
     }
   }
@@ -93,7 +109,6 @@ router.post('/',
 // Update opportunity
 router.put('/:id',
   [
-    body('client_email').optional().isEmail().withMessage('Valid email required'),
     body('estimated_value').optional().isNumeric().withMessage('Estimated value must be a number'),
     body('priority').optional().isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority')
   ],

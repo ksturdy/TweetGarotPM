@@ -3,26 +3,28 @@ import api from './api';
 export interface Opportunity {
   id: number;
   title: string;
-  client_name: string;
-  client_email?: string;
-  client_phone?: string;
-  client_company?: string;
   description?: string;
   estimated_value?: number;
   estimated_start_date?: string;
   estimated_duration_days?: number;
-  project_type?: string;
+  construction_type?: string;
+  project_type?: string; // Deprecated - kept for backward compatibility
   location?: string;
   stage_id: number;
   stage_name?: string;
   stage_color?: string;
-  stage_probability?: number;
-  probability?: number;
+  stage_probability?: string;
+  probability?: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assigned_to?: number;
   assigned_to_name?: string;
   assigned_to_email?: string;
   source?: string;
+  market?: string;
+  owner?: string;
+  general_contractor?: string;
+  architect?: string;
+  engineer?: string;
   converted_to_project_id?: number;
   converted_project_name?: string;
   converted_at?: string;
@@ -100,6 +102,12 @@ const opportunitiesService = {
   // Get opportunities grouped by stages (Kanban view)
   async getKanbanView(): Promise<PipelineStage[]> {
     const response = await api.get('/opportunities/kanban');
+    return response.data;
+  },
+
+  // Get all pipeline stages
+  async getStages(): Promise<Array<{ id: number; name: string; color: string; probability: string; display_order: number }>> {
+    const response = await api.get('/opportunities/stages');
     return response.data;
   },
 

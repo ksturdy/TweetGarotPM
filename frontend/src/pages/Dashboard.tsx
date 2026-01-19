@@ -45,7 +45,6 @@ const Dashboard: React.FC = () => {
     { name: 'Safety', icon: '🦺', path: '#', desc: 'Incidents & Training', ready: false },
     { name: 'HR', icon: '👥', path: '/hr', desc: 'Employees', ready: true },
     { name: 'Fleet', icon: '🚛', path: '#', desc: 'Vehicles', ready: false },
-    { name: 'Inventory', icon: '📦', path: '#', desc: 'Parts & Tools', ready: false },
   ];
 
   const scrollToBottom = () => {

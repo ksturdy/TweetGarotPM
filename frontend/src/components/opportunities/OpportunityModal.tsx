@@ -23,23 +23,26 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
   const [formData, setFormData] = useState({
     title: opportunity?.title || '',
-    client_name: opportunity?.client_name || '',
-    client_email: opportunity?.client_email || '',
-    client_phone: opportunity?.client_phone || '',
-    client_company: opportunity?.client_company || '',
     description: opportunity?.description || '',
     estimated_value: opportunity?.estimated_value || '',
     estimated_start_date: opportunity?.estimated_start_date || '',
     estimated_duration_days: opportunity?.estimated_duration_days || '',
-    project_type: opportunity?.project_type || '',
+    construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
     stage_id: opportunity?.stage_id || 1,
     priority: opportunity?.priority || 'medium',
+    probability: opportunity?.probability || opportunity?.stage_probability || '',
     assigned_to: opportunity?.assigned_to || '',
-    source: opportunity?.source || ''
+    source: opportunity?.source || '',
+    market: opportunity?.market || '',
+    owner: opportunity?.owner || '',
+    general_contractor: opportunity?.general_contractor || '',
+    architect: opportunity?.architect || '',
+    engineer: opportunity?.engineer || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Fetch users for assignment
   const { data: usersResponse } = useQuery({
@@ -48,6 +51,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   });
 
   const users: User[] = usersResponse?.data || [];
+
+  // Fetch pipeline stages
+  const { data: stages = [] } = useQuery({
+    queryKey: ['pipeline-stages'],
+    queryFn: () => opportunitiesService.getStages()
+  });
 
   // Create mutation
   const createMutation = useMutation({
@@ -58,7 +67,20 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     },
     onError: (error: any) => {
       console.error('Failed to create opportunity:', error);
-      alert(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to create opportunity');
+      console.error('Error response:', error.response);
+      console.error('Error data:', error.response?.data);
+
+      // Build detailed error message
+      let errorMessage = 'Failed to create opportunity';
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = error.response.data.errors.map((e: any) => `${e.param}: ${e.msg}`).join(', ');
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      alert(`Error: ${errorMessage}`);
     }
   });
 
@@ -75,6 +97,19 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     }
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: () => opportunitiesService.delete(opportunity!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+      onSave();
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete opportunity:', error);
+      alert(error.response?.data?.error || 'Failed to delete opportunity');
+    }
+  });
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -83,21 +118,32 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Clean up form data: convert empty strings to null/undefined for optional fields
-    const cleanedData = {
-      ...formData,
-      client_email: formData.client_email || undefined,
-      client_phone: formData.client_phone || undefined,
-      client_company: formData.client_company || undefined,
-      description: formData.description || undefined,
-      estimated_value: formData.estimated_value ? Number(formData.estimated_value) : undefined,
-      estimated_start_date: formData.estimated_start_date || undefined,
-      estimated_duration_days: formData.estimated_duration_days ? Number(formData.estimated_duration_days) : undefined,
-      project_type: formData.project_type || undefined,
-      location: formData.location || undefined,
-      assigned_to: formData.assigned_to ? Number(formData.assigned_to) : undefined,
-      source: formData.source || undefined
+    // Clean up form data: only include fields that have values
+    const cleanedData: any = {
+      title: formData.title,
+      stage_id: formData.stage_id,
+      priority: formData.priority
     };
+
+    // Add optional string fields if they have values
+    if (formData.description) cleanedData.description = formData.description;
+    if (formData.construction_type) cleanedData.construction_type = formData.construction_type;
+    if (formData.location) cleanedData.location = formData.location;
+    if (formData.estimated_start_date) cleanedData.estimated_start_date = formData.estimated_start_date;
+    if (formData.source) cleanedData.source = formData.source;
+    if (formData.market) cleanedData.market = formData.market;
+    if (formData.owner) cleanedData.owner = formData.owner;
+    if (formData.general_contractor) cleanedData.general_contractor = formData.general_contractor;
+    if (formData.architect) cleanedData.architect = formData.architect;
+    if (formData.engineer) cleanedData.engineer = formData.engineer;
+
+    // Add optional number fields if they have values
+    if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
+    if (formData.estimated_duration_days) cleanedData.estimated_duration_days = Number(formData.estimated_duration_days);
+    if (formData.assigned_to) cleanedData.assigned_to = Number(formData.assigned_to);
+    if (formData.probability) cleanedData.probability = formData.probability;
+
+    console.log('Submitting opportunity data:', cleanedData);
 
     if (isEditMode) {
       updateMutation.mutate(cleanedData);
@@ -113,6 +159,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
         ? `${prev.description}\n\n${transcript}`
         : transcript
     }));
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Are you sure you want to delete this opportunity? This action cannot be undone.')) {
+      deleteMutation.mutate();
+    }
   };
 
   return (
@@ -199,59 +251,104 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </select>
                   </div>
                 </div>
-              </div>
-
-              {/* Client Info */}
-              <div className="form-section">
-                <h3>Client Information</h3>
-
-                <div className="form-group">
-                  <label htmlFor="client_name">Client Name *</label>
-                  <input
-                    type="text"
-                    id="client_name"
-                    name="client_name"
-                    value={formData.client_name}
-                    onChange={handleChange}
-                    required
-                    placeholder="Contact person name"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="client_company">Company</label>
-                  <input
-                    type="text"
-                    id="client_company"
-                    name="client_company"
-                    value={formData.client_company}
-                    onChange={handleChange}
-                    placeholder="Company name"
-                  />
-                </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="client_email">Email</label>
-                    <input
-                      type="email"
-                      id="client_email"
-                      name="client_email"
-                      value={formData.client_email}
+                    <label htmlFor="stage_id">Stage</label>
+                    <select
+                      id="stage_id"
+                      name="stage_id"
+                      value={formData.stage_id}
                       onChange={handleChange}
-                      placeholder="email@example.com"
+                    >
+                      {stages.map((stage) => (
+                        <option key={stage.id} value={stage.id}>
+                          {stage.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    {/* Empty div to maintain grid layout */}
+                  </div>
+                </div>
+
+                {isEditMode && (
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="probability">Win Probability</label>
+                      <select
+                        id="probability"
+                        name="probability"
+                        value={formData.probability}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select probability</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      {/* Empty div to maintain grid layout */}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Project Participants */}
+              <div className="form-section">
+                <h3>Project Participants</h3>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="owner">Owner</label>
+                    <input
+                      type="text"
+                      id="owner"
+                      name="owner"
+                      value={formData.owner}
+                      onChange={handleChange}
+                      placeholder="Project owner"
                     />
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="client_phone">Phone</label>
+                    <label htmlFor="general_contractor">General Contractor</label>
                     <input
-                      type="tel"
-                      id="client_phone"
-                      name="client_phone"
-                      value={formData.client_phone}
+                      type="text"
+                      id="general_contractor"
+                      name="general_contractor"
+                      value={formData.general_contractor}
                       onChange={handleChange}
-                      placeholder="(555) 123-4567"
+                      placeholder="GC company name"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="architect">Architect</label>
+                    <input
+                      type="text"
+                      id="architect"
+                      name="architect"
+                      value={formData.architect}
+                      onChange={handleChange}
+                      placeholder="Architect firm"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="engineer">Engineer</label>
+                    <input
+                      type="text"
+                      id="engineer"
+                      name="engineer"
+                      value={formData.engineer}
+                      onChange={handleChange}
+                      placeholder="Engineering firm"
                     />
                   </div>
                 </div>
@@ -269,8 +366,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       name="description"
                       value={formData.description}
                       onChange={handleChange}
-                      rows={4}
+                      rows={6}
                       placeholder="Describe the project scope, requirements, etc."
+                      style={{ width: '100%', resize: 'vertical' }}
                     />
                     <VoiceNoteButton onTranscript={handleVoiceNote} />
                   </div>
@@ -278,22 +376,42 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="project_type">Project Type</label>
+                    <label htmlFor="construction_type">Construction Type</label>
                     <select
-                      id="project_type"
-                      name="project_type"
-                      value={formData.project_type}
+                      id="construction_type"
+                      name="construction_type"
+                      value={formData.construction_type}
                       onChange={handleChange}
                     >
                       <option value="">Select type</option>
-                      <option value="commercial">Commercial</option>
-                      <option value="industrial">Industrial</option>
-                      <option value="residential">Residential</option>
-                      <option value="retrofit">Retrofit</option>
-                      <option value="maintenance">Maintenance</option>
+                      <option value="New Construction">New Construction</option>
+                      <option value="Addition">Addition</option>
+                      <option value="Renovation">Renovation</option>
                     </select>
                   </div>
 
+                  <div className="form-group">
+                    <label htmlFor="market">Market</label>
+                    <select
+                      id="market"
+                      name="market"
+                      value={formData.market}
+                      onChange={handleChange}
+                    >
+                      <option value="">Select market</option>
+                      <option value="Healthcare">🏥 Healthcare</option>
+                      <option value="Education">🏫 Education</option>
+                      <option value="Commercial">🏢 Commercial</option>
+                      <option value="Industrial">🏭 Industrial</option>
+                      <option value="Retail">🏬 Retail</option>
+                      <option value="Government">🏛️ Government</option>
+                      <option value="Hospitality">🏨 Hospitality</option>
+                      <option value="Data Center">💾 Data Center</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="location">Location</label>
                     <input
@@ -304,6 +422,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       onChange={handleChange}
                       placeholder="City, State"
                     />
+                  </div>
+
+                  <div className="form-group">
+                    {/* Empty div to maintain grid layout */}
                   </div>
                 </div>
 
@@ -379,20 +501,34 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
               {/* Form Actions */}
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={onClose}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {createMutation.isPending || updateMutation.isPending
-                    ? 'Saving...'
-                    : isEditMode
-                    ? 'Update'
-                    : 'Create'}
-                </button>
+                <div className="form-actions-left">
+                  {isEditMode && (
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={handleDelete}
+                      disabled={deleteMutation.isPending}
+                    >
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                    </button>
+                  )}
+                </div>
+                <div className="form-actions-right">
+                  <button type="button" className="btn-secondary" onClick={onClose}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                  >
+                    {createMutation.isPending || updateMutation.isPending
+                      ? 'Saving...'
+                      : isEditMode
+                      ? 'Update'
+                      : 'Create'}
+                  </button>
+                </div>
               </div>
             </form>
           ) : (

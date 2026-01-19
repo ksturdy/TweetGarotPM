@@ -126,24 +126,27 @@ const opportunities = {
   // Create new opportunity
   async create(opportunityData, userId) {
     const {
-      title, client_name, client_email, client_phone, client_company,
-      description, estimated_value, estimated_start_date, estimated_duration_days,
-      project_type, location, stage_id, priority, assigned_to, source
+      title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      construction_type, project_type, location, stage_id, priority, assigned_to, source,
+      market, owner, general_contractor, architect, engineer
     } = opportunityData;
+
+    // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
+    const typeValue = construction_type || project_type;
 
     const query = `
       INSERT INTO opportunities (
-        title, client_name, client_email, client_phone, client_company,
-        description, estimated_value, estimated_start_date, estimated_duration_days,
-        project_type, location, stage_id, priority, assigned_to, source, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        title, description, estimated_value, estimated_start_date, estimated_duration_days,
+        construction_type, project_type, location, stage_id, priority, assigned_to, source,
+        market, owner, general_contractor, architect, engineer, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
-      title, client_name, client_email, client_phone, client_company,
-      description, estimated_value, estimated_start_date, estimated_duration_days,
-      project_type, location, stage_id, priority, assigned_to, source, userId
+      title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      typeValue, typeValue, location, stage_id, priority, assigned_to, source,
+      market, owner, general_contractor, architect, engineer, userId
     ]);
 
     return result.rows[0];
@@ -152,38 +155,43 @@ const opportunities = {
   // Update opportunity
   async update(id, opportunityData) {
     const {
-      title, client_name, client_email, client_phone, client_company,
-      description, estimated_value, estimated_start_date, estimated_duration_days,
-      project_type, location, stage_id, priority, assigned_to, probability, lost_reason
+      title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
+      market, owner, general_contractor, architect, engineer
     } = opportunityData;
+
+    // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
+    const typeValue = construction_type || project_type;
 
     const query = `
       UPDATE opportunities SET
         title = COALESCE($1, title),
-        client_name = COALESCE($2, client_name),
-        client_email = COALESCE($3, client_email),
-        client_phone = COALESCE($4, client_phone),
-        client_company = COALESCE($5, client_company),
-        description = COALESCE($6, description),
-        estimated_value = COALESCE($7, estimated_value),
-        estimated_start_date = COALESCE($8, estimated_start_date),
-        estimated_duration_days = COALESCE($9, estimated_duration_days),
-        project_type = COALESCE($10, project_type),
-        location = COALESCE($11, location),
-        stage_id = COALESCE($12, stage_id),
-        priority = COALESCE($13, priority),
-        assigned_to = COALESCE($14, assigned_to),
-        probability = COALESCE($15, probability),
-        lost_reason = COALESCE($16, lost_reason),
+        description = COALESCE($2, description),
+        estimated_value = COALESCE($3, estimated_value),
+        estimated_start_date = COALESCE($4, estimated_start_date),
+        estimated_duration_days = COALESCE($5, estimated_duration_days),
+        construction_type = COALESCE($6, construction_type),
+        project_type = COALESCE($7, project_type),
+        location = COALESCE($8, location),
+        stage_id = COALESCE($9, stage_id),
+        priority = COALESCE($10, priority),
+        assigned_to = COALESCE($11, assigned_to),
+        probability = COALESCE($12, probability),
+        lost_reason = COALESCE($13, lost_reason),
+        market = COALESCE($14, market),
+        owner = COALESCE($15, owner),
+        general_contractor = COALESCE($16, general_contractor),
+        architect = COALESCE($17, architect),
+        engineer = COALESCE($18, engineer),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $17
+      WHERE id = $19
       RETURNING *
     `;
 
     const result = await pool.query(query, [
-      title, client_name, client_email, client_phone, client_company,
-      description, estimated_value, estimated_start_date, estimated_duration_days,
-      project_type, location, stage_id, priority, assigned_to, probability, lost_reason, id
+      title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
+      market, owner, general_contractor, architect, engineer, id
     ]);
 
     return result.rows[0];
