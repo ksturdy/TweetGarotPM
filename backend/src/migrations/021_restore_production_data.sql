@@ -37,7 +37,15 @@ VALUES
   (6, 'brian.smith@tweetgarot.com', 'Brian', 'Smith', 'user', '$2a$10$IWxQdt3hW1VrXJIoBgv52OhaMfMY90xMcjhstnLfn1zkZc73nblYe', 'none', true, NOW(), NOW()),
   (7, 'kipp.sturdivant@tweetgarot.com', 'Kipp', 'Sturdivant', 'admin', '$2a$10$99c3qI3.3ewMy1qTTCGmeeSYIKJRPQxEtL7h4yAsgAikindRj11Wi', 'write', true, NOW(), NOW()),
   (13, 'christopher.howald@tweetgarot.com', 'Christopher', 'Howald', 'manager', '$2a$10$KnAaHNwIa80E2LLU2P.F0uzoLaX8oEZV7jsq7Wg/kdwLa5Vzu2WgK', 'read', true, NOW(), NOW())
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  email = EXCLUDED.email,
+  first_name = EXCLUDED.first_name,
+  last_name = EXCLUDED.last_name,
+  role = EXCLUDED.role,
+  password = EXCLUDED.password,
+  hr_access = EXCLUDED.hr_access,
+  is_active = EXCLUDED.is_active,
+  updated_at = NOW();
 
 -- Update sequence for users
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
