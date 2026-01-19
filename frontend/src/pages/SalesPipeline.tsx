@@ -71,6 +71,12 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => opportunitiesService.getTrend(7)
   });
 
+  // Fetch pipeline stages
+  const { data: pipelineStages = [], isLoading: isStagesLoading } = useQuery({
+    queryKey: ['pipeline-stages'],
+    queryFn: () => opportunitiesService.getStages()
+  });
+
   // Helper function to get market icon
   const getMarketIcon = (market?: string): string => {
     const marketIcons: { [key: string]: string } = {
@@ -342,24 +348,24 @@ const SalesPipeline: React.FC = () => {
   const totalClosedValue = opportunities.reduce((sum, opp) => sum + opp.value, 0);
   const winRate = totalClosedValue > 0 ? (wonOpportunities / opportunities.length) * 100 : 0;
 
-  // Group by stage for funnel
-  const stageData = {
-    lead: opportunities.filter(o => o.stage === 'lead'),
-    qualified: opportunities.filter(o => o.stage === 'qualified'),
-    proposal: opportunities.filter(o => o.stage === 'proposal'),
-    negotiation: opportunities.filter(o => o.stage === 'negotiation'),
-    won: opportunities.filter(o => o.stage === 'won')
-  };
+  // Group opportunities by stage for funnel (using stage_name from API)
+  // Only include active stages, exclude "Lost" and "Passed" from funnel display
+  const activeStages = pipelineStages
+    .filter(stage => stage.name !== 'Lost' && stage.name !== 'Passed')
+    .sort((a, b) => a.display_order - b.display_order);
 
-  const stageValues = {
-    lead: stageData.lead.reduce((sum, o) => sum + o.value, 0),
-    qualified: stageData.qualified.reduce((sum, o) => sum + o.value, 0),
-    proposal: stageData.proposal.reduce((sum, o) => sum + o.value, 0),
-    negotiation: stageData.negotiation.reduce((sum, o) => sum + o.value, 0),
-    won: stageData.won.reduce((sum, o) => sum + o.value, 0)
-  };
+  const stageDataMap = activeStages.reduce((acc, stage) => {
+    const oppsForStage = apiOpportunities.filter(o => o.stage_name === stage.name);
+    acc[stage.name] = {
+      opportunities: oppsForStage,
+      count: oppsForStage.length,
+      value: oppsForStage.reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0),
+      color: stage.color
+    };
+    return acc;
+  }, {} as { [key: string]: { opportunities: OpportunityType[], count: number, value: number, color: string } });
 
-  const maxStageValue = Math.max(...Object.values(stageValues));
+  const maxStageValue = Math.max(...Object.values(stageDataMap).map(s => s.value), 1);
 
   // Chart data - use real trend data from API
   const trendChartData = {
@@ -682,91 +688,30 @@ const SalesPipeline: React.FC = () => {
           </div>
           <div className="sales-chart-container">
             <div className="sales-funnel-container">
-              <div className="sales-funnel-stage">
-                <div className="sales-funnel-label">Lead</div>
-                <div className="sales-funnel-bar-container">
-                  <div
-                    className="sales-funnel-bar"
-                    style={{
-                      width: `${(stageValues.lead / maxStageValue) * 100}%`,
-                      background: '#8b5cf6'
-                    }}
-                  >
-                    {stageData.lead.length}
+              {activeStages.map(stage => {
+                const stageData = stageDataMap[stage.name] || { count: 0, value: 0, color: stage.color };
+                const widthPercent = maxStageValue > 0 ? (stageData.value / maxStageValue) * 100 : 0;
+
+                return (
+                  <div key={stage.id} className="sales-funnel-stage">
+                    <div className="sales-funnel-label">{stage.name}</div>
+                    <div className="sales-funnel-bar-container">
+                      <div
+                        className="sales-funnel-bar"
+                        style={{
+                          width: `${widthPercent}%`,
+                          background: stageData.color
+                        }}
+                      >
+                        {stageData.count}
+                      </div>
+                    </div>
+                    <div className="sales-funnel-value" style={{ color: stageData.color }}>
+                      {formatCurrency(stageData.value)}
+                    </div>
                   </div>
-                </div>
-                <div className="sales-funnel-value" style={{ color: '#8b5cf6' }}>
-                  {formatCurrency(stageValues.lead)}
-                </div>
-              </div>
-              <div className="sales-funnel-stage">
-                <div className="sales-funnel-label">Qualified</div>
-                <div className="sales-funnel-bar-container">
-                  <div
-                    className="sales-funnel-bar"
-                    style={{
-                      width: `${(stageValues.qualified / maxStageValue) * 100}%`,
-                      background: '#06b6d4'
-                    }}
-                  >
-                    {stageData.qualified.length}
-                  </div>
-                </div>
-                <div className="sales-funnel-value" style={{ color: '#06b6d4' }}>
-                  {formatCurrency(stageValues.qualified)}
-                </div>
-              </div>
-              <div className="sales-funnel-stage">
-                <div className="sales-funnel-label">Proposal</div>
-                <div className="sales-funnel-bar-container">
-                  <div
-                    className="sales-funnel-bar"
-                    style={{
-                      width: `${(stageValues.proposal / maxStageValue) * 100}%`,
-                      background: '#3b82f6'
-                    }}
-                  >
-                    {stageData.proposal.length}
-                  </div>
-                </div>
-                <div className="sales-funnel-value" style={{ color: '#3b82f6' }}>
-                  {formatCurrency(stageValues.proposal)}
-                </div>
-              </div>
-              <div className="sales-funnel-stage">
-                <div className="sales-funnel-label">Negotiation</div>
-                <div className="sales-funnel-bar-container">
-                  <div
-                    className="sales-funnel-bar"
-                    style={{
-                      width: `${(stageValues.negotiation / maxStageValue) * 100}%`,
-                      background: '#f59e0b'
-                    }}
-                  >
-                    {stageData.negotiation.length}
-                  </div>
-                </div>
-                <div className="sales-funnel-value" style={{ color: '#f59e0b' }}>
-                  {formatCurrency(stageValues.negotiation)}
-                </div>
-              </div>
-              <div className="sales-funnel-stage">
-                <div className="sales-funnel-label">Won</div>
-                <div className="sales-funnel-bar-container">
-                  <div
-                    className="sales-funnel-bar"
-                    style={{
-                      width: `${(stageValues.won / maxStageValue) * 100}%`,
-                      background: '#10b981'
-                    }}
-                  >
-                    {stageData.won.length}
-                  </div>
-                </div>
-                <div className="sales-funnel-value" style={{ color: '#10b981' }}>
-                  {formatCurrency(stageValues.won)}
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -789,34 +734,39 @@ const SalesPipeline: React.FC = () => {
       {/* Board View */}
       {view === 'board' && (
         <div className="sales-pipeline-board">
-          {(['lead', 'qualified', 'proposal', 'negotiation', 'won'] as const).map((stage) => (
-            <div key={stage} className="sales-pipeline-column">
-              <div className="sales-column-header">
-                <div>
-                  <div className="sales-column-title" style={{ color: getStageColor(stage) }}>
-                    {stage.charAt(0).toUpperCase() + stage.slice(1)}
+          {activeStages.map((stage) => {
+            const stageInfo = stageDataMap[stage.name] || { opportunities: [], count: 0, value: 0, color: stage.color };
+            const displayOpps = stageInfo.opportunities.slice(0, 2).map(mapApiToDisplay);
+
+            return (
+              <div key={stage.id} className="sales-pipeline-column">
+                <div className="sales-column-header">
+                  <div>
+                    <div className="sales-column-title" style={{ color: stageInfo.color }}>
+                      {stage.name}
+                    </div>
+                    <div className="sales-column-total">{formatCurrency(stageInfo.value)}</div>
                   </div>
-                  <div className="sales-column-total">{formatCurrency(stageValues[stage])}</div>
+                  <div className="sales-column-count">{stageInfo.count}</div>
                 </div>
-                <div className="sales-column-count">{stageData[stage].length}</div>
-              </div>
-              {stageData[stage].slice(0, 2).map((opp) => (
-                <div key={opp.id} className="sales-opportunity-card">
-                  <div className="sales-opp-name">{opp.name}</div>
-                  <div className="sales-opp-value">{formatCurrency(opp.value)}</div>
-                  <div className="sales-opp-meta">
-                    <span className="sales-opp-date">{opp.date}</span>
-                    <div
-                      className="sales-opp-avatar"
-                      style={{ background: opp.salesperson.color }}
-                    >
-                      {opp.salesperson.initials}
+                {displayOpps.map((opp) => (
+                  <div key={opp.id} className="sales-opportunity-card">
+                    <div className="sales-opp-name">{opp.name}</div>
+                    <div className="sales-opp-value">{formatCurrency(opp.value)}</div>
+                    <div className="sales-opp-meta">
+                      <span className="sales-opp-date">{opp.date}</span>
+                      <div
+                        className="sales-opp-avatar"
+                        style={{ background: opp.salesperson.color }}
+                      >
+                        {opp.salesperson.initials}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ))}
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
