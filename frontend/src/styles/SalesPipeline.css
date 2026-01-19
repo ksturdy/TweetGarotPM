@@ -178,6 +178,11 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+/* Reduce padding for market chart card to show labels */
+.sales-chart-card:has(.sales-market-chart-full) {
+  padding: 24px 8px 24px 24px;
+}
+
 .sales-chart-header {
   display: flex;
   justify-content: space-between;
@@ -217,12 +222,12 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 10px;
+  padding: 0;
   overflow: visible;
 }
 
 .sales-market-chart-full > div {
-  max-width: 400px !important;
+  max-width: 100% !important;
   width: 100% !important;
 }
 
