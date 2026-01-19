@@ -21,5 +21,8 @@ services:
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://tweetgarot-backend.onrender.com/api
     # Note: For SPA routing support, we use 404.html redirect technique
     # See frontend/public/404.html and frontend/public/index.html

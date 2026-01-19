@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractReviewsApi, ContractRiskFinding, ContractAnnotation } from '../../services/contractReviews';
 import ContractViewerNew from '../../components/contractReview/ContractViewerNew';
+import api from '../../services/api';
 import './ContractReviewDetail.css';
 
 const ContractReviewDetail: React.FC = () => {
@@ -114,7 +115,8 @@ const ContractReviewDetail: React.FC = () => {
     deleteAnnotationMutation.mutate(annotationId);
   };
 
-  const fileUrl = `http://localhost:3001${contractReviewsApi.getFileUrl(Number(id))}`;
+  // Pass the full API URL to ContractViewerNew (it will use the api instance with auth)
+  const fileUrl = `${api.defaults.baseURL}${contractReviewsApi.getFileUrl(Number(id))}`;
 
   return (
     <div className={`contract-detail ${showViewer ? 'split-view' : ''}`}>

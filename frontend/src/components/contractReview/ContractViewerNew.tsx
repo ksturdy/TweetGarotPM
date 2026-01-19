@@ -3,6 +3,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ContractRiskFinding } from '../../services/contractReviews';
+import api from '../../services/api';
 import './ContractViewerNew.css';
 
 // Configure PDF.js worker - use local worker file for better reliability
@@ -32,32 +33,20 @@ const ContractViewerNew: React.FC<ContractViewerProps> = ({
       try {
         setLoading(true);
         setError(null);
-        const token = localStorage.getItem('token');
         console.log('[ContractViewer] Fetching PDF from:', fileUrl);
-        console.log('[ContractViewer] Token exists:', !!token, 'Token length:', token?.length);
-        if (token) {
-          console.log('[ContractViewer] Token preview:', token.substring(0, 20) + '...');
-        }
 
-        const response = await fetch(fileUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        // Use axios (api instance) to get the file with proper auth headers
+        const response = await api.get(fileUrl.replace(api.defaults.baseURL || '', ''), {
+          responseType: 'arraybuffer'
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);
-        }
+        console.log('[ContractViewer] PDF received, size:', response.data.byteLength);
 
-        const blob = await response.blob();
-        console.log('[ContractViewer] PDF blob received, size:', blob.size, 'type:', blob.type);
-
-        const arrayBuffer = await blob.arrayBuffer();
-        setPdfData(arrayBuffer);
+        setPdfData(response.data);
         setLoading(false);
       } catch (err: any) {
         console.error('[ContractViewer] Error fetching PDF:', err);
-        setError(err.message || 'Failed to load PDF');
+        setError(err.response?.data?.error || err.message || 'Failed to load PDF');
         setLoading(false);
       }
     };
