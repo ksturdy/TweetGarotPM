@@ -82,7 +82,10 @@ const ContractReviewUpload: React.FC = () => {
       }
     })
       .then(res => res.json())
-      .then(data => setServerHasKey(data.hasServerKey))
+      .then(data => {
+        console.log('[ContractReviewUpload] Server has key:', data.hasServerKey);
+        setServerHasKey(data.hasServerKey);
+      })
       .catch(err => console.error('Failed to check Claude config:', err));
   }, []);
 
@@ -162,12 +165,15 @@ const ContractReviewUpload: React.FC = () => {
       }
 
       let analysisResults;
+      console.log('[ContractReviewUpload] Analysis decision - claudeApiKey:', !!claudeApiKey, 'serverHasKey:', serverHasKey);
       if (claudeApiKey || serverHasKey) {
         // Real Claude API analysis with page tracking
         // Pass claudeApiKey (may be empty string) - backend will use server key if user key is empty
+        console.log('[ContractReviewUpload] Using real Claude API analysis');
         analysisResults = await analyzeContractWithClaude(contractText, claudeApiKey, pageTexts.length > 0 ? pageTexts : undefined);
       } else {
         // Demo mode - mock analysis with realistic data
+        console.log('[ContractReviewUpload] Using demo mode - no API key available');
         const isPDF = file.name.toLowerCase().endsWith('.pdf');
         analysisResults = {
           contractValue: Math.floor(Math.random() * 5000000) + 500000,

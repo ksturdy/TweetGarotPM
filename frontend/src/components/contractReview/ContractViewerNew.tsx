@@ -32,11 +32,16 @@ const ContractViewerNew: React.FC<ContractViewerProps> = ({
       try {
         setLoading(true);
         setError(null);
+        const token = localStorage.getItem('token');
         console.log('[ContractViewer] Fetching PDF from:', fileUrl);
+        console.log('[ContractViewer] Token exists:', !!token, 'Token length:', token?.length);
+        if (token) {
+          console.log('[ContractViewer] Token preview:', token.substring(0, 20) + '...');
+        }
 
         const response = await fetch(fileUrl, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${token}`
           }
         });
 

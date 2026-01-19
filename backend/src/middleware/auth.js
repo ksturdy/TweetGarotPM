@@ -13,6 +13,7 @@ const authenticate = (req, res, next) => {
   }
 
   if (!token) {
+    console.log('[Auth] No token provided. Auth header:', authHeader, 'Query token:', req.query.token);
     return res.status(401).json({ error: 'Authentication required' });
   }
 
@@ -21,6 +22,7 @@ const authenticate = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
+    console.log('[Auth] Token verification failed:', error.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
