@@ -50,7 +50,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- Update sequence for users
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
--- Insert departments (only if they don't exist)
+-- Insert departments WITHOUT manager_id first (to avoid foreign key issues)
 INSERT INTO departments (id, name, description, manager_id, department_number, created_at, updated_at)
 VALUES
   (1, 'Executive', 'Executive leadership and management', NULL, '01-01', NOW(), NOW()),
@@ -58,14 +58,13 @@ VALUES
   (5, 'Human Resources', 'HR and employee relations', NULL, NULL, NOW(), NOW()),
   (6, 'Administration', 'Accounting, IT, Risk', NULL, NULL, NOW(), NOW()),
   (9, 'CW Accounts', 'Central Wisconsin Accounts', NULL, NULL, NOW(), NOW()),
-  (10, 'Project Construction', '', 1, '10-30', NOW(), NOW()),
-  (11, 'NEW Accounts (Industrial)', '', 2, '10-50', NOW(), NOW()),
-  (12, 'Tempe', '', 4, '40-30', NOW(), NOW()),
+  (10, 'Project Construction', '', NULL, '10-30', NOW(), NOW()),
+  (11, 'NEW Accounts (Industrial)', '', NULL, '10-50', NOW(), NOW()),
+  (12, 'Tempe', '', NULL, '40-30', NOW(), NOW()),
   (13, 'NEW Accounts (Commercial)', '', NULL, '10-60', NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
-  manager_id = EXCLUDED.manager_id,
   department_number = EXCLUDED.department_number,
   updated_at = NOW();
 
@@ -99,3 +98,8 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Update sequence for employees
 SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees));
+
+-- Now update department manager_id references (after employees exist)
+UPDATE departments SET manager_id = 1 WHERE id = 10;
+UPDATE departments SET manager_id = 2 WHERE id = 11;
+UPDATE departments SET manager_id = 4 WHERE id = 12;
