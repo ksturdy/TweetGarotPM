@@ -334,9 +334,9 @@ const SalesPipeline: React.FC = () => {
   // Helper to convert probability to percentage
   const getProbabilityPercent = (probability: number | string): number => {
     if (typeof probability === 'number') return probability;
-    if (probability === 'Low') return 33;
-    if (probability === 'Medium') return 66;
-    if (probability === 'High') return 100;
+    if (probability === 'Low') return 15;
+    if (probability === 'Medium') return 40;
+    if (probability === 'High') return 80;
     return 0;
   };
 
@@ -872,7 +872,10 @@ const SalesPipeline: React.FC = () => {
                     {opp.probability ? (
                       <span className={`sales-probability-badge ${typeof opp.probability === 'string' ? opp.probability.toLowerCase() : ''}`}>
                         <span className="sales-probability-dot"></span>
-                        {opp.probability}
+                        {typeof opp.probability === 'string'
+                          ? `${opp.probability} (${getProbabilityPercent(opp.probability)}%)`
+                          : `${opp.probability}%`
+                        }
                       </span>
                     ) : (
                       <span>-</span>
