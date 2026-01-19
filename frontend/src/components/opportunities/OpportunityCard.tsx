@@ -90,21 +90,16 @@ const OpportunityCard: React.FC<OpportunityCardProps> = ({
         )}
       </div>
 
-      {/* Client Info */}
-      <div className="card-client">
-        <span className="client-icon">👤</span>
-        <div className="client-info">
-          <span className="client-name">{opportunity.client_name}</span>
-          {opportunity.client_company && (
-            <span className="client-company">{opportunity.client_company}</span>
-          )}
-        </div>
-      </div>
-
       {/* Card Meta */}
       <div className="card-meta">
-        {opportunity.project_type && (
-          <span className="meta-tag">{opportunity.project_type}</span>
+        {opportunity.construction_type && (
+          <span className="meta-tag">{opportunity.construction_type}</span>
+        )}
+        {opportunity.market && (
+          <span className="meta-tag market-tag">{opportunity.market}</span>
+        )}
+        {opportunity.owner && (
+          <span className="meta-tag owner-tag">👤 {opportunity.owner}</span>
         )}
         {opportunity.location && (
           <span className="meta-location">📍 {opportunity.location}</span>
