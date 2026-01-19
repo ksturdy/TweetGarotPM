@@ -46,6 +46,7 @@ interface SalesOpportunity {
     color: string;
   };
   owner: string;
+  market: string;
   icon: string;
   iconGradient: string;
 }
@@ -146,6 +147,7 @@ const SalesPipeline: React.FC = () => {
         color: getSalespersonColor(salespersonName)
       },
       owner: opp.owner || '',
+      market: opp.market || '',
       icon: getMarketIcon(opp.market),
       iconGradient: getMarketGradient(opp.market)
     };
@@ -500,6 +502,10 @@ const SalesPipeline: React.FC = () => {
         aValue = a.owner.toLowerCase();
         bValue = b.owner.toLowerCase();
         break;
+      case 'market':
+        aValue = a.market.toLowerCase();
+        bValue = b.market.toLowerCase();
+        break;
       case 'value':
         aValue = a.value;
         bValue = b.value;
@@ -842,6 +848,9 @@ const SalesPipeline: React.FC = () => {
                 <th className="sales-sortable" onClick={() => handleSort('owner')}>
                   Owner <span className="sales-sort-icon">{sortColumn === 'owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
+                <th className="sales-sortable" onClick={() => handleSort('market')}>
+                  Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                </th>
                 <th className="sales-sortable" onClick={() => handleSort('value')}>
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
@@ -881,6 +890,7 @@ const SalesPipeline: React.FC = () => {
                     </div>
                   </td>
                   <td>{opp.owner || '-'}</td>
+                  <td>{opp.market || '-'}</td>
                   <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
                   <td>
                     <span className={`sales-stage-badge ${opp.stage}`}>
