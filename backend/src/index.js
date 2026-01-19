@@ -73,19 +73,26 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Error handling
-app.use(errorHandler);
+// Serve static frontend files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../frontend/build')));
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
-// Only listen on a port if not running in serverless environment
-if (process.env.VERCEL !== '1') {
-  app.listen(config.port, () => {
-    console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
+  // Handle React routing - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
   });
 }
 
-module.exports = app;
+// Error handling
+app.use(errorHandler);
+
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Start server
+app.listen(config.port, () => {
+  console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
+});
+
