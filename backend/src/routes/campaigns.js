@@ -1,0 +1,463 @@
+const express = require('express');
+const router = express.Router();
+const campaigns = require('../models/campaigns');
+const campaignCompanies = require('../models/campaignCompanies');
+const campaignContacts = require('../models/campaignContacts');
+const campaignOpportunities = require('../models/campaignOpportunities');
+const campaignEstimates = require('../models/campaignEstimates');
+const campaignActivityLogs = require('../models/campaignActivityLogs');
+
+// ===== CAMPAIGNS =====
+
+// GET all campaigns
+router.get('/', async (req, res, next) => {
+  try {
+    const allCampaigns = await campaigns.getAll();
+    res.json(allCampaigns);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET campaign by ID
+router.get('/:id', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    res.json(campaign);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE campaign
+router.post('/', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.create(req.body);
+    res.status(201).json(campaign);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE campaign
+router.put('/:id', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.update(req.params.id, req.body);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    res.json(campaign);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE campaign
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.delete(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    res.json({ message: 'Campaign deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET campaign weeks
+router.get('/:id/weeks', async (req, res, next) => {
+  try {
+    const weeks = await campaigns.getWeeks(req.params.id);
+    res.json(weeks);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE campaign week
+router.post('/:id/weeks', async (req, res, next) => {
+  try {
+    const week = await campaigns.createWeek(req.params.id, req.body);
+    res.status(201).json(week);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET campaign team members
+router.get('/:id/team', async (req, res, next) => {
+  try {
+    const team = await campaigns.getTeamMembers(req.params.id);
+    res.json(team);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ADD team member
+router.post('/:id/team', async (req, res, next) => {
+  try {
+    const member = await campaigns.addTeamMember(
+      req.params.id,
+      req.body.user_id,
+      req.body.role
+    );
+    res.status(201).json(member);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET campaign status stats
+router.get('/:id/stats/status', async (req, res, next) => {
+  try {
+    const stats = await campaigns.getStatusStats(req.params.id);
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET campaign weekly stats
+router.get('/:id/stats/weekly', async (req, res, next) => {
+  try {
+    const stats = await campaigns.getWeeklyStats(req.params.id);
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== CAMPAIGN COMPANIES =====
+
+// GET all companies for a campaign
+router.get('/:campaignId/companies', async (req, res, next) => {
+  try {
+    const filters = {
+      assigned_to_id: req.query.assigned_to_id,
+      status: req.query.status,
+      tier: req.query.tier,
+      target_week: req.query.target_week
+    };
+    const companies = await campaignCompanies.getByCampaignId(req.params.campaignId, filters);
+    res.json(companies);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET company by ID
+router.get('/:campaignId/companies/:id', async (req, res, next) => {
+  try {
+    const company = await campaignCompanies.getById(req.params.id);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE campaign company
+router.post('/:campaignId/companies', async (req, res, next) => {
+  try {
+    const data = { ...req.body, campaign_id: req.params.campaignId };
+    const company = await campaignCompanies.create(data);
+    res.status(201).json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE campaign company
+router.put('/:campaignId/companies/:id', async (req, res, next) => {
+  try {
+    const company = await campaignCompanies.update(req.params.id, req.body);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE company status
+router.patch('/:campaignId/companies/:id/status', async (req, res, next) => {
+  try {
+    const company = await campaignCompanies.updateStatus(
+      req.params.id,
+      req.body.status,
+      req.user.id
+    );
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE company action
+router.patch('/:campaignId/companies/:id/action', async (req, res, next) => {
+  try {
+    const company = await campaignCompanies.updateAction(
+      req.params.id,
+      req.body.next_action,
+      req.user.id
+    );
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ADD company to main database
+router.post('/:campaignId/companies/:id/add-to-database', async (req, res, next) => {
+  try {
+    const result = await campaignCompanies.addToDatabase(req.params.id, req.user.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE campaign company
+router.delete('/:campaignId/companies/:id', async (req, res, next) => {
+  try {
+    const company = await campaignCompanies.delete(req.params.id);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    res.json({ message: 'Company deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== CAMPAIGN CONTACTS =====
+
+// GET contacts for a company
+router.get('/:campaignId/companies/:companyId/contacts', async (req, res, next) => {
+  try {
+    const contacts = await campaignContacts.getByCompanyId(req.params.companyId);
+    res.json(contacts);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE contact
+router.post('/:campaignId/companies/:companyId/contacts', async (req, res, next) => {
+  try {
+    const data = { ...req.body, campaign_company_id: req.params.companyId };
+    const contact = await campaignContacts.create(data);
+    res.status(201).json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE contact
+router.put('/:campaignId/companies/:companyId/contacts/:id', async (req, res, next) => {
+  try {
+    const contact = await campaignContacts.update(req.params.id, req.body);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    res.json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE contact
+router.delete('/:campaignId/companies/:companyId/contacts/:id', async (req, res, next) => {
+  try {
+    const contact = await campaignContacts.delete(req.params.id);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    res.json({ message: 'Contact deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== CAMPAIGN OPPORTUNITIES =====
+
+// GET opportunities for a campaign
+router.get('/:campaignId/opportunities', async (req, res, next) => {
+  try {
+    const opportunities = await campaignOpportunities.getByCampaignId(req.params.campaignId);
+    res.json(opportunities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET opportunities for a company
+router.get('/:campaignId/companies/:companyId/opportunities', async (req, res, next) => {
+  try {
+    const opportunities = await campaignOpportunities.getByCompanyId(req.params.companyId);
+    res.json(opportunities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE opportunity
+router.post('/:campaignId/companies/:companyId/opportunities', async (req, res, next) => {
+  try {
+    const data = { ...req.body, campaign_company_id: req.params.companyId };
+    const opportunity = await campaignOpportunities.create(data, req.user.id);
+    res.status(201).json(opportunity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE opportunity
+router.put('/:campaignId/companies/:companyId/opportunities/:id', async (req, res, next) => {
+  try {
+    const opportunity = await campaignOpportunities.update(req.params.id, req.body);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    res.json(opportunity);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE opportunity
+router.delete('/:campaignId/companies/:companyId/opportunities/:id', async (req, res, next) => {
+  try {
+    const opportunity = await campaignOpportunities.delete(req.params.id);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    res.json({ message: 'Opportunity deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== CAMPAIGN ESTIMATES =====
+
+// GET estimates for a campaign
+router.get('/:campaignId/estimates', async (req, res, next) => {
+  try {
+    const estimates = await campaignEstimates.getByCampaignId(req.params.campaignId);
+    res.json(estimates);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET estimates for a company
+router.get('/:campaignId/companies/:companyId/estimates', async (req, res, next) => {
+  try {
+    const estimates = await campaignEstimates.getByCompanyId(req.params.companyId);
+    res.json(estimates);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE estimate
+router.post('/:campaignId/companies/:companyId/estimates', async (req, res, next) => {
+  try {
+    const data = { ...req.body, campaign_company_id: req.params.companyId };
+    const estimate = await campaignEstimates.create(data, req.user.id);
+    res.status(201).json(estimate);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE estimate
+router.put('/:campaignId/companies/:companyId/estimates/:id', async (req, res, next) => {
+  try {
+    const estimate = await campaignEstimates.update(req.params.id, req.body);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+    res.json(estimate);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE estimate
+router.delete('/:campaignId/companies/:companyId/estimates/:id', async (req, res, next) => {
+  try {
+    const estimate = await campaignEstimates.delete(req.params.id);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+    res.json({ message: 'Estimate deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== CAMPAIGN ACTIVITY LOGS =====
+
+// GET activity logs for a campaign
+router.get('/:campaignId/activity', async (req, res, next) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 100;
+    const logs = await campaignActivityLogs.getByCampaignId(req.params.campaignId, limit);
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET activity logs for a company
+router.get('/:campaignId/companies/:companyId/activity', async (req, res, next) => {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+    const logs = await campaignActivityLogs.getByCompanyId(req.params.companyId, limit);
+    res.json(logs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ADD note
+router.post('/:campaignId/companies/:companyId/notes', async (req, res, next) => {
+  try {
+    const log = await campaignActivityLogs.addNote(
+      req.params.campaignId,
+      req.params.companyId,
+      req.user.id,
+      req.body.note
+    );
+    res.status(201).json(log);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// LOG contact attempt
+router.post('/:campaignId/companies/:companyId/contact-attempt', async (req, res, next) => {
+  try {
+    const log = await campaignActivityLogs.logContactAttempt(
+      req.params.campaignId,
+      req.params.companyId,
+      req.user.id,
+      req.body.method || 'phone',
+      req.body.notes || ''
+    );
+    res.status(201).json(log);
+  } catch (error) {
+    next(error);
+  }
+});
+
+module.exports = router;

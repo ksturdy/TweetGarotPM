@@ -25,6 +25,7 @@ export interface Opportunity {
   general_contractor?: string;
   architect?: string;
   engineer?: string;
+  campaign_id?: number;
   converted_to_project_id?: number;
   converted_project_name?: string;
   converted_at?: string;

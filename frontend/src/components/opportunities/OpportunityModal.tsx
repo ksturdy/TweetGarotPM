@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
 import { usersApi, User } from '../../services/users';
+import { getCampaigns } from '../../services/campaigns';
 import VoiceNoteButton from './VoiceNoteButton';
 import ActivityTimeline from './ActivityTimeline';
 import QuickActions from './QuickActions';
@@ -38,7 +39,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     owner: opportunity?.owner || '',
     general_contractor: opportunity?.general_contractor || '',
     architect: opportunity?.architect || '',
-    engineer: opportunity?.engineer || ''
+    engineer: opportunity?.engineer || '',
+    campaign_id: opportunity?.campaign_id || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
@@ -56,6 +58,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const { data: stages = [] } = useQuery({
     queryKey: ['pipeline-stages'],
     queryFn: () => opportunitiesService.getStages()
+  });
+
+  // Fetch campaigns for linking
+  const { data: campaigns = [] } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: getCampaigns
   });
 
   // Create mutation
@@ -157,6 +165,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.estimated_duration_days) cleanedData.estimated_duration_days = Number(formData.estimated_duration_days);
     if (formData.assigned_to) cleanedData.assigned_to = Number(formData.assigned_to);
     if (formData.probability) cleanedData.probability = formData.probability;
+    if (formData.campaign_id) cleanedData.campaign_id = Number(formData.campaign_id);
 
     console.log('Submitting opportunity data:', cleanedData);
 
@@ -510,6 +519,29 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       <option value="repeat_customer">Repeat Customer</option>
                       <option value="other">Other</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="campaign_id">Sales Campaign</label>
+                    <select
+                      id="campaign_id"
+                      name="campaign_id"
+                      value={formData.campaign_id}
+                      onChange={handleChange}
+                    >
+                      <option value="">None (not from a campaign)</option>
+                      {campaigns.map((campaign: any) => (
+                        <option key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    {/* Empty div to maintain grid layout */}
                   </div>
                 </div>
               </div>

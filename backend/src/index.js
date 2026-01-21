@@ -48,6 +48,7 @@ const feedbackRoutes = require('./routes/feedback');
 const contractReviewRoutes = require('./routes/contractReviews');
 const opportunityRoutes = require('./routes/opportunities');
 const vendorRoutes = require('./routes/vendors');
+const campaignRoutes = require('./routes/campaigns');
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/contract-reviews', contractReviewRoutes);
 app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/campaigns', campaignRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
