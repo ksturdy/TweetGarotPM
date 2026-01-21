@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Line, Doughnut } from 'react-chartjs-2';
 import {
@@ -17,6 +17,9 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { useQuery } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
+import { officeLocationsApi } from '../services/officeLocations';
+import { usersApi } from '../services/users';
+import { employeesApi } from '../services/employees';
 import '../styles/SalesPipeline.css';
 
 // Register ChartJS components (excluding datalabels globally)
@@ -60,6 +63,8 @@ const SalesPipeline: React.FC = () => {
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
   const [sortColumn, setSortColumn] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('all');
+  const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
 
   // Fetch real opportunities from API
   const { data: apiOpportunities = [], isLoading } = useQuery({
@@ -78,6 +83,26 @@ const SalesPipeline: React.FC = () => {
     queryKey: ['pipeline-stages'],
     queryFn: () => opportunitiesService.getStages()
   });
+
+  // Fetch office locations
+  const { data: officeLocationsData } = useQuery({
+    queryKey: ['office-locations'],
+    queryFn: async () => {
+      const response = await officeLocationsApi.getAll();
+      return response.data || [];
+    }
+  });
+  const officeLocations = Array.isArray(officeLocationsData) ? officeLocationsData : [];
+
+  // Fetch employees to get office location mapping
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => {
+      const response = await employeesApi.getAll();
+      return response.data || [];
+    }
+  });
+  const employees = Array.isArray(employeesData) ? employeesData : [];
 
   // Helper function to get market icon
   const getMarketIcon = (market?: string): string => {
@@ -162,6 +187,57 @@ const SalesPipeline: React.FC = () => {
   };
 
   const opportunities: SalesOpportunity[] = apiOpportunities.map(mapApiToDisplay);
+
+  // Get unique salespeople from opportunities
+  const salespeople = useMemo(() => {
+    const uniqueSalespeople = new Set<string>();
+    apiOpportunities.forEach(opp => {
+      if (opp.assigned_to_name) {
+        uniqueSalespeople.add(opp.assigned_to_name);
+      }
+    });
+    return Array.from(uniqueSalespeople).sort();
+  }, [apiOpportunities]);
+
+  // Create a mapping of salespeople to their office locations (from employees data)
+  const salespersonToOffice = useMemo(() => {
+    const mapping: Record<string, number | null> = {};
+    if (employees && Array.isArray(employees)) {
+      employees.forEach((emp: any) => {
+        const fullName = `${emp.first_name} ${emp.last_name}`;
+        mapping[fullName] = emp.office_location_id;
+      });
+    }
+    return mapping;
+  }, [employees]);
+
+  // Filter opportunities based on selected filters
+  const filteredApiOpportunities = useMemo(() => {
+    return apiOpportunities.filter(opp => {
+      // Filter by salesperson
+      if (selectedSalesperson !== 'all' && opp.assigned_to_name !== selectedSalesperson) {
+        return false;
+      }
+
+      // Filter by office location
+      if (selectedOfficeLocation !== 'all') {
+        const officeId = parseInt(selectedOfficeLocation);
+
+        // If filtering by office, check if this opportunity's salesperson belongs to that office
+        if (opp.assigned_to_name) {
+          const salespersonOfficeId = salespersonToOffice[opp.assigned_to_name];
+          if (salespersonOfficeId !== officeId) {
+            return false;
+          }
+        } else {
+          // If no salesperson assigned, exclude from office filter
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [apiOpportunities, selectedSalesperson, selectedOfficeLocation, salespersonToOffice]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -317,8 +393,8 @@ const SalesPipeline: React.FC = () => {
     }
   ];
 
-  // Group by market sector using the market field from API opportunities
-  const marketData = apiOpportunities.reduce((acc, opp) => {
+  // Group by market sector using the market field from FILTERED API opportunities
+  const marketData = filteredApiOpportunities.reduce((acc, opp) => {
     // Use the market field directly, or skip if not set
     const sector = opp.market;
     if (!sector) return acc;
@@ -342,22 +418,23 @@ const SalesPipeline: React.FC = () => {
     return 0;
   };
 
-  // Calculate KPIs
-  const totalPipeline = opportunities.reduce((sum, opp) => sum + opp.value, 0);
-  const weightedPipeline = opportunities.reduce((sum, opp) => sum + (opp.value * getProbabilityPercent(opp.probability) / 100), 0);
-  const activeOpportunities = opportunities.filter(opp => opp.stage !== 'won').length;
-  const wonOpportunities = opportunities.filter(opp => opp.stage === 'won').length;
-  const totalClosedValue = opportunities.reduce((sum, opp) => sum + opp.value, 0);
-  const winRate = totalClosedValue > 0 ? (wonOpportunities / opportunities.length) * 100 : 0;
+  // Calculate KPIs from FILTERED opportunities
+  const filteredOpportunities = filteredApiOpportunities.map(mapApiToDisplay);
+  const totalPipeline = filteredOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const weightedPipeline = filteredOpportunities.reduce((sum, opp) => sum + (opp.value * getProbabilityPercent(opp.probability) / 100), 0);
+  const activeOpportunities = filteredOpportunities.filter(opp => opp.stage !== 'won').length;
+  const wonOpportunities = filteredOpportunities.filter(opp => opp.stage === 'won').length;
+  const totalClosedValue = filteredOpportunities.reduce((sum, opp) => sum + opp.value, 0);
+  const winRate = totalClosedValue > 0 && filteredOpportunities.length > 0 ? (wonOpportunities / filteredOpportunities.length) * 100 : 0;
 
-  // Group opportunities by stage for funnel (using stage_name from API)
+  // Group opportunities by stage for funnel (using stage_name from FILTERED API)
   // Only include active stages, exclude "Lost" and "Passed" from funnel display
   const activeStages = pipelineStages
     .filter(stage => stage.name !== 'Lost' && stage.name !== 'Passed')
     .sort((a, b) => a.display_order - b.display_order);
 
   const stageDataMap = activeStages.reduce((acc, stage) => {
-    const oppsForStage = apiOpportunities.filter(o => o.stage_name === stage.name);
+    const oppsForStage = filteredApiOpportunities.filter(o => o.stage_name === stage.name);
     acc[stage.name] = {
       opportunities: oppsForStage,
       count: oppsForStage.length,
@@ -504,8 +581,8 @@ const SalesPipeline: React.FC = () => {
     return colors[stage] || '#6b7280';
   };
 
-  // Filter opportunities based on search term
-  const filteredOpportunities = opportunities.filter(opp =>
+  // Filter opportunities based on search term (on top of filter selections)
+  const searchFilteredOpportunities = filteredOpportunities.filter(opp =>
     opp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     opp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     opp.salesperson.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -513,7 +590,7 @@ const SalesPipeline: React.FC = () => {
   );
 
   // Sort opportunities
-  const sortedOpportunities = [...filteredOpportunities].sort((a, b) => {
+  const sortedOpportunities = [...searchFilteredOpportunities].sort((a, b) => {
     let aValue: any;
     let bValue: any;
 
@@ -797,6 +874,40 @@ const SalesPipeline: React.FC = () => {
           <div className="sales-table-header">
             <div className="sales-table-title">All Opportunities</div>
             <div className="sales-table-controls">
+              <select
+                value={selectedOfficeLocation}
+                onChange={(e) => setSelectedOfficeLocation(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  fontSize: '14px',
+                  minWidth: '150px',
+                  marginRight: '8px'
+                }}
+              >
+                <option value="all">All Offices</option>
+                {officeLocations.map((office: any) => (
+                  <option key={office.id} value={office.id}>{office.name}</option>
+                ))}
+              </select>
+              <select
+                value={selectedSalesperson}
+                onChange={(e) => setSelectedSalesperson(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  fontSize: '14px',
+                  minWidth: '150px',
+                  marginRight: '8px'
+                }}
+              >
+                <option value="all">All Salespeople</option>
+                {salespeople.map((person) => (
+                  <option key={person} value={person}>{person}</option>
+                ))}
+              </select>
               <div className="sales-search-box">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
@@ -809,12 +920,6 @@ const SalesPipeline: React.FC = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <button className="sales-filter-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-                </svg>
-                Filter
-              </button>
             </div>
           </div>
           <table className="sales-table">

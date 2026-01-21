@@ -152,7 +152,7 @@ const App: React.FC = () => {
           </PrivateRoute>
         }
       />
-      </Routes>
+    </Routes>
 
       {/* Force password change modal */}
       {user && (
