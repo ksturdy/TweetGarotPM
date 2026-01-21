@@ -154,6 +154,26 @@ const UserManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const formatLastLogin = (dateString?: string) => {
+    if (!dateString) return 'Never';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) {
+      return diffMins === 0 ? 'Just now' : `${diffMins}m ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours}h ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays}d ago`;
+    } else {
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  };
+
   // Filter users based on search and status
   const filteredUsers = users.filter((user: User) => {
     const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
@@ -245,6 +265,7 @@ const UserManagement: React.FC = () => {
                     </select>
                   </div>
                 </th>
+                <th>Last Login</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -312,6 +333,7 @@ const UserManagement: React.FC = () => {
                           <option value="inactive">Inactive</option>
                         </select>
                       </td>
+                      <td>{formatLastLogin(user.last_login_at)}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -372,6 +394,7 @@ const UserManagement: React.FC = () => {
                           {user.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
+                      <td>{formatLastLogin(user.last_login_at)}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

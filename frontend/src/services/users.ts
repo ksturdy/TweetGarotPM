@@ -9,6 +9,8 @@ export interface User {
   hr_access?: string;
   is_active: boolean;
   created_at: string;
+  last_login_at?: string;
+  two_factor_enabled?: boolean;
 }
 
 export interface UpdateUserData {
