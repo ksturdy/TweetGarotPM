@@ -12,12 +12,14 @@ interface OpportunityModalProps {
   opportunity: Opportunity | null;
   onClose: () => void;
   onSave: () => void;
+  defaultCampaignId?: number;
 }
 
 const OpportunityModal: React.FC<OpportunityModalProps> = ({
   opportunity,
   onClose,
-  onSave
+  onSave,
+  defaultCampaignId
 }) => {
   const queryClient = useQueryClient();
   const isEditMode = !!opportunity;
@@ -40,7 +42,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     general_contractor: opportunity?.general_contractor || '',
     architect: opportunity?.architect || '',
     engineer: opportunity?.engineer || '',
-    campaign_id: opportunity?.campaign_id || ''
+    campaign_id: opportunity?.campaign_id || defaultCampaignId || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
@@ -472,14 +474,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="estimated_duration_days">Est. Duration (days)</label>
+                    <label htmlFor="estimated_duration_days">Est. Duration (months)</label>
                     <input
                       type="number"
                       id="estimated_duration_days"
                       name="estimated_duration_days"
                       value={formData.estimated_duration_days}
                       onChange={handleChange}
-                      placeholder="90"
+                      placeholder="3"
                     />
                   </div>
                 </div>

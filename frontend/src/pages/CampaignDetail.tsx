@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import opportunitiesService from '../services/opportunities';
+import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
+import OpportunityModal from '../components/opportunities/OpportunityModal';
 
 const weeks = [
   { num: 1, start: 'Feb 2', end: 'Feb 8', label: 'Feb 2 - 8' },
@@ -139,14 +140,14 @@ export default function CampaignDetail() {
   const [note, setNote] = useState('');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [filter, setFilter] = useState({ team: 'all', status: 'all', tier: 'all' });
+  const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [showNewOpp, setShowNewOpp] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
   const [showNewEstimate, setShowNewEstimate] = useState(false);
 
   const [newCustomer, setNewCustomer] = useState({ name: '', sector: '', address: '', phone: '', assignedTo: team[0], tier: 'B', score: 70, targetWeek: 1 });
-  const [newOpp, setNewOpp] = useState({ companyId: '', name: '', value: '', stage: 'qualification', probability: 25, closeDate: '', description: '' });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
 
@@ -195,44 +196,16 @@ export default function CampaignDetail() {
     setShowNewCustomer(false);
   };
 
-  const handleAddOpportunity = async () => {
-    if (!newOpp.name.trim() || !newOpp.companyId) return;
+  const handleCloseOpportunityModal = () => {
+    setIsOpportunityModalOpen(false);
+    setSelectedOpportunity(null);
+  };
 
-    try {
-      const company = data.find((c: any) => c.id === parseInt(newOpp.companyId));
-
-      // Create opportunity in the main sales pipeline
-      const probabilityValue = newOpp.probability || 25;
-      const probabilityStr = probabilityValue <= 20 ? 'Low' : probabilityValue <= 50 ? 'Medium' : 'High';
-
-      const opportunityData = {
-        title: newOpp.name,
-        description: newOpp.description || '',
-        estimated_value: parseFloat(newOpp.value) || 0,
-        estimated_start_date: newOpp.closeDate || '',
-        stage_id: newOpp.stage === 'qualification' ? 1 : newOpp.stage === 'discovery' ? 2 : newOpp.stage === 'proposal' ? 3 : newOpp.stage === 'negotiation' ? 4 : 5,
-        probability: probabilityStr,
-        priority: 'medium' as 'medium',
-        source: 'sales_campaign',
-        campaign_id: parseInt(id || '1'), // Link to this campaign
-        owner: company?.name || '',
-        market: company?.sector || ''
-      };
-
-      const createdOpp = await opportunitiesService.create(opportunityData);
-
-      // Refetch opportunities to get updated list
-      await refetchOpportunities();
-
-      setLogs((l: any) => [{ id: Date.now(), cid: parseInt(newOpp.companyId), text: `New opportunity: ${newOpp.name} ($${(parseFloat(newOpp.value) || 0).toLocaleString()})`, time: new Date().toISOString(), name: company?.name }, ...l]);
-      setNewOpp({ companyId: '', name: '', value: '', stage: 'qualification', probability: 25, closeDate: '', description: '' });
-      setShowNewOpp(false);
-
-      alert('Opportunity created successfully in the Sales Pipeline!');
-    } catch (error: any) {
-      console.error('Failed to create opportunity:', error);
-      alert(`Failed to create opportunity: ${error.response?.data?.error || error.message}`);
-    }
+  const handleSaveOpportunity = async () => {
+    setIsOpportunityModalOpen(false);
+    setSelectedOpportunity(null);
+    // Refetch opportunities to get updated list
+    await refetchOpportunities();
   };
 
   const handleAddContact = () => {
@@ -296,7 +269,7 @@ export default function CampaignDetail() {
             <button onClick={() => setShowNewCustomer(true)} style={{ ...btn, fontSize: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontSize: '16px' }}>+</span> New Prospect
             </button>
-            <button onClick={() => setShowNewOpp(true)} style={{ ...btnSecondary, fontSize: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button onClick={() => setIsOpportunityModalOpen(true)} style={{ ...btnSecondary, fontSize: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontSize: '16px' }}>+</span> New Opportunity
             </button>
           </div>
@@ -439,8 +412,6 @@ export default function CampaignDetail() {
                   <option value="B">B-Tier</option>
                 </select>
                 <span style={{ fontSize: '13px', color: '#64748b' }}>{filtered.length} prospects</span>
-                <div style={{ flex: 1 }} />
-                <button onClick={() => setShowNewCustomer(true)} style={{ ...btn, fontSize: '12px', padding: '6px 12px' }}>+ Add Prospect</button>
               </div>
 
               <div style={{ ...card, overflow: 'hidden' }}>
@@ -532,9 +503,8 @@ export default function CampaignDetail() {
         {tab === 'pipeline' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ ...card, padding: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Active Opportunities</h3>
-                <button onClick={() => setShowNewOpp(true)} style={{ ...btn, fontSize: '12px', padding: '6px 12px' }}>+ New Opportunity</button>
               </div>
               {opportunitiesLoading ? (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>Loading opportunities...</div>
@@ -783,106 +753,14 @@ export default function CampaignDetail() {
         </div>
       )}
 
-      {/* New Opportunity Modal */}
-      {showNewOpp && (
-        <div style={modalOverlay} onClick={() => setShowNewOpp(false)}>
-          <div style={modal} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '24px', borderBottom: '1px solid #e5e7eb' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>Add New Opportunity</h2>
-            </div>
-            <div style={{ padding: '24px', maxHeight: 'calc(90vh - 150px)', overflow: 'auto' }}>
-              <div style={{ display: 'grid', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Company *</label>
-                  <select
-                    value={newOpp.companyId}
-                    onChange={e => setNewOpp({...newOpp, companyId: e.target.value})}
-                    style={input}
-                  >
-                    <option value="">Select company</option>
-                    {data.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Opportunity Name *</label>
-                  <input
-                    type="text"
-                    value={newOpp.name}
-                    onChange={e => setNewOpp({...newOpp, name: e.target.value})}
-                    style={input}
-                    placeholder="e.g., HVAC Installation - New Facility"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Description</label>
-                  <textarea
-                    value={newOpp.description}
-                    onChange={e => setNewOpp({...newOpp, description: e.target.value})}
-                    style={{...input, minHeight: '80px', resize: 'vertical'}}
-                    placeholder="Describe the opportunity..."
-                  />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Estimated Value</label>
-                    <input
-                      type="text"
-                      value={newOpp.value}
-                      onChange={e => setNewOpp({...newOpp, value: e.target.value})}
-                      style={input}
-                      placeholder="e.g., 150000"
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Expected Close Date</label>
-                    <input
-                      type="date"
-                      value={newOpp.closeDate}
-                      onChange={e => setNewOpp({...newOpp, closeDate: e.target.value})}
-                      style={input}
-                    />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Stage</label>
-                    <select
-                      value={newOpp.stage}
-                      onChange={e => setNewOpp({...newOpp, stage: e.target.value})}
-                      style={input}
-                    >
-                      <option value="qualification">Qualification</option>
-                      <option value="discovery">Discovery</option>
-                      <option value="proposal">Proposal</option>
-                      <option value="negotiation">Negotiation</option>
-                      <option value="closed_won">Closed Won</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Probability (%)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={newOpp.probability}
-                      onChange={e => setNewOpp({...newOpp, probability: parseInt(e.target.value) || 0})}
-                      style={input}
-                      placeholder="25"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowNewOpp(false)} style={btnSecondary}>Cancel</button>
-              <button onClick={handleAddOpportunity} style={btn} disabled={!newOpp.name.trim() || !newOpp.companyId}>
-                Create Opportunity
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Opportunity Modal */}
+      {isOpportunityModalOpen && (
+        <OpportunityModal
+          opportunity={selectedOpportunity}
+          onClose={handleCloseOpportunityModal}
+          onSave={handleSaveOpportunity}
+          defaultCampaignId={parseInt(id || '0')}
+        />
       )}
     </div>
   );

@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getCampaigns, Campaign } from '../services/campaigns';
 import { format } from 'date-fns';
+import OpportunityModal from '../components/opportunities/OpportunityModal';
+import { Opportunity } from '../services/opportunities';
 import '../styles/SalesPipeline.css';
 
 const Campaigns: React.FC = () => {
@@ -10,6 +12,8 @@ const Campaigns: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('start_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
   const { data: campaigns, isLoading, error } = useQuery({
     queryKey: ['campaigns'],
@@ -127,6 +131,16 @@ const Campaigns: React.FC = () => {
     }
   };
 
+  const handleCloseOpportunityModal = () => {
+    setIsOpportunityModalOpen(false);
+    setSelectedOpportunity(null);
+  };
+
+  const handleSaveOpportunity = () => {
+    setIsOpportunityModalOpen(false);
+    setSelectedOpportunity(null);
+  };
+
   if (isLoading) {
     return (
       <div className="sales-container">
@@ -165,6 +179,16 @@ const Campaigns: React.FC = () => {
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Export
+          </button>
+          <button
+            className="sales-btn sales-btn-secondary"
+            onClick={() => setIsOpportunityModalOpen(true)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Opportunity
           </button>
           <button
             className="sales-btn sales-btn-primary"
@@ -312,6 +336,15 @@ const Campaigns: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Opportunity Modal */}
+      {isOpportunityModalOpen && (
+        <OpportunityModal
+          opportunity={selectedOpportunity}
+          onClose={handleCloseOpportunityModal}
+          onSave={handleSaveOpportunity}
+        />
+      )}
     </div>
   );
 };
