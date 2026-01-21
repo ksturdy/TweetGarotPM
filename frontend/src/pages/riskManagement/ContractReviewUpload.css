@@ -289,7 +289,7 @@
 /* Results Summary */
 .results-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 1.5rem;
   margin-bottom: 2rem;
   padding: 1.5rem;
@@ -301,6 +301,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .summary-label {
@@ -312,6 +313,9 @@
 .summary-item strong {
   color: #1a1a1a;
   font-size: 1.125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Risk Counts */
