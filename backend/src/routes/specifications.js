@@ -1,40 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Specification = require('../models/Specification');
 const { authenticate } = require('../middleware/auth');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
+const { deleteFile, getFileUrl, getFileInfo } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/specifications');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    // Accept common document formats
-    const allowedTypes = /pdf|doc|docx|txt|dwg|dxf|rvt/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype) || file.mimetype === 'application/octet-stream';
-
-    if (extname || mimetype) {
-      return cb(null, true);
-    }
-    cb(new Error('Only PDF, DOC, DOCX, TXT, DWG, DXF, and RVT files are allowed'));
-  }
+// Configure upload middleware with R2 or local storage
+const upload = createUploadMiddleware({
+  destination: 'uploads/specifications',
+  allowedTypes: [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'application/octet-stream', // DWG, DXF, RVT files
+  ],
+  maxSize: 50 * 1024 * 1024, // 50MB limit
 });
 
 // Get all specifications for a project
@@ -86,10 +70,11 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
 
     // Add file information if file was uploaded
     if (req.file) {
-      data.file_name = req.file.originalname;
-      data.file_path = req.file.path;
-      data.file_size = req.file.size;
-      data.file_type = req.file.mimetype;
+      const fileInfo = getFileInfo(req.file);
+      data.file_name = fileInfo.fileName;
+      data.file_path = fileInfo.filePath;
+      data.file_size = fileInfo.fileSize;
+      data.file_type = fileInfo.fileType;
     }
 
     // If this is a new version, mark the parent as not latest
@@ -101,8 +86,9 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
     res.status(201).json({ data: specification });
   } catch (error) {
     // Clean up uploaded file if there was an error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      await deleteFile(fileInfo.filePath).catch(console.error);
     }
     next(error);
   }
@@ -126,9 +112,9 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const spec = await Specification.findById(req.params.id);
 
-    // Delete the file if it exists
-    if (spec && spec.file_path && fs.existsSync(spec.file_path)) {
-      fs.unlinkSync(spec.file_path);
+    // Delete the file from R2 or local storage
+    if (spec && spec.file_path) {
+      await deleteFile(spec.file_path).catch(console.error);
     }
 
     await Specification.delete(req.params.id);
@@ -146,7 +132,18 @@ router.get('/:id/download', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Specification not found' });
     }
 
-    if (!specification.file_path || !fs.existsSync(specification.file_path)) {
+    if (!specification.file_path) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // If using R2, redirect to presigned URL
+    if (isR2Enabled()) {
+      const url = await getFileUrl(specification.file_path);
+      return res.redirect(url);
+    }
+
+    // For local storage, serve the file directly
+    if (!fs.existsSync(specification.file_path)) {
       return res.status(404).json({ error: 'File not found' });
     }
 

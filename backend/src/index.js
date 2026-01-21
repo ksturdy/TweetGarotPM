@@ -4,10 +4,12 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
 // Version: 2026-01-19 - Added auth debugging and Claude API fixes
 
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
+const { isR2Enabled } = require('./config/r2Client');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -44,8 +46,14 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static files for uploads
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Static files for uploads (only when using local storage)
+// When R2 is enabled, files are served via presigned URLs from download endpoints
+if (!isR2Enabled()) {
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  console.log('Using local file storage - serving static files from /uploads');
+} else {
+  console.log('Using Cloudflare R2 - files served via presigned URLs');
+}
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -78,14 +86,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Serve static frontend files in production
+// Serve static frontend files in production (if they exist)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../frontend/build')));
+  const frontendBuildPath = path.join(__dirname, '../../frontend/build');
+  const frontendIndexPath = path.join(frontendBuildPath, 'index.html');
 
-  // Handle React routing - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../frontend/build/index.html'));
-  });
+  if (fs.existsSync(frontendBuildPath) && fs.existsSync(frontendIndexPath)) {
+    app.use(express.static(frontendBuildPath));
+
+    // Handle React routing - serve index.html for all non-API routes
+    app.get('*', (req, res) => {
+      res.sendFile(frontendIndexPath);
+    });
+    console.log('Serving frontend build from:', frontendBuildPath);
+  } else {
+    console.log('Frontend build not found - running as API-only server');
+    // Add a root route for API-only mode
+    app.get('/', (req, res) => {
+      res.json({
+        name: 'Tweet Garot PM API',
+        version: '1.0.0',
+        status: 'running',
+        mode: 'API-only',
+        docs: '/api/health for health check',
+      });
+    });
+  }
 }
 
 // Error handling

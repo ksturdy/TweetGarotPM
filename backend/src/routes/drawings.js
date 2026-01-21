@@ -1,40 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Drawing = require('../models/Drawing');
 const { authenticate } = require('../middleware/auth');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
+const { deleteFile, getFileUrl, getFileInfo, getFileStream } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/drawings');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for drawings
-  fileFilter: (req, file, cb) => {
-    // Accept common drawing formats
-    const allowedTypes = /pdf|dwg|dxf|rvt|png|jpg|jpeg|tiff|tif/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype) || file.mimetype === 'application/octet-stream' || file.mimetype.startsWith('image/');
-
-    if (extname || mimetype) {
-      return cb(null, true);
-    }
-    cb(new Error('Only PDF, DWG, DXF, RVT, and image files are allowed'));
-  }
+// Configure upload middleware with R2 or local storage
+const upload = createUploadMiddleware({
+  destination: 'uploads/drawings',
+  allowedTypes: [
+    'application/pdf',
+    'application/octet-stream', // DWG, DXF, RVT files
+    'image/png',
+    'image/jpeg',
+    'image/tiff',
+  ],
+  maxSize: 100 * 1024 * 1024, // 100MB limit for drawings
 });
 
 // Get all drawings for a project
@@ -87,10 +71,11 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
 
     // Add file information if file was uploaded
     if (req.file) {
-      data.file_name = req.file.originalname;
-      data.file_path = req.file.path;
-      data.file_size = req.file.size;
-      data.file_type = req.file.mimetype;
+      const fileInfo = getFileInfo(req.file);
+      data.file_name = fileInfo.fileName;
+      data.file_path = fileInfo.filePath;
+      data.file_size = fileInfo.fileSize;
+      data.file_type = fileInfo.fileType;
     }
 
     // If this is a new version, mark the parent as not latest
@@ -102,8 +87,9 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
     res.status(201).json({ data: drawing });
   } catch (error) {
     // Clean up uploaded file if there was an error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      await deleteFile(fileInfo.filePath).catch(console.error);
     }
     next(error);
   }
@@ -127,9 +113,9 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const drawing = await Drawing.findById(req.params.id);
 
-    // Delete the file if it exists
-    if (drawing && drawing.file_path && fs.existsSync(drawing.file_path)) {
-      fs.unlinkSync(drawing.file_path);
+    // Delete the file from R2 or local storage
+    if (drawing && drawing.file_path) {
+      await deleteFile(drawing.file_path).catch(console.error);
     }
 
     await Drawing.delete(req.params.id);
@@ -147,7 +133,18 @@ router.get('/:id/download', authenticate, async (req, res, next) => {
       return res.status(404).json({ error: 'Drawing not found' });
     }
 
-    if (!drawing.file_path || !fs.existsSync(drawing.file_path)) {
+    if (!drawing.file_path) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // If using R2, redirect to presigned URL
+    if (isR2Enabled()) {
+      const url = await getFileUrl(drawing.file_path);
+      return res.redirect(url);
+    }
+
+    // For local storage, serve the file directly
+    if (!fs.existsSync(drawing.file_path)) {
       return res.status(404).json({ error: 'File not found' });
     }
 

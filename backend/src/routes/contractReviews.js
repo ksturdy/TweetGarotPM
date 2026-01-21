@@ -1,43 +1,25 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
-const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const ContractReview = require('../models/ContractReview');
 const ContractRiskFinding = require('../models/ContractRiskFinding');
 const ContractAnnotation = require('../models/ContractAnnotation');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
+const { deleteFile, getFileUrl, getFileInfo } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/contracts');
-    try {
-      await fs.mkdir(uploadDir, { recursive: true });
-      cb(null, uploadDir);
-    } catch (error) {
-      cb(error, uploadDir);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.pdf', '.docx', '.txt'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOCX, and TXT files are allowed.'));
-    }
-  }
+// Configure upload middleware with R2 or local storage
+const upload = createUploadMiddleware({
+  destination: 'uploads/contracts',
+  allowedTypes: [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+  ],
+  maxSize: 50 * 1024 * 1024, // 50MB limit
 });
 
 // Check if server has Claude API key configured (before auth middleware)
@@ -217,8 +199,15 @@ router.post('/', upload.single('file'), async (req, res, next) => {
     const reviewData = {
       ...req.body,
       uploaded_by: req.user.id,
-      file_path: req.file ? req.file.path : null,
     };
+
+    // Add file information if file was uploaded
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      reviewData.file_name = fileInfo.fileName;
+      reviewData.file_path = fileInfo.filePath;
+      reviewData.file_size = fileInfo.fileSize;
+    }
 
     console.log('Creating contract review with data:', JSON.stringify(reviewData, null, 2));
 
@@ -296,6 +285,11 @@ router.delete('/:id', async (req, res, next) => {
     // Only allow deletion by uploader or admin
     if (review.uploaded_by !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to delete this review' });
+    }
+
+    // Delete the file from R2 or local storage
+    if (review.file_path) {
+      await deleteFile(review.file_path).catch(console.error);
     }
 
     await ContractReview.delete(req.params.id);
@@ -425,7 +419,7 @@ router.delete('/:id/annotations/:annotationId', async (req, res, next) => {
 });
 
 // Serve contract file
-router.get('/:id/file', async (req, res, next) => {
+router.get('/:id/file', authenticate, async (req, res, next) => {
   try {
     const review = await ContractReview.findById(req.params.id);
     if (!review) {
@@ -436,7 +430,13 @@ router.get('/:id/file', async (req, res, next) => {
       return res.status(404).json({ error: 'Contract file not found' });
     }
 
-    // Resolve the file path (assuming it's stored relative to the uploads directory)
+    // If using R2, redirect to presigned URL
+    if (isR2Enabled()) {
+      const url = await getFileUrl(review.file_path);
+      return res.redirect(url);
+    }
+
+    // For local storage, serve the file directly
     const filePath = path.resolve(review.file_path);
 
     // Check if file exists
