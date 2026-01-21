@@ -30,26 +30,50 @@ async function analyzeContractWithClaude(contractText: string, apiKey: string, p
     const token = localStorage.getItem('token');
     const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-    const response = await fetch(`${apiUrl}/contract-reviews/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-      },
-      body: JSON.stringify({
-        contractText,
-        pageTexts,
-        apiKey,
-      }),
-    });
+    console.log('[analyzeContractWithClaude] Starting request...');
+    console.log('[analyzeContractWithClaude] Contract text length:', contractText.length);
+    console.log('[analyzeContractWithClaude] Number of pages:', pageTexts?.length || 0);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Analysis failed (${response.status})`);
+    // Create an AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+
+    try {
+      const response = await fetch(`${apiUrl}/contract-reviews/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          contractText,
+          pageTexts,
+          apiKey,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[analyzeContractWithClaude] Error response:', errorData);
+        throw new Error(errorData.error || errorData.details || `Analysis failed (${response.status})`);
+      }
+
+      const result = await response.json();
+      console.log('[analyzeContractWithClaude] Success:', result);
+      return result;
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timed out after 5 minutes. Please try with a smaller contract or contact support.');
+      }
+      throw fetchError;
     }
-
-    return await response.json();
   } catch (error: any) {
+    console.error('[analyzeContractWithClaude] Error:', error);
     if (error.message.includes('Failed to fetch')) {
       throw new Error('Unable to connect to server. Please check your connection.');
     }

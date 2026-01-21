@@ -61,6 +61,10 @@ router.get('/stats', async (req, res, next) => {
 
 // Analyze contract with Claude API (proxy endpoint) - MUST BE BEFORE /:id route
 router.post('/analyze', async (req, res, next) => {
+  // Set a longer timeout for this endpoint (5 minutes)
+  req.setTimeout(300000);
+  res.setTimeout(300000);
+
   try {
     const { contractText, pageTexts, apiKey: userApiKey } = req.body;
 
@@ -77,8 +81,16 @@ router.post('/analyze', async (req, res, next) => {
       return res.status(400).json({ error: 'Contract text is required' });
     }
 
+    console.log('[Contract Analysis] Starting analysis...');
+    console.log('[Contract Analysis] Contract text length:', contractText.length);
+    console.log('[Contract Analysis] Number of pages:', pageTexts?.length || 0);
+
     const Anthropic = require('@anthropic-ai/sdk');
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = new Anthropic({
+      apiKey,
+      timeout: 300000, // 5 minutes timeout
+      maxRetries: 2
+    });
 
     const systemPrompt = `You are a contract review specialist for Tweet Garot Mechanical, a mechanical contracting company specializing in plumbing, HVAC, and piping for commercial and industrial projects. Analyze subcontracts from general contractors to identify risk factors.
 
@@ -95,6 +107,7 @@ CRITICAL INSTRUCTIONS:
 4. Identify the correct page number where each issue appears
 5. Do NOT make assumptions or use placeholder values
 6. If page-by-page text is provided, use it to determine accurate page numbers
+7. IMPORTANT: Respond with ONLY valid, well-formed JSON. No trailing commas, proper escaping of quotes, valid structure.
 
 For each risk found, provide:
 1. category (use snake_case matching categories above)
@@ -102,7 +115,7 @@ For each risk found, provide:
 3. risk_level (HIGH, MODERATE, or LOW)
 4. finding (specific and accurate description of the issue)
 5. recommendation (what to negotiate or change)
-6. quoted_text (EXACT text from contract, minimum 10 words)
+6. quoted_text (EXACT text from contract, minimum 10 words - escape quotes properly with backslash)
 7. page_number (actual page where this text appears, if determinable)
 
 Also extract:
@@ -111,7 +124,9 @@ Also extract:
 - generalContractor (exact name from contract)
 - overallRisk (HIGH, MODERATE, or LOW based on findings)
 
-Respond ONLY with valid JSON in this format:
+CRITICAL: Respond ONLY with valid, parseable JSON. Ensure all strings with quotes use proper escaping (\"). No trailing commas. Valid JSON syntax only.
+
+Example format:
 {
   "contractValue": 1500000,
   "projectName": "Project Name",
@@ -141,13 +156,14 @@ Respond ONLY with valid JSON in this format:
       userContent += contractText;
     }
 
-    console.log('[Contract Analysis] Using Anthropic SDK version:', require('@anthropic-ai/sdk/package.json').version);
     console.log('[Contract Analysis] API key configured:', !!apiKey);
     console.log('[Contract Analysis] Using model: claude-sonnet-4-5-20250929');
+    console.log('[Contract Analysis] Sending request to Claude API...');
 
+    const startTime = Date.now();
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 4096,
+      max_tokens: 8192, // Increased from 4096 to allow for more detailed analysis
       system: systemPrompt,
       messages: [
         {
@@ -157,30 +173,73 @@ Respond ONLY with valid JSON in this format:
       ],
     });
 
-    const responseText = message.content[0].text;
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    const endTime = Date.now();
+    console.log(`[Contract Analysis] Received response from Claude API in ${endTime - startTime}ms`);
 
-    if (!jsonMatch) {
-      console.error('[Contract Analysis] No JSON found in response:', responseText);
-      return res.status(500).json({ error: 'No valid JSON found in Claude response' });
+    const responseText = message.content[0].text;
+    console.log('[Contract Analysis] Response text length:', responseText.length);
+
+    // Extract JSON from response (Claude might wrap it in markdown code blocks)
+    let jsonText = responseText;
+
+    // Remove markdown code blocks if present
+    const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      jsonText = codeBlockMatch[1].trim();
+    } else {
+      // Try to find raw JSON object
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[0];
+      }
     }
 
-    const analysisResults = JSON.parse(jsonMatch[0]);
+    if (!jsonText || (!jsonText.startsWith('{') && !jsonText.startsWith('['))) {
+      console.error('[Contract Analysis] No valid JSON found in response');
+      console.error('[Contract Analysis] Response preview:', responseText.substring(0, 500));
+      return res.status(500).json({
+        error: 'No valid JSON found in Claude response',
+        details: 'The AI response did not contain parseable JSON data'
+      });
+    }
+
+    let analysisResults;
+    try {
+      analysisResults = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error('[Contract Analysis] JSON parse error:', parseError.message);
+      console.error('[Contract Analysis] Malformed JSON preview:', jsonText.substring(0, 500));
+      console.error('[Contract Analysis] Full response:', responseText);
+
+      return res.status(500).json({
+        error: 'Failed to parse Claude response',
+        details: `JSON parsing error: ${parseError.message}. The AI response may be incomplete or malformed.`
+      });
+    }
+
     res.json(analysisResults);
   } catch (error) {
     console.error('[Contract Analysis] Error:', error);
     console.error('[Contract Analysis] Error type:', error.constructor.name);
     console.error('[Contract Analysis] Error message:', error.message);
     console.error('[Contract Analysis] Error status:', error.status);
-    console.error('[Contract Analysis] Full error:', JSON.stringify(error, null, 2));
+    console.error('[Contract Analysis] Error stack:', error.stack);
 
-    // Return more detailed error information
+    // Check if it's a timeout error
+    if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+      return res.status(504).json({
+        error: 'Request timed out',
+        details: 'The contract analysis took too long. Please try with a smaller document.',
+        type: 'timeout'
+      });
+    }
+
+    // Return more detailed error information for API errors
     if (error.status) {
       return res.status(error.status).json({
         error: error.message || 'Claude API error',
         details: error.error?.message || error.message,
-        type: error.type || 'unknown',
-        sdkVersion: require('@anthropic-ai/sdk/package.json').version
+        type: error.type || 'unknown'
       });
     }
 
@@ -189,7 +248,7 @@ Respond ONLY with valid JSON in this format:
       error: 'Internal server error during contract analysis',
       details: error.message,
       type: error.constructor.name,
-      sdkVersion: require('@anthropic-ai/sdk/package.json').version
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
