@@ -276,7 +276,13 @@ const ContractReviewUpload: React.FC = () => {
       setResults(analysisResults);
     } catch (err: any) {
       console.error('Error during analysis or save:', err);
-      setError(err.message || 'Failed to analyze or save contract');
+      console.error('Error response data:', err.response?.data);
+      console.error('Error response status:', err.response?.status);
+      console.error('Error message:', err.message);
+      // For Axios errors, the server's error message is in err.response.data
+      const errorMessage = err.response?.data?.error || err.response?.data?.details || err.message || 'Failed to analyze or save contract';
+      console.error('Extracted error message:', errorMessage);
+      setError(errorMessage);
     } finally {
       setAnalyzing(false);
     }
