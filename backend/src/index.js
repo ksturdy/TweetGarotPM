@@ -5,7 +5,19 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const fs = require('fs');
-// Version: 2026-01-19 - Added auth debugging and Claude API fixes
+// Version: 2026-01-21 - Fix database crash handler and add startup validation
+
+// Handle uncaught exceptions and unhandled rejections gracefully
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+  console.error('Stack:', err.stack);
+  // Log but don't exit - let the app continue
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION at:', promise, 'reason:', reason);
+  // Log but don't exit - let the app continue
+});
 
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
@@ -122,9 +134,54 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+// Validate critical environment variables on startup
+function validateEnvironment() {
+  const warnings = [];
+  const errors = [];
+
+  // Check database configuration
+  if (!process.env.DATABASE_URL && !process.env.DB_PASSWORD) {
+    errors.push('Missing database configuration: Set DATABASE_URL or DB_* variables');
+  }
+
+  // Check JWT secret in production
+  if (config.nodeEnv === 'production' && config.jwt.secret === 'dev-secret-change-in-production') {
+    errors.push('JWT_SECRET not set in production - using insecure default!');
+  }
+
+  // Warnings for optional features
+  if (!process.env.ANTHROPIC_API_KEY) {
+    warnings.push('ANTHROPIC_API_KEY not set - AI features will be disabled');
+  }
+
+  if (!config.r2.accountId) {
+    warnings.push('Cloudflare R2 not configured - using local file storage');
+  }
+
+  // Log warnings
+  warnings.forEach(warning => console.warn('⚠️', warning));
+
+  // Log errors
+  if (errors.length > 0) {
+    errors.forEach(error => console.error('❌', error));
+    console.error('⚠️ Server starting with configuration errors - some features may not work');
+  }
+
+  return { warnings, errors };
+}
+
 // Start server
 app.listen(config.port, () => {
-  console.log(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
+  console.log(`\n🚀 Server running on port ${config.port} in ${config.nodeEnv} mode\n`);
+
+  const { warnings, errors } = validateEnvironment();
+
+  console.log('📊 Startup validation:');
+  console.log(`  ✅ Server started`);
+  console.log(`  ${errors.length === 0 ? '✅' : '❌'} Configuration: ${errors.length} errors, ${warnings.length} warnings`);
+  console.log(`  ${process.env.DATABASE_URL || process.env.DB_PASSWORD ? '✅' : '❌'} Database configured`);
+  console.log(`  ${process.env.ANTHROPIC_API_KEY ? '✅' : '⚠️'} Anthropic API (AI features)`);
+  console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)\n`);
 });
 
 

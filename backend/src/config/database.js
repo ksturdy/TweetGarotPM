@@ -17,8 +17,25 @@ const poolConfig = process.env.DATABASE_URL
 const pool = new Pool(poolConfig);
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('Unexpected error on idle PostgreSQL client:', err);
+  // Don't exit immediately - let the app handle connection errors gracefully
+  // The error will be caught when queries are attempted
+});
+
+// Test database connection on startup
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('❌ Database connection failed:', err.message);
+    console.error('Configuration:', {
+      usingDatabaseUrl: !!process.env.DATABASE_URL,
+      host: poolConfig.host || 'from DATABASE_URL',
+      port: poolConfig.port || 'from DATABASE_URL',
+      database: poolConfig.database || 'from DATABASE_URL',
+      ssl: poolConfig.ssl,
+    });
+  } else {
+    console.log('✅ Database connected successfully at:', res.rows[0].now);
+  }
 });
 
 module.exports = {

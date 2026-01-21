@@ -3,17 +3,28 @@ services:
   - type: web
     name: tweetgarot-backend
     env: node
-    buildCommand: cd backend && npm install
+    buildCommand: cd backend && npm install --production=false
     startCommand: cd backend && npm run start:production
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
       - key: ANTHROPIC_API_KEY
         sync: false  # Set this as a secret in Render dashboard
       - key: DATABASE_URL
         sync: false  # Already configured via Render database connection
       - key: JWT_SECRET
         sync: false  # Set this as a secret in Render dashboard
+      # Optional: Cloudflare R2 for file storage (set in Render dashboard if needed)
+      # - key: CLOUDFLARE_R2_ACCOUNT_ID
+      #   sync: false
+      # - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+      #   sync: false
+      # - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+      #   sync: false
+      # - key: CLOUDFLARE_R2_BUCKET_NAME
+      #   sync: false
 
   # Frontend Static Site
   - type: web
