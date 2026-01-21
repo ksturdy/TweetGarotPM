@@ -5,6 +5,18 @@ import { projectsApi } from '../../services/projects';
 import { usersApi } from '../../services/users';
 import { format } from 'date-fns';
 
+// Market icons - matching opportunities
+const MARKET_OPTIONS = [
+  { value: 'Healthcare', icon: '🏥', label: 'Healthcare' },
+  { value: 'Education', icon: '🏫', label: 'Education' },
+  { value: 'Commercial', icon: '🏢', label: 'Commercial' },
+  { value: 'Industrial', icon: '🏭', label: 'Industrial' },
+  { value: 'Retail', icon: '🏬', label: 'Retail' },
+  { value: 'Government', icon: '🏛️', label: 'Government' },
+  { value: 'Hospitality', icon: '🏨', label: 'Hospitality' },
+  { value: 'Data Center', icon: '💾', label: 'Data Center' }
+];
+
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -29,6 +41,7 @@ const ProjectDetail: React.FC = () => {
     end_date: '',
     status: '',
     description: '',
+    market: '',
     manager_id: '',
   });
 
@@ -43,6 +56,7 @@ const ProjectDetail: React.FC = () => {
         end_date: project.end_date || '',
         status: project.status,
         description: project.description || '',
+        market: project.market || '',
         manager_id: project.manager_id?.toString() || '',
       });
     }
@@ -68,6 +82,7 @@ const ProjectDetail: React.FC = () => {
       endDate: formData.end_date || undefined,
       status: formData.status,
       description: formData.description || undefined,
+      market: formData.market || undefined,
       managerId: formData.manager_id ? Number(formData.manager_id) : undefined,
     };
     updateMutation.mutate(submitData);
@@ -182,6 +197,25 @@ const ProjectDetail: React.FC = () => {
               </div>
 
               <div className="form-group">
+                <label className="form-label">Market</label>
+                <select
+                  name="market"
+                  className="form-input"
+                  value={formData.market}
+                  onChange={handleChange}
+                >
+                  <option value="">Select Market</option>
+                  {MARKET_OPTIONS.map((market) => (
+                    <option key={market.value} value={market.value}>
+                      {market.icon} {market.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
                 <label className="form-label">Project Manager</label>
                 <select
                   name="manager_id"
@@ -250,6 +284,7 @@ const ProjectDetail: React.FC = () => {
                       end_date: project.end_date || '',
                       status: project.status,
                       description: project.description || '',
+                      market: project.market || '',
                       manager_id: project.manager_id?.toString() || '',
                     });
                   }
@@ -288,6 +323,16 @@ const ProjectDetail: React.FC = () => {
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Address</div>
                 <div>{project.address || '-'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Market</div>
+                <div>
+                  {project.market ? (
+                    <>
+                      {MARKET_OPTIONS.find(m => m.value === project.market)?.icon || ''} {project.market}
+                    </>
+                  ) : '-'}
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Project Manager</div>

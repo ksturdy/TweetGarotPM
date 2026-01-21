@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const Project = {
-  async create({ name, number, client, address, startDate, endDate, status, description, managerId }) {
+  async create({ name, number, client, address, startDate, endDate, status, description, market, managerId }) {
     const result = await db.query(
-      `INSERT INTO projects (name, number, client, address, start_date, end_date, status, description, manager_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO projects (name, number, client, address, start_date, end_date, status, description, market, manager_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [name, number, client, address, startDate, endDate, status || 'active', description, managerId]
+      [name, number, client, address, startDate, endDate, status || 'active', description, market, managerId]
     );
     return result.rows[0];
   },

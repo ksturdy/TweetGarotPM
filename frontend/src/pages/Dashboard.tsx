@@ -33,11 +33,11 @@ const Dashboard: React.FC = () => {
   const activeProjects = projects?.filter((p) => p.status === 'active') || [];
 
   const modules = [
-    { name: 'Project Management', icon: '🏗️', path: '/projects', desc: 'RFIs, Submittals, COs', ready: true, count: projects?.length || 0 },
+    { name: 'Project Management', icon: '📊', path: '/projects', desc: 'RFIs, Submittals, COs', ready: true, count: projects?.length || 0 },
     { name: 'Account Management', icon: '🤝', path: '/account-management', desc: 'Customers & Contacts', ready: true },
-    { name: 'Marketing', icon: '🎯', path: '/marketing', desc: 'Proposals, Branding, Events', ready: true },
-    { name: 'Estimating', icon: '📐', path: '/estimating', desc: 'Estimates & Budgets', ready: true },
-    { name: 'Risk Management', icon: '🛡️', path: '/risk-management', desc: 'Contract Reviews', ready: true },
+    { name: 'Marketing', icon: '📣', path: '/marketing', desc: 'Proposals, Branding, Events', ready: true },
+    { name: 'Estimating', icon: '🎯', path: '/estimating', desc: 'Estimates & Budgets', ready: true },
+    { name: 'Risk Management', icon: '⚖️', path: '/risk-management', desc: 'Contract Reviews', ready: true },
     { name: 'QA/QC', icon: '✅', path: '#', desc: 'Quality Assurance', ready: false },
     { name: 'IT', icon: '💻', path: '#', desc: 'Systems & Support', ready: false },
     { name: 'Administration', icon: '💼', path: '/administration', desc: 'Accounting, AP/AR', ready: true },

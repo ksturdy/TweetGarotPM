@@ -10,6 +10,7 @@ export interface Project {
   end_date: string;
   status: string;
   description: string;
+  market?: string;
   manager_id: number;
   manager_name: string;
   created_at: string;

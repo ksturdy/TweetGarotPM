@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ScrollToTop from './ScrollToTop';
 import './Layout.css';
 
 interface LayoutProps {
@@ -26,6 +27,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="layout">
+      <ScrollToTop />
       <header className="header">
         <div className="header-content">
           <Link to="/" className="logo">
