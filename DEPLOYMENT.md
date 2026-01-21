@@ -206,11 +206,98 @@ Vercel automatically deploys:
 - **Production:** Pushes to `main` branch → Production URL
 - **Preview:** Pull requests → Unique preview URL
 
+## Common Production Issues & Fixes
+
+### Issue: "Request failed with status code 500" on Contract Analysis
+
+**Symptoms:**
+- Contract upload works, but analysis fails with error 500
+- Error appears as "Request failed with status code 500" in UI
+- Works locally but fails in production
+
+**Cause**: Missing or incorrect Anthropic API key in production environment, or outdated SDK version.
+
+**Solution**:
+1. **Verify API Key**: Ensure `ANTHROPIC_API_KEY` is set in Vercel environment variables
+   - Go to Backend Project → Settings → Environment Variables
+   - Add `ANTHROPIC_API_KEY=sk-ant-xxxxx` (your actual key from console.anthropic.com)
+   - Redeploy after adding
+
+2. **Update Dependencies**: Ensure latest SDK is installed
+   - The application requires `@anthropic-ai/sdk@^0.71.2` for Claude Sonnet 4.5 support
+   - Vercel automatically runs `npm install` on each deployment
+   - If issues persist, clear build cache: Settings → General → Clear Build Cache & Redeploy
+
+3. **Check Logs**: View detailed error messages
+   - Go to Backend Project → Deployments → [Latest] → Function Logs
+   - Look for lines like:
+     ```
+     [Contract Analysis] Using Anthropic SDK version: 0.71.2
+     [Contract Analysis] API key configured: true/false
+     [Contract Analysis] Error: <detailed error message>
+     ```
+
+4. **Verify Model**: The app now uses `claude-sonnet-4-5-20250929` (latest stable)
+   - If you see errors about unsupported models, ensure you've pulled latest code
+
+**Recent Fixes** (2025-01-21):
+- Updated to Claude Sonnet 4.5 model (`claude-sonnet-4-5-20250929`)
+- Enhanced error logging with SDK version and detailed diagnostics
+- Improved error responses to help identify production issues
+
+### Issue: SDK Version Mismatch
+
+**Symptoms**:
+- "API version X does not match Worker version Y"
+- Contract analysis fails with cryptic errors
+- PDF viewer shows chunk loading errors
+
+**Solution**:
+The application requires specific SDK versions:
+- Backend: `@anthropic-ai/sdk@^0.71.2` (supports Claude Sonnet 4.5)
+- Frontend: `pdfjs-dist@5.4.296` (matches react-pdf requirements)
+
+In Vercel:
+1. Ensure `package.json` has correct versions (should be in latest code)
+2. Clear build cache and redeploy both projects
+3. Check build logs to verify correct versions are installed
+
+### Issue: Files Not Uploading in Production
+
+**Cause**: Vercel serverless functions have a 4.5MB request body limit.
+
+**Solution**:
+1. Use Cloudflare R2 for file storage (configured in environment variables)
+2. Add these to Backend environment variables:
+   ```
+   CLOUDFLARE_R2_ACCOUNT_ID=your_account_id
+   CLOUDFLARE_R2_ACCESS_KEY_ID=your_access_key
+   CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_secret_key
+   CLOUDFLARE_R2_BUCKET_NAME=tweetgarot-pm-files
+   CLOUDFLARE_R2_REGION=auto
+   CLOUDFLARE_R2_ENDPOINT=https://your_account_id.r2.cloudflarestorage.com
+   ```
+3. See [backend/R2_SETUP.md](backend/R2_SETUP.md) for complete R2 configuration
+
 ## Next Steps
 
-1. ✅ Configure environment variables in Vercel
+1. ✅ Configure environment variables in Vercel (including `ANTHROPIC_API_KEY`)
 2. ✅ Set up PostgreSQL database
 3. ✅ Run database migrations
-4. ✅ Push code to trigger deployment
-5. ✅ Test the deployed application
-6. Configure custom domain (optional)
+4. ✅ Configure Cloudflare R2 for file storage (recommended for production)
+5. ✅ Push code to trigger deployment
+6. ✅ Test the deployed application (especially contract analysis feature)
+7. Configure custom domain (optional)
+
+## Health Checks After Deployment
+
+After deploying, verify these endpoints work:
+
+1. **Claude API Config**: `GET https://your-backend.vercel.app/api/contract-reviews/claude-config`
+   - Should return `{"hasServerKey": true}` if API key is configured
+   - If returns `{"hasServerKey": false}`, add `ANTHROPIC_API_KEY` to environment variables
+
+2. **Upload Test**: Upload a test contract and verify analysis works
+   - Use a small PDF file
+   - Check for the green "AI Analysis Enabled" banner
+   - Verify analysis completes successfully

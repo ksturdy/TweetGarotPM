@@ -141,8 +141,12 @@ Respond ONLY with valid JSON in this format:
       userContent += contractText;
     }
 
+    console.log('[Contract Analysis] Using Anthropic SDK version:', require('@anthropic-ai/sdk/package.json').version);
+    console.log('[Contract Analysis] API key configured:', !!apiKey);
+    console.log('[Contract Analysis] Using model: claude-sonnet-4-5-20250929');
+
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4096,
       system: systemPrompt,
       messages: [
@@ -157,24 +161,36 @@ Respond ONLY with valid JSON in this format:
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
+      console.error('[Contract Analysis] No JSON found in response:', responseText);
       return res.status(500).json({ error: 'No valid JSON found in Claude response' });
     }
 
     const analysisResults = JSON.parse(jsonMatch[0]);
     res.json(analysisResults);
   } catch (error) {
-    console.error('Claude API error:', error);
-    console.error('Error details:', error.message, error.stack);
+    console.error('[Contract Analysis] Error:', error);
+    console.error('[Contract Analysis] Error type:', error.constructor.name);
+    console.error('[Contract Analysis] Error message:', error.message);
+    console.error('[Contract Analysis] Error status:', error.status);
+    console.error('[Contract Analysis] Full error:', JSON.stringify(error, null, 2));
 
     // Return more detailed error information
     if (error.status) {
       return res.status(error.status).json({
         error: error.message || 'Claude API error',
-        details: error.error?.message || error.message
+        details: error.error?.message || error.message,
+        type: error.type || 'unknown',
+        sdkVersion: require('@anthropic-ai/sdk/package.json').version
       });
     }
 
-    next(error);
+    // For non-API errors, return detailed info
+    return res.status(500).json({
+      error: 'Internal server error during contract analysis',
+      details: error.message,
+      type: error.constructor.name,
+      sdkVersion: require('@anthropic-ai/sdk/package.json').version
+    });
   }
 });
 
