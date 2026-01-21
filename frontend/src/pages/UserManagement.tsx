@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
+import securityApi from '../services/security';
+import { useAuth } from '../context/AuthContext';
 import './CustomerDetail.css';
 
 const UserManagement: React.FC = () => {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -16,6 +19,9 @@ const UserManagement: React.FC = () => {
     hr_access: 'none',
     is_active: true,
   });
+
+  // Check if current user has HR write access
+  const hasHRWriteAccess = currentUser?.role === 'admin' || currentUser?.hrAccess === 'write';
 
   const { data: users = [], isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -60,6 +66,38 @@ const UserManagement: React.FC = () => {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: number) => securityApi.resetUserPassword(userId, true),
+    onSuccess: (response) => {
+      const { temporaryPassword, email } = response.data;
+      alert(
+        `Password reset successful!\n\nEmail: ${email}\nTemporary Password: ${temporaryPassword}\n\nThe user will be required to change their password on next login.\n\nPlease share this temporary password securely with the user.`
+      );
+    },
+    onError: (err: any) => {
+      alert(`Failed to reset password: ${err.response?.data?.error || 'Unknown error'}`);
+    },
+  });
+
+  const disable2FAMutation = useMutation({
+    mutationFn: (userId: number) => securityApi.disable2FAForUser(userId),
+    onSuccess: () => {
+      alert('2FA has been disabled for this user');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      alert(`Failed to disable 2FA: ${err.response?.data?.error || 'Unknown error'}`);
+    },
+  });
+
+  const forcePasswordChangeMutation = useMutation({
+    mutationFn: (userId: number) => securityApi.forcePasswordChange(userId),
+    onSuccess: () => {
+      alert('User will be required to change password on next login');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({
@@ -91,6 +129,24 @@ const UserManagement: React.FC = () => {
   const handleDelete = (user: User) => {
     if (window.confirm(`Are you sure you want to delete ${user.first_name} ${user.last_name}? This action cannot be undone.`)) {
       deleteMutation.mutate(user.id);
+    }
+  };
+
+  const handleResetPassword = (user: User) => {
+    if (window.confirm(`Reset password for ${user.first_name} ${user.last_name}?\n\nA temporary password will be generated and the user will be required to change it on next login.`)) {
+      resetPasswordMutation.mutate(user.id);
+    }
+  };
+
+  const handleDisable2FA = (user: User) => {
+    if (window.confirm(`Disable 2FA for ${user.first_name} ${user.last_name}?\n\nThis will remove their two-factor authentication protection.`)) {
+      disable2FAMutation.mutate(user.id);
+    }
+  };
+
+  const handleForcePasswordChange = (user: User) => {
+    if (window.confirm(`Force password change for ${user.first_name} ${user.last_name}?\n\nThey will be required to change their password on next login.`)) {
+      forcePasswordChangeMutation.mutate(user.id);
     }
   };
 
@@ -168,6 +224,7 @@ const UserManagement: React.FC = () => {
                 <th>Email</th>
                 <th>Role</th>
                 <th>HR Access</th>
+                <th>2FA</th>
                 <th>
                   Status
                   <div style={{ marginTop: '0.5rem' }}>
@@ -306,13 +363,18 @@ const UserManagement: React.FC = () => {
                         </span>
                       </td>
                       <td>
+                        <span className={`badge ${(user as any).two_factor_enabled ? 'badge-success' : 'badge-secondary'}`}>
+                          {(user as any).two_factor_enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </td>
+                      <td>
                         <span className={`badge ${user.is_active ? 'badge-success' : 'badge-secondary'}`}>
                           {user.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => handleEdit(user)}
                             style={{
@@ -327,6 +389,57 @@ const UserManagement: React.FC = () => {
                           >
                             Edit
                           </button>
+                          {hasHRWriteAccess && (
+                            <>
+                              <button
+                                onClick={() => handleResetPassword(user)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#8b5cf6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  cursor: 'pointer',
+                                }}
+                                title="Reset password"
+                              >
+                                Reset Pwd
+                              </button>
+                              {(user as any).two_factor_enabled && (
+                                <button
+                                  onClick={() => handleDisable2FA(user)}
+                                  style={{
+                                    padding: '0.25rem 0.5rem',
+                                    background: '#f97316',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer',
+                                  }}
+                                  title="Disable 2FA"
+                                >
+                                  Disable 2FA
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleForcePasswordChange(user)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#d97706',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  cursor: 'pointer',
+                                }}
+                                title="Force password change on next login"
+                              >
+                                Force Pwd Change
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleToggleStatus(user)}
                             style={{

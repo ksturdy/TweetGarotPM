@@ -25,6 +25,7 @@ const { isR2Enabled } = require('./config/r2Client');
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const securityRoutes = require('./routes/security');
 const userRoutes = require('./routes/users');
 const projectRoutes = require('./routes/projects');
 const rfiRoutes = require('./routes/rfis');
@@ -70,6 +71,7 @@ if (!isR2Enabled()) {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/security', securityRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/rfis', rfiRoutes);

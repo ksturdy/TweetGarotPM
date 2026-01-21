@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/common/Layout';
 import Login from './pages/Login';
+import ChangePasswordModal from './components/security/ChangePasswordModal';
 import Dashboard from './pages/Dashboard';
 import ProjectList from './pages/projects/ProjectList';
 import ProjectForm from './pages/projects/ProjectForm';
@@ -42,6 +43,7 @@ import EmployeeForm from './pages/hr/EmployeeForm';
 import DepartmentList from './pages/hr/DepartmentList';
 import LocationList from './pages/hr/LocationList';
 import UserManagement from './pages/UserManagement';
+import SecuritySettings from './pages/SecuritySettings';
 import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
@@ -68,16 +70,29 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 };
 
 const App: React.FC = () => {
+  const { user } = useAuth();
+  const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+
+  useEffect(() => {
+    // Check if user needs to change password
+    if (user && (user as any).forcePasswordChange) {
+      setShowPasswordChangeModal(true);
+    } else {
+      setShowPasswordChangeModal(false);
+    }
+  }, [user]);
+
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/*"
-        element={
-          <PrivateRoute>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
+    <>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
                 <Route path="/sales" element={<SalesPipeline />} />
                 <Route path="/sales/mobile" element={<MobileSales />} />
                 <Route path="/campaigns" element={<Campaigns />} />
@@ -107,6 +122,7 @@ const App: React.FC = () => {
                 <Route path="/hr/departments" element={<DepartmentList />} />
                 <Route path="/hr/locations" element={<LocationList />} />
                 <Route path="/users" element={<UserManagement />} />
+                <Route path="/security" element={<SecuritySettings />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
@@ -136,7 +152,20 @@ const App: React.FC = () => {
           </PrivateRoute>
         }
       />
-    </Routes>
+      </Routes>
+
+      {/* Force password change modal */}
+      {user && (
+        <ChangePasswordModal
+          isOpen={showPasswordChangeModal}
+          onClose={() => {
+            // Force refresh to get updated user state
+            window.location.reload();
+          }}
+          forceChange={true}
+        />
+      )}
+    </>
   );
 };
 

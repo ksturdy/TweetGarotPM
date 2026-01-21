@@ -8,12 +8,15 @@ interface User {
   lastName: string;
   role: string;
   hrAccess?: string;
+  forcePasswordChange?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<any>;
+  login2FA: (userId: number, token: string) => Promise<void>;
   logout: () => void;
   register: (data: RegisterData) => Promise<void>;
 }
@@ -44,6 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastName: res.data.last_name,
             role: res.data.role,
             hrAccess: res.data.hr_access,
+            forcePasswordChange: res.data.force_password_change,
+            twoFactorEnabled: res.data.two_factor_enabled,
           });
         })
         .catch((error) => {
@@ -60,6 +65,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post('/auth/login', { email, password });
+
+    // Check if 2FA is required
+    if (res.data.requires2FA) {
+      return {
+        requires2FA: true,
+        userId: res.data.userId,
+        email: res.data.email,
+      };
+    }
+
+    // Normal login (no 2FA)
+    localStorage.setItem('token', res.data.token);
+    api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+    setUser(res.data.user);
+
+    return { requires2FA: false };
+  }, []);
+
+  const login2FA = useCallback(async (userId: number, token: string) => {
+    const res = await api.post('/auth/login/2fa', { userId, token });
     localStorage.setItem('token', res.data.token);
     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     setUser(res.data.user);
@@ -86,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, loading, login, login2FA, logout, register }}>
       {children}
     </AuthContext.Provider>
   );
