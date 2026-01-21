@@ -128,7 +128,7 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, source,
-      market, owner, general_contractor, architect, engineer
+      market, owner, general_contractor, architect, engineer, campaign_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -138,15 +138,15 @@ const opportunities = {
       INSERT INTO opportunities (
         title, description, estimated_value, estimated_start_date, estimated_duration_days,
         construction_type, project_type, location, stage_id, priority, assigned_to, source,
-        market, owner, general_contractor, architect, engineer, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        market, owner, general_contractor, architect, engineer, campaign_id, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, source,
-      market, owner, general_contractor, architect, engineer, userId
+      market, owner, general_contractor, architect, engineer, campaign_id, userId
     ]);
 
     return result.rows[0];
@@ -157,7 +157,7 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer
+      market, owner, general_contractor, architect, engineer, campaign_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -183,15 +183,16 @@ const opportunities = {
         general_contractor = COALESCE($16, general_contractor),
         architect = COALESCE($17, architect),
         engineer = COALESCE($18, engineer),
+        campaign_id = $19,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $19
+      WHERE id = $20
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer, id
+      market, owner, general_contractor, architect, engineer, campaign_id, id
     ]);
 
     return result.rows[0];

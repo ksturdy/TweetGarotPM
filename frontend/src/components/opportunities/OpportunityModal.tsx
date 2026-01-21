@@ -165,7 +165,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.estimated_duration_days) cleanedData.estimated_duration_days = Number(formData.estimated_duration_days);
     if (formData.assigned_to) cleanedData.assigned_to = Number(formData.assigned_to);
     if (formData.probability) cleanedData.probability = formData.probability;
-    if (formData.campaign_id) cleanedData.campaign_id = Number(formData.campaign_id);
+    // Always include campaign_id (even if empty string, convert to null for clearing)
+    if (formData.campaign_id && formData.campaign_id !== '') {
+      cleanedData.campaign_id = Number(formData.campaign_id);
+    } else if (isEditMode) {
+      // In edit mode, explicitly set to null to clear the campaign
+      cleanedData.campaign_id = null;
+    }
 
     console.log('Submitting opportunity data:', cleanedData);
 

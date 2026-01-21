@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import opportunitiesService from '../services/opportunities';
 
 const weeks = [
@@ -67,12 +68,6 @@ const initContacts = [
   { id: 10, companyId: 8, name: "Emily Davis", title: "Engineering Manager", email: "edavis@stryker.com", phone: "(480) 792-1451", isPrimary: true }
 ];
 
-const initOpportunities = [
-  { id: 1, companyId: 1, name: "Refrigeration System Upgrade", value: 125000, stage: "qualification", probability: 25, closeDate: "2025-04-15", description: "Main freezer system needs replacement" },
-  { id: 2, companyId: 3, name: "Cleanroom HVAC Retrofit", value: 450000, stage: "proposal", probability: 60, closeDate: "2025-03-30", description: "ISO 7 cleanroom environmental controls" },
-  { id: 3, companyId: 5, name: "Testing Facility Expansion", value: 280000, stage: "negotiation", probability: 75, closeDate: "2025-03-15", description: "New satellite testing chamber climate controls" },
-  { id: 4, companyId: 7, name: "Bottling Line Cooling", value: 175000, stage: "qualification", probability: 30, closeDate: "2025-05-01", description: "New production line cooling system" }
-];
 
 const initEstimates = [
   { id: 1, companyId: 3, oppId: 2, number: "EST-2025-001", name: "Cleanroom HVAC - Phase 1", amount: 275000, status: "sent", sentDate: "2025-02-01", validUntil: "2025-03-01" },
@@ -125,9 +120,18 @@ export default function CampaignDetail() {
 
   const [data, setData] = useState(() => load('data', initCompanies));
   const [contacts, setContacts] = useState(() => load('contacts', initContacts));
-  const [opportunities, setOpportunities] = useState(() => load('opportunities', initOpportunities));
   const [estimates, setEstimates] = useState(() => load('estimates', initEstimates));
   const [logs, setLogs] = useState<any[]>(() => load('logs', []));
+
+  // Fetch real opportunities from database filtered by campaign_id
+  const { data: opportunities = [], isLoading: opportunitiesLoading, refetch: refetchOpportunities } = useQuery({
+    queryKey: ['campaign-opportunities', id],
+    queryFn: async () => {
+      const allOpportunities = await opportunitiesService.getAll();
+      return allOpportunities.filter(opp => opp.campaign_id === parseInt(id || '0'));
+    },
+    enabled: !!id
+  });
   const [tab, setTab] = useState('dashboard');
   const [selected, setSelected] = useState<any>(null);
   const [detailView, setDetailView] = useState<any>(null);
@@ -150,16 +154,15 @@ export default function CampaignDetail() {
     save('data', data);
     save('logs', logs);
     save('contacts', contacts);
-    save('opportunities', opportunities);
     save('estimates', estimates);
-  }, [data, logs, contacts, opportunities, estimates]);
+  }, [data, logs, contacts, estimates]);
 
   const stats = useMemo(() => {
     const byStatus: any = {}; statuses.forEach(s => byStatus[s.key] = data.filter((c: any) => c.status === s.key).length);
     const byAction: any = {}; actions.forEach(a => byAction[a.key] = data.filter((c: any) => c.action === a.key).length);
     const contacted = data.filter((c: any) => c.status !== 'prospect').length;
-    const opps = data.filter((c: any) => c.status === 'new_opp').length;
-    const totalOppValue = opportunities.reduce((sum: number, o: any) => sum + (o.value || 0), 0);
+    const opps = opportunities.length;
+    const totalOppValue = opportunities.reduce((sum: number, o: any) => sum + (o.estimated_value || 0), 0);
     return { byStatus, byAction, contacted, opportunities: opps, totalOppValue };
   }, [data, opportunities]);
 
@@ -218,10 +221,8 @@ export default function CampaignDetail() {
 
       const createdOpp = await opportunitiesService.create(opportunityData);
 
-      // Also keep it in local state for this campaign view
-      const newId = opportunities.length > 0 ? Math.max(...opportunities.map((o: any) => o.id)) + 1 : 1;
-      const localOpp = { ...newOpp, id: newId, companyId: parseInt(newOpp.companyId), value: parseFloat(newOpp.value) || 0, probability: parseInt(String(newOpp.probability)) };
-      setOpportunities([...opportunities, localOpp]);
+      // Refetch opportunities to get updated list
+      await refetchOpportunities();
 
       setLogs((l: any) => [{ id: Date.now(), cid: parseInt(newOpp.companyId), text: `New opportunity: ${newOpp.name} ($${(parseFloat(newOpp.value) || 0).toLocaleString()})`, time: new Date().toISOString(), name: company?.name }, ...l]);
       setNewOpp({ companyId: '', name: '', value: '', stage: 'qualification', probability: 25, closeDate: '', description: '' });
@@ -535,35 +536,41 @@ export default function CampaignDetail() {
                 <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Active Opportunities</h3>
                 <button onClick={() => setShowNewOpp(true)} style={{ ...btn, fontSize: '12px', padding: '6px 12px' }}>+ New Opportunity</button>
               </div>
-              {opportunities.length > 0 ? (
+              {opportunitiesLoading ? (
+                <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>Loading opportunities...</div>
+              ) : opportunities.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
                       <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Opportunity</th>
-                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Company</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Owner</th>
                       <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>Value</th>
                       <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Stage</th>
-                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Prob.</th>
-                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Close Date</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Priority</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Est. Start</th>
                     </tr>
                   </thead>
                   <tbody>
                     {opportunities.map((o: any) => {
-                      const company = data.find((c: any) => c.id === o.companyId);
-                      const stage = oppStages.find(s => s.key === o.stage);
                       return (
                         <tr key={o.id} style={{ borderTop: '1px solid #e5e7eb' }}>
                           <td style={{ padding: '10px' }}>
-                            <div style={{ fontWeight: 500 }}>{o.name}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{o.description}</div>
+                            <div style={{ fontWeight: 500 }}>{o.title}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{o.description || 'No description'}</div>
                           </td>
-                          <td style={{ padding: '10px', color: '#2563eb', cursor: 'pointer' }} onClick={() => company && openDetail(company)}>{company?.name}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>${o.value.toLocaleString()}</td>
+                          <td style={{ padding: '10px' }}>{o.owner || '-'}</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>${(o.estimated_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
                           <td style={{ padding: '10px', textAlign: 'center' }}>
-                            <span style={{ background: stage?.color + '20', color: stage?.color, padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500 }}>{stage?.label}</span>
+                            <span style={{ background: '#3b82f620', color: '#3b82f6', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500 }}>{o.stage_name || 'Unknown'}</span>
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'center' }}>{o.probability}%</td>
-                          <td style={{ padding: '10px', fontSize: '12px' }}>{o.closeDate}</td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <span style={{
+                              background: o.priority === 'urgent' ? '#ef444420' : o.priority === 'high' ? '#f59e0b20' : o.priority === 'medium' ? '#3b82f620' : '#6b728020',
+                              color: o.priority === 'urgent' ? '#ef4444' : o.priority === 'high' ? '#f59e0b' : o.priority === 'medium' ? '#3b82f6' : '#6b7280',
+                              padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, textTransform: 'capitalize'
+                            }}>{o.priority || 'medium'}</span>
+                          </td>
+                          <td style={{ padding: '10px', fontSize: '12px' }}>{o.estimated_start_date || '-'}</td>
                         </tr>
                       );
                     })}
