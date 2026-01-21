@@ -300,7 +300,18 @@ router.post('/', upload.single('file'), async (req, res, next) => {
     console.log('Contract review created:', review);
 
     // Create risk findings if provided
-    const findings = req.body.findings ? JSON.parse(req.body.findings) : [];
+    let findings = [];
+    if (req.body.findings) {
+      try {
+        findings = JSON.parse(req.body.findings);
+        console.log(`Parsed ${findings.length} risk findings from request`);
+      } catch (parseError) {
+        console.error('Error parsing findings JSON:', parseError.message);
+        console.error('Findings string:', req.body.findings.substring(0, 500));
+        throw new Error(`Failed to parse findings: ${parseError.message}`);
+      }
+    }
+
     if (findings && findings.length > 0) {
       console.log(`Creating ${findings.length} risk findings...`);
       for (const finding of findings) {
