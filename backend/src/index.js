@@ -50,6 +50,7 @@ const contractReviewRoutes = require('./routes/contractReviews');
 const opportunityRoutes = require('./routes/opportunities');
 const vendorRoutes = require('./routes/vendors');
 const campaignRoutes = require('./routes/campaigns');
+const customerAssessmentRoutes = require('./routes/customerAssessments');
 
 const app = express();
 
@@ -96,6 +97,7 @@ app.use('/api/contract-reviews', contractReviewRoutes);
 app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/customer-assessments', customerAssessmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

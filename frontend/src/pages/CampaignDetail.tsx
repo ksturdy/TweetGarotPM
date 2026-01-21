@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
+import AssessmentScoring from '../components/assessments/AssessmentScoring';
+import { assessmentsApi } from '../services/assessments';
 
 const weeks = [
   { num: 1, start: 'Feb 2', end: 'Feb 8', label: 'Feb 2 - 8' },
@@ -133,6 +135,28 @@ export default function CampaignDetail() {
     },
     enabled: !!id
   });
+
+  // Fetch assessments for all customers to show TG Cust. Score
+  const { data: assessmentsMap = {} } = useQuery({
+    queryKey: ['campaign-assessments', id],
+    queryFn: async () => {
+      const map: Record<number, number> = {};
+      // Fetch assessment for each customer
+      for (const company of data) {
+        try {
+          const response = await assessmentsApi.getCurrent(company.id);
+          if (response.data) {
+            map[company.id] = response.data.total_score;
+          }
+        } catch (error) {
+          // Customer doesn't have an assessment yet
+        }
+      }
+      return map;
+    },
+    enabled: !!id && data.length > 0,
+    staleTime: 30000, // Cache for 30 seconds
+  });
   const [tab, setTab] = useState('dashboard');
   const [selected, setSelected] = useState<any>(null);
   const [detailView, setDetailView] = useState<any>(null);
@@ -142,10 +166,13 @@ export default function CampaignDetail() {
   const [filter, setFilter] = useState({ team: 'all', status: 'all', tier: 'all' });
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showNewContact, setShowNewContact] = useState(false);
   const [showNewEstimate, setShowNewEstimate] = useState(false);
+  const [showAssessment, setShowAssessment] = useState(false);
+  const [assessmentCustomer, setAssessmentCustomer] = useState<any>(null);
 
   const [newCustomer, setNewCustomer] = useState({ name: '', sector: '', address: '', phone: '', assignedTo: team[0], tier: 'B', score: 70, targetWeek: 1 });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
@@ -167,11 +194,63 @@ export default function CampaignDetail() {
     return { byStatus, byAction, contacted, opportunities: opps, totalOppValue };
   }, [data, opportunities]);
 
-  const filtered = useMemo(() => data.filter((c: any) =>
-    (filter.team === 'all' || c.assignedTo === filter.team) &&
-    (filter.status === 'all' || c.status === filter.status) &&
-    (filter.tier === 'all' || c.tier === filter.tier)
-  ), [data, filter]);
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const filtered = useMemo(() => {
+    let filteredData = data.filter((c: any) =>
+      (filter.team === 'all' || c.assignedTo === filter.team) &&
+      (filter.status === 'all' || c.status === filter.status) &&
+      (filter.tier === 'all' || c.tier === filter.tier)
+    );
+
+    // Apply sorting
+    if (sortConfig) {
+      filteredData.sort((a: any, b: any) => {
+        let aValue, bValue;
+
+        switch (sortConfig.key) {
+          case 'name':
+            aValue = a.name.toLowerCase();
+            bValue = b.name.toLowerCase();
+            break;
+          case 'prospectScore':
+            aValue = a.score;
+            bValue = b.score;
+            break;
+          case 'tgScore':
+            aValue = assessmentsMap[a.id] || 0;
+            bValue = assessmentsMap[b.id] || 0;
+            break;
+          case 'assigned':
+            aValue = a.assignedTo.toLowerCase();
+            bValue = b.assignedTo.toLowerCase();
+            break;
+          case 'week':
+            aValue = a.targetWeek;
+            bValue = b.targetWeek;
+            break;
+          default:
+            return 0;
+        }
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return filteredData;
+  }, [data, filter, sortConfig, assessmentsMap]);
 
   const updateField = (id: number, field: string, value: string) => {
     setData((d: any) => d.map((c: any) => c.id === id ? {...c, [field]: value} : c));
@@ -419,27 +498,79 @@ export default function CampaignDetail() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead style={{ position: 'sticky', top: 0, background: '#f9fafb' }}>
                       <tr>
-                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Company</th>
-                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Score</th>
-                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Assigned</th>
-                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Week</th>
+                        <th
+                          style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => handleSort('name')}
+                        >
+                          Company {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => handleSort('prospectScore')}
+                        >
+                          Prospect Score {sortConfig?.key === 'prospectScore' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => handleSort('tgScore')}
+                        >
+                          TG Cust. Score {sortConfig?.key === 'tgScore' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => handleSort('assigned')}
+                        >
+                          Assigned {sortConfig?.key === 'assigned' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th
+                          style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                          onClick={() => handleSort('week')}
+                        >
+                          Week {sortConfig?.key === 'week' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                        </th>
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Action</th>
                         <th style={{ padding: '12px', textAlign: 'center', fontWeight: 600 }}>Details</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.map((c: any) => (
-                        <tr key={c.id} onClick={() => setSelected(c)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer', background: selected?.id === c.id ? '#fef3c7' : '#fff' }}>
-                          <td style={{ padding: '12px' }}>
-                            <div style={{ fontWeight: 500 }}>{c.name}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.sector}</div>
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
-                          </td>
-                          <td style={{ padding: '12px', color: '#64748b', fontSize: '12px' }}>{c.assignedTo}</td>
-                          <td style={{ padding: '12px', fontSize: '12px' }}>{weeks.find(w=>w.num===c.targetWeek)?.label}</td>
+                      {filtered.map((c: any) => {
+                        const tgScore = assessmentsMap[c.id];
+                        const getTierFromScore = (score: number) => {
+                          if (score >= 85) return 'A';
+                          if (score >= 70) return 'B';
+                          if (score >= 50) return 'C';
+                          return null;
+                        };
+                        const tgTier = tgScore ? getTierFromScore(tgScore) : null;
+
+                        return (
+                          <tr key={c.id} onClick={() => setSelected(c)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer', background: selected?.id === c.id ? '#fef3c7' : '#fff' }}>
+                            <td style={{ padding: '12px' }}>
+                              <div style={{ fontWeight: 500 }}>{c.name}</div>
+                              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.sector}</div>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              {tgScore ? (
+                                <span style={{
+                                  background: tgTier === 'A' ? '#dcfce7' : tgTier === 'B' ? '#dbeafe' : '#fef9c3',
+                                  color: tgTier === 'A' ? '#16a34a' : tgTier === 'B' ? '#2563eb' : '#ca8a04',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontWeight: 600,
+                                  fontSize: '11px'
+                                }}>
+                                  {tgTier}-{tgScore}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px', color: '#64748b', fontSize: '12px' }}>{c.assignedTo}</td>
+                            <td style={{ padding: '12px', fontSize: '12px' }}>{weeks.find(w=>w.num===c.targetWeek)?.label}</td>
                           <td style={{ padding: '12px' }}>
                             <select value={c.status} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto' }}>
                               {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -451,12 +582,18 @@ export default function CampaignDetail() {
                             </select>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <button onClick={(e) => { e.stopPropagation(); openDetail(c); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' }}>
-                              View →
-                            </button>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                              <button onClick={(e) => { e.stopPropagation(); setAssessmentCustomer(c); setShowAssessment(true); }} style={{ background: '#fef3c7', color: '#f59e0b', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' }}>
+                                Score
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); openDetail(c); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' }}>
+                                View →
+                              </button>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -760,6 +897,18 @@ export default function CampaignDetail() {
           onClose={handleCloseOpportunityModal}
           onSave={handleSaveOpportunity}
           defaultCampaignId={parseInt(id || '0')}
+        />
+      )}
+
+      {/* Assessment Scoring Modal */}
+      {showAssessment && assessmentCustomer && (
+        <AssessmentScoring
+          customerId={assessmentCustomer.id}
+          customerName={assessmentCustomer.name}
+          onClose={() => {
+            setShowAssessment(false);
+            setAssessmentCustomer(null);
+          }}
         />
       )}
     </div>
