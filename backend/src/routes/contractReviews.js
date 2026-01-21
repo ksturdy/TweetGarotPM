@@ -164,6 +164,16 @@ Respond ONLY with valid JSON in this format:
     res.json(analysisResults);
   } catch (error) {
     console.error('Claude API error:', error);
+    console.error('Error details:', error.message, error.stack);
+
+    // Return more detailed error information
+    if (error.status) {
+      return res.status(error.status).json({
+        error: error.message || 'Claude API error',
+        details: error.error?.message || error.message
+      });
+    }
+
     next(error);
   }
 });
