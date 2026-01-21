@@ -10,6 +10,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/proposals',
       desc: 'Sales proposals & pitches',
       color: '#3b82f6',
+      ready: false,
     },
     {
       name: 'Branding',
@@ -17,6 +18,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/branding',
       desc: 'Logos, colors & style guides',
       color: '#8b5cf6',
+      ready: true,
     },
     {
       name: 'Trade Shows',
@@ -24,6 +26,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/trade-shows',
       desc: 'Events, booths & conferences',
       color: '#ec4899',
+      ready: false,
     },
     {
       name: 'Website',
@@ -31,6 +34,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/website',
       desc: 'Web content & updates',
       color: '#06b6d4',
+      ready: false,
     },
     {
       name: 'Case Studies',
@@ -38,6 +42,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/case-studies',
       desc: 'Success stories & testimonials',
       color: '#10b981',
+      ready: false,
     },
     {
       name: 'Social Media',
@@ -45,6 +50,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/social-media',
       desc: 'Posts, campaigns & analytics',
       color: '#f59e0b',
+      ready: false,
     },
     {
       name: 'Email Campaigns',
@@ -52,6 +58,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/email-campaigns',
       desc: 'Newsletters & announcements',
       color: '#ef4444',
+      ready: false,
     },
     {
       name: 'Print Materials',
@@ -59,6 +66,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/print-materials',
       desc: 'Brochures, flyers & cards',
       color: '#6366f1',
+      ready: false,
     },
     {
       name: 'Video Content',
@@ -66,6 +74,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/video-content',
       desc: 'Commercials, demos & tours',
       color: '#a855f7',
+      ready: false,
     },
     {
       name: 'Swag & Merch',
@@ -73,6 +82,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/swag',
       desc: 'Branded gifts & giveaways',
       color: '#14b8a6',
+      ready: false,
     },
     {
       name: 'Press Releases',
@@ -80,6 +90,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/press-releases',
       desc: 'News & media announcements',
       color: '#64748b',
+      ready: false,
     },
     {
       name: 'Customer Events',
@@ -87,6 +98,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/customer-events',
       desc: 'Open houses & appreciation',
       color: '#f97316',
+      ready: false,
     },
     {
       name: 'Analytics',
@@ -94,6 +106,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/analytics',
       desc: 'Performance metrics & ROI',
       color: '#0ea5e9',
+      ready: false,
     },
     {
       name: 'Awards & Recognition',
@@ -101,6 +114,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/awards',
       desc: 'Industry awards & achievements',
       color: '#eab308',
+      ready: false,
     },
     {
       name: 'Partnerships',
@@ -108,6 +122,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/partnerships',
       desc: 'Strategic alliances & collabs',
       color: '#84cc16',
+      ready: false,
     },
     {
       name: 'Sponsorships',
@@ -115,6 +130,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/sponsorships',
       desc: 'Community & event sponsorships',
       color: '#22c55e',
+      ready: false,
     },
   ];
 
@@ -133,9 +149,11 @@ const MarketingList: React.FC = () => {
           <Link
             key={category.name}
             to={category.path}
-            className="marketing-category-card"
+            className={`marketing-category-card ${!category.ready ? 'disabled' : ''}`}
             style={{ '--category-color': category.color } as React.CSSProperties}
+            onClick={(e) => !category.ready && e.preventDefault()}
           >
+            {!category.ready && <span className="coming-soon-badge">Coming Soon</span>}
             <div className="category-icon-wrapper">
               <div className="category-icon">{category.icon}</div>
             </div>

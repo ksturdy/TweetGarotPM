@@ -56,6 +56,49 @@
   overflow: hidden;
 }
 
+.marketing-category-card.disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.marketing-category-card.disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #e5e7eb;
+}
+
+.marketing-category-card.disabled:hover::before {
+  transform: scaleX(0);
+}
+
+.marketing-category-card.disabled:hover .category-icon-wrapper {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  transform: none;
+}
+
+.marketing-category-card.disabled:hover .category-icon {
+  transform: none;
+}
+
+.marketing-category-card.disabled .category-arrow {
+  opacity: 0;
+}
+
+.coming-soon-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #F37B03;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 1;
+}
+
 .marketing-category-card::before {
   content: '';
   position: absolute;
