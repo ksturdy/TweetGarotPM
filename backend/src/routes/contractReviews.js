@@ -163,7 +163,7 @@ Example format:
     const startTime = Date.now();
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 8192, // Increased from 4096 to allow for more detailed analysis
+      max_tokens: 16384, // Increased to 16K to handle contracts with many findings
       system: systemPrompt,
       messages: [
         {
@@ -175,9 +175,19 @@ Example format:
 
     const endTime = Date.now();
     console.log(`[Contract Analysis] Received response from Claude API in ${endTime - startTime}ms`);
+    console.log('[Contract Analysis] Stop reason:', message.stop_reason);
 
     const responseText = message.content[0].text;
     console.log('[Contract Analysis] Response text length:', responseText.length);
+
+    // Check if response was truncated due to max_tokens
+    if (message.stop_reason === 'max_tokens') {
+      console.error('[Contract Analysis] WARNING: Response truncated due to max_tokens limit');
+      return res.status(500).json({
+        error: 'Analysis response too large',
+        details: 'The contract has too many findings to analyze in one request. Please try with a simpler contract or contact support.'
+      });
+    }
 
     // Extract JSON from response (Claude might wrap it in markdown code blocks)
     let jsonText = responseText;
