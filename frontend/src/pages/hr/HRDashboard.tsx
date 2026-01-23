@@ -24,9 +24,10 @@ const HRDashboard: React.FC = () => {
     queryFn: () => officeLocationsApi.getAll().then((res) => res.data.data),
   });
 
-  const activeEmployees = employees?.filter((emp) => emp.employment_status === 'active') || [];
-  const inactiveEmployees = employees?.filter((emp) => emp.employment_status === 'inactive') || [];
-  const terminatedEmployees = employees?.filter((emp) => emp.employment_status === 'terminated') || [];
+  const employeesList = Array.isArray(employees) ? employees : [];
+  const activeEmployees = employeesList.filter((emp) => emp.employment_status === 'active');
+  const inactiveEmployees = employeesList.filter((emp) => emp.employment_status === 'inactive');
+  const terminatedEmployees = employeesList.filter((emp) => emp.employment_status === 'terminated');
 
   return (
     <div>
@@ -40,7 +41,7 @@ const HRDashboard: React.FC = () => {
             Total Employees
           </h3>
           <div style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            {employees?.length || 0}
+            {employeesList.length}
           </div>
           <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
             {activeEmployees.length} active • {inactiveEmployees.length} inactive • {terminatedEmployees.length} terminated

@@ -89,7 +89,7 @@ const SalesPipeline: React.FC = () => {
     queryKey: ['office-locations'],
     queryFn: async () => {
       const response = await officeLocationsApi.getAll();
-      return response.data || [];
+      return response.data?.data || [];
     }
   });
   const officeLocations = Array.isArray(officeLocationsData) ? officeLocationsData : [];
@@ -99,7 +99,7 @@ const SalesPipeline: React.FC = () => {
     queryKey: ['employees'],
     queryFn: async () => {
       const response = await employeesApi.getAll();
-      return response.data || [];
+      return response.data?.data || [];
     }
   });
   const employees = Array.isArray(employeesData) ? employeesData : [];
