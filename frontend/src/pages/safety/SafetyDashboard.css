@@ -1,0 +1,380 @@
+.safety-dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Header */
+.safety-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.safety-header-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.safety-icon-large {
+  font-size: 3rem;
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  padding: 1rem;
+  border-radius: 1rem;
+}
+
+.safety-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  color: var(--text-primary);
+}
+
+.safety-header p {
+  margin: 0.25rem 0 0 0;
+  color: var(--secondary);
+  font-size: 0.95rem;
+}
+
+/* SharePoint Button */
+.btn-sharepoint {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  background: linear-gradient(135deg, #038387 0%, #026d70 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(3, 131, 135, 0.3);
+}
+
+.btn-sharepoint:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(3, 131, 135, 0.4);
+}
+
+.sharepoint-icon {
+  display: flex;
+  align-items: center;
+}
+
+.external-icon {
+  font-size: 1.1rem;
+  opacity: 0.8;
+}
+
+/* Safety Alert Banner */
+.safety-alert {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border: 1px solid #F59E0B;
+  border-radius: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.alert-icon {
+  font-size: 1.5rem;
+}
+
+.alert-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: #92400E;
+}
+
+.alert-content strong {
+  color: #78350F;
+}
+
+/* Stats Grid */
+.safety-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.safety-stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.safety-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  font-size: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--secondary);
+}
+
+/* Content Grid */
+.safety-content-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+  .safety-content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.safety-content-grid .card {
+  padding: 1.5rem;
+}
+
+.safety-content-grid h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.card-icon {
+  font-size: 1.25rem;
+}
+
+/* Resources List */
+.resources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem;
+  background: var(--background);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resource-item:hover {
+  background: var(--hover-bg);
+  transform: translateX(4px);
+}
+
+.resource-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.resource-info {
+  flex: 1;
+}
+
+.resource-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.resource-desc {
+  font-size: 0.875rem;
+  color: var(--secondary);
+}
+
+.resource-arrow {
+  color: var(--secondary);
+  font-size: 1.25rem;
+}
+
+/* Actions List */
+.actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  font-size: 1.25rem;
+}
+
+.action-btn-danger {
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  color: #991B1B;
+}
+
+.action-btn-danger:hover {
+  background: linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%);
+}
+
+.action-btn-warning {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #92400E;
+}
+
+.action-btn-warning:hover {
+  background: linear-gradient(135deg, #FDE68A 0%, #FCD34D 100%);
+}
+
+.action-btn-primary {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  color: #1E40AF;
+}
+
+.action-btn-primary:hover {
+  background: linear-gradient(135deg, #BFDBFE 0%, #93C5FD 100%);
+}
+
+.action-btn-secondary {
+  background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%);
+  color: #374151;
+}
+
+.action-btn-secondary:hover {
+  background: linear-gradient(135deg, #E5E7EB 0%, #D1D5DB 100%);
+}
+
+/* Training List */
+.training-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.training-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--background);
+  border-radius: 0.5rem;
+}
+
+.training-status {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.status-complete {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.status-pending {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.training-info {
+  flex: 1;
+}
+
+.training-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.training-date {
+  font-size: 0.875rem;
+  color: var(--secondary);
+}
+
+/* Contacts List */
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem;
+  background: var(--background);
+  border-radius: 0.5rem;
+}
+
+.contact-emergency {
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+}
+
+.contact-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.contact-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.contact-number {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.contact-emergency .contact-number {
+  color: #DC2626;
+  font-size: 1.25rem;
+}

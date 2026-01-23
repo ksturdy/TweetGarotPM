@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
     { name: 'IT', icon: '💻', path: '#', desc: 'Systems & Support', ready: false },
     { name: 'Administration', icon: '💼', path: '/administration', desc: 'Accounting, AP/AR', ready: true },
     { name: 'Service', icon: '🔧', path: '#', desc: 'Work Orders', ready: false },
-    { name: 'Safety', icon: '🦺', path: '#', desc: 'Incidents & Training', ready: false },
+    { name: 'Safety', icon: '🦺', path: '/safety', desc: 'Incidents & Training', ready: true },
     { name: 'HR', icon: '👥', path: '/hr', desc: 'Employees', ready: true },
     { name: 'Fleet', icon: '🚛', path: '#', desc: 'Vehicles', ready: false },
   ];

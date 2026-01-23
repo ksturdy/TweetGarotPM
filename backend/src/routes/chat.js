@@ -105,15 +105,26 @@ async function performIntelligentSearch(message) {
   const db = require('../config/database');
 
   // Extract potential search terms (remove common words)
-  const commonWords = ['the', 'a', 'an', 'what', 'who', 'is', 'are', 'tell', 'me', 'about', 'find', 'show', 'get', 'account', 'manager', 'for', 'customer', 'project'];
+  const commonWords = ['the', 'a', 'an', 'what', 'who', 'is', 'are', 'tell', 'me', 'about', 'find', 'show', 'get', 'account', 'manager', 'for', 'customer', 'project', 'anything', 'related', 'any', 'all', 'do', 'we', 'have', 'can', 'you', 'with', 'from', 'information', 'info', 'data', 'list', 'give'];
   const words = message.toLowerCase().split(/\s+/).filter(w => !commonWords.includes(w) && w.length > 2);
 
   if (words.length > 0) {
-    // Search customers
-    const searchTerm = words.join(' ');
-    const customerResults = await Customer.search(searchTerm);
-    if (customerResults && customerResults.length > 0) {
-      searchResults.customers = customerResults.slice(0, 10).map(c => ({
+    // Search customers - try each word individually to find matches
+    let allCustomerResults = [];
+    for (const word of words) {
+      const results = await Customer.search(word);
+      if (results && results.length > 0) {
+        // Add results that aren't already in the array (by id)
+        for (const result of results) {
+          if (!allCustomerResults.find(c => c.id === result.id)) {
+            allCustomerResults.push(result);
+          }
+        }
+      }
+    }
+
+    if (allCustomerResults.length > 0) {
+      searchResults.customers = allCustomerResults.slice(0, 10).map(c => ({
         facility: c.customer_facility,
         owner: c.customer_owner,
         accountManager: c.account_manager,
@@ -126,18 +137,29 @@ async function performIntelligentSearch(message) {
       }));
     }
 
-    // Search projects by client name
-    const projectResults = await db.query(
-      `SELECT p.*, u.first_name || ' ' || u.last_name as manager_name
-       FROM projects p
-       LEFT JOIN users u ON p.manager_id = u.id
-       WHERE p.name ILIKE $1 OR p.client ILIKE $1 OR p.number ILIKE $1
-       ORDER BY p.created_at DESC
-       LIMIT 10`,
-      [`%${searchTerm}%`]
-    );
-    if (projectResults.rows.length > 0) {
-      searchResults.projects = projectResults.rows.map(p => ({
+    // Search projects - try each word individually
+    let allProjectResults = [];
+    for (const word of words) {
+      const projectResults = await db.query(
+        `SELECT p.*, u.first_name || ' ' || u.last_name as manager_name
+         FROM projects p
+         LEFT JOIN users u ON p.manager_id = u.id
+         WHERE p.name ILIKE $1 OR p.client ILIKE $1 OR p.number ILIKE $1
+         ORDER BY p.created_at DESC
+         LIMIT 10`,
+        [`%${word}%`]
+      );
+      if (projectResults.rows.length > 0) {
+        for (const result of projectResults.rows) {
+          if (!allProjectResults.find(p => p.id === result.id)) {
+            allProjectResults.push(result);
+          }
+        }
+      }
+    }
+
+    if (allProjectResults.length > 0) {
+      searchResults.projects = allProjectResults.slice(0, 10).map(p => ({
         name: p.name,
         number: p.number,
         client: p.client,

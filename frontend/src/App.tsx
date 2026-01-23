@@ -58,6 +58,7 @@ import SalesPipeline from './pages/SalesPipeline';
 import MobileSales from './pages/MobileSales';
 import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
+import SafetyDashboard from './pages/safety/SafetyDashboard';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -121,6 +122,7 @@ const App: React.FC = () => {
                 <Route path="/hr/employees/:id/edit" element={<EmployeeDetail />} />
                 <Route path="/hr/departments" element={<DepartmentList />} />
                 <Route path="/hr/locations" element={<LocationList />} />
+                <Route path="/safety" element={<SafetyDashboard />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/security" element={<SecuritySettings />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
