@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { vendorsService, Vendor } from '../../services/vendors';
+import { PlacesSearch } from '../../components/PlacesSearch';
+import { Place } from '../../services/places';
 import './CustomerList.css';
 
 const VendorList: React.FC = () => {
@@ -13,6 +15,26 @@ const VendorList: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Handle place selection from Foursquare search
+  const handlePlaceSelect = (place: Place) => {
+    if (!formRef.current) return;
+
+    const form = formRef.current;
+    const setInputValue = (name: string, value: string) => {
+      const input = form.elements.namedItem(name) as HTMLInputElement;
+      if (input) input.value = value;
+    };
+
+    setInputValue('vendor_name', place.name);
+    setInputValue('company_name', place.name);
+    setInputValue('phone', place.phone);
+    setInputValue('address_line1', place.address);
+    setInputValue('city', place.city);
+    setInputValue('state', place.state);
+    setInputValue('zip_code', place.zip_code);
+  };
 
   // Fetch vendors
   const { data: vendors = [], isLoading } = useQuery({
@@ -229,7 +251,19 @@ const VendorList: React.FC = () => {
               <h2>{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
               <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} ref={formRef}>
+              {!editingVendor && (
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label>Search Business</label>
+                  <PlacesSearch
+                    onSelect={handlePlaceSelect}
+                    placeholder="Search for a business (e.g., Ferguson Enterprises)..."
+                  />
+                  <small style={{ color: '#6b7280', fontSize: '12px' }}>
+                    Search and select to auto-fill vendor details
+                  </small>
+                </div>
+              )}
               <div className="form-grid">
                 <div className="form-group">
                   <label>Vendor Name *</label>
