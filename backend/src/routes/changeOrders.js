@@ -1,9 +1,15 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const ChangeOrder = require('../models/ChangeOrder');
+const Project = require('../models/Project');
 const { authenticate, authorize } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 
 const router = express.Router();
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -13,8 +19,26 @@ const validate = (req, res, next) => {
   next();
 };
 
+// Middleware to verify project belongs to tenant
+const verifyProjectOwnership = async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId || req.body.projectId;
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    const project = await Project.findByIdAndTenant(projectId, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    req.project = project;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get change orders for a project
-router.get('/project/:projectId', authenticate, async (req, res, next) => {
+router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
     const filters = { status: req.query.status };
     const changeOrders = await ChangeOrder.findByProject(req.params.projectId, filters);
@@ -25,7 +49,7 @@ router.get('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Get project change order totals
-router.get('/project/:projectId/totals', authenticate, async (req, res, next) => {
+router.get('/project/:projectId/totals', verifyProjectOwnership, async (req, res, next) => {
   try {
     const totals = await ChangeOrder.getProjectTotals(req.params.projectId);
     res.json(totals);
@@ -35,10 +59,15 @@ router.get('/project/:projectId/totals', authenticate, async (req, res, next) =>
 });
 
 // Get single change order
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const changeOrder = await ChangeOrder.findById(req.params.id);
     if (!changeOrder) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+    // Verify the change order's project belongs to tenant
+    const project = await Project.findByIdAndTenant(changeOrder.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'Change order not found' });
     }
     res.json(changeOrder);
@@ -50,13 +79,13 @@ router.get('/:id', authenticate, async (req, res, next) => {
 // Create change order
 router.post(
   '/',
-  authenticate,
   [
     body('projectId').isInt(),
     body('title').trim().notEmpty(),
     body('description').trim().notEmpty(),
   ],
   validate,
+  verifyProjectOwnership,
   async (req, res, next) => {
     try {
       const number = await ChangeOrder.getNextNumber(req.body.projectId);
@@ -73,12 +102,20 @@ router.post(
 );
 
 // Update change order
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
-    const changeOrder = await ChangeOrder.update(req.params.id, req.body);
-    if (!changeOrder) {
+    // First get the change order to verify ownership
+    const existingCO = await ChangeOrder.findById(req.params.id);
+    if (!existingCO) {
       return res.status(404).json({ error: 'Change order not found' });
     }
+    // Verify the change order's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingCO.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+
+    const changeOrder = await ChangeOrder.update(req.params.id, req.body);
     res.json(changeOrder);
   } catch (error) {
     next(error);
@@ -86,12 +123,20 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Submit change order for approval
-router.post('/:id/submit', authenticate, async (req, res, next) => {
+router.post('/:id/submit', async (req, res, next) => {
   try {
-    const changeOrder = await ChangeOrder.update(req.params.id, { status: 'pending' });
-    if (!changeOrder) {
+    // First get the change order to verify ownership
+    const existingCO = await ChangeOrder.findById(req.params.id);
+    if (!existingCO) {
       return res.status(404).json({ error: 'Change order not found' });
     }
+    // Verify the change order's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingCO.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+
+    const changeOrder = await ChangeOrder.update(req.params.id, { status: 'pending' });
     res.json(changeOrder);
   } catch (error) {
     next(error);
@@ -99,14 +144,22 @@ router.post('/:id/submit', authenticate, async (req, res, next) => {
 });
 
 // Approve change order
-router.post('/:id/approve', authenticate, authorize('admin', 'manager'), async (req, res, next) => {
+router.post('/:id/approve', authorize('admin', 'manager'), async (req, res, next) => {
   try {
+    // First get the change order to verify ownership
+    const existingCO = await ChangeOrder.findById(req.params.id);
+    if (!existingCO) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+    // Verify the change order's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingCO.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+
     const changeOrder = await ChangeOrder.approve(req.params.id, {
       approvedBy: req.user.id,
     });
-    if (!changeOrder) {
-      return res.status(404).json({ error: 'Change order not found' });
-    }
     res.json(changeOrder);
   } catch (error) {
     next(error);
@@ -114,14 +167,22 @@ router.post('/:id/approve', authenticate, authorize('admin', 'manager'), async (
 });
 
 // Reject change order
-router.post('/:id/reject', authenticate, authorize('admin', 'manager'), async (req, res, next) => {
+router.post('/:id/reject', authorize('admin', 'manager'), async (req, res, next) => {
   try {
+    // First get the change order to verify ownership
+    const existingCO = await ChangeOrder.findById(req.params.id);
+    if (!existingCO) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+    // Verify the change order's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingCO.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Change order not found' });
+    }
+
     const changeOrder = await ChangeOrder.reject(req.params.id, {
       rejectionReason: req.body.rejectionReason,
     });
-    if (!changeOrder) {
-      return res.status(404).json({ error: 'Change order not found' });
-    }
     res.json(changeOrder);
   } catch (error) {
     next(error);

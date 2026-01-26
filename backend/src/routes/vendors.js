@@ -4,6 +4,7 @@ const Vendors = require('../models/vendors');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 
 // Configure multer for file uploads
 const upload = multer({
@@ -25,8 +26,9 @@ const upload = multer({
   },
 });
 
-// Apply authentication to all routes
+// Apply authentication and tenant context to all routes
 router.use(authenticate);
+router.use(tenantContext);
 
 // GET /api/vendors - Get all vendors with optional filters
 router.get('/', async (req, res, next) => {
@@ -39,17 +41,59 @@ router.get('/', async (req, res, next) => {
     if (trade_specialty) filters.trade_specialty = trade_specialty;
     if (search) filters.search = search;
 
-    const vendors = await Vendors.findAll(filters);
+    const vendors = await Vendors.findAllByTenant(filters, req.tenantId);
     res.json(vendors);
   } catch (error) {
     next(error);
   }
 });
 
+// GET /api/vendors/export/template - Download Excel template (must be before /:id)
+router.get('/export/template', (req, res) => {
+  const templateData = [
+    {
+      'Vendor Name': 'ABC Plumbing',
+      'Company Name': 'ABC Plumbing Inc',
+      'Email': 'contact@abcplumbing.com',
+      'Phone': '555-0200',
+      'Address Line 1': '456 Industrial Blvd',
+      'Address Line 2': '',
+      'City': 'Chicago',
+      'State': 'IL',
+      'Zip Code': '60601',
+      'Country': 'USA',
+      'Payment Terms': 'Net 30',
+      'Tax ID': '98-7654321',
+      'W9 On File': 'true',
+      'Vendor Type': 'subcontractor',
+      'Trade Specialty': 'Plumbing',
+      'Insurance Expiry': '2026-12-31',
+      'License Number': 'PL-12345',
+      'License Expiry': '2026-12-31',
+      'Primary Contact': 'Jane Smith',
+      'AP Contact': 'John Billing',
+      'AP Email': 'ap@abcplumbing.com',
+      'Rating': '5',
+      'Status': 'active',
+      'Notes': 'Sample vendor record',
+    },
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(templateData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendors');
+
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Disposition', 'attachment; filename=vendors_template.xlsx');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buffer);
+});
+
 // GET /api/vendors/:id - Get vendor by ID
 router.get('/:id', async (req, res, next) => {
   try {
-    const vendor = await Vendors.findById(req.params.id);
+    const vendor = await Vendors.findByIdAndTenant(req.params.id, req.tenantId);
     if (!vendor) {
       return res.status(404).json({ message: 'Vendor not found' });
     }
@@ -62,7 +106,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/vendors - Create new vendor
 router.post('/', async (req, res, next) => {
   try {
-    const vendor = await Vendors.create(req.body, req.user.id);
+    const vendor = await Vendors.create(req.body, req.user.id, req.tenantId);
     res.status(201).json(vendor);
   } catch (error) {
     next(error);
@@ -72,7 +116,7 @@ router.post('/', async (req, res, next) => {
 // PUT /api/vendors/:id - Update vendor
 router.put('/:id', async (req, res, next) => {
   try {
-    const vendor = await Vendors.update(req.params.id, req.body, req.user.id);
+    const vendor = await Vendors.update(req.params.id, req.body, req.user.id, req.tenantId);
     if (!vendor) {
       return res.status(404).json({ message: 'Vendor not found' });
     }
@@ -85,7 +129,7 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/vendors/:id - Delete vendor
 router.delete('/:id', async (req, res, next) => {
   try {
-    const vendor = await Vendors.delete(req.params.id);
+    const vendor = await Vendors.delete(req.params.id, req.tenantId);
     if (!vendor) {
       return res.status(404).json({ message: 'Vendor not found' });
     }
@@ -140,8 +184,8 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
       notes: row['Notes'] || row['notes'] || '',
     }));
 
-    // Bulk insert
-    const vendors = await Vendors.bulkCreate(vendorsData, req.user.id);
+    // Bulk insert with tenant ID
+    const vendors = await Vendors.bulkCreate(vendorsData, req.user.id, req.tenantId);
 
     res.status(201).json({
       message: `Successfully imported ${vendors.length} vendors`,
@@ -151,48 +195,6 @@ router.post('/import', upload.single('file'), async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
-
-// GET /api/vendors/export/template - Download Excel template
-router.get('/export/template', (req, res) => {
-  const templateData = [
-    {
-      'Vendor Name': 'ABC Plumbing',
-      'Company Name': 'ABC Plumbing Inc',
-      'Email': 'contact@abcplumbing.com',
-      'Phone': '555-0200',
-      'Address Line 1': '456 Industrial Blvd',
-      'Address Line 2': '',
-      'City': 'Chicago',
-      'State': 'IL',
-      'Zip Code': '60601',
-      'Country': 'USA',
-      'Payment Terms': 'Net 30',
-      'Tax ID': '98-7654321',
-      'W9 On File': 'true',
-      'Vendor Type': 'subcontractor',
-      'Trade Specialty': 'Plumbing',
-      'Insurance Expiry': '2026-12-31',
-      'License Number': 'PL-12345',
-      'License Expiry': '2026-12-31',
-      'Primary Contact': 'Jane Smith',
-      'AP Contact': 'John Billing',
-      'AP Email': 'ap@abcplumbing.com',
-      'Rating': '5',
-      'Status': 'active',
-      'Notes': 'Sample vendor record',
-    },
-  ];
-
-  const worksheet = XLSX.utils.json_to_sheet(templateData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendors');
-
-  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-  res.setHeader('Content-Disposition', 'attachment; filename=vendors_template.xlsx');
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buffer);
 });
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 const Project = require('../models/Project');
 const Customer = require('../models/Customer');
 const RFI = require('../models/RFI');
@@ -13,8 +14,9 @@ const Contact = require('../models/Contact');
 
 const router = express.Router();
 
-// Apply auth middleware
+// Apply auth and tenant middleware
 router.use(authenticate);
+router.use(tenantContext);
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -22,14 +24,14 @@ const anthropic = new Anthropic({
 });
 
 /**
- * Gather database context for the chatbot
+ * Gather database context for the chatbot (tenant-scoped)
  */
-async function gatherDatabaseContext(userId) {
+async function gatherDatabaseContext(userId, tenantId) {
   try {
     const context = {};
 
-    // Get projects summary
-    const projects = await Project.findAll();
+    // Get projects summary (tenant-scoped)
+    const projects = await Project.findAllByTenant(tenantId);
     context.projects = {
       total: projects.length,
       active: projects.filter(p => p.status === 'active').length,
@@ -45,9 +47,9 @@ async function gatherDatabaseContext(userId) {
       }))
     };
 
-    // Get customer stats
-    const customerStats = await Customer.getStats();
-    const customers = await Customer.findAll();
+    // Get customer stats (tenant-scoped)
+    const customerStats = await Customer.getStatsByTenant(tenantId);
+    const customers = await Customer.findAllByTenant(tenantId);
     context.customers = {
       stats: customerStats,
       recentCustomers: customers.slice(0, 10).map(c => ({
@@ -72,10 +74,15 @@ async function gatherDatabaseContext(userId) {
       overdue: allRFIs.filter(r => r.due_date && new Date(r.due_date) < new Date() && r.status !== 'closed').length
     };
 
-    // Get companies and contacts count
-    const companies = await Company.findAll();
+    // Get companies and contacts count (tenant-scoped)
+    const companies = await Company.findAllByTenant({}, tenantId);
     const db = require('../config/database');
-    const contactsResult = await db.query('SELECT COUNT(*) FROM contacts');
+    const contactsResult = await db.query(
+      `SELECT COUNT(*) FROM contacts c
+       JOIN companies comp ON c.company_id = comp.id
+       WHERE comp.tenant_id = $1`,
+      [tenantId]
+    );
     const contactsCount = parseInt(contactsResult.rows[0].count);
 
     context.companies = {
@@ -98,9 +105,9 @@ async function gatherDatabaseContext(userId) {
 }
 
 /**
- * Perform intelligent search based on user's question
+ * Perform intelligent search based on user's question (tenant-scoped)
  */
-async function performIntelligentSearch(message) {
+async function performIntelligentSearch(message, tenantId) {
   const searchResults = {};
   const db = require('../config/database');
 
@@ -109,10 +116,10 @@ async function performIntelligentSearch(message) {
   const words = message.toLowerCase().split(/\s+/).filter(w => !commonWords.includes(w) && w.length > 2);
 
   if (words.length > 0) {
-    // Search customers - try each word individually to find matches
+    // Search customers - try each word individually to find matches (tenant-scoped)
     let allCustomerResults = [];
     for (const word of words) {
-      const results = await Customer.search(word);
+      const results = await Customer.searchByTenant(word, tenantId);
       if (results && results.length > 0) {
         // Add results that aren't already in the array (by id)
         for (const result of results) {
@@ -137,17 +144,17 @@ async function performIntelligentSearch(message) {
       }));
     }
 
-    // Search projects - try each word individually
+    // Search projects - try each word individually (tenant-scoped)
     let allProjectResults = [];
     for (const word of words) {
       const projectResults = await db.query(
         `SELECT p.*, u.first_name || ' ' || u.last_name as manager_name
          FROM projects p
          LEFT JOIN users u ON p.manager_id = u.id
-         WHERE p.name ILIKE $1 OR p.client ILIKE $1 OR p.number ILIKE $1
+         WHERE p.tenant_id = $1 AND (p.name ILIKE $2 OR p.client ILIKE $2 OR p.number ILIKE $2)
          ORDER BY p.created_at DESC
          LIMIT 10`,
-        [`%${word}%`]
+        [tenantId, `%${word}%`]
       );
       if (projectResults.rows.length > 0) {
         for (const result of projectResults.rows) {
@@ -183,11 +190,11 @@ router.post('/message', async (req, res, next) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Gather real-time database context
-    const dbContext = await gatherDatabaseContext(req.user.id);
+    // Gather real-time database context (tenant-scoped)
+    const dbContext = await gatherDatabaseContext(req.user.id, req.tenantId);
 
-    // Perform intelligent search based on the question
-    const searchResults = await performIntelligentSearch(message);
+    // Perform intelligent search based on the question (tenant-scoped)
+    const searchResults = await performIntelligentSearch(message, req.tenantId);
 
     // Build conversation messages for Claude
     const messages = [

@@ -3,10 +3,16 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const Drawing = require('../models/Drawing');
+const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const { deleteFile, getFileUrl, getFileInfo, getFileStream } = require('../utils/fileStorage');
 const { isR2Enabled } = require('../config/r2Client');
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 // Configure upload middleware with R2 or local storage
 const upload = createUploadMiddleware({
@@ -21,8 +27,26 @@ const upload = createUploadMiddleware({
   maxSize: 100 * 1024 * 1024, // 100MB limit for drawings
 });
 
+// Middleware to verify project belongs to tenant
+const verifyProjectOwnership = async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId || req.body.project_id;
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    const project = await Project.findByIdAndTenant(projectId, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    req.project = project;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get all drawings for a project
-router.get('/project/:projectId', authenticate, async (req, res, next) => {
+router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
     const drawings = await Drawing.findByProject(
       req.params.projectId,
@@ -39,10 +63,15 @@ router.get('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Get single drawing
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const drawing = await Drawing.findById(req.params.id);
     if (!drawing) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+    // Verify the drawing's project belongs to tenant
+    const project = await Project.findByIdAndTenant(drawing.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'Drawing not found' });
     }
     res.json({ data: drawing });
@@ -52,8 +81,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
 });
 
 // Get version history for a drawing
-router.get('/:id/versions', authenticate, async (req, res, next) => {
+router.get('/:id/versions', async (req, res, next) => {
   try {
+    const drawing = await Drawing.findById(req.params.id);
+    if (!drawing) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+    // Verify the drawing's project belongs to tenant
+    const project = await Project.findByIdAndTenant(drawing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+
     const versions = await Drawing.getVersionHistory(req.params.id);
     res.json({ data: versions });
   } catch (error) {
@@ -62,7 +101,7 @@ router.get('/:id/versions', authenticate, async (req, res, next) => {
 });
 
 // Create drawing with file upload
-router.post('/', authenticate, upload.single('file'), async (req, res, next) => {
+router.post('/', upload.single('file'), verifyProjectOwnership, async (req, res, next) => {
   try {
     const data = {
       ...req.body,
@@ -96,12 +135,19 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
 });
 
 // Update drawing
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
-    const drawing = await Drawing.update(req.params.id, req.body);
-    if (!drawing) {
+    const existingDrawing = await Drawing.findById(req.params.id);
+    if (!existingDrawing) {
       return res.status(404).json({ error: 'Drawing not found' });
     }
+    // Verify the drawing's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingDrawing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+
+    const drawing = await Drawing.update(req.params.id, req.body);
     res.json({ data: drawing });
   } catch (error) {
     next(error);
@@ -109,12 +155,20 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete drawing
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const drawing = await Drawing.findById(req.params.id);
+    if (!drawing) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+    // Verify the drawing's project belongs to tenant
+    const project = await Project.findByIdAndTenant(drawing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
 
     // Delete the file from R2 or local storage
-    if (drawing && drawing.file_path) {
+    if (drawing.file_path) {
       await deleteFile(drawing.file_path).catch(console.error);
     }
 
@@ -126,10 +180,15 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 });
 
 // Download drawing file
-router.get('/:id/download', authenticate, async (req, res, next) => {
+router.get('/:id/download', async (req, res, next) => {
   try {
     const drawing = await Drawing.findById(req.params.id);
     if (!drawing) {
+      return res.status(404).json({ error: 'Drawing not found' });
+    }
+    // Verify the drawing's project belongs to tenant
+    const project = await Project.findByIdAndTenant(drawing.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'Drawing not found' });
     }
 

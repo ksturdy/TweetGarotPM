@@ -1,6 +1,11 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 
+/**
+ * Authenticate user via JWT token
+ * Token can be in Authorization header (Bearer) or query parameter
+ * Extracts user info including tenantId for multi-tenant context
+ */
 const authenticate = (req, res, next) => {
   // Check for token in Authorization header first, then query parameter
   let token = null;
@@ -20,6 +25,12 @@ const authenticate = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, config.jwt.secret);
     req.user = decoded;
+
+    // Also set tenantId directly on request for convenience
+    if (decoded.tenantId) {
+      req.tenantId = decoded.tenantId;
+    }
+
     next();
   } catch (error) {
     console.log('[Auth] Token verification failed:', error.message);
@@ -68,4 +79,20 @@ const authorizeHR = (requiredAccess = 'read') => {
   };
 };
 
-module.exports = { authenticate, authorize, authorizeHR };
+/**
+ * Platform admin authorization middleware
+ * Only allows access to users with is_platform_admin = true
+ */
+const authorizePlatformAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!req.user.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Platform admin access required' });
+  }
+
+  next();
+};
+
+module.exports = { authenticate, authorize, authorizeHR, authorizePlatformAdmin };

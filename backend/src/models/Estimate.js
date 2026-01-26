@@ -1,7 +1,7 @@
 const db = require('../config/database');
 
 const Estimate = {
-  async create(data) {
+  async create(data, tenantId) {
     const result = await db.query(
       `INSERT INTO estimates (
         estimate_number, project_name, customer_id, customer_name,
@@ -10,8 +10,8 @@ const Estimate = {
         estimator_id, estimator_name, status,
         overhead_percentage, profit_percentage, contingency_percentage, bond_percentage,
         scope_of_work, exclusions, assumptions, notes,
-        created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        created_by, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING *`,
       [
         data.estimate_number, data.project_name, data.customer_id, data.customer_name,
@@ -21,7 +21,7 @@ const Estimate = {
         data.overhead_percentage || 10.00, data.profit_percentage || 10.00,
         data.contingency_percentage || 5.00, data.bond_percentage || 0,
         data.scope_of_work, data.exclusions, data.assumptions, data.notes,
-        data.created_by
+        data.created_by, tenantId
       ]
     );
     return result.rows[0];
@@ -45,7 +45,25 @@ const Estimate = {
     return result.rows[0];
   },
 
-  async findAll(filters = {}) {
+  async findByIdAndTenant(id, tenantId) {
+    const result = await db.query(
+      `SELECT e.*,
+              u1.first_name || ' ' || u1.last_name as estimator_full_name,
+              u2.first_name || ' ' || u2.last_name as created_by_name,
+              u3.first_name || ' ' || u3.last_name as approved_by_name,
+              c.customer_facility
+       FROM estimates e
+       LEFT JOIN users u1 ON e.estimator_id = u1.id
+       LEFT JOIN users u2 ON e.created_by = u2.id
+       LEFT JOIN users u3 ON e.approved_by = u3.id
+       LEFT JOIN customers c ON e.customer_id = c.id
+       WHERE e.id = $1 AND e.tenant_id = $2`,
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async findAll(filters = {}, tenantId) {
     let query = `
       SELECT e.*,
              u1.first_name || ' ' || u1.last_name as estimator_full_name,
@@ -53,10 +71,10 @@ const Estimate = {
       FROM estimates e
       LEFT JOIN users u1 ON e.estimator_id = u1.id
       LEFT JOIN customers c ON e.customer_id = c.id
-      WHERE 1=1
+      WHERE e.tenant_id = $1
     `;
-    const params = [];
-    let paramCount = 1;
+    const params = [tenantId];
+    let paramCount = 2;
 
     if (filters.status) {
       params.push(filters.status);
@@ -85,7 +103,7 @@ const Estimate = {
     return result.rows;
   },
 
-  async update(id, data) {
+  async update(id, data, tenantId) {
     const fields = [];
     const values = [];
     let paramCount = 1;
@@ -108,33 +126,46 @@ const Estimate = {
     });
 
     if (fields.length === 0) {
-      return this.findById(id);
+      return this.findByIdAndTenant(id, tenantId);
     }
 
     values.push(id);
+    values.push(tenantId);
     const result = await db.query(
       `UPDATE estimates SET ${fields.join(', ')}, updated_at = NOW()
-       WHERE id = $${paramCount}
+       WHERE id = $${paramCount} AND tenant_id = $${paramCount + 1}
        RETURNING *`,
       values
     );
     return result.rows[0];
   },
 
-  async delete(id) {
-    await db.query('DELETE FROM estimates WHERE id = $1', [id]);
+  async delete(id, tenantId) {
+    const result = await db.query(
+      'DELETE FROM estimates WHERE id = $1 AND tenant_id = $2 RETURNING id',
+      [id, tenantId]
+    );
+    return result.rows.length > 0;
   },
 
-  async getNextEstimateNumber() {
+  async countByTenant(tenantId) {
+    const result = await db.query(
+      'SELECT COUNT(*) as count FROM estimates WHERE tenant_id = $1',
+      [tenantId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  async getNextEstimateNumber(tenantId) {
     const year = new Date().getFullYear();
     const prefix = `EST-${year}-`;
 
     const result = await db.query(
       `SELECT estimate_number FROM estimates
-       WHERE estimate_number LIKE $1
+       WHERE estimate_number LIKE $1 AND tenant_id = $2
        ORDER BY estimate_number DESC
        LIMIT 1`,
-      [`${prefix}%`]
+      [`${prefix}%`, tenantId]
     );
 
     if (result.rows.length === 0) {
@@ -146,7 +177,7 @@ const Estimate = {
     return `${prefix}${nextNumber}`;
   },
 
-  async updateStatus(id, status, userId) {
+  async updateStatus(id, status, userId, tenantId) {
     const updates = { status };
 
     if (status === 'approved') {
@@ -154,9 +185,9 @@ const Estimate = {
       const result = await db.query(
         `UPDATE estimates
          SET status = $1, approved_by = $2, approved_at = NOW(), updated_at = NOW()
-         WHERE id = $3
+         WHERE id = $3 AND tenant_id = $4
          RETURNING *`,
-        [status, userId, id]
+        [status, userId, id, tenantId]
       );
       return result.rows[0];
     }
@@ -165,14 +196,14 @@ const Estimate = {
       const result = await db.query(
         `UPDATE estimates
          SET status = $1, submitted_at = NOW(), updated_at = NOW()
-         WHERE id = $2
+         WHERE id = $2 AND tenant_id = $3
          RETURNING *`,
-        [status, id]
+        [status, id, tenantId]
       );
       return result.rows[0];
     }
 
-    return this.update(id, updates);
+    return this.update(id, updates, tenantId);
   },
 };
 

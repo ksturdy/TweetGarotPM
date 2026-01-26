@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 const ContractReview = require('../models/ContractReview');
 const ContractRiskFinding = require('../models/ContractRiskFinding');
 const ContractAnnotation = require('../models/ContractAnnotation');
@@ -29,8 +30,9 @@ router.get('/claude-config', async (req, res) => {
   });
 });
 
-// Apply auth middleware to all routes
+// Apply auth and tenant middleware to all routes below
 router.use(authenticate);
+router.use(tenantContext);
 
 // Get all contract reviews
 router.get('/', async (req, res, next) => {
@@ -42,7 +44,7 @@ router.get('/', async (req, res, next) => {
       uploaded_by: req.query.uploaded_by,
       search: req.query.search,
     };
-    const reviews = await ContractReview.findAll(filters);
+    const reviews = await ContractReview.findAllByTenant(filters, req.tenantId);
     res.json(reviews);
   } catch (error) {
     next(error);
@@ -52,7 +54,7 @@ router.get('/', async (req, res, next) => {
 // Get contract review statistics
 router.get('/stats', async (req, res, next) => {
   try {
-    const stats = await ContractReview.getStats();
+    const stats = await ContractReview.getStatsByTenant(req.tenantId);
     res.json(stats);
   } catch (error) {
     next(error);
@@ -266,7 +268,7 @@ Example format:
 // Get single contract review with risk findings and annotations
 router.get('/:id', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }
@@ -306,7 +308,7 @@ router.post('/', upload.single('file'), async (req, res, next) => {
 
     console.log('Creating contract review with data:', JSON.stringify(reviewData, null, 2));
 
-    const review = await ContractReview.create(reviewData);
+    const review = await ContractReview.create(reviewData, req.tenantId);
     console.log('Contract review created:', review);
 
     // Create risk findings if provided
@@ -351,7 +353,7 @@ router.post('/', upload.single('file'), async (req, res, next) => {
 // Update contract review
 router.put('/:id', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }
@@ -368,7 +370,7 @@ router.put('/:id', async (req, res, next) => {
       req.body.approved_by = req.user.id;
     }
 
-    const updated = await ContractReview.update(req.params.id, req.body);
+    const updated = await ContractReview.update(req.params.id, req.body, req.tenantId);
     const findings = await ContractRiskFinding.findByContractReview(req.params.id);
 
     res.json({
@@ -383,7 +385,7 @@ router.put('/:id', async (req, res, next) => {
 // Delete contract review
 router.delete('/:id', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }
@@ -398,7 +400,7 @@ router.delete('/:id', async (req, res, next) => {
       await deleteFile(review.file_path).catch(console.error);
     }
 
-    await ContractReview.delete(req.params.id);
+    await ContractReview.delete(req.params.id, req.tenantId);
     res.json({ message: 'Contract review deleted successfully' });
   } catch (error) {
     next(error);
@@ -410,7 +412,7 @@ router.delete('/:id', async (req, res, next) => {
 // Add new risk finding to existing contract review
 router.post('/:id/findings', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }
@@ -429,6 +431,12 @@ router.post('/:id/findings', async (req, res, next) => {
 // Update risk finding
 router.put('/:id/findings/:findingId', async (req, res, next) => {
   try {
+    // First verify the contract review belongs to tenant
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
     const finding = await ContractRiskFinding.findById(req.params.findingId);
     if (!finding) {
       return res.status(404).json({ error: 'Risk finding not found' });
@@ -450,6 +458,12 @@ router.put('/:id/findings/:findingId', async (req, res, next) => {
 // Delete risk finding
 router.delete('/:id/findings/:findingId', async (req, res, next) => {
   try {
+    // First verify the contract review belongs to tenant
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
     const finding = await ContractRiskFinding.findById(req.params.findingId);
     if (!finding) {
       return res.status(404).json({ error: 'Risk finding not found' });
@@ -467,6 +481,12 @@ router.delete('/:id/findings/:findingId', async (req, res, next) => {
 // Get all annotations for a contract review
 router.get('/:id/annotations', async (req, res, next) => {
   try {
+    // First verify the contract review belongs to tenant
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
     const annotations = await ContractAnnotation.findByContractReview(req.params.id);
     res.json(annotations);
   } catch (error) {
@@ -477,7 +497,7 @@ router.get('/:id/annotations', async (req, res, next) => {
 // Create new annotation
 router.post('/:id/annotations', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }
@@ -497,6 +517,12 @@ router.post('/:id/annotations', async (req, res, next) => {
 // Update annotation
 router.put('/:id/annotations/:annotationId', async (req, res, next) => {
   try {
+    // First verify the contract review belongs to tenant
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
     const annotation = await ContractAnnotation.findById(req.params.annotationId);
     if (!annotation) {
       return res.status(404).json({ error: 'Annotation not found' });
@@ -512,6 +538,12 @@ router.put('/:id/annotations/:annotationId', async (req, res, next) => {
 // Delete annotation
 router.delete('/:id/annotations/:annotationId', async (req, res, next) => {
   try {
+    // First verify the contract review belongs to tenant
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!review) {
+      return res.status(404).json({ error: 'Contract review not found' });
+    }
+
     const annotation = await ContractAnnotation.findById(req.params.annotationId);
     if (!annotation) {
       return res.status(404).json({ error: 'Annotation not found' });
@@ -525,9 +557,9 @@ router.delete('/:id/annotations/:annotationId', async (req, res, next) => {
 });
 
 // Serve contract file
-router.get('/:id/file', authenticate, async (req, res, next) => {
+router.get('/:id/file', async (req, res, next) => {
   try {
-    const review = await ContractReview.findById(req.params.id);
+    const review = await ContractReview.findByIdAndTenant(req.params.id, req.tenantId);
     if (!review) {
       return res.status(404).json({ error: 'Contract review not found' });
     }

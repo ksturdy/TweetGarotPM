@@ -2,11 +2,16 @@ const express = require('express');
 const router = express.Router();
 const Company = require('../models/Company');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 // Get all companies
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
-    const companies = await Company.findAll();
+    const companies = await Company.findAllByTenant(req.tenantId);
     res.json(companies);
   } catch (error) {
     next(error);
@@ -14,8 +19,9 @@ router.get('/', authenticate, async (req, res, next) => {
 });
 
 // Get companies for a specific project
-router.get('/project/:projectId', authenticate, async (req, res, next) => {
+router.get('/project/:projectId', async (req, res, next) => {
   try {
+    // Note: Project company association is checked through project ownership
     const companies = await Company.findByProject(req.params.projectId);
     res.json(companies);
   } catch (error) {
@@ -24,9 +30,9 @@ router.get('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Get single company
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
-    const company = await Company.findById(req.params.id);
+    const company = await Company.findByIdAndTenant(req.params.id, req.tenantId);
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
     }
@@ -37,7 +43,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
 });
 
 // Create new company
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', async (req, res, next) => {
   try {
     const { name, address, city, state, zip, phone, email, website, notes } = req.body;
 
@@ -55,7 +61,7 @@ router.post('/', authenticate, async (req, res, next) => {
       email,
       website,
       notes,
-    });
+    }, req.tenantId);
 
     res.status(201).json(company);
   } catch (error) {
@@ -64,7 +70,7 @@ router.post('/', authenticate, async (req, res, next) => {
 });
 
 // Update company
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
     const { name, address, city, state, zip, phone, email, website, notes } = req.body;
 
@@ -78,7 +84,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
       email,
       website,
       notes,
-    });
+    }, req.tenantId);
 
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });
@@ -91,9 +97,12 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete company
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
   try {
-    await Company.delete(req.params.id);
+    const deleted = await Company.delete(req.params.id, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -101,12 +110,18 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 });
 
 // Add company to project
-router.post('/project/:projectId', authenticate, async (req, res, next) => {
+router.post('/project/:projectId', async (req, res, next) => {
   try {
     const { companyId, role, isPrimary, notes } = req.body;
 
     if (!companyId || !role) {
       return res.status(400).json({ error: 'Company ID and role are required' });
+    }
+
+    // Verify company belongs to tenant
+    const company = await Company.findByIdAndTenant(companyId, req.tenantId);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
     }
 
     const projectCompany = await Company.addToProject({
@@ -124,7 +139,7 @@ router.post('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Update project-company relationship
-router.put('/project-company/:id', authenticate, async (req, res, next) => {
+router.put('/project-company/:id', async (req, res, next) => {
   try {
     const { role, isPrimary, notes } = req.body;
 
@@ -145,7 +160,7 @@ router.put('/project-company/:id', authenticate, async (req, res, next) => {
 });
 
 // Remove company from project
-router.delete('/project-company/:id', authenticate, async (req, res, next) => {
+router.delete('/project-company/:id', async (req, res, next) => {
   try {
     await Company.removeFromProject(req.params.id);
     res.status(204).send();

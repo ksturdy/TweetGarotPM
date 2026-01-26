@@ -5,6 +5,10 @@ import Layout from './components/common/Layout';
 import Login from './pages/Login';
 import ChangePasswordModal from './components/security/ChangePasswordModal';
 import Dashboard from './pages/Dashboard';
+// Public pages
+import LandingPage from './pages/public/LandingPage';
+import SignupPage from './pages/public/SignupPage';
+import PricingPage from './pages/public/PricingPage';
 import ProjectList from './pages/projects/ProjectList';
 import ProjectForm from './pages/projects/ProjectForm';
 import ProjectDetail from './pages/projects/ProjectDetail';
@@ -59,6 +63,9 @@ import MobileSales from './pages/MobileSales';
 import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
+// Platform Admin pages
+import PlatformDashboard from './pages/platform/PlatformDashboard';
+import TenantList from './pages/platform/TenantList';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -68,6 +75,24 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   }
 
   return user ? <>{children}</> : <Navigate to="/login" />;
+};
+
+const PlatformAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!(user as any).isPlatformAdmin) {
+    return <Navigate to="/" />;
+  }
+
+  return <>{children}</>;
 };
 
 const App: React.FC = () => {
@@ -86,7 +111,39 @@ const App: React.FC = () => {
   return (
     <>
       <Routes>
+        {/* Public routes */}
+        <Route path="/welcome" element={<LandingPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
         <Route path="/login" element={<Login />} />
+
+        {/* Platform Admin routes */}
+        <Route
+          path="/platform"
+          element={
+            <PlatformAdminRoute>
+              <PlatformDashboard />
+            </PlatformAdminRoute>
+          }
+        />
+        <Route
+          path="/platform/tenants"
+          element={
+            <PlatformAdminRoute>
+              <TenantList />
+            </PlatformAdminRoute>
+          }
+        />
+        <Route
+          path="/platform/tenants/:id"
+          element={
+            <PlatformAdminRoute>
+              <TenantList />
+            </PlatformAdminRoute>
+          }
+        />
+
+        {/* Protected app routes */}
         <Route
           path="/*"
           element={

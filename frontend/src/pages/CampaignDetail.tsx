@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
 import { assessmentsApi } from '../services/assessments';
+import { getCampaign, updateCampaign } from '../services/campaigns';
+import '../styles/SalesPipeline.css';
 
 const weeks = [
   { num: 1, start: 'Feb 2', end: 'Feb 8', label: 'Feb 2 - 8' },
@@ -94,15 +96,6 @@ const actions = [
   { key: 'no_follow', label: 'No Follow Up Necessary', color: '#94a3b8' }
 ];
 
-const oppStages = [
-  { key: 'qualification', label: 'Qualification', color: '#6b7280' },
-  { key: 'discovery', label: 'Discovery', color: '#3b82f6' },
-  { key: 'proposal', label: 'Proposal', color: '#f59e0b' },
-  { key: 'negotiation', label: 'Negotiation', color: '#8b5cf6' },
-  { key: 'closed_won', label: 'Closed Won', color: '#10b981' },
-  { key: 'closed_lost', label: 'Closed Lost', color: '#ef4444' }
-];
-
 const estimateStatuses = [
   { key: 'draft', label: 'Draft', color: '#6b7280' },
   { key: 'pending', label: 'Pending Review', color: '#f59e0b' },
@@ -125,6 +118,12 @@ export default function CampaignDetail() {
   const [contacts, setContacts] = useState(() => load('contacts', initContacts));
   const [estimates, setEstimates] = useState(() => load('estimates', initEstimates));
   const [logs, setLogs] = useState<any[]>(() => load('logs', []));
+
+  // Fetch pipeline stages from database
+  const { data: pipelineStages = [] } = useQuery({
+    queryKey: ['pipeline-stages'],
+    queryFn: () => opportunitiesService.getStages()
+  });
 
   // Fetch real opportunities from database filtered by campaign_id
   const { data: opportunities = [], isLoading: opportunitiesLoading, refetch: refetchOpportunities } = useQuery({
@@ -173,6 +172,24 @@ export default function CampaignDetail() {
   const [showNewEstimate, setShowNewEstimate] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [assessmentCustomer, setAssessmentCustomer] = useState<any>(null);
+  const [showEditCampaign, setShowEditCampaign] = useState(false);
+
+  // Campaign info state
+  const [campaignInfo, setCampaignInfo] = useState(() => load('campaignInfo', {
+    name: 'Phoenix Division',
+    description: '6-Week Sales Campaign targeting industrial and manufacturing prospects in the Phoenix metropolitan area.',
+    startDate: '2025-02-02',
+    endDate: '2025-03-15',
+    goal: 'Contact 40 high-value prospects and generate 5+ new opportunities',
+    targetValue: 500000,
+    assignedTeam: ['Brian Smith', 'Brian Wohlers', 'Cory Wile'],
+    status: 'active',
+    owner: 'Brian Smith'
+  }));
+
+  useEffect(() => {
+    save('campaignInfo', campaignInfo);
+  }, [campaignInfo]);
 
   const [newCustomer, setNewCustomer] = useState({ name: '', sector: '', address: '', phone: '', assignedTo: team[0], tier: 'B', score: 70, targetWeek: 1 });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
@@ -332,14 +349,36 @@ export default function CampaignDetail() {
       <header style={{ background: '#fff', borderBottom: '1px solid #e5e5e5', padding: '12px 24px', position: 'sticky', top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', background: 'linear-gradient(135deg, #ea580c, #dc2626)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>P</div>
+            <button
+              onClick={() => navigate('/campaigns')}
+              style={{ padding: '8px', background: '#f3f4f6', color: '#64748b', border: '1px solid #e5e7eb', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Back to Campaigns"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5" />
+                <path d="M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div style={{ width: '36px', height: '36px', background: 'linear-gradient(135deg, #ea580c, #dc2626)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>{campaignInfo.name.charAt(0)}</div>
             <div>
-              <h1 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>Phoenix Division</h1>
-              <p style={{ fontSize: '12px', color: '#64748b' }}>6-Week Campaign: Feb 2 - Mar 15, 2025</p>
+              <h1 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>{campaignInfo.name}</h1>
+              <p style={{ fontSize: '12px', color: '#64748b' }}>
+                {new Date(campaignInfo.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(campaignInfo.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
             </div>
+            <button
+              onClick={() => setShowEditCampaign(true)}
+              style={{ marginLeft: '8px', padding: '6px 12px', background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Edit
+            </button>
           </div>
           <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-            {['dashboard', 'weekly', 'prospects', 'pipeline', 'goals'].map(t => (
+            {['dashboard', 'weekly', 'prospects', 'opportunities', 'goals'].map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 14px', background: tab === t ? '#ea580c' : 'transparent', color: tab === t ? '#fff' : '#64748b', border: 'none', borderRadius: '6px', fontWeight: 500, cursor: 'pointer', fontSize: '13px' }}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
@@ -364,7 +403,7 @@ export default function CampaignDetail() {
                 { label: 'Total Prospects', value: data.length, color: '#6366f1' },
                 { label: 'Contacted', value: stats.contacted, color: '#3b82f6' },
                 { label: 'New Opportunities', value: stats.opportunities, color: '#10b981' },
-                { label: 'Pipeline Value', value: '$' + (stats.totalOppValue / 1000).toFixed(0) + 'K', color: '#8b5cf6' },
+                { label: 'Opportunities Value', value: '$' + (stats.totalOppValue / 1000).toFixed(0) + 'K', color: '#8b5cf6' },
                 { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' }
               ].map((k, i) => (
                 <div key={i} style={{ ...card, padding: '16px' }}>
@@ -637,47 +676,137 @@ export default function CampaignDetail() {
           </div>
         )}
 
-        {tab === 'pipeline' && (
+        {tab === 'opportunities' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ ...card, padding: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Active Opportunities</h3>
+            {/* Opportunity Metrics Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+              <div style={{ ...card, padding: '20px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Opportunities</div>
+                <div style={{ fontSize: '36px', fontWeight: 700, color: '#6366f1' }}>{opportunities.length}</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Active in pipeline</div>
+              </div>
+              <div style={{ ...card, padding: '20px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Value</div>
+                <div style={{ fontSize: '36px', fontWeight: 700, color: '#10b981' }}>${Math.round(stats.totalOppValue).toLocaleString('en-US')}</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Opportunities Value</div>
+              </div>
+              <div style={{ ...card, padding: '20px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Average Value</div>
+                <div style={{ fontSize: '36px', fontWeight: 700, color: '#8b5cf6' }}>
+                  ${opportunities.length > 0 ? Math.round(stats.totalOppValue / opportunities.length).toLocaleString('en-US', { maximumFractionDigits: 0 }) : 0}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Per opportunity</div>
+              </div>
+              <div style={{ ...card, padding: '20px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>High Priority</div>
+                <div style={{ fontSize: '36px', fontWeight: 700, color: '#f59e0b' }}>
+                  {opportunities.filter((o: any) => o.priority === 'high' || o.priority === 'urgent').length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>Urgent + High</div>
+              </div>
+            </div>
+
+            {/* Opportunities Table */}
+            <div className="sales-table-section">
+              <div className="sales-table-header">
+                <h2 className="sales-table-title">All Opportunities</h2>
               </div>
               {opportunitiesLoading ? (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>Loading opportunities...</div>
               ) : opportunities.length > 0 ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <table className="sales-table">
                   <thead>
-                    <tr style={{ background: '#f9fafb' }}>
-                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Opportunity</th>
-                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Owner</th>
-                      <th style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>Value</th>
-                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Stage</th>
-                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Priority</th>
-                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Est. Start</th>
+                    <tr>
+                      <th>Date</th>
+                      <th>Project / Opportunity</th>
+                      <th>Owner</th>
+                      <th>Market</th>
+                      <th>Value</th>
+                      <th>Stage</th>
+                      <th>Probability</th>
+                      <th>Salesperson</th>
                     </tr>
                   </thead>
                   <tbody>
                     {opportunities.map((o: any) => {
+                      const stageClass = (o.stage_name || 'lead').toLowerCase().replace(/\s+/g, '-');
+                      const probabilityClass = (o.probability || 'medium').toLowerCase();
+                      const getProbabilityPercent = (prob: string) => {
+                        const map: Record<string, number> = { low: 25, medium: 50, high: 75 };
+                        return map[prob.toLowerCase()] || 50;
+                      };
+                      const getInitials = (name: string) => {
+                        if (!name) return '??';
+                        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                      };
+                      const getAvatarColor = (name: string) => {
+                        const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+                        const index = name ? name.charCodeAt(0) % colors.length : 0;
+                        return colors[index];
+                      };
+                      const formatDate = (dateStr: string) => {
+                        if (!dateStr) return '-';
+                        const date = new Date(dateStr);
+                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                      };
+                      const iconGradients = [
+                        'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                        'linear-gradient(135deg, #10b981, #06b6d4)',
+                        'linear-gradient(135deg, #f59e0b, #f43f5e)',
+                        'linear-gradient(135deg, #8b5cf6, #ec4899)'
+                      ];
+                      const iconGradient = iconGradients[o.id % iconGradients.length];
+                      const icon = o.title ? o.title.charAt(0).toUpperCase() : '?';
+                      const salespersonName = o.assigned_to_name || o.owner || 'Unassigned';
+
                       return (
-                        <tr key={o.id} style={{ borderTop: '1px solid #e5e7eb' }}>
-                          <td style={{ padding: '10px' }}>
-                            <div style={{ fontWeight: 500 }}>{o.title}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>{o.description || 'No description'}</div>
+                        <tr
+                          key={o.id}
+                          onClick={() => { setSelectedOpportunity(o); setIsOpportunityModalOpen(true); }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td>{formatDate(o.created_at)}</td>
+                          <td>
+                            <div className="sales-project-cell">
+                              <div className="sales-project-icon" style={{ background: iconGradient }}>
+                                {icon}
+                              </div>
+                              <div className="sales-project-info">
+                                <h4>{o.title}</h4>
+                                <span>{o.description || 'No description'}</span>
+                              </div>
+                            </div>
                           </td>
-                          <td style={{ padding: '10px' }}>{o.owner || '-'}</td>
-                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>${(o.estimated_value || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
-                          <td style={{ padding: '10px', textAlign: 'center' }}>
-                            <span style={{ background: '#3b82f620', color: '#3b82f6', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500 }}>{o.stage_name || 'Unknown'}</span>
+                          <td>{o.owner || '-'}</td>
+                          <td>{o.market || '-'}</td>
+                          <td className="sales-value-cell">${Math.round(o.estimated_value || 0).toLocaleString('en-US')}</td>
+                          <td>
+                            <span className={`sales-stage-badge ${stageClass}`}>
+                              <span className="sales-stage-dot"></span>
+                              {o.stage_name || 'Unknown'}
+                            </span>
                           </td>
-                          <td style={{ padding: '10px', textAlign: 'center' }}>
-                            <span style={{
-                              background: o.priority === 'urgent' ? '#ef444420' : o.priority === 'high' ? '#f59e0b20' : o.priority === 'medium' ? '#3b82f620' : '#6b728020',
-                              color: o.priority === 'urgent' ? '#ef4444' : o.priority === 'high' ? '#f59e0b' : o.priority === 'medium' ? '#3b82f6' : '#6b7280',
-                              padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, textTransform: 'capitalize'
-                            }}>{o.priority || 'medium'}</span>
+                          <td>
+                            {o.probability || o.stage_probability ? (
+                              <span className={`sales-probability-badge ${probabilityClass}`}>
+                                <span className="sales-probability-dot"></span>
+                                {o.probability || o.stage_probability} ({getProbabilityPercent(o.probability || o.stage_probability || 'medium')}%)
+                              </span>
+                            ) : (
+                              <span>-</span>
+                            )}
                           </td>
-                          <td style={{ padding: '10px', fontSize: '12px' }}>{o.estimated_start_date || '-'}</td>
+                          <td>
+                            <div className="sales-salesperson-cell">
+                              <div
+                                className="sales-salesperson-avatar"
+                                style={{ background: getAvatarColor(salespersonName) }}
+                              >
+                                {getInitials(salespersonName)}
+                              </div>
+                              {salespersonName}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -687,36 +816,6 @@ export default function CampaignDetail() {
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No opportunities yet. Create one to get started!</div>
               )}
             </div>
-
-            <div style={{ ...card, padding: '20px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>By Status</h3>
-              <div style={{ display: 'flex', gap: '4px', marginBottom: '20px' }}>
-                {statuses.map(s => (
-                  <div key={s.key} style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ background: s.color, color: '#fff', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '18px' }}>{stats.byStatus[s.key]}</div>
-                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {statuses.filter(s => stats.byStatus[s.key] > 0).map(s => (
-              <div key={s.key} style={{ ...card, padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: s.color }} />
-                  <span style={{ fontWeight: 600, fontSize: '14px' }}>{s.label}</span>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>({stats.byStatus[s.key]})</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {data.filter((c: any) => c.status === s.key).map((c: any) => (
-                    <div key={c.id} onClick={() => openDetail(c)} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '8px 12px', cursor: 'pointer', fontSize: '12px' }}>
-                      <div style={{ fontWeight: 500 }}>{c.name}</div>
-                      <div style={{ color: '#94a3b8', fontSize: '11px' }}>{c.assignedTo}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
           </div>
         )}
 
@@ -910,6 +1009,162 @@ export default function CampaignDetail() {
             setAssessmentCustomer(null);
           }}
         />
+      )}
+
+      {/* Edit Campaign Modal */}
+      {showEditCampaign && (
+        <div style={modalOverlay} onClick={() => setShowEditCampaign(false)}>
+          <div style={{ ...modal, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px', borderBottom: '1px solid #e5e7eb' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>Edit Campaign</h2>
+              <p style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>Update campaign details and settings</p>
+            </div>
+            <div style={{ padding: '24px', maxHeight: 'calc(90vh - 200px)', overflow: 'auto' }}>
+              <div style={{ display: 'grid', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Campaign Name *</label>
+                  <input
+                    type="text"
+                    value={campaignInfo.name}
+                    onChange={e => setCampaignInfo({...campaignInfo, name: e.target.value})}
+                    style={input}
+                    placeholder="e.g., Phoenix Division Q1"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Description</label>
+                  <textarea
+                    value={campaignInfo.description}
+                    onChange={e => setCampaignInfo({...campaignInfo, description: e.target.value})}
+                    style={{ ...input, minHeight: '80px', resize: 'vertical' }}
+                    placeholder="Describe the campaign objectives and scope..."
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Start Date</label>
+                    <input
+                      type="date"
+                      value={campaignInfo.startDate}
+                      onChange={e => setCampaignInfo({...campaignInfo, startDate: e.target.value})}
+                      style={input}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>End Date</label>
+                    <input
+                      type="date"
+                      value={campaignInfo.endDate}
+                      onChange={e => setCampaignInfo({...campaignInfo, endDate: e.target.value})}
+                      style={input}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Campaign Goal</label>
+                  <textarea
+                    value={campaignInfo.goal}
+                    onChange={e => setCampaignInfo({...campaignInfo, goal: e.target.value})}
+                    style={{ ...input, minHeight: '60px', resize: 'vertical' }}
+                    placeholder="What is the primary objective of this campaign?"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Pipeline Value ($)</label>
+                    <input
+                      type="number"
+                      value={campaignInfo.targetValue}
+                      onChange={e => setCampaignInfo({...campaignInfo, targetValue: parseInt(e.target.value) || 0})}
+                      style={input}
+                      placeholder="e.g., 500000"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Status</label>
+                    <select
+                      value={campaignInfo.status}
+                      onChange={e => setCampaignInfo({...campaignInfo, status: e.target.value})}
+                      style={input}
+                    >
+                      <option value="planning">Planning</option>
+                      <option value="active">Active</option>
+                      <option value="paused">Paused</option>
+                      <option value="completed">Completed</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Campaign Owner</label>
+                  <select
+                    value={campaignInfo.owner || ''}
+                    onChange={e => setCampaignInfo({...campaignInfo, owner: e.target.value})}
+                    style={input}
+                  >
+                    <option value="">Select Owner</option>
+                    {team.map(member => (
+                      <option key={member} value={member}>{member}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned Team Members</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {team.map(member => (
+                      <label key={member} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: campaignInfo.assignedTeam.includes(member) ? '#dbeafe' : '#f3f4f6', borderRadius: '6px', cursor: 'pointer', border: campaignInfo.assignedTeam.includes(member) ? '1px solid #3b82f6' : '1px solid #e5e7eb' }}>
+                        <input
+                          type="checkbox"
+                          checked={campaignInfo.assignedTeam.includes(member)}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setCampaignInfo({...campaignInfo, assignedTeam: [...campaignInfo.assignedTeam, member]});
+                            } else {
+                              setCampaignInfo({...campaignInfo, assignedTeam: campaignInfo.assignedTeam.filter((m: string) => m !== member)});
+                            }
+                          }}
+                          style={{ accentColor: '#3b82f6' }}
+                        />
+                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{member}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Campaign Summary */}
+                <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', marginTop: '8px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Campaign Summary</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Duration</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                        {Math.ceil((new Date(campaignInfo.endDate).getTime() - new Date(campaignInfo.startDate).getTime()) / (1000 * 60 * 60 * 24 * 7))} weeks
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Team Size</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{campaignInfo.assignedTeam.length} members</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Target Value</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#10b981' }}>${campaignInfo.targetValue.toLocaleString('en-US')}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowEditCampaign(false)} style={btnSecondary}>Cancel</button>
+              <button onClick={() => setShowEditCampaign(false)} style={btn}>Save Changes</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

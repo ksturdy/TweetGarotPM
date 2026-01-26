@@ -3,17 +3,20 @@ const router = express.Router();
 const opportunities = require('../models/opportunities');
 const opportunityActivities = require('../models/opportunityActivities');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext, checkLimit } = require('../middleware/tenant');
 const { body, validationResult } = require('express-validator');
 
-// Apply authentication to all routes
+// Apply authentication and tenant context to all routes
 router.use(authenticate);
+router.use(tenantContext);
 
-// Get all pipeline stages
+// Get all pipeline stages for tenant
 router.get('/stages', async (req, res, next) => {
   try {
     const pool = require('../config/database');
     const result = await pool.query(
-      'SELECT id, name, color, probability, display_order FROM pipeline_stages WHERE is_active = true ORDER BY display_order'
+      'SELECT id, name, color, probability, display_order FROM pipeline_stages WHERE is_active = true AND tenant_id = $1 ORDER BY display_order',
+      [req.tenantId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -31,7 +34,7 @@ router.get('/', async (req, res, next) => {
       search: req.query.search
     };
 
-    const allOpportunities = await opportunities.findAll(filters);
+    const allOpportunities = await opportunities.findAll(filters, req.tenantId);
     res.json(allOpportunities);
   } catch (error) {
     next(error);
@@ -41,7 +44,7 @@ router.get('/', async (req, res, next) => {
 // Get opportunities grouped by pipeline stages (Kanban view)
 router.get('/kanban', async (req, res, next) => {
   try {
-    const stages = await opportunities.findByStages();
+    const stages = await opportunities.findByStages(req.tenantId);
     res.json(stages);
   } catch (error) {
     next(error);
@@ -57,7 +60,7 @@ router.get('/analytics', async (req, res, next) => {
       date_to: req.query.date_to
     };
 
-    const analytics = await opportunities.getAnalytics(filters);
+    const analytics = await opportunities.getAnalytics(filters, req.tenantId);
     res.json(analytics);
   } catch (error) {
     next(error);
@@ -68,7 +71,7 @@ router.get('/analytics', async (req, res, next) => {
 router.get('/trend', async (req, res, next) => {
   try {
     const months = req.query.months || 7; // Default to 7 months
-    const trendData = await opportunities.getPipelineTrend(months);
+    const trendData = await opportunities.getPipelineTrend(months, req.tenantId);
     res.json(trendData);
   } catch (error) {
     next(error);
@@ -78,7 +81,7 @@ router.get('/trend', async (req, res, next) => {
 // Get single opportunity
 router.get('/:id', async (req, res, next) => {
   try {
-    const opportunity = await opportunities.findById(req.params.id);
+    const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
 
     if (!opportunity) {
       return res.status(404).json({ error: 'Opportunity not found' });
@@ -92,6 +95,7 @@ router.get('/:id', async (req, res, next) => {
 
 // Create new opportunity
 router.post('/',
+  checkLimit('max_opportunities'),
   [
     body('title').trim().notEmpty().withMessage('Title is required'),
     body('estimated_value').optional({ values: 'falsy' }).isNumeric().withMessage('Estimated value must be a number'),
@@ -108,7 +112,7 @@ router.post('/',
       }
 
       console.log('Creating opportunity with data:', req.body);
-      const opportunity = await opportunities.create(req.body, req.user.id);
+      const opportunity = await opportunities.create(req.body, req.user.id, req.tenantId);
       res.status(201).json(opportunity);
     } catch (error) {
       console.error('Error creating opportunity:', error);
@@ -130,7 +134,7 @@ router.put('/:id',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const opportunity = await opportunities.update(req.params.id, req.body);
+      const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -153,7 +157,7 @@ router.patch('/:id/stage',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id);
+      const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -176,7 +180,7 @@ router.post('/:id/convert',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const opportunity = await opportunities.convertToProject(req.params.id, req.body.project_id);
+      const opportunity = await opportunities.convertToProject(req.params.id, req.body.project_id, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -194,7 +198,7 @@ router.post('/:id/lost',
   [body('reason').optional().trim()],
   async (req, res, next) => {
     try {
-      const opportunity = await opportunities.markAsLost(req.params.id, req.body.reason);
+      const opportunity = await opportunities.markAsLost(req.params.id, req.body.reason, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -210,7 +214,7 @@ router.post('/:id/lost',
 // Delete opportunity
 router.delete('/:id', async (req, res, next) => {
   try {
-    const opportunity = await opportunities.delete(req.params.id);
+    const opportunity = await opportunities.delete(req.params.id, req.tenantId);
 
     if (!opportunity) {
       return res.status(404).json({ error: 'Opportunity not found' });
@@ -227,6 +231,11 @@ router.delete('/:id', async (req, res, next) => {
 // Get all activities for an opportunity
 router.get('/:id/activities', async (req, res, next) => {
   try {
+    // Verify opportunity belongs to tenant first
+    const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
     const activities = await opportunityActivities.findByOpportunityId(req.params.id);
     res.json(activities);
   } catch (error) {
@@ -247,6 +256,12 @@ router.post('/:id/activities',
         return res.status(400).json({ errors: errors.array() });
       }
 
+      // Verify opportunity belongs to tenant first
+      const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
       const activityData = {
         ...req.body,
         opportunity_id: req.params.id
@@ -263,6 +278,12 @@ router.post('/:id/activities',
 // Update activity
 router.put('/:opportunityId/activities/:activityId', async (req, res, next) => {
   try {
+    // Verify opportunity belongs to tenant first
+    const opportunity = await opportunities.findByIdAndTenant(req.params.opportunityId, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
     const activity = await opportunityActivities.update(req.params.activityId, req.body);
 
     if (!activity) {
@@ -278,6 +299,12 @@ router.put('/:opportunityId/activities/:activityId', async (req, res, next) => {
 // Mark activity as complete
 router.patch('/:opportunityId/activities/:activityId/complete', async (req, res, next) => {
   try {
+    // Verify opportunity belongs to tenant first
+    const opportunity = await opportunities.findByIdAndTenant(req.params.opportunityId, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
     const activity = await opportunityActivities.markComplete(req.params.activityId);
 
     if (!activity) {
@@ -293,6 +320,12 @@ router.patch('/:opportunityId/activities/:activityId/complete', async (req, res,
 // Delete activity
 router.delete('/:opportunityId/activities/:activityId', async (req, res, next) => {
   try {
+    // Verify opportunity belongs to tenant first
+    const opportunity = await opportunities.findByIdAndTenant(req.params.opportunityId, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
     const activity = await opportunityActivities.delete(req.params.activityId);
 
     if (!activity) {

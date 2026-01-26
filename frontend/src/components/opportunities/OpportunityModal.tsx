@@ -73,6 +73,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     mutationFn: (data: any) => opportunitiesService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-opportunities'] });
       onSave();
     },
     onError: (error: any) => {
@@ -99,6 +100,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     mutationFn: (data: any) => opportunitiesService.update(opportunity!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-opportunities'] });
       onSave();
     },
     onError: (error: any) => {
@@ -112,6 +114,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     mutationFn: () => opportunitiesService.delete(opportunity!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-opportunities'] });
       onSave();
     },
     onError: (error: any) => {

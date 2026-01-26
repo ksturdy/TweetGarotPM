@@ -1,11 +1,15 @@
 const pool = require('../config/database');
 
 const opportunities = {
-  // Get all opportunities with stage and assigned user info
-  async findAll(filters = {}) {
-    const conditions = [];
-    const params = [];
-    let paramCount = 1;
+  /**
+   * Get all opportunities with stage and assigned user info
+   * @param {Object} filters - Optional filters
+   * @param {number} tenantId - Tenant ID for isolation
+   */
+  async findAll(filters = {}, tenantId) {
+    const conditions = ['o.tenant_id = $1'];
+    const params = [tenantId];
+    let paramCount = 2;
 
     if (filters.stage_id) {
       conditions.push(`o.stage_id = $${paramCount++}`);
@@ -28,7 +32,7 @@ const opportunities = {
       paramCount++;
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     const query = `
       SELECT
@@ -52,8 +56,11 @@ const opportunities = {
     return result.rows;
   },
 
-  // Get opportunities grouped by stage (for Kanban view)
-  async findByStages() {
+  /**
+   * Get opportunities grouped by stage (for Kanban view)
+   * @param {number} tenantId - Tenant ID for isolation
+   */
+  async findByStages(tenantId) {
     const query = `
       WITH opportunity_data AS (
         SELECT
@@ -66,6 +73,7 @@ const opportunities = {
         FROM opportunities o
         LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
         LEFT JOIN users u ON o.assigned_to = u.id
+        WHERE o.tenant_id = $1
       )
       SELECT
         ps.id as stage_id,
@@ -90,16 +98,18 @@ const opportunities = {
         ) FILTER (WHERE od.id IS NOT NULL), '[]') as opportunities
       FROM pipeline_stages ps
       LEFT JOIN opportunity_data od ON ps.id = od.stage_id
-      WHERE ps.is_active = true
+      WHERE ps.is_active = true AND ps.tenant_id = $1
       GROUP BY ps.id, ps.name, ps.color, ps.display_order, ps.probability
       ORDER BY ps.display_order
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, [tenantId]);
     return result.rows;
   },
 
-  // Get single opportunity with full details
+  /**
+   * Get single opportunity with full details
+   */
   async findById(id) {
     const query = `
       SELECT
@@ -123,8 +133,47 @@ const opportunities = {
     return result.rows[0];
   },
 
-  // Create new opportunity
-  async create(opportunityData, userId) {
+  /**
+   * Get single opportunity with tenant check
+   */
+  async findByIdAndTenant(id, tenantId) {
+    const query = `
+      SELECT
+        o.*,
+        ps.name as stage_name,
+        ps.color as stage_color,
+        ps.probability as stage_probability,
+        u.first_name || ' ' || u.last_name as assigned_to_name,
+        u.email as assigned_to_email,
+        creator.first_name || ' ' || creator.last_name as created_by_name,
+        p.name as converted_project_name
+      FROM opportunities o
+      LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN users creator ON o.created_by = creator.id
+      LEFT JOIN projects p ON o.converted_to_project_id = p.id
+      WHERE o.id = $1 AND o.tenant_id = $2
+    `;
+
+    const result = await pool.query(query, [id, tenantId]);
+    return result.rows[0];
+  },
+
+  /**
+   * Count opportunities in a tenant
+   */
+  async countByTenant(tenantId) {
+    const result = await pool.query(
+      'SELECT COUNT(*) as count FROM opportunities WHERE tenant_id = $1',
+      [tenantId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  /**
+   * Create new opportunity
+   */
+  async create(opportunityData, userId, tenantId) {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, source,
@@ -138,22 +187,24 @@ const opportunities = {
       INSERT INTO opportunities (
         title, description, estimated_value, estimated_start_date, estimated_duration_days,
         construction_type, project_type, location, stage_id, priority, assigned_to, source,
-        market, owner, general_contractor, architect, engineer, campaign_id, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        market, owner, general_contractor, architect, engineer, campaign_id, created_by, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, source,
-      market, owner, general_contractor, architect, engineer, campaign_id, userId
+      market, owner, general_contractor, architect, engineer, campaign_id, userId, tenantId
     ]);
 
     return result.rows[0];
   },
 
-  // Update opportunity
-  async update(id, opportunityData) {
+  /**
+   * Update opportunity with tenant check
+   */
+  async update(id, opportunityData, tenantId) {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
@@ -185,77 +236,87 @@ const opportunities = {
         engineer = COALESCE($18, engineer),
         campaign_id = $19,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $20
+      WHERE id = $20 AND tenant_id = $21
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer, campaign_id, id
+      market, owner, general_contractor, architect, engineer, campaign_id, id, tenantId
     ]);
 
     return result.rows[0];
   },
 
-  // Move opportunity to different stage
-  async updateStage(id, stageId) {
+  /**
+   * Move opportunity to different stage with tenant check
+   */
+  async updateStage(id, stageId, tenantId) {
     const query = `
       UPDATE opportunities
       SET stage_id = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
+      WHERE id = $2 AND tenant_id = $3
       RETURNING *
     `;
 
-    const result = await pool.query(query, [stageId, id]);
+    const result = await pool.query(query, [stageId, id, tenantId]);
     return result.rows[0];
   },
 
-  // Convert opportunity to project
-  async convertToProject(id, projectId) {
+  /**
+   * Convert opportunity to project with tenant check
+   */
+  async convertToProject(id, projectId, tenantId) {
     const query = `
       UPDATE opportunities
       SET
         converted_to_project_id = $1,
         converted_at = CURRENT_TIMESTAMP,
-        stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Won' LIMIT 1),
+        stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Won' AND tenant_id = $3 LIMIT 1),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
+      WHERE id = $2 AND tenant_id = $3
       RETURNING *
     `;
 
-    const result = await pool.query(query, [projectId, id]);
+    const result = await pool.query(query, [projectId, id, tenantId]);
     return result.rows[0];
   },
 
-  // Mark as lost
-  async markAsLost(id, reason) {
+  /**
+   * Mark as lost with tenant check
+   */
+  async markAsLost(id, reason, tenantId) {
     const query = `
       UPDATE opportunities
       SET
         lost_reason = $1,
-        stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost' LIMIT 1),
+        stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $3 LIMIT 1),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
+      WHERE id = $2 AND tenant_id = $3
       RETURNING *
     `;
 
-    const result = await pool.query(query, [reason, id]);
+    const result = await pool.query(query, [reason, id, tenantId]);
     return result.rows[0];
   },
 
-  // Delete opportunity
-  async delete(id) {
-    const query = 'DELETE FROM opportunities WHERE id = $1 RETURNING *';
-    const result = await pool.query(query, [id]);
+  /**
+   * Delete opportunity with tenant check
+   */
+  async delete(id, tenantId) {
+    const query = 'DELETE FROM opportunities WHERE id = $1 AND tenant_id = $2 RETURNING *';
+    const result = await pool.query(query, [id, tenantId]);
     return result.rows[0];
   },
 
-  // Get pipeline analytics
-  async getAnalytics(filters = {}) {
-    const conditions = [];
-    const params = [];
-    let paramCount = 1;
+  /**
+   * Get pipeline analytics for a tenant
+   */
+  async getAnalytics(filters = {}, tenantId) {
+    const conditions = ['tenant_id = $1'];
+    const params = [tenantId];
+    let paramCount = 2;
 
     if (filters.assigned_to) {
       conditions.push(`assigned_to = $${paramCount++}`);
@@ -272,16 +333,16 @@ const opportunities = {
       params.push(filters.date_to);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     const query = `
       SELECT
         COUNT(*) as total_opportunities,
         SUM(estimated_value) as total_pipeline_value,
         SUM(CASE WHEN converted_to_project_id IS NOT NULL THEN estimated_value ELSE 0 END) as won_value,
-        SUM(CASE WHEN stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost') THEN estimated_value ELSE 0 END) as lost_value,
+        SUM(CASE WHEN stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $1 LIMIT 1) THEN estimated_value ELSE 0 END) as lost_value,
         COUNT(CASE WHEN converted_to_project_id IS NOT NULL THEN 1 END) as won_count,
-        COUNT(CASE WHEN stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost') THEN 1 END) as lost_count,
+        COUNT(CASE WHEN stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $1 LIMIT 1) THEN 1 END) as lost_count,
         AVG(EXTRACT(DAY FROM (COALESCE(converted_at, CURRENT_TIMESTAMP) - created_at))) as avg_days_to_close
       FROM opportunities
       ${whereClause}
@@ -291,11 +352,12 @@ const opportunities = {
     return result.rows[0];
   },
 
-  // Get pipeline trend over time (monthly snapshots)
-  async getPipelineTrend(months = 7) {
+  /**
+   * Get pipeline trend over time for a tenant
+   */
+  async getPipelineTrend(months = 7, tenantId) {
     const query = `
       WITH RECURSIVE months AS (
-        -- Generate the last N months
         SELECT
           DATE_TRUNC('month', CURRENT_DATE - (generate_series(0, $1 - 1) || ' months')::interval) as month
       ),
@@ -306,8 +368,9 @@ const opportunities = {
           COUNT(*) as opportunity_count
         FROM opportunities o
         WHERE
-          o.created_at >= DATE_TRUNC('month', CURRENT_DATE - ($1 || ' months')::interval)
-          AND o.stage_id != (SELECT id FROM pipeline_stages WHERE name = 'Lost' LIMIT 1)
+          o.tenant_id = $2
+          AND o.created_at >= DATE_TRUNC('month', CURRENT_DATE - ($1 || ' months')::interval)
+          AND o.stage_id != (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $2 LIMIT 1)
         GROUP BY DATE_TRUNC('month', o.created_at)
       )
       SELECT
@@ -321,7 +384,7 @@ const opportunities = {
       ORDER BY m.month ASC
     `;
 
-    const result = await pool.query(query, [months]);
+    const result = await pool.query(query, [months, tenantId]);
     return result.rows;
   }
 };

@@ -3,67 +3,150 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const User = {
-  async create({ email, password, firstName, lastName, role = 'user', hrAccess = 'none', forcePasswordChange = true }) {
+  /**
+   * Create a new user
+   * @param {Object} userData - User data including tenantId for multi-tenant support
+   */
+  async create({ email, password, firstName, lastName, role = 'user', hrAccess = 'none', forcePasswordChange = true, tenantId }) {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await db.query(
-      `INSERT INTO users (email, password, first_name, last_name, role, hr_access, force_password_change, password_changed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-       RETURNING id, email, first_name, last_name, role, hr_access, force_password_change, created_at`,
-      [email, hashedPassword, firstName, lastName, role, hrAccess, forcePasswordChange]
+      `INSERT INTO users (email, password, first_name, last_name, role, hr_access, force_password_change, password_changed_at, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+       RETURNING id, email, first_name, last_name, role, hr_access, force_password_change, tenant_id, created_at`,
+      [email, hashedPassword, firstName, lastName, role, hrAccess, forcePasswordChange, tenantId]
     );
     return result.rows[0];
   },
 
+  /**
+   * Find user by email (global lookup for login)
+   */
   async findByEmail(email) {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     return result.rows[0];
   },
 
+  /**
+   * Find user by email within a specific tenant
+   */
+  async findByEmailAndTenant(email, tenantId) {
+    const result = await db.query(
+      'SELECT * FROM users WHERE email = $1 AND tenant_id = $2',
+      [email, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Find user by ID
+   */
   async findById(id) {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
               two_factor_enabled, force_password_change, password_changed_at,
-              last_login_at, created_at
+              last_login_at, tenant_id, is_platform_admin, created_at
        FROM users WHERE id = $1`,
       [id]
     );
     return result.rows[0];
   },
 
+  /**
+   * Find user by ID with tenant check (security)
+   */
+  async findByIdAndTenant(id, tenantId) {
+    const result = await db.query(
+      `SELECT id, email, first_name, last_name, role, hr_access, is_active,
+              two_factor_enabled, force_password_change, password_changed_at,
+              last_login_at, tenant_id, is_platform_admin, created_at
+       FROM users WHERE id = $1 AND tenant_id = $2`,
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Find all users (global - admin only)
+   */
   async findAll() {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
               two_factor_enabled, force_password_change, password_changed_at,
-              last_login_at, created_at
+              last_login_at, tenant_id, created_at
        FROM users ORDER BY last_name, first_name`
     );
     return result.rows;
   },
 
-  async update(id, { email, firstName, lastName, role, hrAccess, isActive }) {
+  /**
+   * Find all users within a tenant
+   */
+  async findAllByTenant(tenantId) {
     const result = await db.query(
-      `UPDATE users
+      `SELECT id, email, first_name, last_name, role, hr_access, is_active,
+              two_factor_enabled, force_password_change, password_changed_at,
+              last_login_at, tenant_id, created_at
+       FROM users WHERE tenant_id = $1 ORDER BY last_name, first_name`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  /**
+   * Count users in a tenant (for limit checking)
+   */
+  async countByTenant(tenantId) {
+    const result = await db.query(
+      'SELECT COUNT(*) as count FROM users WHERE tenant_id = $1',
+      [tenantId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  async update(id, { email, firstName, lastName, role, hrAccess, isActive }, tenantId = null) {
+    let query = `UPDATE users
        SET email = $1, first_name = $2, last_name = $3, role = $4, hr_access = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7
-       RETURNING id, email, first_name, last_name, role, hr_access, is_active, created_at`,
-      [email, firstName, lastName, role, hrAccess, isActive, id]
-    );
+       WHERE id = $7`;
+    const params = [email, firstName, lastName, role, hrAccess, isActive, id];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $8';
+      params.push(tenantId);
+    }
+
+    query += ' RETURNING id, email, first_name, last_name, role, hr_access, is_active, created_at';
+
+    const result = await db.query(query, params);
     return result.rows[0];
   },
 
-  async updateStatus(id, isActive) {
-    const result = await db.query(
-      `UPDATE users
+  async updateStatus(id, isActive, tenantId = null) {
+    let query = `UPDATE users
        SET is_active = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING id, email, first_name, last_name, role, hr_access, is_active, created_at`,
-      [isActive, id]
-    );
+       WHERE id = $2`;
+    const params = [isActive, id];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $3';
+      params.push(tenantId);
+    }
+
+    query += ' RETURNING id, email, first_name, last_name, role, hr_access, is_active, created_at';
+
+    const result = await db.query(query, params);
     return result.rows[0];
   },
 
-  async delete(id) {
-    await db.query('DELETE FROM users WHERE id = $1', [id]);
+  async delete(id, tenantId = null) {
+    let query = 'DELETE FROM users WHERE id = $1';
+    const params = [id];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $2';
+      params.push(tenantId);
+    }
+
+    await db.query(query, params);
   },
 
   async comparePassword(password, hashedPassword) {
@@ -118,7 +201,7 @@ const User = {
     const result = await db.query(
       `UPDATE users
        SET two_factor_secret = NULL, two_factor_enabled = FALSE, two_factor_backup_codes = NULL, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
+       WHERE id = $1
        RETURNING id, email, two_factor_enabled`,
       [id]
     );

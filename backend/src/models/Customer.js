@@ -1,11 +1,36 @@
 const db = require('../config/database');
 
 const Customer = {
+  /**
+   * Find all customers (global - use findAllByTenant for multi-tenant)
+   */
   async findAll() {
     const result = await db.query(
       `SELECT * FROM customers ORDER BY customer_facility ASC`
     );
     return result.rows;
+  },
+
+  /**
+   * Find all customers within a tenant
+   */
+  async findAllByTenant(tenantId) {
+    const result = await db.query(
+      `SELECT * FROM customers WHERE tenant_id = $1 ORDER BY customer_facility ASC`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  /**
+   * Count customers in a tenant (for limit checking)
+   */
+  async countByTenant(tenantId) {
+    const result = await db.query(
+      'SELECT COUNT(*) as count FROM customers WHERE tenant_id = $1',
+      [tenantId]
+    );
+    return parseInt(result.rows[0].count, 10);
   },
 
   async findById(id) {
@@ -16,81 +41,98 @@ const Customer = {
     return result.rows[0];
   },
 
-  async findByOwner(owner) {
+  /**
+   * Find customer by ID with tenant check
+   */
+  async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
-      'SELECT * FROM customers WHERE customer_owner ILIKE $1 ORDER BY customer_facility ASC',
-      [`%${owner}%`]
+      'SELECT * FROM customers WHERE id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async findByOwner(owner, tenantId) {
+    const result = await db.query(
+      'SELECT * FROM customers WHERE customer_owner ILIKE $1 AND tenant_id = $2 ORDER BY customer_facility ASC',
+      [`%${owner}%`, tenantId]
     );
     return result.rows;
   },
 
-  async search(searchTerm) {
+  async search(searchTerm, tenantId) {
     const result = await db.query(
       `SELECT * FROM customers
-       WHERE customer_facility ILIKE $1
-          OR customer_owner ILIKE $1
-          OR city ILIKE $1
-          OR state ILIKE $1
+       WHERE tenant_id = $1
+         AND (customer_facility ILIKE $2
+          OR customer_owner ILIKE $2
+          OR city ILIKE $2
+          OR state ILIKE $2)
        ORDER BY customer_facility ASC`,
-      [`%${searchTerm}%`]
+      [tenantId, `%${searchTerm}%`]
     );
     return result.rows;
   },
 
-  async create(data) {
+  async create(data, tenantId) {
     const result = await db.query(
       `INSERT INTO customers (
         customer_facility, customer_owner, account_manager, field_leads,
         customer_number, address, city, state, zip_code,
-        controls, department, customer_score, active_customer, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        controls, department, customer_score, active_customer, notes, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         data.customer_facility, data.customer_owner, data.account_manager, data.field_leads,
         data.customer_number, data.address, data.city, data.state, data.zip_code,
-        data.controls, data.department, data.customer_score, data.active_customer, data.notes
+        data.controls, data.department, data.customer_score, data.active_customer, data.notes,
+        tenantId
       ]
     );
     return result.rows[0];
   },
 
-  async bulkCreate(customers) {
+  async bulkCreate(customers, tenantId) {
     const inserted = [];
     for (const customer of customers) {
-      const result = await this.create(customer);
+      const result = await this.create(customer, tenantId);
       inserted.push(result);
     }
     return inserted;
   },
 
-  async update(id, data) {
+  async update(id, data, tenantId) {
     const result = await db.query(
       `UPDATE customers SET
         customer_facility = $1, customer_owner = $2, account_manager = $3, field_leads = $4,
         customer_number = $5, address = $6, city = $7, state = $8, zip_code = $9,
         controls = $10, department = $11, customer_score = $12, active_customer = $13, notes = $14,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+      WHERE id = $15 AND tenant_id = $16
       RETURNING *`,
       [
         data.customer_facility, data.customer_owner, data.account_manager, data.field_leads,
         data.customer_number, data.address, data.city, data.state, data.zip_code,
         data.controls, data.department, data.customer_score, data.active_customer, data.notes,
-        id
+        id, tenantId
       ]
     );
     return result.rows[0];
   },
 
-  async delete(id) {
-    await db.query('DELETE FROM customers WHERE id = $1', [id]);
+  async delete(id, tenantId) {
+    const result = await db.query(
+      'DELETE FROM customers WHERE id = $1 AND tenant_id = $2 RETURNING id',
+      [id, tenantId]
+    );
+    return result.rows.length > 0;
   },
 
-  async deleteAll() {
-    await db.query('DELETE FROM customers');
+  async deleteAll(tenantId) {
+    await db.query('DELETE FROM customers WHERE tenant_id = $1', [tenantId]);
   },
 
-  async getStats() {
+  async getStats(tenantId) {
     const result = await db.query(`
       SELECT
         COUNT(*) as total_customers,
@@ -99,11 +141,12 @@ const Customer = {
         COUNT(DISTINCT account_manager) as account_managers,
         COUNT(DISTINCT state) as states_covered
       FROM customers
-    `);
+      WHERE tenant_id = $1
+    `, [tenantId]);
     return result.rows[0];
   },
 
-  async getMetrics(customerId) {
+  async getMetrics(customerId, tenantId) {
     const result = await db.query(`
       SELECT
         c.customer_score,
@@ -121,9 +164,9 @@ const Customer = {
       FROM customers c
       LEFT JOIN projects p ON p.customer_id = c.id
       LEFT JOIN estimates e ON e.customer_id = c.id
-      WHERE c.id = $1
+      WHERE c.id = $1 AND c.tenant_id = $2
       GROUP BY c.id, c.customer_score
-    `, [customerId]);
+    `, [customerId, tenantId]);
 
     return result.rows[0] || {
       customer_score: 0,
@@ -137,7 +180,7 @@ const Customer = {
     };
   },
 
-  async getProjects(customerId) {
+  async getProjects(customerId, tenantId) {
     const result = await db.query(`
       SELECT
         p.id,
@@ -148,13 +191,13 @@ const Customer = {
         p.status,
         p.description
       FROM projects p
-      WHERE p.customer_id = $1
+      WHERE p.customer_id = $1 AND p.tenant_id = $2
       ORDER BY p.start_date DESC NULLS LAST
-    `, [customerId]);
+    `, [customerId, tenantId]);
     return result.rows;
   },
 
-  async getBids(customerId) {
+  async getBids(customerId, tenantId) {
     const result = await db.query(`
       SELECT
         e.id,
@@ -168,9 +211,9 @@ const Customer = {
         e.building_type,
         e.status
       FROM estimates e
-      WHERE e.customer_id = $1
+      WHERE e.customer_id = $1 AND e.tenant_id = $2
       ORDER BY e.bid_date DESC NULLS LAST, e.created_at DESC
-    `, [customerId]);
+    `, [customerId, tenantId]);
     return result.rows;
   },
 
@@ -205,7 +248,7 @@ const Customer = {
     return result.rows[0];
   },
 
-  async getAllContacts() {
+  async getAllContacts(tenantId) {
     const result = await db.query(`
       SELECT
         cc.*,
@@ -215,8 +258,9 @@ const Customer = {
         c.state
       FROM customer_contacts cc
       JOIN customers c ON cc.customer_id = c.id
+      WHERE c.tenant_id = $1
       ORDER BY c.customer_facility ASC, cc.is_primary DESC, cc.last_name ASC, cc.first_name ASC
-    `);
+    `, [tenantId]);
     return result.rows;
   },
 

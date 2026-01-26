@@ -13,6 +13,7 @@
     "migrate": "node src/migrations/run.js",
     "migrate:rollback": "node src/migrations/rollback.js",
     "seed": "node src/seeds/run.js",
+    "seed:platform-admin": "node src/seeds/platformAdmin.js",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
   },

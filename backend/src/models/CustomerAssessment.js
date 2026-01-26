@@ -80,6 +80,30 @@ const CustomerAssessment = {
       ORDER BY verdict, tier
     `);
     return result.rows;
+  },
+
+  // Get summary statistics (tenant-scoped via customers)
+  async getStatsByTenant(tenantId) {
+    const result = await db.query(`
+      SELECT
+        ca.verdict,
+        ca.tier,
+        COUNT(*) as count,
+        AVG(ca.total_score) as avg_score
+      FROM customer_assessments ca
+      JOIN customers c ON ca.customer_id = c.id
+      WHERE c.tenant_id = $1
+        AND ca.id IN (
+          SELECT MAX(ca2.id)
+          FROM customer_assessments ca2
+          JOIN customers c2 ON ca2.customer_id = c2.id
+          WHERE c2.tenant_id = $1
+          GROUP BY ca2.customer_id
+        )
+      GROUP BY ca.verdict, ca.tier
+      ORDER BY ca.verdict, ca.tier
+    `, [tenantId]);
+    return result.rows;
   }
 };
 

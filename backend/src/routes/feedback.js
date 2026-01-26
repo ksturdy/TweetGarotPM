@@ -2,15 +2,17 @@ const express = require('express');
 const router = express.Router();
 const Feedback = require('../models/Feedback');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 
-// All routes require authentication
+// All routes require authentication and tenant context
 router.use(authenticate);
+router.use(tenantContext);
 
 // GET /api/feedback - Get all feedback with optional filters
 router.get('/', async (req, res) => {
   try {
     const { status, module, type, sortBy, order } = req.query;
-    const feedback = await Feedback.findAll({ status, module, type, sortBy, order });
+    const feedback = await Feedback.findAllByTenant({ status, module, type, sortBy, order }, req.tenantId);
     res.json(feedback);
   } catch (error) {
     console.error('Error fetching feedback:', error);
@@ -21,7 +23,7 @@ router.get('/', async (req, res) => {
 // GET /api/feedback/stats - Get feedback statistics
 router.get('/stats', async (req, res) => {
   try {
-    const stats = await Feedback.getStats();
+    const stats = await Feedback.getStatsByTenant(req.tenantId);
     res.json(stats);
   } catch (error) {
     console.error('Error fetching feedback stats:', error);
@@ -32,7 +34,7 @@ router.get('/stats', async (req, res) => {
 // GET /api/feedback/:id - Get feedback by ID
 router.get('/:id', async (req, res) => {
   try {
-    const feedback = await Feedback.findById(req.params.id);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
     if (!feedback) {
       return res.status(404).json({ message: 'Feedback not found' });
     }
@@ -60,7 +62,7 @@ router.post('/', async (req, res) => {
       description,
       type,
       priority
-    });
+    }, req.tenantId);
 
     res.status(201).json(feedback);
   } catch (error) {
@@ -72,7 +74,7 @@ router.post('/', async (req, res) => {
 // PUT /api/feedback/:id - Update feedback
 router.put('/:id', async (req, res) => {
   try {
-    const feedback = await Feedback.findById(req.params.id);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
     if (!feedback) {
       return res.status(404).json({ message: 'Feedback not found' });
     }
@@ -89,7 +91,7 @@ router.put('/:id', async (req, res) => {
       delete updates.priority;
     }
 
-    const updatedFeedback = await Feedback.update(req.params.id, updates);
+    const updatedFeedback = await Feedback.update(req.params.id, updates, req.tenantId);
     res.json(updatedFeedback);
   } catch (error) {
     console.error('Error updating feedback:', error);
@@ -100,7 +102,7 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/feedback/:id - Delete feedback
 router.delete('/:id', async (req, res) => {
   try {
-    const feedback = await Feedback.findById(req.params.id);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
     if (!feedback) {
       return res.status(404).json({ message: 'Feedback not found' });
     }
@@ -110,7 +112,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to delete this feedback' });
     }
 
-    await Feedback.delete(req.params.id);
+    await Feedback.delete(req.params.id, req.tenantId);
     res.json({ message: 'Feedback deleted successfully' });
   } catch (error) {
     console.error('Error deleting feedback:', error);
@@ -138,7 +140,7 @@ router.post('/:id/vote', async (req, res) => {
       return res.status(400).json({ message: 'Valid vote type (up/down) is required' });
     }
 
-    const feedback = await Feedback.findById(req.params.id);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
     if (!feedback) {
       return res.status(404).json({ message: 'Feedback not found' });
     }
@@ -182,7 +184,7 @@ router.post('/:id/comments', async (req, res) => {
       return res.status(400).json({ message: 'Comment is required' });
     }
 
-    const feedback = await Feedback.findById(req.params.id);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
     if (!feedback) {
       return res.status(404).json({ message: 'Feedback not found' });
     }

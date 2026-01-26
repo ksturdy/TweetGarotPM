@@ -3,15 +3,26 @@ const router = express.Router();
 const RFI = require('../models/RFI');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 const { generateRFIPdfHtml } = require('../utils/rfiPdfGenerator');
 const { generateRFILogPdfHtml } = require('../utils/rfiLogPdfGenerator');
 
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
+
 // Generate PDF for RFI
-router.get('/:id/pdf', authenticate, async (req, res, next) => {
+router.get('/:id/pdf', async (req, res, next) => {
   try {
     const rfi = await RFI.findById(req.params.id);
 
     if (!rfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(rfi.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'RFI not found' });
     }
 
@@ -26,11 +37,17 @@ router.get('/:id/pdf', authenticate, async (req, res, next) => {
 });
 
 // Send RFI via email
-router.post('/:id/send', authenticate, async (req, res, next) => {
+router.post('/:id/send', async (req, res, next) => {
   try {
     const rfi = await RFI.findById(req.params.id);
 
     if (!rfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(rfi.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'RFI not found' });
     }
 
@@ -69,11 +86,17 @@ router.post('/:id/send', authenticate, async (req, res, next) => {
 });
 
 // Get RFI preview data
-router.get('/:id/preview', authenticate, async (req, res, next) => {
+router.get('/:id/preview', async (req, res, next) => {
   try {
     const rfi = await RFI.findById(req.params.id);
 
     if (!rfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(rfi.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'RFI not found' });
     }
 
@@ -84,13 +107,13 @@ router.get('/:id/preview', authenticate, async (req, res, next) => {
 });
 
 // Generate RFI Log PDF Report for a project
-router.get('/project/:projectId/log-report', authenticate, async (req, res, next) => {
+router.get('/project/:projectId/log-report', async (req, res, next) => {
   try {
     const projectId = req.params.projectId;
     const status = req.query.status; // optional filter
 
-    // Get project info
-    const project = await Project.findById(projectId);
+    // Verify project belongs to tenant
+    const project = await Project.findByIdAndTenant(projectId, req.tenantId);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }

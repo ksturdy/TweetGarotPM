@@ -1,8 +1,8 @@
 const db = require('../config/database');
 
 const campaigns = {
-  // Get all campaigns
-  getAll: async () => {
+  // Get all campaigns for tenant
+  getAll: async (tenantId) => {
     const query = `
       SELECT
         c.*,
@@ -15,14 +15,15 @@ const campaigns = {
       LEFT JOIN users u ON c.owner_id = u.id
       LEFT JOIN campaign_companies cc ON c.id = cc.campaign_id
       LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
+      WHERE c.tenant_id = $1
       GROUP BY c.id, u.first_name, u.last_name
       ORDER BY c.created_at DESC
     `;
-    const result = await db.query(query);
+    const result = await db.query(query, [tenantId]);
     return result.rows;
   },
 
-  // Get campaign by ID with stats
+  // Get campaign by ID (global)
   getById: async (id) => {
     const query = `
       SELECT
@@ -44,11 +45,42 @@ const campaigns = {
     return result.rows[0];
   },
 
-  // Create campaign
-  create: async (data) => {
+  // Get campaign by ID with tenant check
+  getByIdAndTenant: async (id, tenantId) => {
     const query = `
-      INSERT INTO campaigns (name, description, start_date, end_date, status, owner_id, total_targets)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      SELECT
+        c.*,
+        CONCAT(u.first_name, ' ', u.last_name) as owner_name,
+        u.email as owner_email,
+        COUNT(DISTINCT cc.id) as company_count,
+        COUNT(DISTINCT CASE WHEN cc.status != 'prospect' THEN cc.id END) as contacted,
+        COUNT(DISTINCT co.id) as opportunities,
+        COALESCE(SUM(co.value), 0) as pipeline_value
+      FROM campaigns c
+      LEFT JOIN users u ON c.owner_id = u.id
+      LEFT JOIN campaign_companies cc ON c.id = cc.campaign_id
+      LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
+      WHERE c.id = $1 AND c.tenant_id = $2
+      GROUP BY c.id, u.first_name, u.last_name, u.email
+    `;
+    const result = await db.query(query, [id, tenantId]);
+    return result.rows[0];
+  },
+
+  // Count campaigns in tenant
+  countByTenant: async (tenantId) => {
+    const result = await db.query(
+      'SELECT COUNT(*) as count FROM campaigns WHERE tenant_id = $1',
+      [tenantId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  // Create campaign
+  create: async (data, tenantId) => {
+    const query = `
+      INSERT INTO campaigns (name, description, start_date, end_date, status, owner_id, total_targets, tenant_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `;
     const values = [
@@ -58,14 +90,15 @@ const campaigns = {
       data.end_date,
       data.status || 'planning',
       data.owner_id,
-      data.total_targets || 0
+      data.total_targets || 0,
+      tenantId
     ];
     const result = await db.query(query, values);
     return result.rows[0];
   },
 
-  // Update campaign
-  update: async (id, data) => {
+  // Update campaign with tenant check
+  update: async (id, data, tenantId) => {
     const query = `
       UPDATE campaigns
       SET name = COALESCE($1, name),
@@ -75,7 +108,7 @@ const campaigns = {
           status = COALESCE($5, status),
           owner_id = COALESCE($6, owner_id),
           total_targets = COALESCE($7, total_targets)
-      WHERE id = $8
+      WHERE id = $8 AND tenant_id = $9
       RETURNING *
     `;
     const values = [
@@ -86,16 +119,17 @@ const campaigns = {
       data.status,
       data.owner_id,
       data.total_targets,
-      id
+      id,
+      tenantId
     ];
     const result = await db.query(query, values);
     return result.rows[0];
   },
 
-  // Delete campaign
-  delete: async (id) => {
-    const query = 'DELETE FROM campaigns WHERE id = $1 RETURNING *';
-    const result = await db.query(query, [id]);
+  // Delete campaign with tenant check
+  delete: async (id, tenantId) => {
+    const query = 'DELETE FROM campaigns WHERE id = $1 AND tenant_id = $2 RETURNING *';
+    const result = await db.query(query, [id, tenantId]);
     return result.rows[0];
   },
 

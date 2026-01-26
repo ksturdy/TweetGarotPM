@@ -1,11 +1,42 @@
 const express = require('express');
 const CustomerAssessment = require('../models/CustomerAssessment');
+const Customer = require('../models/Customer');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 
 const router = express.Router();
 
+// Apply auth and tenant middleware
+router.use(authenticate);
+router.use(tenantContext);
+
+// Middleware to verify customer belongs to tenant
+const verifyCustomerOwnership = async (req, res, next) => {
+  try {
+    const customerId = req.params.customerId;
+    const customer = await Customer.findByIdAndTenant(customerId, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    req.customer = customer;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get assessment statistics (tenant-scoped) - must be before :customerId routes
+router.get('/stats', async (req, res, next) => {
+  try {
+    const stats = await CustomerAssessment.getStatsByTenant(req.tenantId);
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get current assessment for a customer
-router.get('/:customerId/assessment', authenticate, async (req, res, next) => {
+router.get('/:customerId/assessment', verifyCustomerOwnership, async (req, res, next) => {
   try {
     const assessment = await CustomerAssessment.findByCustomerId(req.params.customerId);
     if (!assessment) {
@@ -18,7 +49,7 @@ router.get('/:customerId/assessment', authenticate, async (req, res, next) => {
 });
 
 // Get assessment history for a customer
-router.get('/:customerId/assessments', authenticate, async (req, res, next) => {
+router.get('/:customerId/assessments', verifyCustomerOwnership, async (req, res, next) => {
   try {
     const assessments = await CustomerAssessment.findAllByCustomerId(req.params.customerId);
     res.json(assessments);
@@ -28,7 +59,7 @@ router.get('/:customerId/assessments', authenticate, async (req, res, next) => {
 });
 
 // Create new assessment
-router.post('/:customerId/assessment', authenticate, async (req, res, next) => {
+router.post('/:customerId/assessment', verifyCustomerOwnership, async (req, res, next) => {
   try {
     const assessment = await CustomerAssessment.create(
       req.params.customerId,
@@ -42,7 +73,7 @@ router.post('/:customerId/assessment', authenticate, async (req, res, next) => {
 });
 
 // Update existing assessment
-router.put('/:customerId/assessment/:id', authenticate, async (req, res, next) => {
+router.put('/:customerId/assessment/:id', verifyCustomerOwnership, async (req, res, next) => {
   try {
     const assessment = await CustomerAssessment.update(
       req.params.id,
@@ -59,20 +90,10 @@ router.put('/:customerId/assessment/:id', authenticate, async (req, res, next) =
 });
 
 // Delete assessment
-router.delete('/:customerId/assessment/:id', authenticate, async (req, res, next) => {
+router.delete('/:customerId/assessment/:id', verifyCustomerOwnership, async (req, res, next) => {
   try {
     await CustomerAssessment.delete(req.params.id);
     res.json({ message: 'Assessment deleted successfully' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get assessment statistics
-router.get('/stats', authenticate, async (req, res, next) => {
-  try {
-    const stats = await CustomerAssessment.getStats();
-    res.json(stats);
   } catch (error) {
     next(error);
   }

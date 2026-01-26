@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const config = require('../config');
 const { authenticate } = require('../middleware/auth');
+const { getTenantById } = require('../middleware/tenant');
 
 const router = express.Router();
 
@@ -83,7 +84,22 @@ router.post(
       // Update last login
       await User.updateLastLogin(user.id);
 
-      const token = jwt.sign({ id: user.id, email: user.email, role: user.role, hrAccess: user.hr_access }, config.jwt.secret, {
+      // Get tenant information
+      const tenant = user.tenant_id ? await getTenantById(user.tenant_id) : null;
+
+      // Check if tenant is active
+      if (tenant && !tenant.is_active) {
+        return res.status(401).json({ error: 'Your organization account is inactive. Please contact support.' });
+      }
+
+      const token = jwt.sign({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        hrAccess: user.hr_access,
+        tenantId: user.tenant_id,
+        isPlatformAdmin: user.is_platform_admin || false,
+      }, config.jwt.secret, {
         expiresIn: config.jwt.expiresIn,
       });
 
@@ -97,7 +113,18 @@ router.post(
           hrAccess: user.hr_access,
           forcePasswordChange: user.force_password_change,
           twoFactorEnabled: user.two_factor_enabled,
+          tenantId: user.tenant_id,
+          isPlatformAdmin: user.is_platform_admin || false,
         },
+        tenant: tenant ? {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          settings: tenant.settings,
+          planName: tenant.plan_display_name,
+          planLimits: tenant.plan_limits,
+          planFeatures: tenant.plan_features,
+        } : null,
         token,
       });
     } catch (error) {
@@ -160,9 +187,24 @@ router.post(
       // Update last login
       await User.updateLastLogin(userId);
 
+      // Get tenant information
+      const tenant = user.tenant_id ? await getTenantById(user.tenant_id) : null;
+
+      // Check if tenant is active
+      if (tenant && !tenant.is_active) {
+        return res.status(401).json({ error: 'Your organization account is inactive. Please contact support.' });
+      }
+
       // Issue JWT token
       const jwtToken = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, hrAccess: user.hr_access },
+        {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          hrAccess: user.hr_access,
+          tenantId: user.tenant_id,
+          isPlatformAdmin: user.is_platform_admin || false,
+        },
         config.jwt.secret,
         { expiresIn: config.jwt.expiresIn }
       );
@@ -177,7 +219,18 @@ router.post(
           hrAccess: user.hr_access,
           forcePasswordChange: user.force_password_change,
           twoFactorEnabled: user.two_factor_enabled,
+          tenantId: user.tenant_id,
+          isPlatformAdmin: user.is_platform_admin || false,
         },
+        tenant: tenant ? {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          settings: tenant.settings,
+          planName: tenant.plan_display_name,
+          planLimits: tenant.plan_limits,
+          planFeatures: tenant.plan_features,
+        } : null,
         token: jwtToken,
       });
     } catch (error) {
@@ -193,7 +246,22 @@ router.get('/me', authenticate, async (req, res, next) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(user);
+
+    // Get tenant information
+    const tenant = user.tenant_id ? await getTenantById(user.tenant_id) : null;
+
+    res.json({
+      ...user,
+      tenant: tenant ? {
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        settings: tenant.settings,
+        planName: tenant.plan_display_name,
+        planLimits: tenant.plan_limits,
+        planFeatures: tenant.plan_features,
+      } : null,
+    });
   } catch (error) {
     next(error);
   }

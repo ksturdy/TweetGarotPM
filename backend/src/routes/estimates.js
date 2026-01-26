@@ -1,13 +1,16 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext, requireFeature } = require('../middleware/tenant');
 const Estimate = require('../models/Estimate');
 const EstimateSection = require('../models/EstimateSection');
 const EstimateLineItem = require('../models/EstimateLineItem');
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
+// Apply auth and tenant middleware to all routes
 router.use(authenticate);
+router.use(tenantContext);
+router.use(requireFeature('estimates'));
 
 // Get all estimates
 router.get('/', async (req, res, next) => {
@@ -18,7 +21,7 @@ router.get('/', async (req, res, next) => {
       customer_id: req.query.customer_id,
       search: req.query.search,
     };
-    const estimates = await Estimate.findAll(filters);
+    const estimates = await Estimate.findAll(filters, req.tenantId);
 
     console.log('=== ESTIMATES LIST DEBUG ===');
     estimates.forEach(est => {
@@ -35,7 +38,7 @@ router.get('/', async (req, res, next) => {
 // Get next estimate number
 router.get('/next-number', async (req, res, next) => {
   try {
-    const nextNumber = await Estimate.getNextEstimateNumber();
+    const nextNumber = await Estimate.getNextEstimateNumber(req.tenantId);
     res.json({ estimate_number: nextNumber });
   } catch (error) {
     next(error);
@@ -45,7 +48,7 @@ router.get('/next-number', async (req, res, next) => {
 // Get single estimate with sections and line items
 router.get('/:id', async (req, res, next) => {
   try {
-    const estimate = await Estimate.findById(req.params.id);
+    const estimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
     if (!estimate) {
       return res.status(404).json({ error: 'Estimate not found' });
     }
@@ -87,10 +90,10 @@ router.post('/', async (req, res, next) => {
 
     // Get next estimate number if not provided
     if (!estimateData.estimate_number) {
-      estimateData.estimate_number = await Estimate.getNextEstimateNumber();
+      estimateData.estimate_number = await Estimate.getNextEstimateNumber(req.tenantId);
     }
 
-    const estimate = await Estimate.create(estimateData);
+    const estimate = await Estimate.create(estimateData, req.tenantId);
 
     // Create sections if provided
     if (req.body.sections && req.body.sections.length > 0) {
@@ -114,7 +117,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // Fetch complete estimate with sections and items
-    const completeEstimate = await Estimate.findById(estimate.id);
+    const completeEstimate = await Estimate.findByIdAndTenant(estimate.id, req.tenantId);
     const sections = await EstimateSection.findByEstimate(estimate.id);
     const lineItems = await EstimateLineItem.findByEstimate(estimate.id);
 
@@ -141,11 +144,14 @@ router.put('/:id', async (req, res, next) => {
     console.log('Sections length:', req.body.sections?.length);
     console.log('===========================');
 
-    // Update estimate header
-    const estimate = await Estimate.update(req.params.id, req.body);
-    if (!estimate) {
+    // Verify estimate belongs to tenant
+    const existingEstimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!existingEstimate) {
       return res.status(404).json({ error: 'Estimate not found' });
     }
+
+    // Update estimate header
+    const estimate = await Estimate.update(req.params.id, req.body, req.tenantId);
 
     // Update sections if provided
     if (req.body.sections && req.body.sections.length > 0) {
@@ -217,7 +223,7 @@ router.put('/:id', async (req, res, next) => {
     }
 
     // Fetch complete estimate with updated totals
-    const completeEstimate = await Estimate.findById(req.params.id);
+    const completeEstimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
     const sections = await EstimateSection.findByEstimate(req.params.id);
     const lineItems = await EstimateLineItem.findByEstimate(req.params.id);
 
@@ -254,7 +260,7 @@ router.patch('/:id/status', async (req, res, next) => {
       return res.status(400).json({ error: 'Status is required' });
     }
 
-    const estimate = await Estimate.updateStatus(req.params.id, status, req.user.id);
+    const estimate = await Estimate.updateStatus(req.params.id, status, req.user.id, req.tenantId);
     if (!estimate) {
       return res.status(404).json({ error: 'Estimate not found' });
     }
@@ -268,7 +274,10 @@ router.patch('/:id/status', async (req, res, next) => {
 // Delete estimate
 router.delete('/:id', async (req, res, next) => {
   try {
-    await Estimate.delete(req.params.id);
+    const deleted = await Estimate.delete(req.params.id, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -280,6 +289,11 @@ router.delete('/:id', async (req, res, next) => {
 // Get sections for an estimate
 router.get('/:estimateId/sections', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const sections = await EstimateSection.findByEstimate(req.params.estimateId);
     res.json(sections);
   } catch (error) {
@@ -290,6 +304,11 @@ router.get('/:estimateId/sections', async (req, res, next) => {
 // Create section
 router.post('/:estimateId/sections', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const section = await EstimateSection.create({
       estimate_id: req.params.estimateId,
       ...req.body,
@@ -326,6 +345,11 @@ router.delete('/sections/:id', async (req, res, next) => {
 // Reorder sections
 router.patch('/:estimateId/sections/reorder', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const { sectionOrders } = req.body;
     await EstimateSection.reorder(req.params.estimateId, sectionOrders);
     res.json({ message: 'Sections reordered successfully' });
@@ -339,6 +363,11 @@ router.patch('/:estimateId/sections/reorder', async (req, res, next) => {
 // Get line items for an estimate
 router.get('/:estimateId/items', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const items = await EstimateLineItem.findByEstimate(req.params.estimateId);
     res.json(items);
   } catch (error) {
@@ -359,6 +388,11 @@ router.get('/sections/:sectionId/items', async (req, res, next) => {
 // Create line item
 router.post('/:estimateId/items', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const item = await EstimateLineItem.create({
       estimate_id: req.params.estimateId,
       ...req.body,
@@ -372,6 +406,11 @@ router.post('/:estimateId/items', async (req, res, next) => {
 // Bulk create line items
 router.post('/:estimateId/items/bulk', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const { items } = req.body;
     const itemsWithEstimateId = items.map(item => ({
       estimate_id: req.params.estimateId,
@@ -400,6 +439,11 @@ router.put('/items/:id', async (req, res, next) => {
 // Bulk update line items
 router.put('/:estimateId/items/bulk', async (req, res, next) => {
   try {
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(req.params.estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
     const { items } = req.body;
     const updatedItems = await EstimateLineItem.bulkUpdate(items);
     res.json(updatedItems);

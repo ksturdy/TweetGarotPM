@@ -51,6 +51,9 @@ const opportunityRoutes = require('./routes/opportunities');
 const vendorRoutes = require('./routes/vendors');
 const campaignRoutes = require('./routes/campaigns');
 const customerAssessmentRoutes = require('./routes/customerAssessments');
+const publicRoutes = require('./routes/public');
+const tenantRoutes = require('./routes/tenant');
+const platformRoutes = require('./routes/platform');
 
 const app = express();
 
@@ -70,8 +73,12 @@ if (!isR2Enabled()) {
   console.log('Using Cloudflare R2 - files served via presigned URLs');
 }
 
+// Public routes (no authentication required)
+app.use('/api/public', publicRoutes);
+
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/tenant', tenantRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
@@ -98,6 +105,7 @@ app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/customer-assessments', customerAssessmentRoutes);
+app.use('/api/platform', platformRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

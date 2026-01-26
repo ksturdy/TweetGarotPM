@@ -1,9 +1,15 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const RFI = require('../models/RFI');
+const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 
 const router = express.Router();
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -13,8 +19,26 @@ const validate = (req, res, next) => {
   next();
 };
 
+// Middleware to verify project belongs to tenant
+const verifyProjectOwnership = async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId || req.body.projectId;
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    const project = await Project.findByIdAndTenant(projectId, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    req.project = project;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get RFIs for a project
-router.get('/project/:projectId', authenticate, async (req, res, next) => {
+router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
     const filters = { status: req.query.status };
     const rfis = await RFI.findByProject(req.params.projectId, filters);
@@ -25,10 +49,15 @@ router.get('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Get single RFI
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const rfi = await RFI.findById(req.params.id);
     if (!rfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(rfi.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'RFI not found' });
     }
     res.json(rfi);
@@ -40,13 +69,13 @@ router.get('/:id', authenticate, async (req, res, next) => {
 // Create RFI
 router.post(
   '/',
-  authenticate,
   [
     body('projectId').isInt(),
     body('subject').trim().notEmpty(),
     body('question').trim().notEmpty(),
   ],
   validate,
+  verifyProjectOwnership,
   async (req, res, next) => {
     try {
       const number = await RFI.getNextNumber(req.body.projectId);
@@ -63,12 +92,20 @@ router.post(
 );
 
 // Update RFI
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
-    const rfi = await RFI.update(req.params.id, req.body);
-    if (!rfi) {
+    // First get the RFI to verify ownership
+    const existingRfi = await RFI.findById(req.params.id);
+    if (!existingRfi) {
       return res.status(404).json({ error: 'RFI not found' });
     }
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingRfi.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
+    const rfi = await RFI.update(req.params.id, req.body);
     res.json(rfi);
   } catch (error) {
     next(error);
@@ -76,15 +113,23 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Respond to RFI
-router.post('/:id/respond', authenticate, async (req, res, next) => {
+router.post('/:id/respond', async (req, res, next) => {
   try {
+    // First get the RFI to verify ownership
+    const existingRfi = await RFI.findById(req.params.id);
+    if (!existingRfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingRfi.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
     const rfi = await RFI.respond(req.params.id, {
       response: req.body.response,
       respondedBy: req.user.id,
     });
-    if (!rfi) {
-      return res.status(404).json({ error: 'RFI not found' });
-    }
     res.json(rfi);
   } catch (error) {
     next(error);
@@ -92,12 +137,20 @@ router.post('/:id/respond', authenticate, async (req, res, next) => {
 });
 
 // Close RFI
-router.post('/:id/close', authenticate, async (req, res, next) => {
+router.post('/:id/close', async (req, res, next) => {
   try {
-    const rfi = await RFI.update(req.params.id, { status: 'closed' });
-    if (!rfi) {
+    // First get the RFI to verify ownership
+    const existingRfi = await RFI.findById(req.params.id);
+    if (!existingRfi) {
       return res.status(404).json({ error: 'RFI not found' });
     }
+    // Verify the RFI's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingRfi.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+
+    const rfi = await RFI.update(req.params.id, { status: 'closed' });
     res.json(rfi);
   } catch (error) {
     next(error);

@@ -8,6 +8,14 @@ const HistoricalProject = {
     return result.rows;
   },
 
+  async findAllByTenant(tenantId) {
+    const result = await db.query(
+      'SELECT * FROM historical_projects WHERE tenant_id = $1 ORDER BY bid_date DESC NULLS LAST, created_at DESC',
+      [tenantId]
+    );
+    return result.rows;
+  },
+
   async findById(id) {
     const result = await db.query(
       'SELECT * FROM historical_projects WHERE id = $1',
@@ -16,7 +24,15 @@ const HistoricalProject = {
     return result.rows[0];
   },
 
-  async create(data) {
+  async findByIdAndTenant(id, tenantId) {
+    const result = await db.query(
+      'SELECT * FROM historical_projects WHERE id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async create(data, tenantId = null) {
     const result = await db.query(
       `INSERT INTO historical_projects (
         name, bid_date, building_type, project_type, bid_type,
@@ -43,7 +59,7 @@ const HistoricalProject = {
         laminar_flow, louvers, hoods, fire_dampers, silencers,
         boilers, htx, pumps, cond_pumps, tower, air_sep, exp_tanks, filters, pot_feeder, buffer_tank, triple_duty,
         truck_rental, temp_heat, controls, insulation, balancing, electrical, general, allowance, geo_thermal,
-        notes
+        notes, tenant_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
@@ -53,7 +69,7 @@ const HistoricalProject = {
         $101, $102, $103, $104, $105, $106, $107, $108, $109, $110, $111, $112, $113, $114, $115, $116, $117, $118, $119, $120,
         $121, $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133, $134, $135, $136, $137, $138, $139, $140,
         $141, $142, $143, $144, $145, $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157, $158, $159, $160,
-        $161, $162, $163, $164, $165
+        $161, $162, $163, $164, $165, $166
       ) RETURNING *`,
       [
         data.name, data.bid_date, data.building_type, data.project_type, data.bid_type,
@@ -80,48 +96,67 @@ const HistoricalProject = {
         data.laminar_flow, data.louvers, data.hoods, data.fire_dampers, data.silencers,
         data.boilers, data.htx, data.pumps, data.cond_pumps, data.tower, data.air_sep, data.exp_tanks, data.filters, data.pot_feeder, data.buffer_tank, data.triple_duty,
         data.truck_rental, data.temp_heat, data.controls, data.insulation, data.balancing, data.electrical, data.general, data.allowance, data.geo_thermal,
-        data.notes
+        data.notes, tenantId
       ]
     );
     return result.rows[0];
   },
 
-  async bulkCreate(projects) {
+  async bulkCreate(projects, tenantId = null) {
     const inserted = [];
 
     for (const project of projects) {
-      const result = await this.create(project);
+      const result = await this.create(project, tenantId);
       inserted.push(result);
     }
 
     return inserted;
   },
 
-  async update(id, data) {
-    const result = await db.query(
-      `UPDATE historical_projects SET
-        name = $1, bid_date = $2, building_type = $3, project_type = $4, bid_type = $5,
-        total_cost = $6, total_sqft = $7, cost_per_sqft_with_index = $8, total_cost_per_sqft = $9,
-        notes = $10,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $11
-      RETURNING *`,
-      [
-        data.name, data.bid_date, data.building_type, data.project_type, data.bid_type,
-        data.total_cost, data.total_sqft, data.cost_per_sqft_with_index, data.total_cost_per_sqft,
-        data.notes,
-        id
-      ]
-    );
+  async update(id, data, tenantId = null) {
+    let query = `UPDATE historical_projects SET
+      name = $1, bid_date = $2, building_type = $3, project_type = $4, bid_type = $5,
+      total_cost = $6, total_sqft = $7, cost_per_sqft_with_index = $8, total_cost_per_sqft = $9,
+      notes = $10,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $11`;
+
+    const params = [
+      data.name, data.bid_date, data.building_type, data.project_type, data.bid_type,
+      data.total_cost, data.total_sqft, data.cost_per_sqft_with_index, data.total_cost_per_sqft,
+      data.notes,
+      id
+    ];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $12';
+      params.push(tenantId);
+    }
+
+    query += ' RETURNING *';
+
+    const result = await db.query(query, params);
     return result.rows[0];
   },
 
-  async delete(id) {
-    await db.query('DELETE FROM historical_projects WHERE id = $1', [id]);
+  async delete(id, tenantId = null) {
+    let query = 'DELETE FROM historical_projects WHERE id = $1';
+    const params = [id];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $2';
+      params.push(tenantId);
+    }
+
+    await db.query(query, params);
   },
 
   async deleteAll() {
     await db.query('DELETE FROM historical_projects');
+  },
+
+  async deleteAllByTenant(tenantId) {
+    await db.query('DELETE FROM historical_projects WHERE tenant_id = $1', [tenantId]);
   }
 };
 

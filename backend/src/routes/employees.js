@@ -3,9 +3,14 @@ const router = express.Router();
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const { authenticate, authorize, authorizeHR } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 // Get all employees with optional filtering - requires HR read access
-router.get('/', authenticate, authorizeHR('read'), async (req, res) => {
+router.get('/', authorizeHR('read'), async (req, res) => {
   try {
     const filters = {
       department_id: req.query.department_id,
@@ -13,7 +18,7 @@ router.get('/', authenticate, authorizeHR('read'), async (req, res) => {
       employment_status: req.query.employment_status,
       search: req.query.search,
     };
-    const employees = await Employee.getAll(filters);
+    const employees = await Employee.getAll(filters, req.tenantId);
     res.json({ data: employees });
   } catch (error) {
     console.error('Error fetching employees:', error);
@@ -22,9 +27,9 @@ router.get('/', authenticate, authorizeHR('read'), async (req, res) => {
 });
 
 // Get employee by ID - requires HR read access
-router.get('/:id', authenticate, authorizeHR('read'), async (req, res) => {
+router.get('/:id', authorizeHR('read'), async (req, res) => {
   try {
-    const employee = await Employee.getById(req.params.id);
+    const employee = await Employee.getByIdAndTenant(req.params.id, req.tenantId);
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -36,9 +41,9 @@ router.get('/:id', authenticate, authorizeHR('read'), async (req, res) => {
 });
 
 // Get employee by user ID - requires HR read access
-router.get('/user/:userId', authenticate, authorizeHR('read'), async (req, res) => {
+router.get('/user/:userId', authorizeHR('read'), async (req, res) => {
   try {
-    const employee = await Employee.getByUserId(req.params.userId);
+    const employee = await Employee.getByUserId(req.params.userId, req.tenantId);
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found for this user' });
     }
@@ -50,7 +55,7 @@ router.get('/user/:userId', authenticate, authorizeHR('read'), async (req, res) 
 });
 
 // Create employee - requires HR write access
-router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
+router.post('/', authorizeHR('write'), async (req, res) => {
   try {
     console.log('=== CREATE EMPLOYEE DEBUG ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -63,25 +68,26 @@ router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
       // Normalize email to lowercase for consistency with login
       const normalizedEmail = req.body.email.toLowerCase();
 
-      // Check if user with this email already exists
-      const existingUser = await User.findByEmail(normalizedEmail);
+      // Check if user with this email already exists in this tenant
+      const existingUser = await User.findByEmailAndTenant(normalizedEmail, req.tenantId);
       if (existingUser) {
         return res.status(400).json({ error: 'A user account with this email already exists' });
       }
 
-      // Create the user account
+      // Create the user account with tenant ID
       const user = await User.create({
         email: normalizedEmail,
         password: req.body.userPassword,
         firstName: req.body.first_name,
         lastName: req.body.last_name,
-        role: req.body.userRole || 'user'
+        role: req.body.userRole || 'user',
+        tenantId: req.tenantId
       });
 
       userId = user.id;
     }
 
-    // Create the employee with the user_id
+    // Create the employee with the user_id and tenant ID
     const employee = await Employee.create({
       user_id: userId,
       first_name: req.body.first_name,
@@ -96,7 +102,7 @@ router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
       employment_status: req.body.employment_status,
       notes: req.body.notes,
       role: req.body.role
-    });
+    }, req.tenantId);
     res.status(201).json({ data: employee });
   } catch (error) {
     console.error('Error creating employee:', error);
@@ -105,7 +111,7 @@ router.post('/', authenticate, authorizeHR('write'), async (req, res) => {
 });
 
 // Update employee - requires HR write access
-router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
+router.put('/:id', authorizeHR('write'), async (req, res) => {
   try {
     console.log('=== UPDATE EMPLOYEE DEBUG ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -115,6 +121,12 @@ router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
     console.log('last_name:', req.body.last_name);
     console.log('===========================');
 
+    // Verify employee belongs to tenant first
+    const existingEmployee = await Employee.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!existingEmployee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
     let userId = req.body.user_id;
 
     // If createUserAccount is true, create a new user account
@@ -122,19 +134,20 @@ router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
       // Normalize email to lowercase for consistency with login
       const normalizedEmail = req.body.email.toLowerCase();
 
-      // Check if user with this email already exists
-      const existingUser = await User.findByEmail(normalizedEmail);
+      // Check if user with this email already exists in this tenant
+      const existingUser = await User.findByEmailAndTenant(normalizedEmail, req.tenantId);
       if (existingUser) {
         return res.status(400).json({ error: 'A user account with this email already exists' });
       }
 
-      // Create the user account
+      // Create the user account with tenant ID
       const user = await User.create({
         email: normalizedEmail,
         password: req.body.userPassword,
         firstName: req.body.first_name,
         lastName: req.body.last_name,
-        role: req.body.userRole || 'user'
+        role: req.body.userRole || 'user',
+        tenantId: req.tenantId
       });
 
       userId = user.id;
@@ -155,7 +168,7 @@ router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
       employment_status: req.body.employment_status,
       notes: req.body.notes,
       role: req.body.role
-    });
+    }, req.tenantId);
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -167,9 +180,12 @@ router.put('/:id', authenticate, authorizeHR('write'), async (req, res) => {
 });
 
 // Delete employee - requires HR write access
-router.delete('/:id', authenticate, authorizeHR('write'), async (req, res) => {
+router.delete('/:id', authorizeHR('write'), async (req, res) => {
   try {
-    await Employee.delete(req.params.id);
+    const deleted = await Employee.delete(req.params.id, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
     res.json({ message: 'Employee deleted successfully' });
   } catch (error) {
     console.error('Error deleting employee:', error);

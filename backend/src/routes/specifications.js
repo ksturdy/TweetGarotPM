@@ -3,10 +3,16 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const Specification = require('../models/Specification');
+const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
+const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const { deleteFile, getFileUrl, getFileInfo } = require('../utils/fileStorage');
 const { isR2Enabled } = require('../config/r2Client');
+
+// Apply authentication and tenant context to all routes
+router.use(authenticate);
+router.use(tenantContext);
 
 // Configure upload middleware with R2 or local storage
 const upload = createUploadMiddleware({
@@ -21,8 +27,26 @@ const upload = createUploadMiddleware({
   maxSize: 50 * 1024 * 1024, // 50MB limit
 });
 
+// Middleware to verify project belongs to tenant
+const verifyProjectOwnership = async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId || req.body.project_id;
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+    const project = await Project.findByIdAndTenant(projectId, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    req.project = project;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Get all specifications for a project
-router.get('/project/:projectId', authenticate, async (req, res, next) => {
+router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
     const specifications = await Specification.findByProject(
       req.params.projectId,
@@ -38,10 +62,15 @@ router.get('/project/:projectId', authenticate, async (req, res, next) => {
 });
 
 // Get single specification
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const specification = await Specification.findById(req.params.id);
     if (!specification) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'Specification not found' });
     }
     res.json({ data: specification });
@@ -51,8 +80,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
 });
 
 // Get version history for a specification
-router.get('/:id/versions', authenticate, async (req, res, next) => {
+router.get('/:id/versions', async (req, res, next) => {
   try {
+    const specification = await Specification.findById(req.params.id);
+    if (!specification) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+
     const versions = await Specification.getVersionHistory(req.params.id);
     res.json({ data: versions });
   } catch (error) {
@@ -61,7 +100,7 @@ router.get('/:id/versions', authenticate, async (req, res, next) => {
 });
 
 // Create specification with file upload
-router.post('/', authenticate, upload.single('file'), async (req, res, next) => {
+router.post('/', upload.single('file'), verifyProjectOwnership, async (req, res, next) => {
   try {
     const data = {
       ...req.body,
@@ -95,12 +134,19 @@ router.post('/', authenticate, upload.single('file'), async (req, res, next) => 
 });
 
 // Update specification
-router.put('/:id', authenticate, async (req, res, next) => {
+router.put('/:id', async (req, res, next) => {
   try {
-    const specification = await Specification.update(req.params.id, req.body);
-    if (!specification) {
+    const existingSpec = await Specification.findById(req.params.id);
+    if (!existingSpec) {
       return res.status(404).json({ error: 'Specification not found' });
     }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(existingSpec.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+
+    const specification = await Specification.update(req.params.id, req.body);
     res.json({ data: specification });
   } catch (error) {
     next(error);
@@ -108,12 +154,20 @@ router.put('/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete specification
-router.delete('/:id', authenticate, async (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const spec = await Specification.findById(req.params.id);
+    if (!spec) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(spec.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
 
     // Delete the file from R2 or local storage
-    if (spec && spec.file_path) {
+    if (spec.file_path) {
       await deleteFile(spec.file_path).catch(console.error);
     }
 
@@ -125,10 +179,15 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 });
 
 // Download specification file
-router.get('/:id/download', authenticate, async (req, res, next) => {
+router.get('/:id/download', async (req, res, next) => {
   try {
     const specification = await Specification.findById(req.params.id);
     if (!specification) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+    if (!project) {
       return res.status(404).json({ error: 'Specification not found' });
     }
 
@@ -156,8 +215,18 @@ router.get('/:id/download', authenticate, async (req, res, next) => {
 // ===== QUESTION ROUTES =====
 
 // Get all questions for a specification
-router.get('/:specId/questions', authenticate, async (req, res, next) => {
+router.get('/:specId/questions', async (req, res, next) => {
   try {
+    const specification = await Specification.findById(req.params.specId);
+    if (!specification) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+
     const questions = await Specification.findQuestionsBySpec(
       req.params.specId,
       { status: req.query.status }
@@ -169,11 +238,19 @@ router.get('/:specId/questions', authenticate, async (req, res, next) => {
 });
 
 // Get single question
-router.get('/questions/:id', authenticate, async (req, res, next) => {
+router.get('/questions/:id', async (req, res, next) => {
   try {
     const question = await Specification.findQuestionById(req.params.id);
     if (!question) {
       return res.status(404).json({ error: 'Question not found' });
+    }
+    // Verify the question's specification's project belongs to tenant
+    const specification = await Specification.findById(question.specification_id);
+    if (specification) {
+      const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'Question not found' });
+      }
     }
     res.json({ data: question });
   } catch (error) {
@@ -182,8 +259,18 @@ router.get('/questions/:id', authenticate, async (req, res, next) => {
 });
 
 // Create question
-router.post('/:specId/questions', authenticate, async (req, res, next) => {
+router.post('/:specId/questions', async (req, res, next) => {
   try {
+    const specification = await Specification.findById(req.params.specId);
+    if (!specification) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+    // Verify the specification's project belongs to tenant
+    const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Specification not found' });
+    }
+
     const data = {
       specification_id: req.params.specId,
       question: req.body.question,
@@ -197,16 +284,26 @@ router.post('/:specId/questions', authenticate, async (req, res, next) => {
 });
 
 // Answer question
-router.post('/questions/:id/answer', authenticate, async (req, res, next) => {
+router.post('/questions/:id/answer', async (req, res, next) => {
   try {
+    const existingQuestion = await Specification.findQuestionById(req.params.id);
+    if (!existingQuestion) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    // Verify the question's specification's project belongs to tenant
+    const specification = await Specification.findById(existingQuestion.specification_id);
+    if (specification) {
+      const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'Question not found' });
+      }
+    }
+
     const question = await Specification.answerQuestion(
       req.params.id,
       req.body.answer,
       req.user.id
     );
-    if (!question) {
-      return res.status(404).json({ error: 'Question not found' });
-    }
     res.json({ data: question });
   } catch (error) {
     next(error);
@@ -214,12 +311,22 @@ router.post('/questions/:id/answer', authenticate, async (req, res, next) => {
 });
 
 // Update question
-router.put('/questions/:id', authenticate, async (req, res, next) => {
+router.put('/questions/:id', async (req, res, next) => {
   try {
-    const question = await Specification.updateQuestion(req.params.id, req.body);
-    if (!question) {
+    const existingQuestion = await Specification.findQuestionById(req.params.id);
+    if (!existingQuestion) {
       return res.status(404).json({ error: 'Question not found' });
     }
+    // Verify the question's specification's project belongs to tenant
+    const specification = await Specification.findById(existingQuestion.specification_id);
+    if (specification) {
+      const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'Question not found' });
+      }
+    }
+
+    const question = await Specification.updateQuestion(req.params.id, req.body);
     res.json({ data: question });
   } catch (error) {
     next(error);
@@ -227,8 +334,21 @@ router.put('/questions/:id', authenticate, async (req, res, next) => {
 });
 
 // Delete question
-router.delete('/questions/:id', authenticate, async (req, res, next) => {
+router.delete('/questions/:id', async (req, res, next) => {
   try {
+    const existingQuestion = await Specification.findQuestionById(req.params.id);
+    if (!existingQuestion) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+    // Verify the question's specification's project belongs to tenant
+    const specification = await Specification.findById(existingQuestion.specification_id);
+    if (specification) {
+      const project = await Project.findByIdAndTenant(specification.project_id, req.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'Question not found' });
+      }
+    }
+
     await Specification.deleteQuestion(req.params.id);
     res.json({ message: 'Question deleted successfully' });
   } catch (error) {

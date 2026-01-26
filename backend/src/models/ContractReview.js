@@ -1,7 +1,7 @@
 const db = require('../config/database');
 
 const ContractReview = {
-  async create(data) {
+  async create(data, tenantId = null) {
     console.log('ContractReview.create - Input data:', data);
     const params = [
       data.file_name,
@@ -15,7 +15,8 @@ const ContractReview = {
       data.status || 'pending',
       data.needs_legal_review || false,
       data.uploaded_by,
-      data.review_notes
+      data.review_notes,
+      tenantId
     ];
     console.log('ContractReview.create - SQL params:', params);
 
@@ -23,8 +24,8 @@ const ContractReview = {
       `INSERT INTO contract_reviews (
         file_name, file_size, file_path, project_name, general_contractor,
         contract_value, overall_risk, analysis_completed_at, status,
-        needs_legal_review, uploaded_by, review_notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        needs_legal_review, uploaded_by, review_notes, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       params
     );
@@ -44,6 +45,26 @@ const ContractReview = {
        LEFT JOIN users u3 ON cr.approved_by = u3.id
        WHERE cr.id = $1`,
       [id]
+    );
+    const row = result.rows[0];
+    if (row && row.contract_value) {
+      row.contract_value = parseFloat(row.contract_value);
+    }
+    return row;
+  },
+
+  async findByIdAndTenant(id, tenantId) {
+    const result = await db.query(
+      `SELECT cr.*,
+              u1.first_name || ' ' || u1.last_name as uploaded_by_name,
+              u2.first_name || ' ' || u2.last_name as reviewed_by_name,
+              u3.first_name || ' ' || u3.last_name as approved_by_name
+       FROM contract_reviews cr
+       LEFT JOIN users u1 ON cr.uploaded_by = u1.id
+       LEFT JOIN users u2 ON cr.reviewed_by = u2.id
+       LEFT JOIN users u3 ON cr.approved_by = u3.id
+       WHERE cr.id = $1 AND cr.tenant_id = $2`,
+      [id, tenantId]
     );
     const row = result.rows[0];
     if (row && row.contract_value) {
@@ -102,7 +123,57 @@ const ContractReview = {
     });
   },
 
-  async update(id, data) {
+  async findAllByTenant(filters = {}, tenantId) {
+    let query = `
+      SELECT cr.*,
+             u1.first_name || ' ' || u1.last_name as uploaded_by_name,
+             u2.first_name || ' ' || u2.last_name as reviewed_by_name
+      FROM contract_reviews cr
+      LEFT JOIN users u1 ON cr.uploaded_by = u1.id
+      LEFT JOIN users u2 ON cr.reviewed_by = u2.id
+      WHERE cr.tenant_id = $1
+    `;
+    const params = [tenantId];
+    let paramCount = 2;
+
+    if (filters.status) {
+      params.push(filters.status);
+      query += ` AND cr.status = $${paramCount++}`;
+    }
+
+    if (filters.overall_risk) {
+      params.push(filters.overall_risk);
+      query += ` AND cr.overall_risk = $${paramCount++}`;
+    }
+
+    if (filters.needs_legal_review !== undefined) {
+      params.push(filters.needs_legal_review);
+      query += ` AND cr.needs_legal_review = $${paramCount++}`;
+    }
+
+    if (filters.uploaded_by) {
+      params.push(filters.uploaded_by);
+      query += ` AND cr.uploaded_by = $${paramCount++}`;
+    }
+
+    if (filters.search) {
+      params.push(`%${filters.search}%`);
+      query += ` AND (cr.project_name ILIKE $${paramCount} OR cr.general_contractor ILIKE $${paramCount} OR cr.file_name ILIKE $${paramCount})`;
+      paramCount++;
+    }
+
+    query += ' ORDER BY cr.created_at DESC';
+
+    const result = await db.query(query, params);
+    return result.rows.map(row => {
+      if (row.contract_value) {
+        row.contract_value = parseFloat(row.contract_value);
+      }
+      return row;
+    });
+  },
+
+  async update(id, data, tenantId = null) {
     const fields = [];
     const values = [];
     let paramCount = 1;
@@ -126,16 +197,30 @@ const ContractReview = {
     }
 
     values.push(id);
-    const result = await db.query(
-      `UPDATE contract_reviews SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-      values
-    );
+    let query = `UPDATE contract_reviews SET ${fields.join(', ')} WHERE id = $${paramCount}`;
+
+    if (tenantId) {
+      values.push(tenantId);
+      query += ` AND tenant_id = $${paramCount + 1}`;
+    }
+
+    query += ' RETURNING *';
+
+    const result = await db.query(query, values);
 
     return result.rows[0];
   },
 
-  async delete(id) {
-    await db.query('DELETE FROM contract_reviews WHERE id = $1', [id]);
+  async delete(id, tenantId = null) {
+    let query = 'DELETE FROM contract_reviews WHERE id = $1';
+    const params = [id];
+
+    if (tenantId) {
+      query += ' AND tenant_id = $2';
+      params.push(tenantId);
+    }
+
+    await db.query(query, params);
   },
 
   async getStats() {
@@ -154,6 +239,33 @@ const ContractReview = {
         AVG(contract_value) as avg_contract_value
       FROM contract_reviews
     `);
+    const stats = result.rows[0];
+    if (stats.total_contract_value) {
+      stats.total_contract_value = parseFloat(stats.total_contract_value);
+    }
+    if (stats.avg_contract_value) {
+      stats.avg_contract_value = parseFloat(stats.avg_contract_value);
+    }
+    return stats;
+  },
+
+  async getStatsByTenant(tenantId) {
+    const result = await db.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'pending') as pending,
+        COUNT(*) FILTER (WHERE status = 'under_review') as under_review,
+        COUNT(*) FILTER (WHERE status = 'approved') as approved,
+        COUNT(*) FILTER (WHERE status = 'rejected') as rejected,
+        COUNT(*) FILTER (WHERE overall_risk = 'HIGH') as high_risk,
+        COUNT(*) FILTER (WHERE overall_risk = 'MODERATE') as moderate_risk,
+        COUNT(*) FILTER (WHERE overall_risk = 'LOW') as low_risk,
+        COUNT(*) FILTER (WHERE needs_legal_review = true) as needs_legal_review,
+        SUM(contract_value) as total_contract_value,
+        AVG(contract_value) as avg_contract_value
+      FROM contract_reviews
+      WHERE tenant_id = $1
+    `, [tenantId]);
     const stats = result.rows[0];
     if (stats.total_contract_value) {
       stats.total_contract_value = parseFloat(stats.total_contract_value);
