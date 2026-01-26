@@ -35,8 +35,9 @@ import {
   Block,
   CheckCircle,
   ArrowBack,
+  Edit,
 } from '@mui/icons-material';
-import { getTenants, suspendTenant, activateTenant, Tenant } from '../../services/platform';
+import { getTenants, suspendTenant, activateTenant, changeTenantPlan, getPlans, Tenant, Plan } from '../../services/platform';
 
 const TenantList: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +53,12 @@ const TenantList: React.FC = () => {
     tenant: null,
     reason: '',
   });
+  const [planDialog, setPlanDialog] = useState<{ open: boolean; tenant: Tenant | null; planId: number }>({
+    open: false,
+    tenant: null,
+    planId: 0,
+  });
+  const [plans, setPlans] = useState<Plan[]>([]);
 
   const limit = 20;
 
@@ -76,7 +83,17 @@ const TenantList: React.FC = () => {
 
   useEffect(() => {
     fetchTenants();
+    fetchPlans();
   }, [page, statusFilter]);
+
+  const fetchPlans = async () => {
+    try {
+      const data = await getPlans();
+      setPlans(data);
+    } catch (err) {
+      console.error('Failed to load plans:', err);
+    }
+  };
 
   const handleSearch = () => {
     setPage(1);
@@ -101,6 +118,25 @@ const TenantList: React.FC = () => {
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to activate tenant');
     }
+  };
+
+  const handleChangePlan = async () => {
+    if (!planDialog.tenant || !planDialog.planId) return;
+    try {
+      await changeTenantPlan(planDialog.tenant.id, planDialog.planId);
+      setPlanDialog({ open: false, tenant: null, planId: 0 });
+      fetchTenants();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to change plan');
+    }
+  };
+
+  const openPlanDialog = (tenant: Tenant) => {
+    setPlanDialog({
+      open: true,
+      tenant,
+      planId: tenant.plan_id || 0,
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -217,7 +253,22 @@ const TenantList: React.FC = () => {
                       </Typography>
                     </Box>
                   </TableCell>
-                  <TableCell>{tenant.plan_display_name || tenant.plan_name}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Chip
+                        label={tenant.plan_display_name || tenant.plan_name}
+                        size="small"
+                        color={tenant.plan_name === 'enterprise' ? 'primary' : tenant.plan_name === 'pro' ? 'secondary' : 'default'}
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={() => openPlanDialog(tenant)}
+                        title="Change Plan"
+                      >
+                        <Edit fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
                   <TableCell align="right">
                     {tenant.active_users} / {tenant.total_users}
                   </TableCell>
@@ -324,6 +375,71 @@ const TenantList: React.FC = () => {
             disabled={!suspendDialog.reason}
           >
             Suspend Tenant
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Change Plan Dialog */}
+      <Dialog
+        open={planDialog.open}
+        onClose={() => setPlanDialog({ open: false, tenant: null, planId: 0 })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Change Subscription Plan</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            Change the subscription plan for <strong>{planDialog.tenant?.name}</strong>
+          </Typography>
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Subscription Plan</InputLabel>
+            <Select
+              value={planDialog.planId}
+              label="Subscription Plan"
+              onChange={(e) => setPlanDialog({ ...planDialog, planId: Number(e.target.value) })}
+            >
+              {plans.map((plan) => (
+                <MenuItem key={plan.id} value={plan.id}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                    <span>{plan.display_name}</span>
+                    <Typography variant="body2" color="text.secondary">
+                      ${plan.price_monthly}/mo
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {planDialog.planId > 0 && plans.find(p => p.id === planDialog.planId) && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>Plan Limits:</Typography>
+              {(() => {
+                const selectedPlan = plans.find(p => p.id === planDialog.planId);
+                const limits = selectedPlan?.limits as any;
+                return (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    <Typography variant="body2">Users: {limits?.max_users === -1 ? 'Unlimited' : limits?.max_users}</Typography>
+                    <Typography variant="body2">Projects: {limits?.max_projects === -1 ? 'Unlimited' : limits?.max_projects}</Typography>
+                    <Typography variant="body2">Customers: {limits?.max_customers === -1 ? 'Unlimited' : limits?.max_customers}</Typography>
+                    <Typography variant="body2">Opportunities: {limits?.max_opportunities === -1 ? 'Unlimited' : limits?.max_opportunities}</Typography>
+                    <Typography variant="body2">Storage: {limits?.storage_gb === -1 ? 'Unlimited' : `${limits?.storage_gb} GB`}</Typography>
+                  </Box>
+                );
+              })()}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPlanDialog({ open: false, tenant: null, planId: 0 })}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleChangePlan}
+            disabled={!planDialog.planId || planDialog.planId === planDialog.tenant?.plan_id}
+          >
+            Change Plan
           </Button>
         </DialogActions>
       </Dialog>

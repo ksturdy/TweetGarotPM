@@ -212,7 +212,7 @@ router.delete('/contacts/:contactId', async (req, res, next) => {
 });
 
 // Create new customer
-router.post('/', checkLimit('max_customers'), async (req, res, next) => {
+router.post('/', checkLimit('max_customers', Customer.countByTenant), async (req, res, next) => {
   try {
     const customer = await Customer.create(req.body, req.tenantId);
     res.status(201).json(customer);
@@ -263,7 +263,7 @@ router.delete('/all/delete', async (req, res, next) => {
 });
 
 // Import customers from Excel
-router.post('/import/excel', checkLimit('max_customers'), upload.single('file'), async (req, res, next) => {
+router.post('/import/excel', checkLimit('max_customers', Customer.countByTenant), upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

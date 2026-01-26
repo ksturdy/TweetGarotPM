@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
+import { PlacesSearch } from '../PlacesSearch';
+import { Place } from '../../services/places';
 import './Modal.css';
 
 const MARKET_OPTIONS = [
@@ -105,6 +107,19 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
     }
   };
 
+  // Handle place selection from Foursquare search
+  const handlePlaceSelect = (place: Place) => {
+    setFormData(prev => ({
+      ...prev,
+      customer_facility: place.name,
+      customer_owner: place.name,
+      address: place.address,
+      city: place.city,
+      state: place.state,
+      zip_code: place.zip_code,
+    }));
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
@@ -122,6 +137,21 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
               <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
                 Basic Information
               </h3>
+
+              {/* Places Search - only show for new customers */}
+              {!isEditing && (
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label>Search Business</label>
+                  <PlacesSearch
+                    onSelect={handlePlaceSelect}
+                    placeholder="Search: name + city (e.g., Banner Hospital Phoenix)"
+                    near="USA"
+                  />
+                  <small style={{ color: '#6b7280', fontSize: '12px' }}>
+                    Include business type and city for best results
+                  </small>
+                </div>
+              )}
 
               <div className="form-row">
                 <div className="form-group">
