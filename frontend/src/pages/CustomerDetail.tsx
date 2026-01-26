@@ -105,97 +105,96 @@ const CustomerDetail: React.FC = () => {
     },
   ];
 
+  // Generate initials for avatar
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <div className="customer-detail-page">
       {/* Header */}
       <div className="customer-header">
-        <Link to="/account-management/customers" className="back-button">
-          ← Back to Customers
-        </Link>
-        <div className="customer-header-content">
-          <div className="customer-info">
-            <h1>{customer.customer_facility}</h1>
-            <div className="customer-subtitle">{customer.customer_owner}</div>
-            <div className="customer-meta">
-              {customer.city && customer.state && (
-                <div className="meta-item">
-                  <span className="meta-icon">📍</span>
-                  <span>{customer.city}, {customer.state}</span>
-                </div>
-              )}
-              {customer.account_manager && (
-                <div className="meta-item">
-                  <span className="meta-icon">👨‍💼</span>
-                  <span>{customer.account_manager}</span>
-                </div>
-              )}
-              {customer.customer_number && (
-                <div className="meta-item">
-                  <span className="meta-icon">#</span>
-                  <span>{customer.customer_number}</span>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="header-top-bar">
+          <Link to="/account-management/customers" className="back-button">
+            ← Back to Customers
+          </Link>
           <button
             onClick={() => setShowEditModal(true)}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#3b82f6')}
+            className="edit-customer-btn"
           >
             ✏️ Edit Customer
           </button>
         </div>
-      </div>
 
-      {/* Metrics Cards */}
-      <div className="metrics-grid">
-        <div className="metric-card" style={{ '--metric-color': '#667eea' } as React.CSSProperties}>
-          <div className="metric-header">
-            <div className="metric-label">Total Awarded</div>
-            <div className="metric-icon">💰</div>
-          </div>
-          <div className="metric-value">{formatCurrency(metrics?.total_revenue || 0)}</div>
-          <div className="metric-subtitle">Won estimates value</div>
-        </div>
+        <div className="header-main">
+          <div className="customer-info-section">
+            <div className="customer-title-row">
+              <div className="customer-avatar">
+                {getInitials(customer.customer_facility)}
+              </div>
+              <div className="customer-title-text">
+                <h1>{customer.customer_facility}</h1>
+                {customer.customer_owner && (
+                  <div className="customer-subtitle">{customer.customer_owner}</div>
+                )}
+              </div>
+            </div>
 
-        <div className="metric-card" style={{ '--metric-color': '#10b981' } as React.CSSProperties}>
-          <div className="metric-header">
-            <div className="metric-label">Hit Rate</div>
-            <div className="metric-icon">🎯</div>
+            <div className="customer-tags">
+              {customer.city && customer.state && (
+                <div className="customer-tag">
+                  <span className="customer-tag-icon">📍</span>
+                  {customer.city}, {customer.state}
+                </div>
+              )}
+              {customer.account_manager && (
+                <div className="customer-tag">
+                  <span className="customer-tag-icon">👤</span>
+                  {customer.account_manager}
+                </div>
+              )}
+              {customer.customer_number && (
+                <div className="customer-tag">
+                  <span className="customer-tag-icon">#</span>
+                  {customer.customer_number}
+                </div>
+              )}
+              {customer.market && (
+                <div className="customer-tag">
+                  <span className="customer-tag-icon">🏢</span>
+                  {customer.market}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="metric-value">{metrics?.hit_rate || 0}%</div>
-          <div className="metric-subtitle">{metrics?.won_estimates || 0} won of {metrics?.total_bids || 0} total</div>
-        </div>
 
-        <div className="metric-card" style={{ '--metric-color': '#f59e0b' } as React.CSSProperties}>
-          <div className="metric-header">
-            <div className="metric-label">Customer Score</div>
-            <div className="metric-icon">⭐</div>
+          <div className="header-metrics">
+            <div className="header-metric">
+              <span className="header-metric-icon">💰</span>
+              <div className="header-metric-value">{formatCurrency(metrics?.total_revenue || 0)}</div>
+              <div className="header-metric-label">Total Awarded</div>
+            </div>
+            <div className="header-metric">
+              <span className="header-metric-icon">🎯</span>
+              <div className="header-metric-value">{metrics?.hit_rate || 0}%</div>
+              <div className="header-metric-label">Hit Rate</div>
+            </div>
+            <div className="header-metric">
+              <span className="header-metric-icon">⭐</span>
+              <div className="header-metric-value">{customer.customer_score || 'N/A'}</div>
+              <div className="header-metric-label">Score</div>
+            </div>
+            <div className="header-metric">
+              <span className="header-metric-icon">🏗️</span>
+              <div className="header-metric-value">{metrics?.total_projects || 0}</div>
+              <div className="header-metric-label">Projects</div>
+            </div>
           </div>
-          <div className="metric-value">{customer.customer_score || 'N/A'}</div>
-          <div className="metric-subtitle">Account rating</div>
-        </div>
-
-        <div className="metric-card" style={{ '--metric-color': '#3b82f6' } as React.CSSProperties}>
-          <div className="metric-header">
-            <div className="metric-label">Total Projects</div>
-            <div className="metric-icon">🏗️</div>
-          </div>
-          <div className="metric-value">{metrics?.total_projects || 0}</div>
-          <div className="metric-subtitle">{metrics?.completed_projects || 0} completed</div>
         </div>
       </div>
 
