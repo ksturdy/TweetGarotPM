@@ -56,13 +56,23 @@ router.get('/search', authenticate, async (req, res) => {
 
     res.json({ places });
   } catch (error) {
-    console.error('Places search error:', error.response?.data || error.message);
+    console.error('Places search error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message,
+    });
 
     if (error.response?.status === 401) {
       return res.status(500).json({ error: 'Invalid Foursquare API key' });
     }
+    if (error.response?.status === 403) {
+      return res.status(500).json({ error: 'Foursquare API key lacks permissions' });
+    }
 
-    res.status(500).json({ error: 'Failed to search places' });
+    res.status(500).json({
+      error: 'Failed to search places',
+      details: error.response?.data?.message || error.message
+    });
   }
 });
 
