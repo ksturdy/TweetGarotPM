@@ -18,11 +18,10 @@ router.get('/search', authenticate, async (req, res) => {
       return res.status(500).json({ error: 'Foursquare API key not configured' });
     }
 
-    // Build Foursquare API URL
+    // Build Foursquare Places API URL (new endpoint as of 2025)
     const params = new URLSearchParams({
       query,
       limit: String(limit),
-      fields: 'name,location,tel,website,fsq_id',
     });
 
     // Add location bias if provided (e.g., "Dallas, TX")
@@ -31,18 +30,19 @@ router.get('/search', authenticate, async (req, res) => {
     }
 
     const response = await axios.get(
-      `https://api.foursquare.com/v3/places/search?${params.toString()}`,
+      `https://places-api.foursquare.com/places/search?${params.toString()}`,
       {
         headers: {
-          'Authorization': apiKey.startsWith('fsq') ? apiKey : `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Accept': 'application/json',
+          'X-Places-Api-Version': '2025-06-17',
         },
       }
     );
 
     // Transform to simpler format
     const places = (response.data.results || []).map(place => ({
-      id: place.fsq_id,
+      id: place.fsq_place_id,
       name: place.name,
       address: place.location?.address || '',
       city: place.location?.locality || '',
