@@ -34,7 +34,7 @@ router.get('/search', authenticate, async (req, res) => {
       `https://api.foursquare.com/v3/places/search?${params.toString()}`,
       {
         headers: {
-          'Authorization': apiKey,
+          'Authorization': apiKey.startsWith('fsq') ? apiKey : `Bearer ${apiKey}`,
           'Accept': 'application/json',
         },
       }
