@@ -18,7 +18,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/branding',
       desc: 'Logos, colors & style guides',
       color: '#8b5cf6',
-      ready: true,
+      ready: false,
     },
     {
       name: 'Trade Shows',

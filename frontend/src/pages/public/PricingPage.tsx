@@ -128,15 +128,37 @@ const PricingPage: React.FC = () => {
       <AppBar position="static" color="transparent" elevation={0}>
         <Container maxWidth="lg">
           <Toolbar disableGutters>
-            <Construction sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography
-              variant="h6"
+            <Box
               component={Link}
-              to="/"
-              sx={{ flexGrow: 1, fontWeight: 700, color: 'primary.main', textDecoration: 'none' }}
+              to="/welcome"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                textDecoration: 'none',
+                flexGrow: 1,
+              }}
             >
-              Titan PM
-            </Typography>
+              <Box
+                sx={{
+                  fontSize: '2.5rem',
+                  mr: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                🛡️
+              </Box>
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 800,
+                  color: 'primary.main',
+                  letterSpacing: '0.1em',
+                }}
+              >
+                TITAN
+              </Typography>
+            </Box>
             <Stack direction="row" spacing={2}>
               <Button color="inherit" component={Link} to="/login">
                 Login

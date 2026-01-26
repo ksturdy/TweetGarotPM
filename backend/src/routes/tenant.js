@@ -10,10 +10,20 @@ const Tenant = require('../models/Tenant');
 const User = require('../models/User');
 const { authenticate, authorize } = require('../middleware/auth');
 const { tenantContext, loadTenant } = require('../middleware/tenant');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const crypto = require('crypto');
 const db = require('../config/database');
+const config = require('../config');
+const { isR2Enabled } = require('../config/r2Client');
 
 const router = express.Router();
+
+// Logo upload middleware
+const logoUpload = createUploadMiddleware({
+  destination: 'uploads/logos',
+  allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+  maxSize: 5 * 1024 * 1024, // 5MB max
+});
 
 // All routes require authentication and tenant context
 router.use(authenticate);
@@ -105,6 +115,74 @@ router.patch(
 
       const tenant = await Tenant.updateSettings(req.tenantId, settings);
       res.json(tenant);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Upload tenant logo
+ * POST /api/tenant/logo
+ */
+router.post(
+  '/logo',
+  authorize('admin'),
+  logoUpload.single('logo'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No logo file uploaded' });
+      }
+
+      // Build logo URL based on storage type
+      let logoUrl;
+      if (isR2Enabled()) {
+        // R2 public URL
+        logoUrl = `${config.r2.publicUrl}/${req.file.key}`;
+      } else {
+        // Local URL
+        logoUrl = `/uploads/logos/${req.file.filename}`;
+      }
+
+      // Update tenant settings with logo URL
+      const tenant = await Tenant.updateSettings(req.tenantId, {
+        branding: {
+          logo_url: logoUrl,
+        },
+      });
+
+      res.json({
+        message: 'Logo uploaded successfully',
+        logoUrl,
+        tenant,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Delete tenant logo
+ * DELETE /api/tenant/logo
+ */
+router.delete(
+  '/logo',
+  authorize('admin'),
+  async (req, res, next) => {
+    try {
+      // Clear logo URL from settings
+      const tenant = await Tenant.updateSettings(req.tenantId, {
+        branding: {
+          logo_url: null,
+        },
+      });
+
+      res.json({
+        message: 'Logo removed successfully',
+        tenant,
+      });
     } catch (error) {
       next(error);
     }

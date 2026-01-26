@@ -61,7 +61,6 @@ const Login: React.FC = () => {
           <div className="login-shield">🛡️</div>
         </div>
         <h1 className="login-title">TITAN</h1>
-        <p className="login-subtitle">by Tweet Garot</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 

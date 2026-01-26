@@ -9,11 +9,15 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, tenant, logout } = useAuth();
   const location = useLocation();
 
   // Only show HR nav if user has HR access (not 'none') or is admin
   const hasHRAccess = user?.role === 'admin' || (user?.hrAccess && user.hrAccess !== 'none');
+
+  // Get tenant branding
+  const logoUrl = tenant?.settings?.branding?.logo_url;
+  const companyName = tenant?.settings?.branding?.company_name || tenant?.name;
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
@@ -31,11 +35,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <header className="header">
         <div className="header-content">
           <Link to="/" className="logo">
-            <div className="logo-shield">🛡️</div>
-            <div className="logo-text">
-              <div className="logo-titan">TITAN</div>
-              <div className="logo-subtitle">BY TWEET GAROT</div>
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt={companyName || 'Company logo'} className="logo-image" />
+            ) : (
+              <>
+                <div className="logo-shield">🛡️</div>
+                <div className="logo-text">
+                  <div className="logo-titan">TITAN</div>
+                </div>
+              </>
+            )}
           </Link>
           <nav className="nav">
             {navItems.map((item) => (
@@ -52,6 +61,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Link to="/feedback" className="btn btn-primary btn-sm">
               Feedback
             </Link>
+            {user?.role === 'admin' && (
+              <Link to="/settings" className="btn btn-secondary btn-sm">
+                Settings
+              </Link>
+            )}
             <span className="user-name">
               {user?.firstName} {user?.lastName}
             </span>

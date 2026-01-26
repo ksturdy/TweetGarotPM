@@ -20,7 +20,6 @@ import {
   Stack,
 } from '@mui/material';
 import {
-  Construction,
   Business,
   Person,
   CheckCircle,
@@ -204,9 +203,11 @@ const SignupPage: React.FC = () => {
       <Container maxWidth="sm">
         {/* Header */}
         <Stack direction="row" spacing={1} alignItems="center" justifyContent="center" sx={{ mb: 4 }}>
-          <Construction sx={{ fontSize: 32, color: 'primary.main' }} />
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-            Titan PM
+          <Box sx={{ fontSize: '3rem', display: 'flex', alignItems: 'center' }}>
+            🛡️
+          </Box>
+          <Typography variant="h3" sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '0.1em' }}>
+            TITAN
           </Typography>
         </Stack>
 

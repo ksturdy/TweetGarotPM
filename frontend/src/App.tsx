@@ -24,7 +24,6 @@ import DailyReportList from './pages/dailyReports/DailyReportList';
 import ScheduleView from './pages/schedule/ScheduleView';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
-import Branding from './pages/marketing/Branding';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -63,6 +62,7 @@ import MobileSales from './pages/MobileSales';
 import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
+import TenantSettings from './pages/TenantSettings';
 // Platform Admin pages
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantList from './pages/platform/TenantList';
@@ -156,7 +156,6 @@ const App: React.FC = () => {
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
-                <Route path="/marketing/branding" element={<Branding />} />
                 <Route path="/estimating" element={<EstimatingDashboard />} />
                 <Route path="/estimating/estimates" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />
@@ -182,6 +181,7 @@ const App: React.FC = () => {
                 <Route path="/safety" element={<SafetyDashboard />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/security" element={<SecuritySettings />} />
+                <Route path="/settings" element={<TenantSettings />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
