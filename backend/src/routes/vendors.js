@@ -48,6 +48,30 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// GET /api/vendors/check-duplicate - Check for duplicate company name (must be before /:id)
+router.get('/check-duplicate', async (req, res, next) => {
+  try {
+    const { company_name, exclude_id } = req.query;
+
+    if (!company_name) {
+      return res.status(400).json({ message: 'company_name is required' });
+    }
+
+    const duplicates = await Vendors.checkDuplicate(
+      company_name,
+      req.tenantId,
+      exclude_id ? parseInt(exclude_id) : null
+    );
+
+    res.json({
+      isDuplicate: duplicates.length > 0,
+      matches: duplicates,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/vendors/export/template - Download Excel template (must be before /:id)
 router.get('/export/template', (req, res) => {
   const templateData = [

@@ -97,4 +97,17 @@ export const vendorsService = {
     });
     return response.data;
   },
+
+  // Check for duplicate company name
+  checkDuplicate: async (companyName: string, excludeId?: number): Promise<{
+    isDuplicate: boolean;
+    matches: Array<{ id: number; company_name: string; vendor_name: string; city: string; state: string }>;
+  }> => {
+    const params = new URLSearchParams();
+    params.append('company_name', companyName);
+    if (excludeId) params.append('exclude_id', excludeId.toString());
+
+    const response = await api.get(`/vendors/check-duplicate?${params.toString()}`);
+    return response.data;
+  },
 };

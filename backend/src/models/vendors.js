@@ -277,6 +277,32 @@ const Vendors = {
     return result.rows[0];
   },
 
+  // Check for duplicate company name (partial match)
+  // Matches if existing company contains search term OR search term contains existing company
+  async checkDuplicate(companyName, tenantId, excludeId = null) {
+    // Extract the first word (typically the main company name like "Ferguson")
+    const searchTerm = companyName.trim();
+    const firstWord = searchTerm.split(/\s+/)[0];
+
+    let query = `SELECT id, company_name, vendor_name, city, state
+                 FROM vendors
+                 WHERE tenant_id = $1
+                 AND (
+                   LOWER(company_name) ILIKE LOWER($2)
+                   OR LOWER($3) ILIKE '%' || LOWER(company_name) || '%'
+                   OR LOWER(company_name) ILIKE '%' || LOWER($4) || '%'
+                 )`;
+    const params = [tenantId, `%${searchTerm}%`, searchTerm, firstWord];
+
+    if (excludeId) {
+      query += ' AND id != $5';
+      params.push(excludeId);
+    }
+
+    const result = await pool.query(query, params);
+    return result.rows;
+  },
+
   // Bulk insert vendors (for Excel import, backwards compatible)
   async bulkCreate(vendorsArray, userId, tenantId = null) {
     const client = await pool.connect();

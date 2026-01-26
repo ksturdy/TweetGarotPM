@@ -6,6 +6,14 @@ import { PlacesSearch } from '../../components/PlacesSearch';
 import { Place } from '../../services/places';
 import './CustomerList.css';
 
+interface DuplicateMatch {
+  id: number;
+  company_name: string;
+  vendor_name: string;
+  city: string;
+  state: string;
+}
+
 const VendorList: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,7 +23,46 @@ const VendorList: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateMatch[]>([]);
+  const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const duplicateCheckRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check for duplicate company name
+  const checkDuplicateCompany = async (companyName: string) => {
+    if (!companyName || companyName.length < 2) {
+      setDuplicateWarning([]);
+      return;
+    }
+
+    try {
+      const result = await vendorsService.checkDuplicate(
+        companyName,
+        editingVendor?.id
+      );
+      if (result.isDuplicate) {
+        setDuplicateWarning(result.matches);
+        setDuplicateAcknowledged(false);
+      } else {
+        setDuplicateWarning([]);
+      }
+    } catch (error) {
+      console.error('Error checking duplicate:', error);
+    }
+  };
+
+  // Handle company name change with debounce
+  const handleCompanyNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    if (duplicateCheckRef.current) {
+      clearTimeout(duplicateCheckRef.current);
+    }
+
+    duplicateCheckRef.current = setTimeout(() => {
+      checkDuplicateCompany(value);
+    }, 500);
+  };
 
   // Handle place selection from Foursquare search
   const handlePlaceSelect = (place: Place) => {
@@ -34,6 +81,9 @@ const VendorList: React.FC = () => {
     setInputValue('city', place.city);
     setInputValue('state', place.state);
     setInputValue('zip_code', place.zip_code);
+
+    // Check for duplicates after setting values
+    checkDuplicateCompany(place.name);
   };
 
   // Fetch vendors
@@ -58,6 +108,8 @@ const VendorList: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       setShowModal(false);
       setEditingVendor(null);
+      setDuplicateWarning([]);
+      setDuplicateAcknowledged(false);
     },
   });
 
@@ -85,6 +137,16 @@ const VendorList: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    // Check if there's a duplicate warning that hasn't been acknowledged
+    if (duplicateWarning.length > 0 && !duplicateAcknowledged) {
+      const confirmCreate = window.confirm(
+        `A vendor with the company name "${duplicateWarning[0].company_name}" already exists. Are you sure you want to create another one?`
+      );
+      if (!confirmCreate) return;
+      setDuplicateAcknowledged(true);
+    }
+
     const formData = new FormData(e.currentTarget);
     const vendor: Partial<Vendor> = {
       vendor_name: formData.get('vendor_name') as string,
@@ -102,6 +164,13 @@ const VendorList: React.FC = () => {
       notes: formData.get('notes') as string,
     };
     saveMutation.mutate(vendor);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingVendor(null);
+    setDuplicateWarning([]);
+    setDuplicateAcknowledged(false);
   };
 
   const handleImport = () => {
@@ -179,7 +248,7 @@ const VendorList: React.FC = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Vendor Name</th>
+                <th>Facility/Location Name</th>
                 <th>Company</th>
                 <th>Type</th>
                 <th>Trade Specialty</th>
@@ -245,11 +314,11 @@ const VendorList: React.FC = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <button className="close-btn" onClick={handleCloseModal}>×</button>
             </div>
             <form onSubmit={handleSubmit} ref={formRef}>
               {!editingVendor && (
@@ -257,27 +326,48 @@ const VendorList: React.FC = () => {
                   <label>Search Business</label>
                   <PlacesSearch
                     onSelect={handlePlaceSelect}
-                    placeholder="Search for a business (e.g., Ferguson Enterprises)..."
+                    placeholder="Search: name + city (e.g., Ferguson Plumbing Phoenix)"
+                    near="USA"
                   />
                   <small style={{ color: '#6b7280', fontSize: '12px' }}>
-                    Search and select to auto-fill vendor details
+                    Include business type and city for best results
                   </small>
                 </div>
               )}
               <div className="form-grid">
                 <div className="form-group">
-                  <label>Vendor Name *</label>
-                  <input
-                    name="vendor_name"
-                    defaultValue={editingVendor?.vendor_name}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Company Name</label>
+                  <label>Company Name *</label>
                   <input
                     name="company_name"
                     defaultValue={editingVendor?.company_name}
+                    onChange={handleCompanyNameChange}
+                    required
+                  />
+                  {duplicateWarning.length > 0 && !duplicateAcknowledged && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '8px 12px',
+                      backgroundColor: '#fef3c7',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '4px',
+                      fontSize: '13px'
+                    }}>
+                      <strong style={{ color: '#b45309' }}>Possible duplicate found:</strong>
+                      {duplicateWarning.map((match) => (
+                        <div key={match.id} style={{ marginTop: '4px', color: '#92400e' }}>
+                          {match.company_name}
+                          {match.vendor_name && ` - ${match.vendor_name}`}
+                          {(match.city || match.state) && ` (${[match.city, match.state].filter(Boolean).join(', ')})`}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Facility/Location Name</label>
+                  <input
+                    name="vendor_name"
+                    defaultValue={editingVendor?.vendor_name}
                   />
                 </div>
                 <div className="form-group">
@@ -366,7 +456,7 @@ const VendorList: React.FC = () => {
                 </div>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">

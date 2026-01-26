@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
+import { employeesApi } from '../../services/employees';
 import './Modal.css';
 
 const MARKET_OPTIONS = [
@@ -17,11 +18,25 @@ const MARKET_OPTIONS = [
 interface CustomerFormModalProps {
   customer?: Customer | null;
   onClose: () => void;
+  onDelete?: () => void;
 }
 
-const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose }) => {
+const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose, onDelete }) => {
   const queryClient = useQueryClient();
   const isEditing = !!customer;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Fetch active employees for account manager dropdown
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees', { employmentStatus: 'active' }],
+    queryFn: () => employeesApi.getAll({ employmentStatus: 'active' }),
+  });
+  const employees = employeesData?.data?.data || [];
+
+  // Check if current account_manager matches an employee
+  const existingManagerMatchesEmployee = customer?.account_manager
+    ? employees.some(emp => `${emp.first_name} ${emp.last_name}` === customer.account_manager)
+    : true;
 
   const [formData, setFormData] = useState({
     customer_facility: customer?.customer_facility || '',
@@ -54,6 +69,16 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
       queryClient.invalidateQueries({ queryKey: ['customer', customer?.id?.toString()] });
       queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
       onClose();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => customersApi.delete(customer!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
+      onClose();
+      onDelete?.();
     },
   });
 
@@ -100,7 +125,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="customer_facility">Customer Facility *</label>
+                  <label htmlFor="customer_facility">Facility/Location Name *</label>
                   <input
                     type="text"
                     id="customer_facility"
@@ -108,12 +133,12 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                     value={formData.customer_facility}
                     onChange={handleChange}
                     required
-                    placeholder="Company facility name"
+                    placeholder="Facility or location name"
                   />
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="customer_owner">Customer Owner *</label>
+                  <label htmlFor="customer_owner">Company *</label>
                   <input
                     type="text"
                     id="customer_owner"
@@ -121,7 +146,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                     value={formData.customer_owner}
                     onChange={handleChange}
                     required
-                    placeholder="Owner name"
+                    placeholder="Company name"
                   />
                 </div>
               </div>
@@ -129,14 +154,25 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="account_manager">Account Manager</label>
-                  <input
-                    type="text"
+                  <select
                     id="account_manager"
                     name="account_manager"
                     value={formData.account_manager}
                     onChange={handleChange}
-                    placeholder="Account manager name"
-                  />
+                  >
+                    <option value="">Select an account manager...</option>
+                    {/* Show existing value if it doesn't match any employee */}
+                    {customer?.account_manager && !existingManagerMatchesEmployee && (
+                      <option value={customer.account_manager}>
+                        {customer.account_manager} (existing)
+                      </option>
+                    )}
+                    {employees.map(emp => (
+                      <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`}>
+                        {emp.first_name} {emp.last_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="form-group">
@@ -322,13 +358,34 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
             </div>
           </div>
 
-          <div className="modal-footer">
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Saving...' : isEditing ? 'Update Customer' : 'Create Customer'}
-            </button>
+          <div className="modal-footer" style={{ justifyContent: isEditing ? 'space-between' : 'flex-end' }}>
+            {isEditing && (
+              <button
+                type="button"
+                className="btn-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={deleteMutation.isPending}
+                style={{
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Delete Customer
+              </button>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="button" className="btn-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving...' : isEditing ? 'Update Customer' : 'Create Customer'}
+              </button>
+            </div>
           </div>
 
           {mutation.isError && (
@@ -336,7 +393,80 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
               Failed to {isEditing ? 'update' : 'create'} customer. Please try again.
             </div>
           )}
+
+          {deleteMutation.isError && (
+            <div className="error-message" style={{ marginTop: '1rem' }}>
+              Failed to delete customer. Please try again.
+            </div>
+          )}
         </form>
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '12px',
+            }}
+          >
+            <div
+              style={{
+                background: 'white',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                maxWidth: '400px',
+                textAlign: 'center',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              }}
+            >
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#9888;</div>
+              <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: 600 }}>
+                Delete Customer
+              </h3>
+              <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                Are you sure you want to delete <strong>{customer?.customer_facility}</strong>?
+                This action cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    border: '1px solid #e5e7eb',
+                    background: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: '#ef4444',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

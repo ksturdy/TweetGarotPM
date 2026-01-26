@@ -457,7 +457,7 @@ const CustomerList: React.FC = () => {
                         {getMarketIcon(customer.market)}
                       </div>
                       <div className="sales-project-info">
-                        <h4>{customer.customer_facility}</h4>
+                        <h4>{customer.customer_facility || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
                         <span>{customer.address || 'No address specified'}</span>
                       </div>
                     </div>

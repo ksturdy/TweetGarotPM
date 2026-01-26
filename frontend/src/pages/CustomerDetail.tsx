@@ -72,7 +72,7 @@ const CustomerDetail: React.FC = () => {
       onClick: () => navigate('/estimating/estimates/new', {
         state: {
           customerId: parseInt(id!),
-          customerName: customer.customer_facility,
+          customerName: customer.customer_facility || 'Unnamed Customer',
         }
       }),
     },
@@ -106,7 +106,8 @@ const CustomerDetail: React.FC = () => {
   ];
 
   // Generate initials for avatar
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
     return name
       .split(' ')
       .map(word => word[0])
@@ -138,7 +139,7 @@ const CustomerDetail: React.FC = () => {
                 {getInitials(customer.customer_facility)}
               </div>
               <div className="customer-title-text">
-                <h1>{customer.customer_facility}</h1>
+                <h1>{customer.customer_facility || 'Unnamed Customer'}</h1>
                 {customer.customer_owner && (
                   <div className="customer-subtitle">{customer.customer_owner}</div>
                 )}
@@ -400,7 +401,7 @@ const CustomerDetail: React.FC = () => {
       {showTouchpointModal && (
         <TouchpointModal
           customerId={parseInt(id!)}
-          customerName={customer.customer_facility}
+          customerName={customer.customer_facility || 'Unnamed Customer'}
           onClose={() => setShowTouchpointModal(false)}
         />
       )}
@@ -408,7 +409,7 @@ const CustomerDetail: React.FC = () => {
       {showProjectModal && (
         <ProjectModal
           customerId={parseInt(id!)}
-          customerName={customer.customer_facility}
+          customerName={customer.customer_facility || 'Unnamed Customer'}
           onClose={() => setShowProjectModal(false)}
         />
       )}
@@ -417,6 +418,7 @@ const CustomerDetail: React.FC = () => {
         <CustomerFormModal
           customer={customer}
           onClose={() => setShowEditModal(false)}
+          onDelete={() => navigate('/account-management/customers')}
         />
       )}
     </div>

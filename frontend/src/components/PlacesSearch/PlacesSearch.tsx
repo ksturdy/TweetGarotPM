@@ -78,7 +78,6 @@ const PlacesSearch: React.FC<PlacesSearchProps> = ({
   return (
     <div className="places-search" ref={containerRef}>
       <div className="places-search-input-wrapper">
-        <span className="search-icon">🔍</span>
         <input
           type="text"
           value={query}
