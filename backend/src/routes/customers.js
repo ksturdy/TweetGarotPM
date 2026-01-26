@@ -295,6 +295,7 @@ router.post('/import/excel', checkLimit('max_customers'), upload.single('file'),
         zip_code: row['ZipCode_PostalCode'] || null,
         controls: row['Controls'] || null,
         department: row['Department'] || null,
+        market: row['Market'] || null,
         customer_score: row['Customer Score'] || null,
         active_customer: row['Active Customer'] === true || row['Active Customer'] === 'Yes' || row['Active Customer'] === 1,
         notes: null

@@ -13,6 +13,7 @@ export interface Customer {
   zip_code?: string;
   controls?: string;
   department?: string;
+  market?: string;
   customer_score?: number;
   active_customer: boolean;
   notes?: string;

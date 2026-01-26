@@ -79,13 +79,13 @@ const Customer = {
       `INSERT INTO customers (
         customer_facility, customer_owner, account_manager, field_leads,
         customer_number, address, city, state, zip_code,
-        controls, department, customer_score, active_customer, notes, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        controls, department, market, customer_score, active_customer, notes, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING *`,
       [
         data.customer_facility, data.customer_owner, data.account_manager, data.field_leads,
         data.customer_number, data.address, data.city, data.state, data.zip_code,
-        data.controls, data.department, data.customer_score, data.active_customer, data.notes,
+        data.controls, data.department, data.market, data.customer_score, data.active_customer, data.notes,
         tenantId
       ]
     );
@@ -106,14 +106,14 @@ const Customer = {
       `UPDATE customers SET
         customer_facility = $1, customer_owner = $2, account_manager = $3, field_leads = $4,
         customer_number = $5, address = $6, city = $7, state = $8, zip_code = $9,
-        controls = $10, department = $11, customer_score = $12, active_customer = $13, notes = $14,
+        controls = $10, department = $11, market = $12, customer_score = $13, active_customer = $14, notes = $15,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15 AND tenant_id = $16
+      WHERE id = $16 AND tenant_id = $17
       RETURNING *`,
       [
         data.customer_facility, data.customer_owner, data.account_manager, data.field_leads,
         data.customer_number, data.address, data.city, data.state, data.zip_code,
-        data.controls, data.department, data.customer_score, data.active_customer, data.notes,
+        data.controls, data.department, data.market, data.customer_score, data.active_customer, data.notes,
         id, tenantId
       ]
     );

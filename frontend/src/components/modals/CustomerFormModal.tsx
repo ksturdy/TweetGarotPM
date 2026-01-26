@@ -3,6 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
 import './Modal.css';
 
+const MARKET_OPTIONS = [
+  { value: 'Healthcare', icon: '🏥', label: 'Healthcare' },
+  { value: 'Education', icon: '🏫', label: 'Education' },
+  { value: 'Commercial', icon: '🏢', label: 'Commercial' },
+  { value: 'Industrial', icon: '🏭', label: 'Industrial' },
+  { value: 'Retail', icon: '🏬', label: 'Retail' },
+  { value: 'Government', icon: '🏛️', label: 'Government' },
+  { value: 'Hospitality', icon: '🏨', label: 'Hospitality' },
+  { value: 'Data Center', icon: '💾', label: 'Data Center' }
+];
+
 interface CustomerFormModalProps {
   customer?: Customer | null;
   onClose: () => void;
@@ -24,6 +35,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
     zip_code: customer?.zip_code || '',
     controls: customer?.controls || '',
     department: customer?.department || '',
+    market: customer?.market || '',
     customer_score: customer?.customer_score || '',
     active_customer: customer?.active_customer ?? true,
     notes: customer?.notes || '',
@@ -163,6 +175,25 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                     onChange={handleChange}
                     placeholder="Department"
                   />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="market">Market</label>
+                  <select
+                    id="market"
+                    name="market"
+                    value={formData.market}
+                    onChange={handleChange}
+                  >
+                    <option value="">Select a market...</option>
+                    {MARKET_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.icon} {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
