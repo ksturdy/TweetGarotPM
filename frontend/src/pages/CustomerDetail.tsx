@@ -226,9 +226,6 @@ const CustomerDetail: React.FC = () => {
                 </h3>
               </div>
               <p className="module-description">{module.description}</p>
-              <div className="module-action">
-                {module.action} →
-              </div>
             </div>
           </div>
         ))}

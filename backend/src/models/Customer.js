@@ -102,21 +102,40 @@ const Customer = {
   },
 
   async update(id, data, tenantId) {
-    const result = await db.query(
-      `UPDATE customers SET
-        customer_facility = $1, customer_owner = $2, account_manager = $3, field_leads = $4,
-        customer_number = $5, address = $6, city = $7, state = $8, zip_code = $9,
-        controls = $10, department = $11, market = $12, customer_score = $13, active_customer = $14, notes = $15,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $16 AND tenant_id = $17
-      RETURNING *`,
-      [
-        data.customer_facility, data.customer_owner, data.account_manager, data.field_leads,
-        data.customer_number, data.address, data.city, data.state, data.zip_code,
-        data.controls, data.department, data.market, data.customer_score, data.active_customer, data.notes,
-        id, tenantId
-      ]
-    );
+    // Build dynamic update query for partial updates
+    const allowedFields = [
+      'customer_facility', 'customer_owner', 'account_manager', 'field_leads',
+      'customer_number', 'address', 'city', 'state', 'zip_code',
+      'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes'
+    ];
+
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`);
+        values.push(data[field]);
+        paramIndex++;
+      }
+    }
+
+    if (updates.length === 0) {
+      // No fields to update, just return the existing record
+      return this.findByIdAndTenant(id, tenantId);
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+
+    const query = `
+      UPDATE customers SET ${updates.join(', ')}
+      WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
+      RETURNING *
+    `;
+    values.push(id, tenantId);
+
+    const result = await db.query(query, values);
     return result.rows[0];
   },
 
