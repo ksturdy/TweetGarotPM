@@ -87,6 +87,58 @@ export interface Estimate {
   created_by?: number;
   approved_by?: number;
   sections?: EstimateSection[];
+  // Bid form fields
+  bid_form_path?: string;
+  bid_form_filename?: string;
+  bid_form_uploaded_at?: string;
+  bid_form_version?: number;
+  build_method?: 'manual' | 'excel_import';
+  rate_inputs?: Record<string, unknown>;
+}
+
+export interface BidFormInfo {
+  hasBidForm: boolean;
+  filename?: string;
+  uploadedAt?: string;
+  version?: number;
+  buildMethod?: string;
+}
+
+export interface BidFormDownload {
+  downloadUrl: string;
+  filename: string;
+  uploadedAt: string;
+  version: number;
+}
+
+export interface BidFormPreview {
+  filename: string;
+  sheetNames: string[];
+  projectInfo: {
+    projectName?: string;
+    bidDate?: string;
+    bidTime?: string;
+  };
+  summary: {
+    totalLaborHours: number;
+    totalLaborCost: number;
+    totalMaterialCost: number;
+    totalEquipmentCost: number;
+    totalSubcontractCost: number;
+    totalRentalCost: number;
+    subtotal: number;
+    totalMarkup: number;
+    totalSell: number;
+  };
+  sectionCount: number;
+  lineItemCount: number;
+  sections: {
+    name: string;
+    itemCount: number;
+    laborCost: number;
+    materialCost: number;
+  }[];
+  warnings: string[];
 }
 
 export const estimatesApi = {
@@ -137,4 +189,33 @@ export const estimatesApi = {
 
   reorderItems: (sectionId: number, itemOrders: { id: number; item_order: number }[]) =>
     api.patch(`/estimates/sections/${sectionId}/items/reorder`, { itemOrders }),
+
+  // Bid form operations
+  getBidFormInfo: (estimateId: number) =>
+    api.get<BidFormInfo>(`/estimates/${estimateId}/bid-form`),
+
+  uploadBidForm: (estimateId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('bidForm', file);
+    return api.post(`/estimates/${estimateId}/bid-form`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  downloadBidForm: (estimateId: number) =>
+    api.get<BidFormDownload>(`/estimates/${estimateId}/bid-form/download`),
+
+  refreshBidForm: (estimateId: number) =>
+    api.post(`/estimates/${estimateId}/bid-form/refresh`),
+
+  deleteBidForm: (estimateId: number) =>
+    api.delete(`/estimates/${estimateId}/bid-form`),
+
+  previewBidForm: (estimateId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('bidForm', file);
+    return api.post<BidFormPreview>(`/estimates/${estimateId}/bid-form/preview`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };

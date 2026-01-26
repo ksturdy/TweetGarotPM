@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
 import { customersApi } from '../../services/customers';
+import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
+
+type BuildStep = 'info' | 'build-method' | 'manual' | 'excel';
 
 const EstimateNew: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Multi-step flow state
+  const [currentStep, setCurrentStep] = useState<BuildStep>('info');
+  const [createdEstimateId, setCreatedEstimateId] = useState<number | null>(null);
 
   // Fetch next estimate number
   const { data: nextNumberData } = useQuery({
@@ -116,6 +124,21 @@ const EstimateNew: React.FC = () => {
     }
   }, [nextNumberData]);
 
+  // Mutation for creating estimate with basic info only (then choose build method)
+  const createBasicMutation = useMutation({
+    mutationFn: (data: Estimate) => estimatesApi.create(data),
+    onSuccess: (response) => {
+      const newEstimateId = response.data.id;
+      setCreatedEstimateId(newEstimateId);
+      setCurrentStep('build-method');
+    },
+    onError: (error: any) => {
+      console.error('Failed to create estimate:', error);
+      alert(`Failed to create estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+    },
+  });
+
+  // Mutation for creating full estimate with sections (manual build)
   const createMutation = useMutation({
     mutationFn: (data: Estimate) => estimatesApi.create(data),
     onSuccess: (response) => {
@@ -127,6 +150,19 @@ const EstimateNew: React.FC = () => {
     onError: (error: any) => {
       console.error('Failed to create estimate:', error);
       alert(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}. Your work has been auto-saved and you can try again.`);
+    },
+  });
+
+  // Mutation for updating existing estimate with sections
+  const updateMutation = useMutation({
+    mutationFn: (data: Estimate) => estimatesApi.update(createdEstimateId!, data),
+    onSuccess: () => {
+      localStorage.removeItem('estimateInProgress');
+      navigate('/estimating/estimates');
+    },
+    onError: (error: any) => {
+      console.error('Failed to update estimate:', error);
+      alert(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -349,8 +385,228 @@ const EstimateNew: React.FC = () => {
       })),
     };
 
-    createMutation.mutate(estimateData);
+    if (createdEstimateId) {
+      updateMutation.mutate(estimateData);
+    } else {
+      createMutation.mutate(estimateData);
+    }
   };
+
+  // Handler for proceeding to build method selection
+  const handleProceedToBuildMethod = () => {
+    if (!formData.project_name) {
+      alert('Please enter a project name');
+      return;
+    }
+
+    const estimateData: Estimate = {
+      ...formData,
+      bid_date: formData.bid_date || undefined,
+      project_start_date: formData.project_start_date || undefined,
+      status: 'in progress',
+      sections: [], // No sections yet
+    };
+
+    createBasicMutation.mutate(estimateData);
+  };
+
+  // Handler for selecting manual build
+  const handleSelectManualBuild = () => {
+    setCurrentStep('manual');
+  };
+
+  // Handler for selecting Excel import
+  const handleSelectExcelImport = () => {
+    setCurrentStep('excel');
+  };
+
+  // Handler for Excel upload complete
+  const handleExcelUploadComplete = () => {
+    localStorage.removeItem('estimateInProgress');
+    navigate(`/estimating/estimates/${createdEstimateId}`);
+  };
+
+  // Handler for saving manual build
+  const handleSaveManualBuild = () => {
+    const estimateData: Estimate = {
+      ...formData,
+      bid_date: formData.bid_date || undefined,
+      project_start_date: formData.project_start_date || undefined,
+      status: 'in progress',
+      sections: sections.map((section) => ({
+        ...section,
+        items: section.items || [],
+      })),
+    };
+
+    if (createdEstimateId) {
+      updateMutation.mutate(estimateData);
+    } else {
+      createMutation.mutate(estimateData);
+    }
+  };
+
+  // Render Build Method Selection step
+  if (currentStep === 'build-method') {
+    return (
+      <div className="estimate-new">
+        <div style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            onClick={() => setCurrentStep('info')}
+            style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
+          >
+            &larr; Back to Estimate Info
+          </button>
+        </div>
+
+        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
+          <h2 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+            How would you like to build this estimate?
+          </h2>
+          <p style={{ textAlign: 'center', color: 'var(--secondary)', marginBottom: '0.5rem' }}>
+            <strong>{formData.project_name}</strong> - {formData.estimate_number}
+          </p>
+          <p style={{ textAlign: 'center', color: 'var(--secondary)', marginBottom: '2rem' }}>
+            Choose your preferred method to assemble the estimate breakdown
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            {/* Manual Build Option */}
+            <div
+              onClick={handleSelectManualBuild}
+              style={{
+                padding: '2rem',
+                border: '2px solid var(--border)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backgroundColor: 'white',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🛠️</div>
+                <h3 style={{ margin: '0 0 0.5rem 0' }}>Build in App</h3>
+                <p style={{ color: 'var(--secondary)', fontSize: '0.875rem', margin: 0 }}>
+                  Create sections and line items manually
+                </p>
+              </div>
+              <ul style={{ marginTop: '1.5rem', paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                <li style={{ marginBottom: '0.5rem' }}>Add custom sections</li>
+                <li style={{ marginBottom: '0.5rem' }}>Enter labor, material, equipment costs</li>
+                <li style={{ marginBottom: '0.5rem' }}>Auto-calculate totals</li>
+              </ul>
+              <div style={{
+                marginTop: '1.5rem',
+                padding: '0.75rem',
+                backgroundColor: 'var(--background)',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                fontWeight: 600,
+                color: 'var(--primary)',
+              }}>
+                Start Building
+              </div>
+            </div>
+
+            {/* Excel Import Option */}
+            <div
+              onClick={handleSelectExcelImport}
+              style={{
+                padding: '2rem',
+                border: '2px solid var(--border)',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backgroundColor: 'white',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--success)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
+                <h3 style={{ margin: '0 0 0.5rem 0' }}>Import from Excel</h3>
+                <p style={{ color: 'var(--secondary)', fontSize: '0.875rem', margin: 0 }}>
+                  Upload your Excel bid form
+                </p>
+              </div>
+              <ul style={{ marginTop: '1.5rem', paddingLeft: '1.25rem', fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                <li style={{ marginBottom: '0.5rem' }}>Upload .xlsm bid form</li>
+                <li style={{ marginBottom: '0.5rem' }}>Auto-extract rates & costs</li>
+                <li style={{ marginBottom: '0.5rem' }}>Edit in Excel, re-upload</li>
+              </ul>
+              <div style={{
+                marginTop: '1.5rem',
+                padding: '0.75rem',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderRadius: '0.5rem',
+                textAlign: 'center',
+                fontWeight: 600,
+                color: 'var(--success)',
+              }}>
+                Upload Excel File
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Excel Import step
+  if (currentStep === 'excel' && createdEstimateId) {
+    return (
+      <div className="estimate-new">
+        <div style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            onClick={() => setCurrentStep('build-method')}
+            style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
+          >
+            &larr; Back to Build Method
+          </button>
+        </div>
+
+        <div className="card" style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <h2 style={{ marginTop: 0 }}>
+            Upload Excel Bid Form
+          </h2>
+          <p style={{ color: 'var(--secondary)', marginBottom: '1.5rem' }}>
+            <strong>{formData.project_name}</strong> - {formData.estimate_number}
+          </p>
+
+          <BidFormUpload
+            estimateId={createdEstimateId}
+            onUploadComplete={handleExcelUploadComplete}
+          />
+
+          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCurrentStep('manual')}
+            >
+              Switch to Manual Build Instead
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="estimate-new">
@@ -970,11 +1226,24 @@ const EstimateNew: React.FC = () => {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={handleSubmitEstimate}
-            disabled={createMutation.isPending}
+            onClick={handleProceedToBuildMethod}
+            disabled={createBasicMutation.isPending}
           >
-            {createMutation.isPending ? 'Submitting...' : 'Submit Estimate'}
+            {createBasicMutation.isPending ? 'Creating...' : 'Continue: Choose Build Method'}
           </button>
+        </div>
+
+        {/* Quick Option Banner */}
+        <div style={{
+          marginTop: '1rem',
+          padding: '1rem',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          borderRadius: '0.5rem',
+          textAlign: 'center'
+        }}>
+          <span style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>
+            Want to import from Excel? Click "Continue: Choose Build Method" to upload your bid form template.
+          </span>
         </div>
       </form>
     </div>

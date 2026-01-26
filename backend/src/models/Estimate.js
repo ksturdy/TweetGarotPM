@@ -114,7 +114,13 @@ const Estimate = {
       'project_duration', 'estimator_id', 'estimator_name', 'status',
       'overhead_percentage', 'profit_percentage', 'contingency_percentage',
       'bond_percentage', 'scope_of_work', 'exclusions', 'assumptions', 'notes',
-      'approved_by'
+      'approved_by',
+      // Bid form fields
+      'bid_form_path', 'bid_form_filename', 'bid_form_uploaded_at',
+      'bid_form_version', 'build_method', 'rate_inputs',
+      // Cost fields (for direct updates from bid form import)
+      'labor_cost', 'material_cost', 'equipment_cost', 'subcontractor_cost',
+      'rental_cost', 'subtotal', 'total_cost', 'contingency_amount'
     ];
 
     Object.keys(data).forEach((key) => {

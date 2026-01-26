@@ -76,6 +76,7 @@ class R2Storage {
  * @param {Object} options - Upload configuration
  * @param {string} options.destination - Local directory for uploads (e.g., 'uploads/drawings')
  * @param {Array<string>} options.allowedTypes - Allowed MIME types
+ * @param {Array<string>} options.allowedExtensions - Allowed file extensions (e.g., ['.xlsm', '.xlsx'])
  * @param {number} options.maxSize - Max file size in bytes
  * @returns {multer.Multer} Configured multer instance
  */
@@ -83,20 +84,39 @@ function createUploadMiddleware(options) {
   const {
     destination,
     allowedTypes,
+    allowedExtensions,
     maxSize = config.upload.maxFileSize,
   } = options;
 
-  // File filter for allowed types
+  // File filter for allowed types and extensions
   const fileFilter = (req, file, cb) => {
-    if (!allowedTypes || allowedTypes.length === 0) {
+    // If no restrictions, allow all
+    if ((!allowedTypes || allowedTypes.length === 0) && (!allowedExtensions || allowedExtensions.length === 0)) {
       return cb(null, true);
     }
 
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Invalid file type. Allowed types: ${allowedTypes.join(', ')}`));
+    // Check by extension first (more reliable than MIME types)
+    if (allowedExtensions && allowedExtensions.length > 0) {
+      const fileExt = path.extname(file.originalname).toLowerCase();
+      if (allowedExtensions.includes(fileExt)) {
+        return cb(null, true);
+      }
     }
+
+    // Then check by MIME type
+    if (allowedTypes && allowedTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+
+    // Neither matched - reject
+    const allowedInfo = [];
+    if (allowedExtensions && allowedExtensions.length > 0) {
+      allowedInfo.push(`extensions: ${allowedExtensions.join(', ')}`);
+    }
+    if (allowedTypes && allowedTypes.length > 0) {
+      allowedInfo.push(`types: ${allowedTypes.join(', ')}`);
+    }
+    cb(new Error(`Invalid file type. Allowed ${allowedInfo.join(' or ')}`));
   };
 
   let storage;

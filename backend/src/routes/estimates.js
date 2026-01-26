@@ -1,11 +1,27 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, requireFeature } = require('../middleware/tenant');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
+const { getPresignedUrl, deleteFile, getFileUrl } = require('../utils/fileStorage');
+const { parseBidForm, mapToEstimateFormat, getSheetNames } = require('../services/bidFormParser');
 const Estimate = require('../models/Estimate');
 const EstimateSection = require('../models/EstimateSection');
 const EstimateLineItem = require('../models/EstimateLineItem');
 
 const router = express.Router();
+
+// Configure upload middleware for Excel bid forms
+const bidFormUpload = createUploadMiddleware({
+  destination: 'estimates/bid-forms',
+  allowedExtensions: ['.xlsm', '.xlsx', '.xls'],
+  allowedTypes: [
+    'application/vnd.ms-excel.sheet.macroEnabled.12', // .xlsm
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+    'application/octet-stream', // Sometimes sent by browsers for .xlsm
+  ],
+  maxSize: 50 * 1024 * 1024, // 50MB max
+});
 
 // Apply auth and tenant middleware to all routes
 router.use(authenticate);
@@ -468,6 +484,411 @@ router.patch('/sections/:sectionId/items/reorder', async (req, res, next) => {
     const { itemOrders } = req.body;
     await EstimateLineItem.reorder(req.params.sectionId, itemOrders);
     res.json({ message: 'Line items reordered successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// --- BID FORM ROUTES ---
+
+// Upload bid form Excel file and populate estimate
+router.post('/:id/bid-form', bidFormUpload.single('bidForm'), async (req, res, next) => {
+  try {
+    const estimateId = req.params.id;
+
+    // Verify estimate belongs to tenant
+    const estimate = await Estimate.findByIdAndTenant(estimateId, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log('=== BID FORM UPLOAD ===');
+    console.log('Estimate ID:', estimateId);
+    console.log('File:', req.file.originalname);
+    console.log('Path/Key:', req.file.key || req.file.path);
+
+    // Delete old bid form file if exists
+    if (estimate.bid_form_path) {
+      try {
+        await deleteFile(estimate.bid_form_path);
+      } catch (err) {
+        console.warn('Could not delete old bid form:', err.message);
+      }
+    }
+
+    // Read and parse the uploaded file
+    const fs = require('fs');
+    const { getR2Client, isR2Enabled } = require('../config/r2Client');
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const config = require('../config');
+
+    let fileBuffer;
+    if (isR2Enabled()) {
+      // Read from R2
+      const r2Client = getR2Client();
+      const command = new GetObjectCommand({
+        Bucket: config.r2.bucketName,
+        Key: req.file.key,
+      });
+      const response = await r2Client.send(command);
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(chunk);
+      }
+      fileBuffer = Buffer.concat(chunks);
+    } else {
+      // Read from local filesystem
+      fileBuffer = fs.readFileSync(req.file.path);
+    }
+
+    // Parse the Excel file
+    const parsedData = parseBidForm(fileBuffer);
+
+    if (parsedData.errors.length > 0) {
+      console.warn('Bid form parse warnings:', parsedData.errors);
+    }
+
+    // Map parsed data to estimate format
+    const { estimate: estimateUpdates, sections } = mapToEstimateFormat(parsedData);
+
+    // Update estimate with parsed data and file info
+    const updatedEstimate = await Estimate.update(estimateId, {
+      ...estimateUpdates,
+      bid_form_path: req.file.key || req.file.path,
+      bid_form_filename: req.file.originalname,
+      bid_form_uploaded_at: new Date(),
+      bid_form_version: (estimate.bid_form_version || 0) + 1,
+      build_method: 'excel_import',
+    }, req.tenantId);
+
+    // Delete existing sections and line items
+    const existingSections = await EstimateSection.findByEstimate(estimateId);
+    for (const section of existingSections) {
+      await EstimateSection.delete(section.id);
+    }
+
+    // Create new sections and line items from parsed data
+    for (const section of sections) {
+      const createdSection = await EstimateSection.create({
+        estimate_id: estimateId,
+        section_name: section.section_name,
+        section_order: section.section_order,
+        description: section.description,
+      });
+
+      // Create line items for this section
+      for (const item of section.line_items) {
+        await EstimateLineItem.create({
+          estimate_id: estimateId,
+          section_id: createdSection.id,
+          ...item,
+        });
+      }
+    }
+
+    // Fetch complete updated estimate
+    const completeEstimate = await Estimate.findByIdAndTenant(estimateId, req.tenantId);
+    const newSections = await EstimateSection.findByEstimate(estimateId);
+    const lineItems = await EstimateLineItem.findByEstimate(estimateId);
+
+    const sectionsWithItems = newSections.map(section => ({
+      ...section,
+      items: lineItems.filter(item => item.section_id === section.id),
+    }));
+
+    console.log('=== BID FORM UPLOAD COMPLETE ===');
+    console.log('Sections created:', newSections.length);
+    console.log('Line items created:', lineItems.length);
+    console.log('Total cost:', completeEstimate.total_cost);
+
+    res.json({
+      ...completeEstimate,
+      sections: sectionsWithItems,
+      parseSummary: {
+        sectionsImported: sections.length,
+        lineItemsImported: sections.reduce((sum, s) => sum + s.line_items.length, 0),
+        warnings: parsedData.errors,
+      },
+    });
+  } catch (error) {
+    console.error('Bid form upload error:', error);
+    next(error);
+  }
+});
+
+// Download bid form file - returns download info/URL
+router.get('/:id/bid-form/download', async (req, res, next) => {
+  try {
+    const estimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!estimate.bid_form_path) {
+      return res.status(404).json({ error: 'No bid form attached to this estimate' });
+    }
+
+    const { isR2Enabled } = require('../config/r2Client');
+
+    let downloadUrl;
+    if (isR2Enabled()) {
+      // Generate presigned URL for R2 download
+      downloadUrl = await getPresignedUrl(estimate.bid_form_path, 3600); // 1 hour expiry
+    } else {
+      // Return URL to file serving endpoint for local storage
+      downloadUrl = `/api/estimates/${req.params.id}/bid-form/file`;
+    }
+
+    res.json({
+      downloadUrl,
+      filename: estimate.bid_form_filename,
+      uploadedAt: estimate.bid_form_uploaded_at,
+      version: estimate.bid_form_version,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Serve bid form file directly (for local storage)
+router.get('/:id/bid-form/file', async (req, res, next) => {
+  try {
+    const estimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!estimate.bid_form_path) {
+      return res.status(404).json({ error: 'No bid form attached to this estimate' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+
+    // bid_form_path is already absolute for local storage
+    const filePath = path.isAbsolute(estimate.bid_form_path)
+      ? estimate.bid_form_path
+      : path.join(__dirname, '../../', estimate.bid_form_path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Bid form file not found on disk' });
+    }
+
+    res.download(filePath, estimate.bid_form_filename);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get bid form info without downloading
+router.get('/:id/bid-form', async (req, res, next) => {
+  try {
+    const estimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!estimate.bid_form_path) {
+      return res.json({
+        hasBidForm: false,
+      });
+    }
+
+    res.json({
+      hasBidForm: true,
+      filename: estimate.bid_form_filename,
+      uploadedAt: estimate.bid_form_uploaded_at,
+      version: estimate.bid_form_version,
+      buildMethod: estimate.build_method,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Refresh estimate values from current bid form (re-parse without re-uploading)
+router.post('/:id/bid-form/refresh', async (req, res, next) => {
+  try {
+    const estimateId = req.params.id;
+    const estimate = await Estimate.findByIdAndTenant(estimateId, req.tenantId);
+
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!estimate.bid_form_path) {
+      return res.status(400).json({ error: 'No bid form attached to this estimate' });
+    }
+
+    // Read the file from storage
+    const { getR2Client, isR2Enabled } = require('../config/r2Client');
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const config = require('../config');
+    const fs = require('fs');
+
+    let fileBuffer;
+    if (isR2Enabled()) {
+      const r2Client = getR2Client();
+      const command = new GetObjectCommand({
+        Bucket: config.r2.bucketName,
+        Key: estimate.bid_form_path,
+      });
+      const response = await r2Client.send(command);
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(chunk);
+      }
+      fileBuffer = Buffer.concat(chunks);
+    } else {
+      const path = require('path');
+      // bid_form_path is already absolute for local storage
+      const fullPath = path.isAbsolute(estimate.bid_form_path)
+        ? estimate.bid_form_path
+        : path.join(__dirname, '../../', estimate.bid_form_path);
+      fileBuffer = fs.readFileSync(fullPath);
+    }
+
+    // Re-parse the Excel file
+    const parsedData = parseBidForm(fileBuffer);
+    const { estimate: estimateUpdates, sections } = mapToEstimateFormat(parsedData);
+
+    // Update estimate values
+    await Estimate.update(estimateId, estimateUpdates, req.tenantId);
+
+    // Delete and recreate sections/line items
+    const existingSections = await EstimateSection.findByEstimate(estimateId);
+    for (const section of existingSections) {
+      await EstimateSection.delete(section.id);
+    }
+
+    for (const section of sections) {
+      const createdSection = await EstimateSection.create({
+        estimate_id: estimateId,
+        section_name: section.section_name,
+        section_order: section.section_order,
+        description: section.description,
+      });
+
+      for (const item of section.line_items) {
+        await EstimateLineItem.create({
+          estimate_id: estimateId,
+          section_id: createdSection.id,
+          ...item,
+        });
+      }
+    }
+
+    // Fetch complete updated estimate
+    const completeEstimate = await Estimate.findByIdAndTenant(estimateId, req.tenantId);
+    const newSections = await EstimateSection.findByEstimate(estimateId);
+    const lineItems = await EstimateLineItem.findByEstimate(estimateId);
+
+    const sectionsWithItems = newSections.map(section => ({
+      ...section,
+      items: lineItems.filter(item => item.section_id === section.id),
+    }));
+
+    res.json({
+      ...completeEstimate,
+      sections: sectionsWithItems,
+      refreshedAt: new Date(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete bid form attachment
+router.delete('/:id/bid-form', async (req, res, next) => {
+  try {
+    const estimate = await Estimate.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (!estimate.bid_form_path) {
+      return res.status(404).json({ error: 'No bid form attached to this estimate' });
+    }
+
+    // Delete the file from storage
+    await deleteFile(estimate.bid_form_path);
+
+    // Clear bid form fields on estimate
+    await Estimate.update(req.params.id, {
+      bid_form_path: null,
+      bid_form_filename: null,
+      bid_form_uploaded_at: null,
+      build_method: 'manual',
+    }, req.tenantId);
+
+    res.json({ message: 'Bid form deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Preview bid form parsing without saving (for validation)
+router.post('/:id/bid-form/preview', bidFormUpload.single('bidForm'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Read the file
+    const fs = require('fs');
+    const { getR2Client, isR2Enabled } = require('../config/r2Client');
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const config = require('../config');
+
+    let fileBuffer;
+    if (isR2Enabled()) {
+      const r2Client = getR2Client();
+      const command = new GetObjectCommand({
+        Bucket: config.r2.bucketName,
+        Key: req.file.key,
+      });
+      const response = await r2Client.send(command);
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(chunk);
+      }
+      fileBuffer = Buffer.concat(chunks);
+
+      // Delete the preview file from R2
+      await deleteFile(req.file.key);
+    } else {
+      fileBuffer = fs.readFileSync(req.file.path);
+      // Delete local preview file
+      fs.unlinkSync(req.file.path);
+    }
+
+    // Get sheet names
+    const sheetNames = getSheetNames(fileBuffer);
+
+    // Parse the file
+    const parsedData = parseBidForm(fileBuffer);
+    const { estimate, sections } = mapToEstimateFormat(parsedData);
+
+    res.json({
+      filename: req.file.originalname,
+      sheetNames,
+      projectInfo: parsedData.projectInfo,
+      summary: parsedData.summary,
+      markupPercentages: parsedData.markupPercentages,
+      sectionCount: sections.length,
+      lineItemCount: sections.reduce((sum, s) => sum + s.line_items.length, 0),
+      sections: sections.map(s => ({
+        name: s.section_name,
+        itemCount: s.line_items.length,
+        laborCost: s.labor_cost,
+        materialCost: s.material_cost,
+      })),
+      warnings: parsedData.errors,
+    });
   } catch (error) {
     next(error);
   }

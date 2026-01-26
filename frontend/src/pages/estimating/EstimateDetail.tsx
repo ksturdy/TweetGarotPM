@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
 import { customersApi } from '../../services/customers';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
+import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
 
 const EstimateDetail: React.FC = () => {
@@ -49,6 +50,7 @@ const EstimateDetail: React.FC = () => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [sections, setSections] = useState<EstimateSection[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [showBidFormSection, setShowBidFormSection] = useState(false);
 
   useEffect(() => {
     if (estimate) {
@@ -594,6 +596,58 @@ const EstimateDetail: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+
+        {/* Excel Bid Form Section */}
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'pointer',
+            }}
+            onClick={() => setShowBidFormSection(!showBidFormSection)}
+          >
+            <div>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>📊</span> Excel Bid Form
+                {estimate.bid_form_filename && (
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      backgroundColor: 'var(--success)',
+                      color: 'white',
+                      padding: '0.125rem 0.5rem',
+                      borderRadius: '0.25rem',
+                      fontWeight: 'normal',
+                    }}
+                  >
+                    Attached
+                  </span>
+                )}
+              </h2>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                {estimate.bid_form_filename
+                  ? `Using: ${estimate.bid_form_filename}`
+                  : 'Upload an Excel bid form to auto-populate estimate data'}
+              </p>
+            </div>
+            <span style={{ fontSize: '1.25rem', color: 'var(--secondary)' }}>
+              {showBidFormSection ? '▼' : '▶'}
+            </span>
+          </div>
+
+          {showBidFormSection && (
+            <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+              <BidFormUpload
+                estimateId={Number(id)}
+                onUploadComplete={() => {
+                  queryClient.invalidateQueries({ queryKey: ['estimate', id] });
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Estimate Sections and Line Items */}

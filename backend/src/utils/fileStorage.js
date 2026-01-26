@@ -53,7 +53,10 @@ async function deleteFile(filePath) {
   } else {
     // Delete from local storage
     try {
-      const fullPath = path.join(__dirname, '../../', filePath);
+      // filePath may be absolute (local multer) or relative
+      const fullPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(__dirname, '../../', filePath);
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
         console.log(`Deleted local file: ${fullPath}`);
