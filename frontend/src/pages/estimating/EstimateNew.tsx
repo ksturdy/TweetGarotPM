@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
 import { customersApi } from '../../services/customers';
+import { employeesApi } from '../../services/employees';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
 
@@ -26,6 +27,12 @@ const EstimateNew: React.FC = () => {
   const { data: customers } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
+  });
+
+  // Fetch employees for estimator dropdown
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll(),
   });
 
   // Load from localStorage on mount
@@ -55,6 +62,8 @@ const EstimateNew: React.FC = () => {
     bid_date: '',
     project_start_date: '',
     project_duration: undefined,
+    estimator_id: undefined,
+    estimator_name: '',
     status: 'in progress',
     overhead_percentage: 10.00,
     profit_percentage: 10.00,
@@ -783,6 +792,32 @@ const EstimateNew: React.FC = () => {
                 onChange={handleChange}
               />
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Estimator</label>
+              <select
+                name="estimator_id"
+                className="form-input"
+                value={formData.estimator_id || ''}
+                onChange={(e) => {
+                  const selectedId = e.target.value ? parseInt(e.target.value) : undefined;
+                  const employees = employeesData?.data?.data || [];
+                  const selectedEmployee = employees.find((emp: any) => emp.id === selectedId);
+                  setFormData((prev) => ({
+                    ...prev,
+                    estimator_id: selectedId,
+                    estimator_name: selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : '',
+                  }));
+                }}
+              >
+                <option value="">Select Estimator...</option>
+                {employeesData?.data?.data?.map((employee: any) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.first_name} {employee.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="form-row">
@@ -809,7 +844,7 @@ const EstimateNew: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Duration (days)</label>
+              <label className="form-label">Duration (months)</label>
               <input
                 type="number"
                 name="project_duration"
@@ -817,6 +852,18 @@ const EstimateNew: React.FC = () => {
                 value={formData.project_duration || ''}
                 onChange={handleChange}
               />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', marginTop: '1.5rem', marginLeft: '-0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleProceedToBuildMethod}
+                disabled={createBasicMutation.isPending}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {createBasicMutation.isPending ? 'Creating...' : 'Continue: Choose Build Method'}
+              </button>
             </div>
           </div>
         </div>
@@ -1223,27 +1270,6 @@ const EstimateNew: React.FC = () => {
           >
             {createMutation.isPending ? 'Saving...' : 'Save as Draft'}
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleProceedToBuildMethod}
-            disabled={createBasicMutation.isPending}
-          >
-            {createBasicMutation.isPending ? 'Creating...' : 'Continue: Choose Build Method'}
-          </button>
-        </div>
-
-        {/* Quick Option Banner */}
-        <div style={{
-          marginTop: '1rem',
-          padding: '1rem',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          borderRadius: '0.5rem',
-          textAlign: 'center'
-        }}>
-          <span style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>
-            Want to import from Excel? Click "Continue: Choose Build Method" to upload your bid form template.
-          </span>
         </div>
       </form>
     </div>

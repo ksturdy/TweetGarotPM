@@ -51,6 +51,7 @@ const EstimateDetail: React.FC = () => {
   const [sections, setSections] = useState<EstimateSection[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (estimate) {
@@ -122,6 +123,18 @@ const EstimateDetail: React.FC = () => {
     onError: (error: any) => {
       console.error('Failed to update status:', error);
       alert(`Failed to update status: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => estimatesApi.delete(Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['estimates'] });
+      navigate('/estimating/estimates');
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete estimate:', error);
+      alert(`Failed to delete estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -1008,20 +1021,104 @@ const EstimateDetail: React.FC = () => {
         </div>
 
         {/* Submit Buttons */}
-        <div className="form-actions">
-          <Link to="/estimating/estimates" className="btn btn-secondary">
-            Cancel
-          </Link>
+        <div className="form-actions" style={{ justifyContent: 'space-between' }}>
           <button
             type="button"
-            className="btn btn-primary"
-            onClick={handleSaveChanges}
-            disabled={updateMutation.isPending}
+            className="btn btn-danger"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleteMutation.isPending}
+            style={{
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+            }}
           >
-            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            Delete Estimate
           </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Link to="/estimating/estimates" className="btn btn-secondary">
+              Cancel
+            </Link>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSaveChanges}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: '1.5rem',
+              borderRadius: '12px',
+              maxWidth: '400px',
+              textAlign: 'center',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#9888;</div>
+            <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: 600 }}>
+              Delete Estimate
+            </h3>
+            <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+              Are you sure you want to delete <strong>{estimate?.estimate_number}</strong> - {estimate?.project_name}?
+              This action cannot be undone and will delete all associated sections and line items.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  background: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preview Modal */}
       <EstimateProposalPreviewModal
