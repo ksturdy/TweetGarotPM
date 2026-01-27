@@ -156,11 +156,10 @@ const App: React.FC = () => {
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
-                <Route path="/estimating" element={<EstimatingDashboard />} />
-                <Route path="/estimating/estimates" element={<EstimatesList />} />
+                <Route path="/estimating" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />
                 <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />
-                <Route path="/estimating/budgets" element={<BudgetsList />} />
+                <Route path="/estimating/budgets" element={<EstimatingDashboard />} />
                 <Route path="/estimating/cost-database" element={<CostDatabase />} />
                 <Route path="/account-management" element={<AccountManagementList />} />
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />

@@ -155,14 +155,21 @@ const EstimatesList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Estimating
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
             </Link>
-            <h1>📊 Estimates</h1>
-            <div className="sales-subtitle">Project Estimates & Proposals</div>
+            <h1>📊 Estimating</h1>
+            <div className="sales-subtitle">Manage Estimates, Budgets & Proposals</div>
           </div>
         </div>
-        <div className="sales-header-actions">
+        <div className="sales-header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
+          <Link to="/estimating/budgets" className="sales-btn sales-btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Budget
+          </Link>
           <Link to="/estimating/estimates/new" className="sales-btn sales-btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="12" y1="5" x2="12" y2="19"/>

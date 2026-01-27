@@ -1,48 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { estimatesApi } from '../../services/estimates';
 import './EstimatingDashboard.css';
 
 const EstimatingDashboard: React.FC = () => {
-  // Fetch estimates data
-  const { data: estimates } = useQuery({
-    queryKey: ['estimates'],
-    queryFn: () => estimatesApi.getAll().then((res) => res.data),
-  });
-
-  // Calculate stats from estimates
-  const estimateStats = {
-    total: estimates?.length || 0,
-    inProgress: estimates?.filter((e: any) => e.status === 'in progress').length || 0,
-    submitted: estimates?.filter((e: any) => e.status === 'submitted').length || 0,
-    awarded: estimates?.filter((e: any) => e.status === 'awarded').length || 0,
-    lost: estimates?.filter((e: any) => e.status === 'lost').length || 0,
-    cancelled: estimates?.filter((e: any) => e.status === 'cancelled').length || 0,
-  };
-
-  const totalEstimatedValue = estimates?.reduce((sum: number, e: any) => sum + Number(e.total_cost || 0), 0) || 0;
-  const awardedEstimates = estimates?.filter((e: any) => e.status === 'awarded').length || 0;
-  const totalEstimates = estimates?.length || 0;
-  const winRate = totalEstimates > 0 ? Math.round((awardedEstimates / totalEstimates) * 100) : 0;
-
   const modules = [
-    {
-      name: 'Budgets',
-      icon: '💰',
-      path: '/estimating/budgets',
-      desc: 'Track project budgets and costs',
-      color: '#10b981',
-      stats: { total: 0, active: 0, overbudget: 0 },
-    },
-    {
-      name: 'Estimates',
-      icon: '📋',
-      path: '/estimating/estimates',
-      desc: 'Create and manage project estimates',
-      color: '#3b82f6',
-      stats: estimateStats,
-    },
     {
       name: 'Cost Database',
       icon: '📚',
@@ -57,9 +18,9 @@ const EstimatingDashboard: React.FC = () => {
     <div className="estimating-dashboard">
       <div className="page-header">
         <div>
-          <Link to="/" className="breadcrumb-link">&larr; Back to Dashboard</Link>
-          <h1 className="page-title">Estimating</h1>
-          <p className="page-subtitle">Manage estimates and budgets for your projects</p>
+          <Link to="/estimating" className="breadcrumb-link">&larr; Back to Estimating</Link>
+          <h1 className="page-title">Budgets</h1>
+          <p className="page-subtitle">Track project budgets and costs</p>
         </div>
       </div>
 
@@ -244,52 +205,14 @@ const EstimatingDashboard: React.FC = () => {
             </div>
 
             <div className="module-stats">
-              {module.name === 'Estimates' ? (
-                <>
-                  <div className="stat-item">
-                    <div className="stat-number">{estimateStats.inProgress}</div>
-                    <div className="stat-label">In Progress</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">{estimateStats.submitted}</div>
-                    <div className="stat-label">Submitted</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">{estimateStats.awarded}</div>
-                    <div className="stat-label">Awarded</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">{estimateStats.lost}</div>
-                    <div className="stat-label">Lost</div>
-                  </div>
-                </>
-              ) : module.name === 'Budgets' ? (
-                <>
-                  <div className="stat-item">
-                    <div className="stat-number">0</div>
-                    <div className="stat-label">Total</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">0</div>
-                    <div className="stat-label">Active</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">0</div>
-                    <div className="stat-label">Over Budget</div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="stat-item">
-                    <div className="stat-number">0</div>
-                    <div className="stat-label">Items</div>
-                  </div>
-                  <div className="stat-item">
-                    <div className="stat-number">8</div>
-                    <div className="stat-label">Categories</div>
-                  </div>
-                </>
-              )}
+              <div className="stat-item">
+                <div className="stat-number">0</div>
+                <div className="stat-label">Items</div>
+              </div>
+              <div className="stat-item">
+                <div className="stat-number">8</div>
+                <div className="stat-label">Categories</div>
+              </div>
             </div>
 
             <div className="module-action">
@@ -301,27 +224,27 @@ const EstimatingDashboard: React.FC = () => {
       </div>
 
       <div className="quick-stats-section">
-        <h2 className="section-title">Quick Stats</h2>
+        <h2 className="section-title">Budget Overview</h2>
         <div className="quick-stats-grid">
+          <div className="stat-card card">
+            <div className="stat-icon">💰</div>
+            <div>
+              <div className="stat-value">$0</div>
+              <div className="stat-label">Total Budget</div>
+            </div>
+          </div>
           <div className="stat-card card">
             <div className="stat-icon">📊</div>
             <div>
-              <div className="stat-value">${totalEstimatedValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
-              <div className="stat-label">Total Estimated Value</div>
+              <div className="stat-value">0</div>
+              <div className="stat-label">Active Budgets</div>
             </div>
           </div>
           <div className="stat-card card">
             <div className="stat-icon">✅</div>
             <div>
-              <div className="stat-value">{winRate}%</div>
-              <div className="stat-label">Win Rate</div>
-            </div>
-          </div>
-          <div className="stat-card card">
-            <div className="stat-icon">⏱️</div>
-            <div>
-              <div className="stat-value">{estimateStats.submitted}</div>
-              <div className="stat-label">Submitted</div>
+              <div className="stat-value">0</div>
+              <div className="stat-label">On Track</div>
             </div>
           </div>
           <div className="stat-card card">
@@ -339,7 +262,7 @@ const EstimatingDashboard: React.FC = () => {
         <div className="card">
           <div className="empty-state">
             <p>No recent activity</p>
-            <p className="empty-state-hint">Start by creating an estimate or budget</p>
+            <p className="empty-state-hint">Start by creating a budget</p>
           </div>
         </div>
       </div>

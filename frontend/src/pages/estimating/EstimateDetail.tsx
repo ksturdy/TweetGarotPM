@@ -434,14 +434,14 @@ const EstimateDetail: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Cost Summary)</span>
               <span style={{ fontWeight: 600 }}>
-                ${Math.round(totals.overhead + totals.profit + totals.contingency + totals.bond).toLocaleString('en-US')}
+                ${Math.round(totals.overhead + totals.profit).toLocaleString('en-US')}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>Total GM %</span>
               <span style={{ fontWeight: 600, color: 'var(--success)' }}>
                 {(() => {
-                  const costSummaryGM = totals.overhead + totals.profit + totals.contingency + totals.bond;
+                  const costSummaryGM = totals.overhead + totals.profit;
                   // If no Cost Summary markup, just use the Bid Form GM%
                   if (costSummaryGM === 0) {
                     return Number(estimate.gross_margin_percentage || 0).toFixed(1);
