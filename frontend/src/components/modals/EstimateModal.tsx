@@ -21,7 +21,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Navigate to estimating page with pre-filled data
-    navigate('/estimating/estimates', {
+    navigate('/estimating', {
       state: {
         customerId,
         customerName,

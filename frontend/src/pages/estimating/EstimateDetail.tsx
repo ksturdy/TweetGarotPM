@@ -141,7 +141,7 @@ const EstimateDetail: React.FC = () => {
     mutationFn: () => estimatesApi.delete(Number(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
-      navigate('/estimating/estimates');
+      navigate('/estimating');
     },
     onError: (error: any) => {
       console.error('Failed to delete estimate:', error);
@@ -379,7 +379,7 @@ const EstimateDetail: React.FC = () => {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
         <p style={{ color: 'var(--danger)' }}>Error loading estimate</p>
-        <Link to="/estimating/estimates" className="btn btn-secondary" style={{ marginTop: '1rem' }}>
+        <Link to="/estimating" className="btn btn-secondary" style={{ marginTop: '1rem' }}>
           &larr; Back to Estimates
         </Link>
       </div>
@@ -389,7 +389,7 @@ const EstimateDetail: React.FC = () => {
   return (
     <div className="estimate-new">
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        <Link to="/estimating/estimates">&larr; All Estimates</Link>
+        <Link to="/estimating">&larr; All Estimates</Link>
         {estimate.customer_id && (
           <>
             <span style={{ color: '#6b7280' }}>|</span>
@@ -1133,7 +1133,7 @@ const EstimateDetail: React.FC = () => {
             Delete Estimate
           </button>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Link to="/estimating/estimates" className="btn btn-secondary">
+            <Link to="/estimating" className="btn btn-secondary">
               Cancel
             </Link>
             <button

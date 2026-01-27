@@ -154,7 +154,7 @@ const EstimateNew: React.FC = () => {
       // Clear localStorage on successful save
       localStorage.removeItem('estimateInProgress');
       // Navigate back to estimates list
-      navigate('/estimating/estimates');
+      navigate('/estimating');
     },
     onError: (error: any) => {
       console.error('Failed to create estimate:', error);
@@ -167,7 +167,7 @@ const EstimateNew: React.FC = () => {
     mutationFn: (data: Estimate) => estimatesApi.update(createdEstimateId!, data),
     onSuccess: () => {
       localStorage.removeItem('estimateInProgress');
-      navigate('/estimating/estimates');
+      navigate('/estimating');
     },
     onError: (error: any) => {
       console.error('Failed to update estimate:', error);
@@ -620,7 +620,7 @@ const EstimateNew: React.FC = () => {
   return (
     <div className="estimate-new">
       <div style={{ marginBottom: '1rem' }}>
-        <Link to="/estimating/estimates">&larr; Back to Estimates</Link>
+        <Link to="/estimating">&larr; Back to Estimates</Link>
       </div>
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
@@ -1259,7 +1259,7 @@ const EstimateNew: React.FC = () => {
 
         {/* Submit Buttons */}
         <div className="form-actions">
-          <Link to="/estimating/estimates" className="btn btn-secondary">
+          <Link to="/estimating" className="btn btn-secondary">
             Cancel
           </Link>
           <button
