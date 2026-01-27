@@ -95,7 +95,7 @@ router.get('/:id', async (req, res, next) => {
 
 // Create new opportunity
 router.post('/',
-  checkLimit('max_opportunities'),
+  checkLimit('max_opportunities', opportunities.countByTenant),
   [
     body('title').trim().notEmpty().withMessage('Title is required'),
     body('estimated_value').optional({ values: 'falsy' }).isNumeric().withMessage('Estimated value must be a number'),
