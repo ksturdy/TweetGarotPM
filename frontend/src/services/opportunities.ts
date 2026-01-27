@@ -30,6 +30,9 @@ export interface Opportunity {
   customer_name?: string;
   gc_customer_id?: number;
   gc_customer_name?: string;
+  facility_name?: string;
+  facility_customer_id?: number;
+  facility_customer_name?: string;
   converted_to_project_id?: number;
   converted_project_name?: string;
   converted_at?: string;

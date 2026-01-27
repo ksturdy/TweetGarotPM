@@ -352,7 +352,7 @@ const CustomerList: React.FC = () => {
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)', width: '36px', height: '36px', fontSize: '1rem' }}>🏢</div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{new Set(filteredCustomers.map(c => c.customer_owner).filter(Boolean)).size}</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Unique Owners</div>
+            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Unique Companies</div>
           </div>
         </div>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
@@ -446,10 +446,10 @@ const CustomerList: React.FC = () => {
                 <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('customer_facility')}>
-                Customer <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('customer_owner')}>
-                Owner <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                Company <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('market')}>
                 Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>

@@ -5,6 +5,13 @@ import './AccountManagementList.css';
 const AccountManagementList: React.FC = () => {
   const modules = [
     {
+      name: 'Teams',
+      icon: '👥',
+      path: '/account-management/teams',
+      desc: 'Manage sales and project teams',
+      color: '#6366f1',
+    },
+    {
       name: 'Customers',
       icon: '👥',
       path: '/account-management/customers',
@@ -79,14 +86,14 @@ const AccountManagementList: React.FC = () => {
         <div className="stat-card card">
           <div className="stat-icon">🎯</div>
           <div>
-            <div className="stat-value">5</div>
+            <div className="stat-value">6</div>
             <div className="stat-label">Total Modules</div>
           </div>
         </div>
         <div className="stat-card card">
           <div className="stat-icon">✅</div>
           <div>
-            <div className="stat-value">4</div>
+            <div className="stat-value">5</div>
             <div className="stat-label">Active Modules</div>
           </div>
         </div>

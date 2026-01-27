@@ -45,13 +45,16 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     engineer: opportunity?.engineer || '',
     campaign_id: opportunity?.campaign_id || defaultCampaignId || '',
     customer_id: opportunity?.customer_id || '',
-    gc_customer_id: opportunity?.gc_customer_id || ''
+    gc_customer_id: opportunity?.gc_customer_id || '',
+    facility_name: opportunity?.facility_name || '',
+    facility_customer_id: opportunity?.facility_customer_id || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [linkToExistingOwner, setLinkToExistingOwner] = useState(!!opportunity?.customer_id);
   const [linkToExistingGC, setLinkToExistingGC] = useState(!!opportunity?.gc_customer_id);
+  const [linkToExistingFacility, setLinkToExistingFacility] = useState(!!opportunity?.facility_customer_id);
 
   // Fetch users for assignment
   const { data: usersResponse } = useQuery({
@@ -78,6 +81,18 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll()
   });
+
+  // Get unique companies from customers list
+  const uniqueCompanies = React.useMemo(() => {
+    const companyMap = new Map<string, Customer>();
+    customers.forEach((customer: Customer) => {
+      const companyName = customer.customer_owner || customer.customer_facility;
+      if (companyName && !companyMap.has(companyName)) {
+        companyMap.set(companyName, customer);
+      }
+    });
+    return Array.from(companyMap.values());
+  }, [customers]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -186,6 +201,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       cleanedData.gc_customer_id = Number(formData.gc_customer_id);
     } else {
       cleanedData.gc_customer_id = null;
+    }
+    // Handle facility linking
+    if (formData.facility_name) cleanedData.facility_name = formData.facility_name;
+    if (linkToExistingFacility && formData.facility_customer_id) {
+      cleanedData.facility_customer_id = Number(formData.facility_customer_id);
+    } else {
+      cleanedData.facility_customer_id = null;
     }
 
     // Add optional number fields if they have values
@@ -361,14 +383,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="owner">Owner</label>
+                    <label htmlFor="owner">Company</label>
                     <input
                       type="text"
                       id="owner"
                       name="owner"
                       value={formData.owner}
                       onChange={handleChange}
-                      placeholder="Project owner"
+                      placeholder="Company name"
                     />
                     <div style={{ marginTop: '0.5rem' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
@@ -383,7 +405,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           }}
                           style={{ width: '16px', height: '16px' }}
                         />
-                        Link to Existing Customer
+                        Link to Existing Company
                       </label>
                       {linkToExistingOwner && (
                         <select
@@ -393,10 +415,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           onChange={handleChange}
                           style={{ marginTop: '0.5rem', width: '100%' }}
                         >
-                          <option value="">Select customer...</option>
-                          {customers.map((customer: Customer) => (
+                          <option value="">Select company...</option>
+                          {uniqueCompanies.map((customer: Customer) => (
                             <option key={customer.id} value={customer.id}>
-                              {customer.customer_facility}
+                              {customer.customer_owner || customer.customer_facility}
                             </option>
                           ))}
                         </select>
@@ -440,12 +462,62 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           <option value="">Select customer...</option>
                           {customers.map((customer: Customer) => (
                             <option key={customer.id} value={customer.id}>
-                              {customer.customer_facility}
+                              {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
                             </option>
                           ))}
                         </select>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="facility_name">Facility/Location Name</label>
+                    <input
+                      type="text"
+                      id="facility_name"
+                      name="facility_name"
+                      value={formData.facility_name}
+                      onChange={handleChange}
+                      placeholder="Facility or location name"
+                    />
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingFacility}
+                          onChange={(e) => {
+                            setLinkToExistingFacility(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, facility_customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '16px', height: '16px' }}
+                        />
+                        Link to Existing Facility/Location
+                      </label>
+                      {linkToExistingFacility && (
+                        <select
+                          id="facility_customer_id"
+                          name="facility_customer_id"
+                          value={formData.facility_customer_id}
+                          onChange={handleChange}
+                          style={{ marginTop: '0.5rem', width: '100%' }}
+                        >
+                          <option value="">Select facility...</option>
+                          {customers.map((customer: Customer) => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    {/* Empty div to maintain grid layout */}
                   </div>
                 </div>
 

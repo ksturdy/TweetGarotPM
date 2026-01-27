@@ -34,6 +34,8 @@ import AccountManagementList from './pages/accountManagement/AccountManagementLi
 import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
 import VendorList from './pages/accountManagement/VendorList';
+import TeamList from './pages/accountManagement/TeamList';
+import TeamDetail from './pages/accountManagement/TeamDetail';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerContacts from './pages/CustomerContacts';
 import CustomerProjects from './pages/CustomerProjects';
@@ -165,6 +167,8 @@ const App: React.FC = () => {
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />
                 <Route path="/account-management/vendors" element={<VendorList />} />
+                <Route path="/account-management/teams" element={<TeamList />} />
+                <Route path="/account-management/teams/:id" element={<TeamDetail />} />
                 <Route path="/customers/:id" element={<CustomerDetail />} />
                 <Route path="/customers/:id/contacts" element={<CustomerContacts />} />
                 <Route path="/customers/:id/projects" element={<CustomerProjects />} />

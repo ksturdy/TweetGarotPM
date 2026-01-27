@@ -42,12 +42,16 @@ const opportunities = {
         ps.probability as stage_probability,
         u.first_name || ' ' || u.last_name as assigned_to_name,
         creator.first_name || ' ' || creator.last_name as created_by_name,
+        c.customer_owner as customer_name,
+        fc.customer_facility as facility_customer_name,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id) as activity_count,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN users u ON o.assigned_to = u.id
       LEFT JOIN users creator ON o.created_by = creator.id
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
       ${whereClause}
       ORDER BY o.last_activity_at DESC
     `;
@@ -122,7 +126,8 @@ const opportunities = {
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
         c.customer_facility as customer_name,
-        gc.customer_facility as gc_customer_name
+        gc.customer_facility as gc_customer_name,
+        fc.customer_facility as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN users u ON o.assigned_to = u.id
@@ -130,6 +135,7 @@ const opportunities = {
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers gc ON o.gc_customer_id = gc.id
+      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
       WHERE o.id = $1
     `;
 
@@ -152,7 +158,8 @@ const opportunities = {
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
         c.customer_facility as customer_name,
-        gc.customer_facility as gc_customer_name
+        gc.customer_facility as gc_customer_name,
+        fc.customer_facility as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN users u ON o.assigned_to = u.id
@@ -160,6 +167,7 @@ const opportunities = {
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers gc ON o.gc_customer_id = gc.id
+      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
       WHERE o.id = $1 AND o.tenant_id = $2
     `;
 
@@ -185,7 +193,8 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, source,
-      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id
+      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
+      facility_name, facility_customer_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -195,15 +204,17 @@ const opportunities = {
       INSERT INTO opportunities (
         title, description, estimated_value, estimated_start_date, estimated_duration_days,
         construction_type, project_type, location, stage_id, priority, assigned_to, source,
-        market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id, created_by, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
+        facility_name, facility_customer_id, created_by, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, source,
-      market, owner, general_contractor, architect, engineer, campaign_id, customer_id || null, gc_customer_id || null, userId, tenantId
+      market, owner, general_contractor, architect, engineer, campaign_id, customer_id || null, gc_customer_id || null,
+      facility_name, facility_customer_id || null, userId, tenantId
     ]);
 
     return result.rows[0];
@@ -216,7 +227,8 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id
+      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
+      facility_name, facility_customer_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -245,15 +257,18 @@ const opportunities = {
         campaign_id = $19,
         customer_id = $20,
         gc_customer_id = $21,
+        facility_name = COALESCE($22, facility_name),
+        facility_customer_id = $23,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $22 AND tenant_id = $23
+      WHERE id = $24 AND tenant_id = $25
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id, id, tenantId
+      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
+      facility_name, facility_customer_id, id, tenantId
     ]);
 
     return result.rows[0];

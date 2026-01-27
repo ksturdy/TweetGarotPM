@@ -55,6 +55,7 @@ const publicRoutes = require('./routes/public');
 const tenantRoutes = require('./routes/tenant');
 const platformRoutes = require('./routes/platform');
 const placesRoutes = require('./routes/places');
+const teamRoutes = require('./routes/teams');
 
 const app = express();
 
@@ -108,6 +109,7 @@ app.use('/api/campaigns', campaignRoutes);
 app.use('/api/customer-assessments', customerAssessmentRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/places', placesRoutes);
+app.use('/api/teams', teamRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

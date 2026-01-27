@@ -49,7 +49,8 @@ interface SalesOpportunity {
     initials: string;
     color: string;
   };
-  owner: string;
+  facilityLocationName: string;
+  company: string;
   market: string;
   icon: string;
   iconGradient: string;
@@ -179,7 +180,8 @@ const SalesPipeline: React.FC = () => {
         initials: opp.assigned_to_name ? opp.assigned_to_name.split(' ').map(n => n[0]).join('') : 'U',
         color: getSalespersonColor(salespersonName)
       },
-      owner: opp.owner || '',
+      facilityLocationName: opp.facility_customer_id ? (opp.facility_customer_name || '') : (opp.facility_name || ''),
+      company: opp.customer_id ? (opp.customer_name || '') : (opp.owner || ''),
       market: opp.market || '',
       icon: getMarketIcon(opp.market),
       iconGradient: getMarketGradient(opp.market)
@@ -251,7 +253,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Opportunity Received',
       probability: 'Medium',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
-      owner: 'City of Phoenix',
+      facilityLocationName: 'Terminal 4',
+      company: 'City of Phoenix',
       market: 'Commercial',
       icon: '🏢',
       iconGradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)'
@@ -266,7 +269,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Quoted',
       probability: 'Medium',
       salesperson: { name: 'Tom Henderson', initials: 'TH', color: '#f59e0b' },
-      owner: 'Banner Health',
+      facilityLocationName: 'Data Center',
+      company: 'Banner Health',
       market: 'Healthcare',
       icon: '🏥',
       iconGradient: 'linear-gradient(135deg, #10b981, #06b6d4)'
@@ -281,7 +285,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Quoted',
       probability: 'High',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
-      owner: 'Chandler USD',
+      facilityLocationName: 'District Office',
+      company: 'Chandler USD',
       market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #f59e0b, #f43f5e)'
@@ -296,7 +301,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Quoted',
       probability: 'Medium',
       salesperson: { name: 'Jake Davis', initials: 'JD', color: '#10b981' },
-      owner: 'Arizona State University',
+      facilityLocationName: 'Research Building',
+      company: 'Arizona State University',
       market: 'Education',
       icon: '🏛',
       iconGradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)'
@@ -311,7 +317,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Opportunity Received',
       probability: 'Low',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
-      owner: 'Vestar Development',
+      facilityLocationName: 'Phase 2 Building',
+      company: 'Vestar Development',
       market: 'Retail',
       icon: '🏬',
       iconGradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)'
@@ -326,7 +333,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Quoted',
       probability: 'High',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
-      owner: 'Macerich Company',
+      facilityLocationName: 'Expansion Wing',
+      company: 'Macerich Company',
       market: 'Commercial',
       icon: '🏢',
       iconGradient: 'linear-gradient(135deg, #10b981, #06b6d4)'
@@ -341,7 +349,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Awarded',
       probability: 'High',
       salesperson: { name: 'Tom Henderson', initials: 'TH', color: '#f59e0b' },
-      owner: 'Dignity Health',
+      facilityLocationName: 'Gilbert Clinic',
+      company: 'Dignity Health',
       market: 'Healthcare',
       icon: '🏥',
       iconGradient: 'linear-gradient(135deg, #f43f5e, #f59e0b)'
@@ -356,7 +365,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Lead',
       probability: 'Low',
       salesperson: { name: 'Mike Reynolds', initials: 'MR', color: '#3b82f6' },
-      owner: 'Maricopa Community Colleges',
+      facilityLocationName: 'Science Building',
+      company: 'Maricopa Community Colleges',
       market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
@@ -371,7 +381,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Lead',
       probability: 'Low',
       salesperson: { name: 'Kevin Walsh', initials: 'KW', color: '#8b5cf6' },
-      owner: 'Intel Corporation',
+      facilityLocationName: 'Building 4',
+      company: 'Intel Corporation',
       market: 'Industrial',
       icon: '🏭',
       iconGradient: 'linear-gradient(135deg, #06b6d4, #10b981)'
@@ -386,7 +397,8 @@ const SalesPipeline: React.FC = () => {
       stageName: 'Awarded',
       probability: 'High',
       salesperson: { name: 'Jake Davis', initials: 'JD', color: '#10b981' },
-      owner: 'Mesa Public Schools',
+      facilityLocationName: 'District Facilities',
+      company: 'Mesa Public Schools',
       market: 'Education',
       icon: '🏫',
       iconGradient: 'linear-gradient(135deg, #10b981, #3b82f6)'
@@ -586,7 +598,8 @@ const SalesPipeline: React.FC = () => {
     opp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     opp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     opp.salesperson.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.owner.toLowerCase().includes(searchTerm.toLowerCase())
+    opp.facilityLocationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    opp.company.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Sort opportunities
@@ -603,13 +616,13 @@ const SalesPipeline: React.FC = () => {
         aValue = a.name.toLowerCase();
         bValue = b.name.toLowerCase();
         break;
-      case 'owner':
-        aValue = a.owner.toLowerCase();
-        bValue = b.owner.toLowerCase();
+      case 'facilityLocationName':
+        aValue = a.facilityLocationName.toLowerCase();
+        bValue = b.facilityLocationName.toLowerCase();
         break;
-      case 'market':
-        aValue = a.market.toLowerCase();
-        bValue = b.market.toLowerCase();
+      case 'company':
+        aValue = a.company.toLowerCase();
+        bValue = b.company.toLowerCase();
         break;
       case 'value':
         aValue = a.value;
@@ -931,11 +944,11 @@ const SalesPipeline: React.FC = () => {
                 <th className="sales-sortable" onClick={() => handleSort('name')}>
                   Project / Opportunity <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
-                <th className="sales-sortable" onClick={() => handleSort('owner')}>
-                  Owner <span className="sales-sort-icon">{sortColumn === 'owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <th className="sales-sortable" onClick={() => handleSort('company')}>
+                  Company <span className="sales-sort-icon">{sortColumn === 'company' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
-                <th className="sales-sortable" onClick={() => handleSort('market')}>
-                  Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <th className="sales-sortable" onClick={() => handleSort('facilityLocationName')}>
+                  Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'facilityLocationName' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('value')}>
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -975,8 +988,8 @@ const SalesPipeline: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td>{opp.owner || '-'}</td>
-                  <td>{opp.market || '-'}</td>
+                  <td>{opp.company || '-'}</td>
+                  <td>{opp.facilityLocationName || '-'}</td>
                   <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
                   <td>
                     <span className={`sales-stage-badge ${opp.stage}`}>
