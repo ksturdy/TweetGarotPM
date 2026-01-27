@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
 import { customersApi } from '../../services/customers';
+import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
@@ -24,6 +25,12 @@ const EstimateDetail: React.FC = () => {
     queryFn: () => customersApi.getAll(),
   });
 
+  // Fetch employees for estimator dropdown
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll(),
+  });
+
   const [formData, setFormData] = useState<Estimate>({
     estimate_number: '',
     project_name: '',
@@ -35,6 +42,8 @@ const EstimateDetail: React.FC = () => {
     bid_date: '',
     project_start_date: '',
     project_duration: undefined,
+    estimator_id: undefined,
+    estimator_name: '',
     status: 'in progress',
     overhead_percentage: 10,
     profit_percentage: 10,
@@ -66,6 +75,8 @@ const EstimateDetail: React.FC = () => {
         bid_date: estimate.bid_date ? estimate.bid_date.split('T')[0] : '',
         project_start_date: estimate.project_start_date ? estimate.project_start_date.split('T')[0] : '',
         project_duration: estimate.project_duration || undefined,
+        estimator_id: estimate.estimator_id || undefined,
+        estimator_name: estimate.estimator_name || '',
         status: estimate.status || 'in progress',
         overhead_percentage: estimate.overhead_percentage || 10,
         profit_percentage: estimate.profit_percentage || 10,
@@ -406,6 +417,44 @@ const EstimateDetail: React.FC = () => {
               ${Math.round(totals.total || 0).toLocaleString('en-US')}
             </span>
           </div>
+          {/* Gross Margin Display */}
+          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Bid Form)</span>
+              <span style={{ fontWeight: 600 }}>
+                ${Math.round(Number(estimate.gross_margin_dollars || 0)).toLocaleString('en-US')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM % (Bid Form)</span>
+              <span style={{ fontWeight: 600 }}>
+                {Number(estimate.gross_margin_percentage || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Cost Summary)</span>
+              <span style={{ fontWeight: 600 }}>
+                ${Math.round(totals.overhead + totals.profit + totals.contingency + totals.bond).toLocaleString('en-US')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>Total GM %</span>
+              <span style={{ fontWeight: 600, color: 'var(--success)' }}>
+                {(() => {
+                  const costSummaryGM = totals.overhead + totals.profit + totals.contingency + totals.bond;
+                  // If no Cost Summary markup, just use the Bid Form GM%
+                  if (costSummaryGM === 0) {
+                    return Number(estimate.gross_margin_percentage || 0).toFixed(1);
+                  }
+                  // Otherwise calculate combined GM%
+                  if (totals.total > 0) {
+                    return ((Number(estimate.gross_margin_dollars || 0) + costSummaryGM) / totals.total * 100).toFixed(1);
+                  }
+                  return '0.0';
+                })()}%
+              </span>
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
@@ -573,6 +622,32 @@ const EstimateDetail: React.FC = () => {
                 onChange={handleChange}
               />
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Estimator</label>
+              <select
+                name="estimator_id"
+                className="form-input"
+                value={formData.estimator_id || ''}
+                onChange={(e) => {
+                  const selectedId = e.target.value ? parseInt(e.target.value) : undefined;
+                  const employees = employeesData?.data?.data || [];
+                  const selectedEmployee = employees.find((emp: any) => emp.id === selectedId);
+                  setFormData((prev) => ({
+                    ...prev,
+                    estimator_id: selectedId,
+                    estimator_name: selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : '',
+                  }));
+                }}
+              >
+                <option value="">Select Estimator...</option>
+                {employeesData?.data?.data?.map((employee: any) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.first_name} {employee.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="form-row">
@@ -599,7 +674,7 @@ const EstimateDetail: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Duration (days)</label>
+              <label className="form-label">Duration (months)</label>
               <input
                 type="number"
                 name="project_duration"

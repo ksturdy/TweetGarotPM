@@ -16,6 +16,7 @@ export interface Customer {
   market?: string;
   customer_score?: number;
   active_customer: boolean;
+  favorite?: boolean;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -64,6 +65,11 @@ export const customersApi = {
 
   async delete(id: number) {
     const response = await api.delete(`/customers/${id}`);
+    return response.data;
+  },
+
+  async toggleFavorite(id: number) {
+    const response = await api.patch<Customer>(`/customers/${id}/favorite`);
     return response.data;
   },
 

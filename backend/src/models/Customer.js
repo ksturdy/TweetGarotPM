@@ -106,7 +106,7 @@ const Customer = {
     const allowedFields = [
       'customer_facility', 'customer_owner', 'account_manager', 'field_leads',
       'customer_number', 'address', 'city', 'state', 'zip_code',
-      'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes'
+      'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes', 'favorite'
     ];
 
     const updates = [];
@@ -223,10 +223,7 @@ const Customer = {
         e.estimate_number || ' - ' || e.project_name as name,
         e.bid_date as date,
         e.total_cost as value,
-        CASE
-          WHEN e.total_cost > 0 THEN ROUND((e.profit_amount / e.total_cost * 100)::numeric, 1)
-          ELSE 0
-        END as gm_percent,
+        ROUND(COALESCE(e.gross_margin_percentage, 0)::numeric, 1) as gm_percent,
         e.building_type,
         e.status
       FROM estimates e

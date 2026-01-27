@@ -94,6 +94,9 @@ export interface Estimate {
   bid_form_version?: number;
   build_method?: 'manual' | 'excel_import';
   rate_inputs?: Record<string, unknown>;
+  // Gross margin from Excel bid form (AF211/AH211)
+  gross_margin_dollars?: number;
+  gross_margin_percentage?: number;
 }
 
 export interface BidFormInfo {

@@ -120,7 +120,9 @@ const Estimate = {
       'bid_form_version', 'build_method', 'rate_inputs',
       // Cost fields (for direct updates from bid form import)
       'labor_cost', 'material_cost', 'equipment_cost', 'subcontractor_cost',
-      'rental_cost', 'subtotal', 'total_cost', 'contingency_amount'
+      'rental_cost', 'subtotal', 'total_cost', 'contingency_amount',
+      // Gross margin fields (from Excel bid form AF211/AH211)
+      'gross_margin_dollars', 'gross_margin_percentage'
     ];
 
     Object.keys(data).forEach((key) => {

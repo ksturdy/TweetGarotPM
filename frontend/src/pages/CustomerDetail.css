@@ -96,6 +96,23 @@
   font-weight: 500;
 }
 
+/* Simplified header layout (used in sub-pages like Estimates, Touchpoints) */
+.customer-header > .back-button {
+  margin: 1rem 1.5rem 0;
+}
+
+.customer-header-content {
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.customer-header-content .customer-info h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.25rem 0;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
 .customer-tags {
   display: flex;
   gap: 0.5rem;
@@ -464,12 +481,36 @@
   padding: 1.5rem;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: 500px;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  width: 45%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.data-table th:nth-child(2),
+.data-table td:nth-child(2) {
+  width: 22%;
+}
+
+.data-table th:nth-child(3),
+.data-table td:nth-child(3) {
+  width: 20%;
+}
+
+.data-table th:nth-child(4),
+.data-table td:nth-child(4) {
+  width: 13%;
 }
 
 .data-table thead th {

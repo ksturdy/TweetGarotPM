@@ -201,6 +201,10 @@ function parseBaseBid(sheet) {
   const lumpSumTotal = parseFloat(getCell('Z211')) || 0; // Subcontract lump sums
   const contingency = parseFloat(getCell('AA211')) || 0; // Contingency
 
+  // Gross margin and total sell price from bid form
+  const grossMarginDollars = parseFloat(getCell('AF211')) || 0; // Gross Margin $
+  const totalCellPrice = parseFloat(getCell('AH211')) || 0; // Total Cell Price
+
   // Total sell includes labor, material, lump sums, and contingency
   result.summary.totalSell = laborSell + materialSell + lumpSumTotal + contingency;
   result.summary.totalMarkup = (parseFloat(getCell('Q211')) || 0) + (parseFloat(getCell('W211')) || 0);
@@ -212,6 +216,18 @@ function parseBaseBid(sheet) {
 
   // Store contingency separately
   result.summary.contingency = contingency;
+
+  // Store gross margin info from Excel
+  result.summary.grossMarginDollars = grossMarginDollars;
+  result.summary.totalCellPrice = totalCellPrice;
+
+  // Calculate gross margin percentage from Excel values
+  // GM% = Gross Margin $ / Total Cell Price
+  if (totalCellPrice > 0) {
+    result.summary.grossMarginPercentage = (grossMarginDollars / totalCellPrice) * 100;
+  } else {
+    result.summary.grossMarginPercentage = 0;
+  }
 
   // Calculate subtotal (before contingency)
   result.summary.subtotal = result.summary.totalLaborCost +
@@ -425,9 +441,35 @@ function parseQuotedItems(sheet) {
 /**
  * Map parsed bid form data to estimate database format
  * @param {Object} parsedData - Output from parseBidForm()
+ * @param {Object} additionalMarkups - Optional additional markups { overhead_percentage, profit_percentage }
  * @returns {Object} Data ready for estimate creation/update
  */
-function mapToEstimateFormat(parsedData) {
+function mapToEstimateFormat(parsedData, additionalMarkups = {}) {
+  // Get gross margin info from Excel
+  let grossMarginDollars = parsedData.summary.grossMarginDollars || 0;
+  const totalCellPrice = parsedData.summary.totalCellPrice || 0;
+  let grossMarginPercentage = parsedData.summary.grossMarginPercentage || 0;
+
+  // If additional overhead/profit markups are provided, add them to the gross margin
+  const additionalOverhead = additionalMarkups.overhead_percentage || 0;
+  const additionalProfit = additionalMarkups.profit_percentage || 0;
+
+  if (additionalOverhead > 0 || additionalProfit > 0) {
+    // Calculate additional markup amounts based on subtotal
+    const subtotal = parsedData.summary.subtotal || 0;
+    const additionalOverheadAmount = subtotal * (additionalOverhead / 100);
+    const additionalProfitAmount = (subtotal + additionalOverheadAmount) * (additionalProfit / 100);
+
+    // Add to gross margin dollars
+    grossMarginDollars += additionalOverheadAmount + additionalProfitAmount;
+
+    // Recalculate gross margin percentage with new total
+    const newTotalSell = totalCellPrice + additionalOverheadAmount + additionalProfitAmount;
+    if (newTotalSell > 0) {
+      grossMarginPercentage = (grossMarginDollars / newTotalSell) * 100;
+    }
+  }
+
   const estimate = {
     project_name: parsedData.projectInfo.projectName || '',
     bid_date: parsedData.projectInfo.bidDate || null,
@@ -443,10 +485,14 @@ function mapToEstimateFormat(parsedData) {
 
     // For Excel imports, markups are already applied in the Sell prices
     // Set percentages to 0 to prevent database trigger from re-applying them
-    overhead_percentage: 0,
-    profit_percentage: 0,
+    overhead_percentage: additionalOverhead,
+    profit_percentage: additionalProfit,
     contingency_percentage: 0,
     bond_percentage: 0,
+
+    // Gross margin from Excel (AF211 / AH211)
+    gross_margin_dollars: grossMarginDollars,
+    gross_margin_percentage: grossMarginPercentage,
 
     // Store full rate inputs as JSON
     rate_inputs: parsedData.rateInputs,

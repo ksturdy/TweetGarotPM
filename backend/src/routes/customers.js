@@ -235,6 +235,20 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// Toggle customer favorite status
+router.patch('/:id/favorite', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const updated = await Customer.update(req.params.id, { favorite: !customer.favorite }, req.tenantId);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Delete customer
 router.delete('/:id', async (req, res, next) => {
   try {

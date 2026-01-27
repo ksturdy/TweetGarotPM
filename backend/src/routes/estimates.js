@@ -555,6 +555,12 @@ router.post('/:id/bid-form', bidFormUpload.single('bidForm'), async (req, res, n
     // Map parsed data to estimate format
     const { estimate: estimateUpdates, sections } = mapToEstimateFormat(parsedData);
 
+    // Preserve existing project_name if user already entered one
+    // Only use Excel's project_name if current one is empty
+    if (estimate.project_name && estimate.project_name.trim() !== '') {
+      delete estimateUpdates.project_name;
+    }
+
     // Update estimate with parsed data and file info
     const updatedEstimate = await Estimate.update(estimateId, {
       ...estimateUpdates,
@@ -755,6 +761,11 @@ router.post('/:id/bid-form/refresh', async (req, res, next) => {
     // Re-parse the Excel file
     const parsedData = parseBidForm(fileBuffer);
     const { estimate: estimateUpdates, sections } = mapToEstimateFormat(parsedData);
+
+    // Preserve existing project_name - don't overwrite with Excel value on refresh
+    if (estimate.project_name && estimate.project_name.trim() !== '') {
+      delete estimateUpdates.project_name;
+    }
 
     // Update estimate values
     await Estimate.update(estimateId, estimateUpdates, req.tenantId);

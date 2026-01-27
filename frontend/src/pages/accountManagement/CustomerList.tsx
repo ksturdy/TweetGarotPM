@@ -137,6 +137,27 @@ const CustomerList: React.FC = () => {
     },
   });
 
+  // Toggle favorite mutation with optimistic updates
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: (id: number) => customersApi.toggleFavorite(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['customers'] });
+      const previousCustomers = queryClient.getQueryData<Customer[]>(['customers']);
+      queryClient.setQueryData<Customer[]>(['customers'], (old) =>
+        old?.map(c => c.id === id ? { ...c, favorite: !c.favorite } : c) || []
+      );
+      return { previousCustomers };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousCustomers) {
+        queryClient.setQueryData(['customers'], context.previousCustomers);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+
   // Handle file upload
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -203,6 +224,10 @@ const CustomerList: React.FC = () => {
     let bValue: any;
 
     switch (sortColumn) {
+      case 'favorite':
+        aValue = a.favorite ? 1 : 0;
+        bValue = b.favorite ? 1 : 0;
+        break;
       case 'customer_facility':
         aValue = (a.customer_facility || '').toLowerCase();
         bValue = (b.customer_facility || '').toLowerCase();
@@ -417,6 +442,9 @@ const CustomerList: React.FC = () => {
         <table className="sales-table">
           <thead>
             <tr>
+              <th className="sales-sortable" onClick={() => handleSort('favorite')} style={{ width: '50px', textAlign: 'center' }}>
+                <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('customer_facility')}>
                 Customer <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
@@ -451,6 +479,31 @@ const CustomerList: React.FC = () => {
                   onClick={() => navigate(`/customers/${customer.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
+                  <td
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavoriteMutation.mutate(customer.id);
+                    }}
+                    style={{ textAlign: 'center', cursor: 'pointer' }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '1.25rem',
+                        color: customer.favorite ? '#f59e0b' : '#d1d5db',
+                        transition: 'color 0.2s, transform 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.2)';
+                        if (!customer.favorite) e.currentTarget.style.color = '#fbbf24';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        if (!customer.favorite) e.currentTarget.style.color = '#d1d5db';
+                      }}
+                    >
+                      {customer.favorite ? '★' : '☆'}
+                    </span>
+                  </td>
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: getMarketGradient(customer.market) }}>
@@ -550,7 +603,7 @@ const CustomerList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       fill="none"
