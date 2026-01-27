@@ -366,9 +366,9 @@ const CustomerDetail: React.FC = () => {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Date</th>
+                    <th style={{ width: '100px' }}>Date</th>
                     <th>Opportunity Name</th>
-                    <th>Value</th>
+                    <th style={{ width: '120px', textAlign: 'right' }}>Value</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,11 +376,14 @@ const CustomerDetail: React.FC = () => {
                     <tr key={opportunity.id}>
                       <td>{formatDate(opportunity.created_at)}</td>
                       <td>
-                        <strong>{opportunity.title}</strong>
+                        <div>
+                          <strong>{opportunity.title}</strong>
+                        </div>
                         {opportunity.stage_name && (
                           <span
                             style={{
-                              marginLeft: '0.5rem',
+                              display: 'inline-block',
+                              marginTop: '0.25rem',
                               padding: '0.125rem 0.5rem',
                               borderRadius: '4px',
                               fontSize: '0.75rem',
@@ -392,7 +395,7 @@ const CustomerDetail: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td><strong>{formatCurrency(opportunity.estimated_value || 0)}</strong></td>
+                      <td style={{ textAlign: 'right' }}><strong>{formatCurrency(opportunity.estimated_value || 0)}</strong></td>
                     </tr>
                   ))}
                 </tbody>

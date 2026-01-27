@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
 import { usersApi, User } from '../../services/users';
 import { getCampaigns } from '../../services/campaigns';
+import { customersApi, Customer } from '../../services/customers';
 import VoiceNoteButton from './VoiceNoteButton';
 import ActivityTimeline from './ActivityTimeline';
 import QuickActions from './QuickActions';
@@ -42,11 +43,15 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     general_contractor: opportunity?.general_contractor || '',
     architect: opportunity?.architect || '',
     engineer: opportunity?.engineer || '',
-    campaign_id: opportunity?.campaign_id || defaultCampaignId || ''
+    campaign_id: opportunity?.campaign_id || defaultCampaignId || '',
+    customer_id: opportunity?.customer_id || '',
+    gc_customer_id: opportunity?.gc_customer_id || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [linkToExistingOwner, setLinkToExistingOwner] = useState(!!opportunity?.customer_id);
+  const [linkToExistingGC, setLinkToExistingGC] = useState(!!opportunity?.gc_customer_id);
 
   // Fetch users for assignment
   const { data: usersResponse } = useQuery({
@@ -66,6 +71,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const { data: campaigns = [] } = useQuery({
     queryKey: ['campaigns'],
     queryFn: getCampaigns
+  });
+
+  // Fetch customers for linking owner and GC
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll()
   });
 
   // Create mutation
@@ -164,6 +175,18 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.general_contractor) cleanedData.general_contractor = formData.general_contractor;
     if (formData.architect) cleanedData.architect = formData.architect;
     if (formData.engineer) cleanedData.engineer = formData.engineer;
+
+    // Handle customer linking
+    if (linkToExistingOwner && formData.customer_id) {
+      cleanedData.customer_id = Number(formData.customer_id);
+    } else {
+      cleanedData.customer_id = null;
+    }
+    if (linkToExistingGC && formData.gc_customer_id) {
+      cleanedData.gc_customer_id = Number(formData.gc_customer_id);
+    } else {
+      cleanedData.gc_customer_id = null;
+    }
 
     // Add optional number fields if they have values
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
@@ -347,6 +370,38 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       onChange={handleChange}
                       placeholder="Project owner"
                     />
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingOwner}
+                          onChange={(e) => {
+                            setLinkToExistingOwner(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '16px', height: '16px' }}
+                        />
+                        Link to Existing Customer
+                      </label>
+                      {linkToExistingOwner && (
+                        <select
+                          id="customer_id"
+                          name="customer_id"
+                          value={formData.customer_id}
+                          onChange={handleChange}
+                          style={{ marginTop: '0.5rem', width: '100%' }}
+                        >
+                          <option value="">Select customer...</option>
+                          {customers.map((customer: Customer) => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.customer_facility}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
 
                   <div className="form-group">
@@ -359,6 +414,38 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       onChange={handleChange}
                       placeholder="GC company name"
                     />
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingGC}
+                          onChange={(e) => {
+                            setLinkToExistingGC(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, gc_customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '16px', height: '16px' }}
+                        />
+                        Link to Existing General Contractor
+                      </label>
+                      {linkToExistingGC && (
+                        <select
+                          id="gc_customer_id"
+                          name="gc_customer_id"
+                          value={formData.gc_customer_id}
+                          onChange={handleChange}
+                          style={{ marginTop: '0.5rem', width: '100%' }}
+                        >
+                          <option value="">Select customer...</option>
+                          {customers.map((customer: Customer) => (
+                            <option key={customer.id} value={customer.id}>
+                              {customer.customer_facility}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
                 </div>
 

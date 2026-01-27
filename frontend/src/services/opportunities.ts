@@ -26,6 +26,10 @@ export interface Opportunity {
   architect?: string;
   engineer?: string;
   campaign_id?: number;
+  customer_id?: number;
+  customer_name?: string;
+  gc_customer_id?: number;
+  gc_customer_name?: string;
   converted_to_project_id?: number;
   converted_project_name?: string;
   converted_at?: string;
