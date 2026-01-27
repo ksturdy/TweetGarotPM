@@ -61,6 +61,13 @@ export interface Estimate {
   estimator_id?: number;
   estimator_name?: string;
   status: string;
+  // Project Participants
+  owner?: string;
+  gc_customer_id?: number | null;
+  general_contractor?: string;
+  facility_name?: string;
+  facility_customer_id?: number | null;
+  send_estimate_to?: number | null;
   labor_cost?: number;
   material_cost?: number;
   equipment_cost?: number;

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
-import { customersApi } from '../../services/customers';
+import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
@@ -11,6 +11,7 @@ type BuildStep = 'info' | 'build-method' | 'manual' | 'excel';
 
 const EstimateNew: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   // Multi-step flow state
@@ -73,10 +74,59 @@ const EstimateNew: React.FC = () => {
     exclusions: '',
     assumptions: '',
     notes: '',
+    // Project Participants
+    owner: '',
+    gc_customer_id: null,
+    general_contractor: '',
+    facility_name: '',
+    facility_customer_id: null,
+    send_estimate_to: null,
   });
 
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  // Link to existing toggles for project participants
+  const [linkToExistingOwner, setLinkToExistingOwner] = useState(false);
+  const [linkToExistingGC, setLinkToExistingGC] = useState(false);
+  const [linkToExistingFacility, setLinkToExistingFacility] = useState(false);
+
+  // Handle Add New Company navigation - saves form state and goes to customer list
+  const handleAddNewCompany = () => {
+    // Save current form state to localStorage
+    localStorage.setItem('estimateInProgress', JSON.stringify({
+      formData,
+      sections,
+      linkToExistingOwner,
+      linkToExistingGC,
+      linkToExistingFacility,
+    }));
+    // Navigate to customer list with flag to open add modal
+    navigate('/account-management/customers?addNew=true&returnTo=/estimating/estimates/new');
+  };
+
+  // Check if returning from adding a new company
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('fromCustomers') === 'true') {
+      // Refresh customers list
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      // Clear the query param
+      navigate('/estimating/estimates/new', { replace: true });
+    }
+  }, [location.search, queryClient, navigate]);
+
+  // Get unique companies from customers list
+  const uniqueCompanies = useMemo(() => {
+    const companyMap = new Map<string, Customer>();
+    customers?.forEach((customer: Customer) => {
+      const companyName = customer.customer_owner || customer.customer_facility;
+      if (companyName && !companyMap.has(companyName)) {
+        companyMap.set(companyName, customer);
+      }
+    });
+    return Array.from(companyMap.values());
+  }, [customers]);
 
   const [sections, setSections] = useState<EstimateSection[]>(savedData?.sections || [
     {
@@ -682,77 +732,6 @@ const EstimateNew: React.FC = () => {
           </div>
 
           <div className="form-row">
-            <div className="form-group" style={{ position: 'relative' }}>
-              <label className="form-label">Customer</label>
-              <input
-                type="text"
-                className="form-input"
-                value={customerSearch}
-                onChange={(e) => {
-                  setCustomerSearch(e.target.value);
-                  setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="Search by facility, owner, or city..."
-              />
-              {showCustomerDropdown && filteredCustomers && filteredCustomers.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    maxHeight: '300px',
-                    overflowY: 'auto',
-                    backgroundColor: 'white',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.375rem',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    zIndex: 1000,
-                    marginTop: '0.25rem',
-                  }}
-                >
-                  {filteredCustomers.map((customer: any) => (
-                    <div
-                      key={customer.id}
-                      onClick={() => handleCustomerSelect(customer)}
-                      style={{
-                        padding: '0.75rem',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--background)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{customer.customer_facility}</div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
-                        {customer.customer_owner}
-                        {customer.city && ` • ${customer.city}, ${customer.state}`}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Click outside to close */}
-              {showCustomerDropdown && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    zIndex: 999,
-                  }}
-                  onClick={() => setShowCustomerDropdown(false)}
-                />
-              )}
-            </div>
-
             <div className="form-group">
               <label className="form-label">Building Type</label>
               <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange}>
@@ -767,9 +746,7 @@ const EstimateNew: React.FC = () => {
                 <option value="Other">Other</option>
               </select>
             </div>
-          </div>
 
-          <div className="form-row">
             <div className="form-group">
               <label className="form-label">Location</label>
               <input
@@ -853,17 +830,247 @@ const EstimateNew: React.FC = () => {
                 onChange={handleChange}
               />
             </div>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', marginTop: '1.5rem', marginLeft: '-0.5rem' }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleProceedToBuildMethod}
-                disabled={createBasicMutation.isPending}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                {createBasicMutation.isPending ? 'Creating...' : 'Continue: Choose Build Method'}
-              </button>
+          {/* Project Participants */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Project Participants</h3>
+
+            <div className="form-row">
+              {/* Company */}
+              <div className="form-group">
+                <label className="form-label">Company</label>
+                <input
+                  type="text"
+                  name="owner"
+                  className="form-input"
+                  value={formData.owner || ''}
+                  onChange={handleChange}
+                  placeholder="Company name"
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={linkToExistingOwner}
+                        onChange={(e) => {
+                          setLinkToExistingOwner(e.target.checked);
+                          if (!e.target.checked) {
+                            setFormData(prev => ({ ...prev, customer_id: null }));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      Link to Existing Company
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddNewCompany}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        padding: 0,
+                      }}
+                    >
+                      + Add New
+                    </button>
+                  </div>
+                  {linkToExistingOwner && (
+                    <select
+                      name="customer_id"
+                      className="form-input"
+                      value={formData.customer_id || ''}
+                      onChange={(e) => {
+                        const selectedId = e.target.value ? Number(e.target.value) : null;
+                        const selectedCustomer = customers?.find((c: Customer) => c.id === selectedId);
+                        setFormData(prev => ({
+                          ...prev,
+                          customer_id: selectedId,
+                          customer_name: selectedCustomer?.customer_facility || '',
+                        }));
+                        if (selectedCustomer) {
+                          setCustomerSearch(`${selectedCustomer.customer_facility} (${selectedCustomer.customer_owner})`);
+                        }
+                      }}
+                      style={{ marginTop: '0.5rem' }}
+                    >
+                      <option value="">Select company...</option>
+                      {uniqueCompanies.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner || customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* General Contractor */}
+              <div className="form-group">
+                <label className="form-label">General Contractor</label>
+                <input
+                  type="text"
+                  name="general_contractor"
+                  className="form-input"
+                  value={formData.general_contractor || ''}
+                  onChange={handleChange}
+                  placeholder="GC company name"
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={linkToExistingGC}
+                        onChange={(e) => {
+                          setLinkToExistingGC(e.target.checked);
+                          if (!e.target.checked) {
+                            setFormData(prev => ({ ...prev, gc_customer_id: null }));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      Link to Existing General Contractor
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddNewCompany}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        padding: 0,
+                      }}
+                    >
+                      + Add New
+                    </button>
+                  </div>
+                  {linkToExistingGC && (
+                    <select
+                      name="gc_customer_id"
+                      className="form-input"
+                      value={formData.gc_customer_id || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, gc_customer_id: e.target.value ? Number(e.target.value) : null }))}
+                      style={{ marginTop: '0.5rem' }}
+                    >
+                      <option value="">Select customer...</option>
+                      {customers?.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="form-row">
+              {/* Facility/Location Name */}
+              <div className="form-group">
+                <label className="form-label">Facility/Location Name</label>
+                <input
+                  type="text"
+                  name="facility_name"
+                  className="form-input"
+                  value={formData.facility_name || ''}
+                  onChange={handleChange}
+                  placeholder="Facility or location name"
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={linkToExistingFacility}
+                        onChange={(e) => {
+                          setLinkToExistingFacility(e.target.checked);
+                          if (!e.target.checked) {
+                            setFormData(prev => ({ ...prev, facility_customer_id: null }));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px' }}
+                      />
+                      Link to Existing Facility/Location
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddNewCompany}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        padding: 0,
+                      }}
+                    >
+                      + Add New
+                    </button>
+                  </div>
+                  {linkToExistingFacility && (
+                    <select
+                      name="facility_customer_id"
+                      className="form-input"
+                      value={formData.facility_customer_id || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, facility_customer_id: e.target.value ? Number(e.target.value) : null }))}
+                      style={{ marginTop: '0.5rem' }}
+                    >
+                      <option value="">Select facility...</option>
+                      {customers?.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-group" />
+            </div>
+          </div>
+
+          {/* Send Estimate To */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Send Estimate To:</label>
+                <select
+                  name="send_estimate_to"
+                  className="form-input"
+                  value={formData.send_estimate_to || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, send_estimate_to: e.target.value ? Number(e.target.value) : null }))}
+                >
+                  <option value="">Select company...</option>
+                  {uniqueCompanies.map((customer: Customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.customer_owner || customer.customer_facility}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleProceedToBuildMethod}
+                  disabled={createBasicMutation.isPending}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {createBasicMutation.isPending ? 'Creating...' : 'Continue: Choose Build Method'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

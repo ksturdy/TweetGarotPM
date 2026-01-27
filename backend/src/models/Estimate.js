@@ -10,8 +10,9 @@ const Estimate = {
         estimator_id, estimator_name, status,
         overhead_percentage, profit_percentage, contingency_percentage, bond_percentage,
         scope_of_work, exclusions, assumptions, notes,
-        created_by, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        created_by, tenant_id,
+        owner, general_contractor, gc_customer_id, facility_name, facility_customer_id, send_estimate_to
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
       RETURNING *`,
       [
         data.estimate_number, data.project_name, data.customer_id, data.customer_name,
@@ -21,7 +22,8 @@ const Estimate = {
         data.overhead_percentage || 10.00, data.profit_percentage || 10.00,
         data.contingency_percentage || 5.00, data.bond_percentage || 0,
         data.scope_of_work, data.exclusions, data.assumptions, data.notes,
-        data.created_by, tenantId
+        data.created_by, tenantId,
+        data.owner, data.general_contractor, data.gc_customer_id, data.facility_name, data.facility_customer_id, data.send_estimate_to
       ]
     );
     return result.rows[0];
@@ -122,7 +124,9 @@ const Estimate = {
       'labor_cost', 'material_cost', 'equipment_cost', 'subcontractor_cost',
       'rental_cost', 'subtotal', 'total_cost', 'contingency_amount',
       // Gross margin fields (from Excel bid form AF211/AH211)
-      'gross_margin_dollars', 'gross_margin_percentage'
+      'gross_margin_dollars', 'gross_margin_percentage',
+      // Project participants fields
+      'owner', 'general_contractor', 'gc_customer_id', 'facility_name', 'facility_customer_id', 'send_estimate_to'
     ];
 
     Object.keys(data).forEach((key) => {

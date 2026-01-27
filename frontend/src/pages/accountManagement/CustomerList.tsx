@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { customersApi, Customer } from '../../services/customers';
 import CustomerFormModal from '../../components/modals/CustomerFormModal';
@@ -8,6 +8,8 @@ import '../../styles/SalesPipeline.css';
 
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterState, setFilterState] = useState('all');
   const [filterManager, setFilterManager] = useState('all');
@@ -19,6 +21,25 @@ const CustomerList: React.FC = () => {
   const [editingCell, setEditingCell] = useState<{ id: number; field: 'market' | 'status' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  // Get returnTo from URL params for navigation back to estimate
+  const returnTo = searchParams.get('returnTo');
+  const addNew = searchParams.get('addNew');
+
+  // Auto-open modal if coming from estimate page
+  useEffect(() => {
+    if (addNew === 'true') {
+      setShowNewCustomerModal(true);
+    }
+  }, [addNew]);
+
+  // Handle modal close - navigate back if returnTo is set
+  const handleModalClose = () => {
+    setShowNewCustomerModal(false);
+    if (returnTo) {
+      navigate(`${returnTo}?fromCustomers=true`);
+    }
+  };
 
   // Market options
   const marketOptions = ['Healthcare', 'Education', 'Commercial', 'Industrial', 'Retail', 'Government', 'Hospitality', 'Data Center'];
@@ -343,6 +364,19 @@ const CustomerList: React.FC = () => {
             </svg>
             New Customer
           </button>
+          {returnTo && (
+            <button
+              className="sales-btn"
+              onClick={() => navigate(`${returnTo}?fromCustomers=true`)}
+              style={{ marginLeft: '0.5rem', background: '#6b7280', color: 'white' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="19" y1="12" x2="5" y2="12"/>
+                <polyline points="12 19 5 12 12 5"/>
+              </svg>
+              Return to Estimate
+            </button>
+          )}
         </div>
       </div>
 
@@ -633,7 +667,7 @@ const CustomerList: React.FC = () => {
       {/* New Customer Modal */}
       {showNewCustomerModal && (
         <CustomerFormModal
-          onClose={() => setShowNewCustomerModal(false)}
+          onClose={handleModalClose}
         />
       )}
     </div>

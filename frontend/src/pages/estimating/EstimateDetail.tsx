@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
-import { customersApi } from '../../services/customers';
+import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
@@ -53,6 +53,13 @@ const EstimateDetail: React.FC = () => {
     exclusions: '',
     assumptions: '',
     notes: '',
+    // Project Participants
+    owner: '',
+    gc_customer_id: null,
+    general_contractor: '',
+    facility_name: '',
+    facility_customer_id: null,
+    send_estimate_to: null,
   });
 
   const [customerSearch, setCustomerSearch] = useState('');
@@ -61,6 +68,23 @@ const EstimateDetail: React.FC = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Link to existing toggles for project participants
+  const [linkToExistingOwner, setLinkToExistingOwner] = useState(false);
+  const [linkToExistingGC, setLinkToExistingGC] = useState(false);
+  const [linkToExistingFacility, setLinkToExistingFacility] = useState(false);
+
+  // Get unique companies from customers list
+  const uniqueCompanies = useMemo(() => {
+    const companyMap = new Map<string, Customer>();
+    customers?.forEach((customer: Customer) => {
+      const companyName = customer.customer_owner || customer.customer_facility;
+      if (companyName && !companyMap.has(companyName)) {
+        companyMap.set(companyName, customer);
+      }
+    });
+    return Array.from(companyMap.values());
+  }, [customers]);
 
   useEffect(() => {
     if (estimate) {
@@ -86,11 +110,23 @@ const EstimateDetail: React.FC = () => {
         exclusions: estimate.exclusions || '',
         assumptions: estimate.assumptions || '',
         notes: estimate.notes || '',
+        // Project Participants
+        owner: estimate.owner || '',
+        gc_customer_id: estimate.gc_customer_id || null,
+        general_contractor: estimate.general_contractor || '',
+        facility_name: estimate.facility_name || '',
+        facility_customer_id: estimate.facility_customer_id || null,
+        send_estimate_to: estimate.send_estimate_to || null,
       });
 
       if (estimate.customer_name) {
         setCustomerSearch(estimate.customer_name);
       }
+
+      // Set link toggles based on existing data
+      setLinkToExistingOwner(!!estimate.customer_id);
+      setLinkToExistingGC(!!estimate.gc_customer_id);
+      setLinkToExistingFacility(!!estimate.facility_customer_id);
 
       if (estimate.sections) {
         // Round all monetary values when loading from database
@@ -704,6 +740,186 @@ const EstimateDetail: React.FC = () => {
                 placeholder="months"
                 style={{ padding: '0.5rem' }}
               />
+            </div>
+          </div>
+
+          {/* Project Participants */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Project Participants</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+              {/* Company */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Company</label>
+                <input
+                  type="text"
+                  name="owner"
+                  className="form-input"
+                  value={formData.owner || ''}
+                  onChange={handleChange}
+                  placeholder="Company name"
+                  style={{ padding: '0.5rem' }}
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={linkToExistingOwner}
+                      onChange={(e) => {
+                        setLinkToExistingOwner(e.target.checked);
+                        if (!e.target.checked) {
+                          setFormData(prev => ({ ...prev, customer_id: null }));
+                        }
+                      }}
+                      style={{ width: '14px', height: '14px' }}
+                    />
+                    Link to Existing Company
+                  </label>
+                  {linkToExistingOwner && (
+                    <select
+                      name="customer_id"
+                      className="form-input"
+                      value={formData.customer_id || ''}
+                      onChange={(e) => {
+                        const selectedId = e.target.value ? Number(e.target.value) : null;
+                        const selectedCustomer = customers?.find((c: Customer) => c.id === selectedId);
+                        setFormData(prev => ({
+                          ...prev,
+                          customer_id: selectedId,
+                          customer_name: selectedCustomer?.customer_facility || '',
+                        }));
+                        if (selectedCustomer) {
+                          setCustomerSearch(`${selectedCustomer.customer_facility} (${selectedCustomer.customer_owner})`);
+                        }
+                      }}
+                      style={{ marginTop: '0.5rem', padding: '0.5rem' }}
+                    >
+                      <option value="">Select company...</option>
+                      {uniqueCompanies.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner || customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* General Contractor */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>General Contractor</label>
+                <input
+                  type="text"
+                  name="general_contractor"
+                  className="form-input"
+                  value={formData.general_contractor || ''}
+                  onChange={handleChange}
+                  placeholder="GC company name"
+                  style={{ padding: '0.5rem' }}
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={linkToExistingGC}
+                      onChange={(e) => {
+                        setLinkToExistingGC(e.target.checked);
+                        if (!e.target.checked) {
+                          setFormData(prev => ({ ...prev, gc_customer_id: null }));
+                        }
+                      }}
+                      style={{ width: '14px', height: '14px' }}
+                    />
+                    Link to Existing General Contractor
+                  </label>
+                  {linkToExistingGC && (
+                    <select
+                      name="gc_customer_id"
+                      className="form-input"
+                      value={formData.gc_customer_id || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, gc_customer_id: e.target.value ? Number(e.target.value) : null }))}
+                      style={{ marginTop: '0.5rem', padding: '0.5rem' }}
+                    >
+                      <option value="">Select customer...</option>
+                      {customers?.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Facility/Location Name */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Facility/Location Name</label>
+                <input
+                  type="text"
+                  name="facility_name"
+                  className="form-input"
+                  value={formData.facility_name || ''}
+                  onChange={handleChange}
+                  placeholder="Facility or location name"
+                  style={{ padding: '0.5rem' }}
+                />
+                <div style={{ marginTop: '0.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={linkToExistingFacility}
+                      onChange={(e) => {
+                        setLinkToExistingFacility(e.target.checked);
+                        if (!e.target.checked) {
+                          setFormData(prev => ({ ...prev, facility_customer_id: null }));
+                        }
+                      }}
+                      style={{ width: '14px', height: '14px' }}
+                    />
+                    Link to Existing Facility/Location
+                  </label>
+                  {linkToExistingFacility && (
+                    <select
+                      name="facility_customer_id"
+                      className="form-input"
+                      value={formData.facility_customer_id || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, facility_customer_id: e.target.value ? Number(e.target.value) : null }))}
+                      style={{ marginTop: '0.5rem', padding: '0.5rem' }}
+                    >
+                      <option value="">Select facility...</option>
+                      {customers?.map((customer: Customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+              <div></div>
+            </div>
+          </div>
+
+          {/* Send Estimate To */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <div className="form-group" style={{ marginBottom: 0, maxWidth: '400px' }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Send Estimate To:</label>
+              <select
+                name="send_estimate_to"
+                className="form-input"
+                value={formData.send_estimate_to || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, send_estimate_to: e.target.value ? Number(e.target.value) : null }))}
+                style={{ padding: '0.5rem' }}
+              >
+                <option value="">Select company...</option>
+                {uniqueCompanies.map((customer: Customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.customer_owner || customer.customer_facility}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
