@@ -81,7 +81,7 @@ const CustomerDetail: React.FC = () => {
       action: 'View Opportunities',
       colorStart: '#10b981',
       colorEnd: '#059669',
-      onClick: () => navigate('/sales-pipeline', { state: { customerId: parseInt(id!) } }),
+      onClick: () => navigate('/sales', { state: { customerId: parseInt(id!) } }),
     },
     {
       title: 'Contacts',
@@ -347,7 +347,7 @@ const CustomerDetail: React.FC = () => {
         {/* Opportunities Section */}
         <div
           className="data-section"
-          onClick={() => navigate('/sales-pipeline', { state: { customerId: parseInt(id!) } })}
+          onClick={() => navigate('/sales', { state: { customerId: parseInt(id!) } })}
           style={{ cursor: 'pointer' }}
         >
           <div className="section-header">
