@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getCustomer } from '../services/customers';
+import { getCustomer, getCustomerTouchpoints } from '../services/customers';
 import api from '../services/api';
 import ContactModal from '../components/modals/ContactModal';
+import TouchpointModal from '../components/modals/TouchpointModal';
 import './CustomerDetail.css';
 
 interface CustomerContact {
@@ -24,6 +25,7 @@ const CustomerContacts: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -38,6 +40,11 @@ const CustomerContacts: React.FC = () => {
       const response = await api.get(`/customers/${id}/contacts`);
       return response.data;
     },
+  });
+
+  const { data: touchpoints = [] } = useQuery({
+    queryKey: ['customer-touchpoints', id],
+    queryFn: () => getCustomerTouchpoints(id!),
   });
 
   const deleteMutation = useMutation({
@@ -91,6 +98,11 @@ const CustomerContacts: React.FC = () => {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
   if (customerLoading || contactsLoading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -108,7 +120,7 @@ const CustomerContacts: React.FC = () => {
         </Link>
         <div className="customer-header-content">
           <div className="customer-info">
-            <h1>{customer.customer_facility} - Contacts</h1>
+            <h1>{customer.customer_facility} - Contacts & Touchpoints</h1>
             <div className="customer-subtitle">{customer.customer_owner}</div>
           </div>
         </div>
@@ -226,12 +238,85 @@ const CustomerContacts: React.FC = () => {
         </div>
       </div>
 
+      {/* Touchpoints Section */}
+      <div className="data-section" style={{ marginBottom: '2rem' }}>
+        <div className="section-header">
+          <h2 className="section-title">
+            📝 Touchpoints <span className="tab-count">{touchpoints.length}</span>
+          </h2>
+          <button
+            className="btn-primary"
+            onClick={() => setShowTouchpointModal(true)}
+            style={{
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              border: 'none',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '8px',
+              color: 'white',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+            onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+          >
+            + Log Touchpoint
+          </button>
+        </div>
+        <div className="data-content">
+          {touchpoints.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">📝</div>
+              <div className="empty-state-text">No touchpoints logged</div>
+              <p>Start tracking customer interactions</p>
+            </div>
+          ) : (
+            <div className="touchpoint-list">
+              {touchpoints.map((touchpoint: any) => (
+                <div key={touchpoint.id} className="touchpoint-item">
+                  <div className="touchpoint-header">
+                    <div>
+                      <div className="touchpoint-type">
+                        {touchpoint.touchpoint_type}
+                        {touchpoint.contact_person && (
+                          <span style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
+                            with {touchpoint.contact_person}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="touchpoint-date">{formatDate(touchpoint.touchpoint_date)}</div>
+                  </div>
+                  {touchpoint.notes && (
+                    <div className="touchpoint-notes">{touchpoint.notes}</div>
+                  )}
+                  {touchpoint.created_by_name && (
+                    <div className="touchpoint-meta">
+                      <span>👤</span> {touchpoint.created_by_name}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Add Contact Modal */}
       {showContactModal && (
         <ContactModal
           customerId={parseInt(id!)}
           customerName={customer.customer_facility}
           onClose={() => setShowContactModal(false)}
+        />
+      )}
+
+      {/* Add Touchpoint Modal */}
+      {showTouchpointModal && (
+        <TouchpointModal
+          customerId={parseInt(id!)}
+          customerName={customer.customer_facility || 'Unnamed Customer'}
+          onClose={() => setShowTouchpointModal(false)}
         />
       )}
 

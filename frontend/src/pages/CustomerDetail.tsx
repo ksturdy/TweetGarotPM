@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getCustomer, getCustomerMetrics, getCustomerProjects, getCustomerBids, getCustomerTouchpoints } from '../services/customers';
-import TouchpointModal from '../components/modals/TouchpointModal';
+import { getCustomer, getCustomerMetrics, getCustomerProjects, getCustomerBids, getCustomerOpportunities } from '../services/customers';
 import ProjectModal from '../components/modals/ProjectModal';
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import './CustomerDetail.css';
@@ -10,7 +9,6 @@ import './CustomerDetail.css';
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -34,9 +32,9 @@ const CustomerDetail: React.FC = () => {
     queryFn: () => getCustomerBids(id!),
   });
 
-  const { data: touchpoints = [] } = useQuery({
-    queryKey: ['customer-touchpoints', id],
-    queryFn: () => getCustomerTouchpoints(id!),
+  const { data: opportunities = [] } = useQuery({
+    queryKey: ['customer-opportunities', id],
+    queryFn: () => getCustomerOpportunities(id!),
   });
 
   if (customerLoading || metricsLoading) {
@@ -77,13 +75,13 @@ const CustomerDetail: React.FC = () => {
       }),
     },
     {
-      title: 'Log Touchpoint',
-      icon: '📝',
-      description: 'Record a new interaction or communication',
-      action: 'Add Touchpoint',
+      title: 'Opportunities',
+      icon: '💼',
+      description: 'View and manage sales opportunities',
+      action: 'View Opportunities',
       colorStart: '#10b981',
       colorEnd: '#059669',
-      onClick: () => setShowTouchpointModal(true),
+      onClick: () => navigate('/sales-pipeline', { state: { customerId: parseInt(id!) } }),
     },
     {
       title: 'Contacts',
@@ -346,66 +344,65 @@ const CustomerDetail: React.FC = () => {
           </div>
         </div>
 
-        {/* Touchpoints Section */}
+        {/* Opportunities Section */}
         <div
           className="data-section"
-          onClick={() => navigate(`/customers/${id}/touchpoints`)}
+          onClick={() => navigate('/sales-pipeline', { state: { customerId: parseInt(id!) } })}
           style={{ cursor: 'pointer' }}
         >
           <div className="section-header">
             <h2 className="section-title">
-              📝 Touchpoints <span className="tab-count">{touchpoints.length}</span>
+              💼 Opportunities <span className="tab-count">{opportunities.length}</span>
             </h2>
           </div>
           <div className="data-content">
-            {touchpoints.length === 0 ? (
+            {opportunities.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-state-icon">📝</div>
-                <div className="empty-state-text">No touchpoints logged</div>
-                <p>Start tracking customer interactions</p>
+                <div className="empty-state-icon">💼</div>
+                <div className="empty-state-text">No opportunities yet</div>
+                <p>Create opportunities to track sales pipeline</p>
               </div>
             ) : (
-              <div className="touchpoint-list">
-                {touchpoints.map((touchpoint: any) => (
-                  <div key={touchpoint.id} className="touchpoint-item">
-                    <div className="touchpoint-header">
-                      <div>
-                        <div className="touchpoint-type">
-                          {touchpoint.touchpoint_type}
-                          {touchpoint.contact_person && (
-                            <span style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
-                              with {touchpoint.contact_person}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="touchpoint-date">{formatDate(touchpoint.touchpoint_date)}</div>
-                    </div>
-                    {touchpoint.notes && (
-                      <div className="touchpoint-notes">{touchpoint.notes}</div>
-                    )}
-                    {touchpoint.created_by_name && (
-                      <div className="touchpoint-meta">
-                        <span>👤</span> {touchpoint.created_by_name}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Opportunity Name</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {opportunities.map((opportunity: any) => (
+                    <tr key={opportunity.id}>
+                      <td>{formatDate(opportunity.created_at)}</td>
+                      <td>
+                        <strong>{opportunity.title}</strong>
+                        {opportunity.stage_name && (
+                          <span
+                            style={{
+                              marginLeft: '0.5rem',
+                              padding: '0.125rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              background: opportunity.stage_color || '#e5e7eb',
+                              color: '#fff',
+                            }}
+                          >
+                            {opportunity.stage_name}
+                          </span>
+                        )}
+                      </td>
+                      <td><strong>{formatCurrency(opportunity.estimated_value || 0)}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
       </div>
 
       {/* Modals */}
-      {showTouchpointModal && (
-        <TouchpointModal
-          customerId={parseInt(id!)}
-          customerName={customer.customer_facility || 'Unnamed Customer'}
-          onClose={() => setShowTouchpointModal(false)}
-        />
-      )}
-
       {showProjectModal && (
         <ProjectModal
           customerId={parseInt(id!)}

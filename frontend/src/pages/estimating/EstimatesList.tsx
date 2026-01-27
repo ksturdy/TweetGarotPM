@@ -106,6 +106,7 @@ const EstimatesList: React.FC = () => {
             <p>Loading estimates...</p>
           </div>
         ) : (
+          <div className="estimates-table-container">
           <table className="data-table">
             <thead>
               <tr>
@@ -128,7 +129,7 @@ const EstimatesList: React.FC = () => {
                   <td>${Number(estimate.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                   <td>
                     <select
-                      value={estimate.status}
+                      value={estimate.status || 'in progress'}
                       onChange={(e) => handleStatusChange(estimate.id, e.target.value)}
                       className="form-input"
                       style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
@@ -140,21 +141,37 @@ const EstimatesList: React.FC = () => {
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </td>
-                  <td>{new Date(estimate.created_at).toLocaleDateString()}</td>
+                  <td>{estimate.created_at ? new Date(estimate.created_at).toLocaleDateString() : 'N/A'}</td>
                   <td>{estimate.estimator_name || 'N/A'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
                         onClick={() => handleViewProposal(estimate.id)}
+                        style={{
+                          padding: '0.375rem 0.75rem',
+                          background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          fontWeight: '500',
+                        }}
                       >
                         View
                       </button>
                       <Link
                         to={`/estimating/estimates/${estimate.id}`}
-                        className="btn btn-secondary btn-sm"
-                        style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                        style={{
+                          padding: '0.375rem 0.75rem',
+                          background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          fontSize: '0.75rem',
+                          fontWeight: '500',
+                        }}
                       >
                         Edit
                       </Link>
@@ -182,6 +199,7 @@ const EstimatesList: React.FC = () => {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

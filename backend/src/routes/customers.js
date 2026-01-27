@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Customer = require('../models/Customer');
+const opportunities = require('../models/opportunities');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
 const multer = require('multer');
@@ -155,6 +156,21 @@ router.post('/:id/touchpoints', async (req, res, next) => {
       created_by: req.user.id
     });
     res.status(201).json(touchpoint);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get customer opportunities
+router.get('/:id/opportunities', async (req, res, next) => {
+  try {
+    // Verify customer belongs to tenant first
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const customerOpportunities = await opportunities.findByCustomerId(req.params.id, req.tenantId);
+    res.json(customerOpportunities);
   } catch (error) {
     next(error);
   }

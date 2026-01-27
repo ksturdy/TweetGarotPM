@@ -353,6 +353,30 @@ const opportunities = {
   },
 
   /**
+   * Get opportunities by customer ID
+   */
+  async findByCustomerId(customerId, tenantId) {
+    const query = `
+      SELECT
+        o.*,
+        ps.name as stage_name,
+        ps.color as stage_color,
+        ps.probability as stage_probability,
+        u.first_name || ' ' || u.last_name as assigned_to_name,
+        creator.first_name || ' ' || creator.last_name as created_by_name
+      FROM opportunities o
+      LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN users creator ON o.created_by = creator.id
+      WHERE o.customer_id = $1 AND o.tenant_id = $2
+      ORDER BY o.created_at DESC
+    `;
+
+    const result = await pool.query(query, [customerId, tenantId]);
+    return result.rows;
+  },
+
+  /**
    * Get pipeline trend over time for a tenant
    */
   async getPipelineTrend(months = 7, tenantId) {

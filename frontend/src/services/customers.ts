@@ -116,4 +116,8 @@ export const getCustomerTouchpoints = async (id: string) => {
   const response = await api.get(`/customers/${id}/touchpoints`);
   return response.data;
 };
+export const getCustomerOpportunities = async (id: string) => {
+  const response = await api.get(`/customers/${id}/opportunities`);
+  return response.data;
+};
 
