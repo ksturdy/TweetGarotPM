@@ -10,7 +10,7 @@ const UserManagement: React.FC = () => {
   const { user: currentUser } = useAuth();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [formData, setFormData] = useState<UpdateUserData>({
     email: '',
     first_name: '',
@@ -23,23 +23,33 @@ const UserManagement: React.FC = () => {
   // Check if current user has HR write access
   const hasHRWriteAccess = currentUser?.role === 'admin' || currentUser?.hrAccess === 'write';
 
-  const { data: users = [], isLoading, error } = useQuery({
+  const { data: users = [], isLoading, error, status, fetchStatus } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      try {
-        const res = await usersApi.getAll();
-        console.log('Users API full response:', res);
-        console.log('Users API response data:', res.data);
-        return res.data;
-      } catch (err) {
-        console.error('Users API error:', err);
-        throw err;
-      }
+      console.log('queryFn called - fetching users...');
+      const res = await usersApi.getAll();
+      console.log('API response:', res);
+      // Ensure we always return an array
+      return Array.isArray(res.data) ? res.data : [];
     },
+    retry: false, // Don't retry on failure
   });
 
+  console.log('Query state - isLoading:', isLoading, 'status:', status, 'fetchStatus:', fetchStatus, 'error:', error);
+
   if (error) {
-    console.error('Query error:', error);
+    return (
+      <div className="customer-detail-page">
+        <div className="customer-header" style={{ marginBottom: '2rem' }}>
+          <div className="customer-header-content">
+            <div className="customer-info">
+              <h1>User Management</h1>
+              <div className="customer-subtitle">Error loading users: {(error as Error).message}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const updateMutation = useMutation({
@@ -219,8 +229,8 @@ const UserManagement: React.FC = () => {
             👥 System Users <span className="tab-count">{filteredUsers.length}</span>
           </h2>
         </div>
-        <div className="data-content">
-          <table className="data-table">
+        <div className="data-content" style={{ maxHeight: 'none', overflowX: 'auto' }}>
+          <table className="data-table" style={{ tableLayout: 'auto', minWidth: '1000px' }}>
             <thead>
               <tr>
                 <th>
@@ -397,18 +407,19 @@ const UserManagement: React.FC = () => {
                       <td>{formatLastLogin(user.last_login_at)}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '0.25rem', whiteSpace: 'nowrap' }}>
                           <button
                             onClick={() => handleEdit(user)}
                             style={{
-                              padding: '0.25rem 0.5rem',
+                              padding: '0.2rem 0.4rem',
                               background: '#3b82f6',
                               color: 'white',
                               border: 'none',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
                               cursor: 'pointer',
                             }}
+                            title="Edit user"
                           >
                             Edit
                           </button>
@@ -417,79 +428,81 @@ const UserManagement: React.FC = () => {
                               <button
                                 onClick={() => handleResetPassword(user)}
                                 style={{
-                                  padding: '0.25rem 0.5rem',
+                                  padding: '0.2rem 0.4rem',
                                   background: '#8b5cf6',
                                   color: 'white',
                                   border: 'none',
-                                  borderRadius: '4px',
-                                  fontSize: '0.75rem',
+                                  borderRadius: '3px',
+                                  fontSize: '0.7rem',
                                   cursor: 'pointer',
                                 }}
-                                title="Reset password"
+                                title="Reset password - generates new temporary password"
                               >
-                                Reset Pwd
+                                Reset
                               </button>
                               {(user as any).two_factor_enabled && (
                                 <button
                                   onClick={() => handleDisable2FA(user)}
                                   style={{
-                                    padding: '0.25rem 0.5rem',
+                                    padding: '0.2rem 0.4rem',
                                     background: '#f97316',
                                     color: 'white',
                                     border: 'none',
-                                    borderRadius: '4px',
-                                    fontSize: '0.75rem',
+                                    borderRadius: '3px',
+                                    fontSize: '0.7rem',
                                     cursor: 'pointer',
                                   }}
-                                  title="Disable 2FA"
+                                  title="Disable two-factor authentication"
                                 >
-                                  Disable 2FA
+                                  2FA
                                 </button>
                               )}
                               <button
                                 onClick={() => handleForcePasswordChange(user)}
                                 style={{
-                                  padding: '0.25rem 0.5rem',
+                                  padding: '0.2rem 0.4rem',
                                   background: '#d97706',
                                   color: 'white',
                                   border: 'none',
-                                  borderRadius: '4px',
-                                  fontSize: '0.75rem',
+                                  borderRadius: '3px',
+                                  fontSize: '0.7rem',
                                   cursor: 'pointer',
                                 }}
                                 title="Force password change on next login"
                               >
-                                Force Pwd Change
+                                Force
                               </button>
                             </>
                           )}
                           <button
                             onClick={() => handleToggleStatus(user)}
                             style={{
-                              padding: '0.25rem 0.5rem',
+                              padding: '0.2rem 0.4rem',
                               background: user.is_active ? '#f59e0b' : '#10b981',
                               color: 'white',
                               border: 'none',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
                               cursor: 'pointer',
                             }}
+                            title={user.is_active ? 'Deactivate user' : 'Activate user'}
                           >
-                            {user.is_active ? 'Deactivate' : 'Activate'}
+                            {user.is_active ? 'Off' : 'On'}
                           </button>
                           <button
                             onClick={() => handleDelete(user)}
                             style={{
-                              padding: '0.25rem 0.5rem',
+                              padding: '0.2rem 0.4rem',
                               background: '#ef4444',
                               color: 'white',
                               border: 'none',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
                               cursor: 'pointer',
                             }}
+                            title="Delete user"
                           >
-                            Delete
+                            Del
                           </button>
                         </div>
                       </td>
