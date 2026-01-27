@@ -485,22 +485,35 @@ const EstimateDetail: React.FC = () => {
       <form onSubmit={(e) => handleSubmit(e, 'draft')}>
         {/* Estimate Header */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <h2 style={{ marginTop: 0 }}>Estimate Information</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0 }}>Estimate Information</h2>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSaveChanges}
+              disabled={updateMutation.isPending}
+              style={{ padding: '0.5rem 1rem' }}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Estimate Number</label>
+          {/* Row 1: Estimate Number, Project Name, Customer */}
+          <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Est #</label>
               <input
                 type="text"
                 name="estimate_number"
                 className="form-input"
                 value={formData.estimate_number}
                 disabled
+                style={{ padding: '0.5rem' }}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Project Name *</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Project Name *</label>
               <input
                 type="text"
                 name="project_name"
@@ -508,13 +521,12 @@ const EstimateDetail: React.FC = () => {
                 value={formData.project_name}
                 onChange={handleChange}
                 required
+                style={{ padding: '0.5rem' }}
               />
             </div>
-          </div>
 
-          <div className="form-row">
-            <div className="form-group" style={{ position: 'relative' }}>
-              <label className="form-label">Customer</label>
+            <div className="form-group" style={{ position: 'relative', marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Customer</label>
               <input
                 type="text"
                 className="form-input"
@@ -524,7 +536,8 @@ const EstimateDetail: React.FC = () => {
                   setShowCustomerDropdown(true);
                 }}
                 onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="Search by facility, owner, or city..."
+                placeholder="Search customer..."
+                style={{ padding: '0.5rem' }}
               />
               {showCustomerDropdown && filteredCustomers && filteredCustomers.length > 0 && (
                 <div
@@ -533,7 +546,7 @@ const EstimateDetail: React.FC = () => {
                     top: '100%',
                     left: 0,
                     right: 0,
-                    maxHeight: '300px',
+                    maxHeight: '250px',
                     overflowY: 'auto',
                     backgroundColor: 'white',
                     border: '1px solid var(--border)',
@@ -548,7 +561,7 @@ const EstimateDetail: React.FC = () => {
                       key={customer.id}
                       onClick={() => handleCustomerSelect(customer)}
                       style={{
-                        padding: '0.75rem',
+                        padding: '0.5rem 0.75rem',
                         cursor: 'pointer',
                         borderBottom: '1px solid var(--border)',
                       }}
@@ -559,8 +572,8 @@ const EstimateDetail: React.FC = () => {
                         e.currentTarget.style.backgroundColor = 'white';
                       }}
                     >
-                      <div style={{ fontWeight: 600 }}>{customer.customer_facility}</div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{customer.customer_facility}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
                         {customer.customer_owner}
                         {customer.city && ` • ${customer.city}, ${customer.state}`}
                       </div>
@@ -582,10 +595,13 @@ const EstimateDetail: React.FC = () => {
                 />
               )}
             </div>
+          </div>
 
-            <div className="form-group">
-              <label className="form-label">Building Type</label>
-              <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange}>
+          {/* Row 2: Building Type, Location, Square Footage, Estimator */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type</label>
+              <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange} style={{ padding: '0.5rem' }}>
                 <option value="Commercial">Commercial</option>
                 <option value="Industrial">Industrial</option>
                 <option value="Healthcare">Healthcare</option>
@@ -597,11 +613,9 @@ const EstimateDetail: React.FC = () => {
                 <option value="Other">Other</option>
               </select>
             </div>
-          </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Location</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Location</label>
               <input
                 type="text"
                 name="location"
@@ -609,22 +623,24 @@ const EstimateDetail: React.FC = () => {
                 value={formData.location}
                 onChange={handleChange}
                 placeholder="City, State"
+                style={{ padding: '0.5rem' }}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Square Footage</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Sq Ft</label>
               <input
                 type="number"
                 name="square_footage"
                 className="form-input"
                 value={formData.square_footage || ''}
                 onChange={handleChange}
+                style={{ padding: '0.5rem' }}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Estimator</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator</label>
               <select
                 name="estimator_id"
                 className="form-input"
@@ -639,8 +655,9 @@ const EstimateDetail: React.FC = () => {
                     estimator_name: selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : '',
                   }));
                 }}
+                style={{ padding: '0.5rem' }}
               >
-                <option value="">Select Estimator...</option>
+                <option value="">Select...</option>
                 {employeesData?.data?.data?.map((employee: any) => (
                   <option key={employee.id} value={employee.id}>
                     {employee.first_name} {employee.last_name}
@@ -650,37 +667,42 @@ const EstimateDetail: React.FC = () => {
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Bid Date</label>
+          {/* Row 3: Bid Date, Project Start Date, Duration */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '1rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bid Date</label>
               <input
                 type="date"
                 name="bid_date"
                 className="form-input"
                 value={formData.bid_date}
                 onChange={handleChange}
+                style={{ padding: '0.5rem' }}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Project Start Date</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Project Start Date</label>
               <input
                 type="date"
                 name="project_start_date"
                 className="form-input"
                 value={formData.project_start_date}
                 onChange={handleChange}
+                style={{ padding: '0.5rem' }}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Duration (months)</label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Duration</label>
               <input
                 type="number"
                 name="project_duration"
                 className="form-input"
                 value={formData.project_duration || ''}
                 onChange={handleChange}
+                placeholder="months"
+                style={{ padding: '0.5rem' }}
               />
             </div>
           </div>
