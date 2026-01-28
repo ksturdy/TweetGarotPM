@@ -482,6 +482,38 @@
   margin-top: 0.25rem;
 }
 
+/* Dashboard Table Container */
+.dashboard-table-container {
+  overflow-x: auto;
+}
+
+/* Compact table styling for dashboard */
+.dashboard-compact-table {
+  font-size: 0.8125rem;
+}
+
+.dashboard-compact-table th,
+.dashboard-compact-table td {
+  padding: 0.5rem 0.75rem;
+}
+
+.dashboard-compact-table th {
+  font-size: 0.6875rem;
+}
+
+.dashboard-compact-table .sales-project-cell {
+  gap: 0.5rem;
+}
+
+.dashboard-compact-table .sales-project-info h4 {
+  font-size: 0.8125rem;
+}
+
+.dashboard-compact-table .sales-stage-badge {
+  font-size: 0.625rem;
+  padding: 0.25rem 0.5rem;
+}
+
 /* Loading */
 .loading {
   text-align: center;

@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
 import opportunitiesService from '../services/opportunities';
+import { estimatesApi } from '../services/estimates';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import HandshakeIcon from '@mui/icons-material/Handshake';
 import { useAuth } from '../context/AuthContext';
 import FolderIcon from '@mui/icons-material/Folder';
 import AssignmentIcon from '@mui/icons-material/Assignment';
@@ -10,12 +13,12 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import BusinessIcon from '@mui/icons-material/Business';
 import './Dashboard.css';
+import '../styles/SalesPipeline.css';
 
 type ViewScope = 'my' | 'team' | 'company';
 
@@ -40,6 +43,13 @@ const Dashboard: React.FC = () => {
     queryKey: ['opportunities'],
     queryFn: () => opportunitiesService.getAll(),
   });
+
+  // Fetch all estimates for filtering
+  const { data: estimatesResponse } = useQuery({
+    queryKey: ['estimates'],
+    queryFn: () => estimatesApi.getAll(),
+  });
+  const allEstimates = estimatesResponse?.data || [];
 
   // Filter projects based on view scope
   const projects = React.useMemo(() => {
@@ -90,6 +100,30 @@ const Dashboard: React.FC = () => {
     return stageName !== 'won' && stageName !== 'lost';
   }).length || 0;
 
+  // Sort opportunities by most recent (created_at or updated_at) - show ALL opportunities
+  const recentOpportunities = React.useMemo(() => {
+    if (!allOpportunities) return [];
+    return [...allOpportunities]
+      .sort((a: any, b: any) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+  }, [allOpportunities]);
+
+  // Sort estimates by most recent (created_at or updated_at)
+  const recentEstimates = React.useMemo(() => {
+    if (!allEstimates) return [];
+    return [...allEstimates]
+      .sort((a: any, b: any) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateB - dateA;
+      })
+      .slice(0, 5);
+  }, [allEstimates]);
+
   // Mock data for attention items (would come from API in real implementation)
   const attentionItems = viewScope === 'my' ? [
     { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
@@ -98,15 +132,6 @@ const Dashboard: React.FC = () => {
     { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
     { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
     { id: 3, type: 'report', message: 'Daily report not submitted', project: 'DEF Building', path: '/projects/3/daily-reports', severity: 'low' },
-  ];
-
-  // Mock recent activity
-  const recentActivity = [
-    { id: 1, action: 'RFI #45 submitted', user: 'John Smith', project: 'ABC Tower', time: '2 hours ago' },
-    { id: 2, action: 'Change Order #7 approved', user: 'Sarah Garcia', project: 'XYZ Hospital', time: '4 hours ago', amount: '$12,500' },
-    { id: 3, action: 'New opportunity added', user: 'Mike Johnson', project: 'HVAC Retrofit', time: '5 hours ago' },
-    { id: 4, action: 'Submittal marked approved', user: 'Emily Martinez', project: 'DEF Building', time: '6 hours ago' },
-    { id: 5, action: 'Daily report submitted', user: 'Bob Wilson', project: 'GHI Complex', time: 'Yesterday' },
   ];
 
   const formatCurrency = (value: number) => {
@@ -314,29 +339,121 @@ const Dashboard: React.FC = () => {
 
         {/* Right Column */}
         <div className="dashboard-right">
-          {/* Recent Activity */}
+          {/* Recent Opportunities */}
           <div className="dashboard-card">
             <div className="card-header">
               <h2 className="card-title">
-                <AccessTimeIcon className="card-title-icon" />
-                Recent Activity
+                <HandshakeIcon className="card-title-icon" />
+                Recent Opportunities
               </h2>
+              <Link to="/sales" className="card-link">View all</Link>
             </div>
-            <div className="activity-list">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="activity-item">
-                  <div className="activity-dot" />
-                  <div className="activity-content">
-                    <div className="activity-action">{activity.action}</div>
-                    <div className="activity-meta">
-                      <span className="activity-user">{activity.user}</span>
-                      <span className="activity-separator">•</span>
-                      <span className="activity-project">{activity.project}</span>
-                    </div>
-                    <div className="activity-time">{activity.time}</div>
-                  </div>
-                </div>
-              ))}
+            <div className="dashboard-table-container">
+              <table className="sales-table dashboard-compact-table">
+                <thead>
+                  <tr>
+                    <th>Project / Opportunity</th>
+                    <th>Company</th>
+                    <th style={{ textAlign: 'right' }}>Value</th>
+                    <th>Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentOpportunities.length > 0 ? (
+                    recentOpportunities.map((opp: any) => (
+                      <tr
+                        key={opp.id}
+                        onClick={() => window.location.href = `/sales/opportunities/${opp.id}`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>
+                          <div className="sales-project-cell">
+                            <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #F37B03, #ff9500)', width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                              🤝
+                            </div>
+                            <div className="sales-project-info">
+                              <h4>{opp.name}</h4>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{opp.customer_name || '-'}</td>
+                        <td className="sales-value-cell">{formatCurrency(parseFloat(opp.estimated_value) || 0)}</td>
+                        <td>
+                          <span className={`sales-stage-badge ${opp.stage_name?.toLowerCase().replace(/\s+/g, '-') || 'unknown'}`}>
+                            <span className="sales-stage-dot"></span>
+                            {opp.stage_name || 'Unknown'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="empty-table">No opportunities found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Recent Estimates */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <CalculateIcon className="card-title-icon" />
+                Recent Estimates
+              </h2>
+              <Link to="/estimating" className="card-link">View all</Link>
+            </div>
+            <div className="dashboard-table-container">
+              <table className="sales-table dashboard-compact-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Project Name</th>
+                    <th style={{ textAlign: 'right' }}>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentEstimates.length > 0 ? (
+                    recentEstimates.map((estimate: any) => (
+                      <tr
+                        key={estimate.id}
+                        onClick={() => window.location.href = `/estimating/estimates/${estimate.id}`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>
+                          <span style={{ color: '#3b82f6', fontWeight: 500 }}>{estimate.estimate_number}</span>
+                        </td>
+                        <td>
+                          <div className="sales-project-cell">
+                            <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                              📊
+                            </div>
+                            <div className="sales-project-info">
+                              <h4>{estimate.project_name || 'Untitled'}</h4>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                          {formatCurrency(parseFloat(estimate.total_cost) || 0)}
+                        </td>
+                        <td>
+                          <span className={`sales-stage-badge ${estimate.status?.toLowerCase().replace(/\s+/g, '-') || 'in-progress'}`}>
+                            <span className="sales-stage-dot"></span>
+                            {estimate.status || 'In Progress'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="empty-table">No estimates found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
