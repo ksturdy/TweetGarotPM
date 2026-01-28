@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
+import Sidebar from './Sidebar';
 import './Layout.css';
 
 interface LayoutProps {
@@ -10,24 +11,10 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, tenant, logout } = useAuth();
-  const location = useLocation();
-
-  // Only show HR nav if user has HR access (not 'none') or is admin
-  const hasHRAccess = user?.role === 'admin' || (user?.hrAccess && user.hrAccess !== 'none');
 
   // Get tenant branding
   const logoUrl = tenant?.settings?.branding?.logo_url;
   const companyName = tenant?.settings?.branding?.company_name || tenant?.name;
-
-  const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/sales', label: 'Sales Pipeline' },
-    { path: '/projects', label: 'Projects' },
-  ];
-
-  if (hasHRAccess) {
-    navItems.push({ path: '/hr', label: 'HR' });
-  }
 
   return (
     <div className="layout">
@@ -46,36 +33,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </>
             )}
           </Link>
-          <nav className="nav">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`nav-link ${location.pathname === item.path ? 'active' : ''}`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
           <div className="user-menu">
-            <Link to="/feedback" className="btn btn-primary btn-sm">
-              Feedback
-            </Link>
-            {user?.role === 'admin' && (
-              <Link to="/settings" className="btn btn-secondary btn-sm">
-                Settings
-              </Link>
-            )}
             <span className="user-name">
               {user?.firstName} {user?.lastName}
             </span>
-            <button onClick={logout} className="btn btn-secondary btn-sm">
+            <button onClick={logout} className="btn btn-header btn-sm">
               Logout
             </button>
           </div>
         </div>
       </header>
-      <main className="main">{children}</main>
+      <div className="layout-body">
+        <Sidebar />
+        <main className="main">{children}</main>
+      </div>
     </div>
   );
 };

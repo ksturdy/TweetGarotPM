@@ -2,7 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
+import opportunitiesService from '../services/opportunities';
 import { chatService } from '../services/chat';
+import { useAuth } from '../context/AuthContext';
+import FolderIcon from '@mui/icons-material/Folder';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import './Dashboard.css';
 
 interface Message {
@@ -13,15 +23,24 @@ interface Message {
 }
 
 const Dashboard: React.FC = () => {
-  const { data: projects, isLoading } = useQuery({
+  const { user } = useAuth();
+
+  // Fetch data for KPIs
+  const { data: projects, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
 
+  const { data: opportunities } = useQuery({
+    queryKey: ['opportunities'],
+    queryFn: () => opportunitiesService.getAll(),
+  });
+
+  // Chat state
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Hello! I\'m Titan, your AI assistant. I can help you with project insights, customer data, scheduling, and answer questions about your business. How can I assist you today?',
+      text: "Hello! I'm Titan, your AI assistant. I can help you with project insights, customer data, scheduling, and answer questions about your business. How can I assist you today?",
       sender: 'titan',
       timestamp: new Date(),
     },
@@ -30,21 +49,37 @@ const Dashboard: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeProjects = projects?.filter((p) => p.status === 'active') || [];
+  // Computed values
+  const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
+  const totalProjects = projects?.length || 0;
 
-  const modules = [
-    { name: 'Project Management', icon: '📊', path: '/projects', desc: 'RFIs, Submittals, COs', ready: true, count: projects?.length || 0 },
-    { name: 'Account Management', icon: '🤝', path: '/account-management', desc: 'Customers & Contacts', ready: true },
-    { name: 'Marketing', icon: '📣', path: '/marketing', desc: 'Proposals, Branding, Events', ready: true },
-    { name: 'Estimating', icon: '🎯', path: '/estimating', desc: 'Estimates & Budgets', ready: true },
-    { name: 'Risk Management', icon: '⚖️', path: '/risk-management', desc: 'Contract Reviews', ready: true },
-    { name: 'QA/QC', icon: '✅', path: '#', desc: 'Quality Assurance', ready: false },
-    { name: 'IT', icon: '💻', path: '#', desc: 'Systems & Support', ready: false },
-    { name: 'Administration', icon: '💼', path: '/administration', desc: 'Accounting, AP/AR', ready: true },
-    { name: 'Service', icon: '🔧', path: '#', desc: 'Work Orders', ready: false },
-    { name: 'Safety', icon: '🦺', path: '/safety', desc: 'Incidents & Training', ready: true },
-    { name: 'HR', icon: '👥', path: '/hr', desc: 'Employees', ready: true },
-    { name: 'Fleet', icon: '🚛', path: '#', desc: 'Vehicles', ready: false },
+  const pipelineValue = opportunities?.reduce((sum: number, opp: any) => {
+    const stageName = opp.stage_name?.toLowerCase() || '';
+    if (stageName !== 'won' && stageName !== 'lost') {
+      return sum + (parseFloat(opp.estimated_value) || 0);
+    }
+    return sum;
+  }, 0) || 0;
+
+  const openOpportunities = opportunities?.filter((o: any) => {
+    const stageName = o.stage_name?.toLowerCase() || '';
+    return stageName !== 'won' && stageName !== 'lost';
+  }).length || 0;
+
+  // Mock data for attention items (would come from API in real implementation)
+  const attentionItems = [
+    { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
+    { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
+    { id: 3, type: 'report', message: 'Daily report not submitted', project: 'DEF Building', path: '/projects/3/daily-reports', severity: 'low' },
+  ];
+
+  // Mock recent activity
+  const recentActivity = [
+    { id: 1, action: 'RFI #45 submitted', user: 'John Smith', project: 'ABC Tower', time: '2 hours ago' },
+    { id: 2, action: 'Change Order #7 approved', user: 'Sarah Garcia', project: 'XYZ Hospital', time: '4 hours ago', amount: '$12,500' },
+    { id: 3, action: 'New opportunity added', user: 'Mike Johnson', project: 'HVAC Retrofit', time: '5 hours ago' },
+    { id: 4, action: 'Submittal marked approved', user: 'Emily Martinez', project: 'DEF Building', time: '6 hours ago' },
+    { id: 5, action: 'Daily report submitted', user: 'Bob Wilson', project: 'GHI Complex', time: 'Yesterday' },
   ];
 
   const scrollToBottom = () => {
@@ -72,7 +107,6 @@ const Dashboard: React.FC = () => {
     setIsTyping(true);
 
     try {
-      // Call the real Claude API
       const response = await chatService.sendMessage(messageText, messages);
 
       const titanResponse: Message = {
@@ -99,39 +133,203 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  const formatCurrency = (value: number) => {
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `$${(value / 1000).toFixed(0)}K`;
+    }
+    return `$${value.toFixed(0)}`;
+  };
+
+  if (projectsLoading) {
     return <div className="loading">Loading...</div>;
   }
 
   return (
     <div className="dashboard">
-      <div className="dashboard-layout">
-        <div className="main-content">
-          <div className="modules-section">
-            <h2 className="section-title">Modules</h2>
-            <div className="modules-grid">
-              {modules.map((module) => (
-                <Link
-                  key={module.name}
-                  to={module.ready ? module.path : '#'}
-                  className={`module-tile ${module.ready ? 'ready' : 'disabled'}`}
-                  onClick={(e) => !module.ready && e.preventDefault()}
-                >
-                  {!module.ready && <span className="coming-soon-badge">Coming Soon</span>}
-                  <div className="module-icon">{module.icon}</div>
-                  <div className="module-name">{module.name}</div>
-                  {module.count !== undefined && (
-                    <div className="module-count">{module.count}</div>
+      {/* Welcome Header */}
+      <div className="dashboard-welcome">
+        <div className="welcome-text">
+          <h1>Welcome back, {user?.firstName || 'User'}</h1>
+          <p>Here's what's happening with your projects today.</p>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-icon kpi-icon-blue">
+            <FolderIcon />
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-value">{activeProjects.length}</div>
+            <div className="kpi-label">Active Projects</div>
+          </div>
+          <Link to="/projects" className="kpi-link">
+            <ArrowForwardIcon fontSize="small" />
+          </Link>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon kpi-icon-orange">
+            <TrendingUpIcon />
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-value">{formatCurrency(pipelineValue)}</div>
+            <div className="kpi-label">Pipeline Value</div>
+          </div>
+          <Link to="/sales" className="kpi-link">
+            <ArrowForwardIcon fontSize="small" />
+          </Link>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon kpi-icon-green">
+            <AssignmentIcon />
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-value">{openOpportunities}</div>
+            <div className="kpi-label">Open Opportunities</div>
+          </div>
+          <Link to="/sales" className="kpi-link">
+            <ArrowForwardIcon fontSize="small" />
+          </Link>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon kpi-icon-purple">
+            <InventoryIcon />
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-value">{totalProjects}</div>
+            <div className="kpi-label">Total Projects</div>
+          </div>
+          <Link to="/projects" className="kpi-link">
+            <ArrowForwardIcon fontSize="small" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Main Dashboard Content */}
+      <div className="dashboard-grid">
+        {/* Left Column */}
+        <div className="dashboard-left">
+          {/* Needs Attention */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <WarningAmberIcon className="card-title-icon warning" />
+                Needs Attention
+              </h2>
+              <span className="attention-count">{attentionItems.length}</span>
+            </div>
+            <div className="attention-list">
+              {attentionItems.length > 0 ? (
+                attentionItems.map((item) => (
+                  <Link key={item.id} to={item.path} className={`attention-item severity-${item.severity}`}>
+                    <div className="attention-content">
+                      <div className="attention-message">{item.message}</div>
+                      <div className="attention-project">{item.project}</div>
+                    </div>
+                    <ArrowForwardIcon className="attention-arrow" fontSize="small" />
+                  </Link>
+                ))
+              ) : (
+                <div className="empty-attention">
+                  <CheckCircleIcon className="empty-icon" />
+                  <p>All caught up! No items need attention.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Active Projects */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <FolderIcon className="card-title-icon" />
+                Active Projects
+              </h2>
+              <Link to="/projects" className="card-link">View all</Link>
+            </div>
+            <div className="projects-table-container">
+              <table className="projects-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeProjects.slice(0, 5).map((project: any) => (
+                    <tr key={project.id}>
+                      <td>
+                        <Link to={`/projects/${project.id}`} className="project-name-link">
+                          {project.name}
+                        </Link>
+                        <div className="project-client">{project.client}</div>
+                      </td>
+                      <td>
+                        <span className={`status-badge status-${project.status}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="progress-bar-container">
+                          <div className="progress-bar-wrapper">
+                            <div
+                              className="progress-bar"
+                              style={{ width: `${project.percentComplete || 0}%` }}
+                            />
+                          </div>
+                          <span className="progress-text">{project.percentComplete || 0}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {activeProjects.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="empty-table">No active projects</td>
+                    </tr>
                   )}
-                  {module.desc && <div className="module-desc">{module.desc}</div>}
-                </Link>
-              ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        <div className="chatbot-section">
-          <div className="chatbot-card card">
+        {/* Right Column */}
+        <div className="dashboard-right">
+          {/* Recent Activity */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <AccessTimeIcon className="card-title-icon" />
+                Recent Activity
+              </h2>
+            </div>
+            <div className="activity-list">
+              {recentActivity.map((activity) => (
+                <div key={activity.id} className="activity-item">
+                  <div className="activity-dot" />
+                  <div className="activity-content">
+                    <div className="activity-action">{activity.action}</div>
+                    <div className="activity-meta">
+                      <span className="activity-user">{activity.user}</span>
+                      <span className="activity-separator">•</span>
+                      <span className="activity-project">{activity.project}</span>
+                    </div>
+                    <div className="activity-time">{activity.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Titan Chat */}
+          <div className="dashboard-card chat-card">
             <div className="chatbot-header">
               <div className="chatbot-title-wrapper">
                 <div className="chatbot-avatar">🛡️</div>
@@ -186,7 +384,7 @@ const Dashboard: React.FC = () => {
               <input
                 type="text"
                 className="chatbot-input"
-                placeholder="Ask Titan anything about your business..."
+                placeholder="Ask Titan anything..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
               />
@@ -197,10 +395,6 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-
-      <footer className="dashboard-footer">
-        © {new Date().getFullYear()} Tweet Garot Mechanical • Internal Use Only
-      </footer>
     </div>
   );
 };
