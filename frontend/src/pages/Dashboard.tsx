@@ -13,6 +13,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import PersonIcon from '@mui/icons-material/Person';
+import GroupsIcon from '@mui/icons-material/Groups';
+import BusinessIcon from '@mui/icons-material/Business';
 import './Dashboard.css';
 
 interface Message {
@@ -22,19 +25,61 @@ interface Message {
   timestamp: Date;
 }
 
+type ViewScope = 'my' | 'team' | 'company';
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const [viewScope, setViewScope] = useState<ViewScope>('my');
 
-  // Fetch data for KPIs
-  const { data: projects, isLoading: projectsLoading } = useQuery({
+  // Scroll to top when Dashboard mounts
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+  }, []);
+
+  // Fetch all projects for filtering
+  const { data: allProjects, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
 
-  const { data: opportunities } = useQuery({
+  // Fetch all opportunities for filtering
+  const { data: allOpportunities } = useQuery({
     queryKey: ['opportunities'],
     queryFn: () => opportunitiesService.getAll(),
   });
+
+  // Filter projects based on view scope
+  const projects = React.useMemo(() => {
+    if (!allProjects) return [];
+
+    switch (viewScope) {
+      case 'my':
+        return allProjects.filter((p: any) => p.manager_id === user?.id);
+      case 'team':
+        // For now, team view shows all (can be enhanced with team membership)
+        return allProjects;
+      case 'company':
+      default:
+        return allProjects;
+    }
+  }, [allProjects, viewScope, user?.id]);
+
+  // Filter opportunities based on view scope
+  const opportunities = React.useMemo(() => {
+    if (!allOpportunities) return [];
+
+    switch (viewScope) {
+      case 'my':
+        return allOpportunities.filter((o: any) => o.assigned_to === user?.id);
+      case 'team':
+        // For now, team view shows all (can be enhanced with team membership)
+        return allOpportunities;
+      case 'company':
+      default:
+        return allOpportunities;
+    }
+  }, [allOpportunities, viewScope, user?.id]);
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([
@@ -49,7 +94,7 @@ const Dashboard: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Computed values
+  // Computed values from filtered data
   const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
   const totalProjects = projects?.length || 0;
 
@@ -67,7 +112,10 @@ const Dashboard: React.FC = () => {
   }).length || 0;
 
   // Mock data for attention items (would come from API in real implementation)
-  const attentionItems = [
+  const attentionItems = viewScope === 'my' ? [
+    { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
+    { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
+  ] : [
     { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
     { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
     { id: 3, type: 'report', message: 'Daily report not submitted', project: 'DEF Building', path: '/projects/3/daily-reports', severity: 'low' },
@@ -142,17 +190,51 @@ const Dashboard: React.FC = () => {
     return `$${value.toFixed(0)}`;
   };
 
+  const getViewLabel = () => {
+    switch (viewScope) {
+      case 'my': return 'your';
+      case 'team': return "your team's";
+      case 'company': return 'company-wide';
+    }
+  };
+
   if (projectsLoading) {
     return <div className="loading">Loading...</div>;
   }
 
   return (
     <div className="dashboard">
-      {/* Welcome Header */}
-      <div className="dashboard-welcome">
-        <div className="welcome-text">
-          <h1>Welcome back, {user?.firstName || 'User'}</h1>
-          <p>Here's what's happening with your projects today.</p>
+      {/* Welcome Header with View Toggle */}
+      <div className="dashboard-header-row">
+        <div className="dashboard-welcome">
+          <div className="welcome-text">
+            <h1>Welcome back, {user?.firstName || 'User'}</h1>
+            <p>Here's what's happening with {getViewLabel()} projects today.</p>
+          </div>
+        </div>
+
+        <div className="view-toggle">
+          <button
+            className={`view-toggle-btn ${viewScope === 'my' ? 'active' : ''}`}
+            onClick={() => setViewScope('my')}
+          >
+            <PersonIcon fontSize="small" />
+            <span>My Work</span>
+          </button>
+          <button
+            className={`view-toggle-btn ${viewScope === 'team' ? 'active' : ''}`}
+            onClick={() => setViewScope('team')}
+          >
+            <GroupsIcon fontSize="small" />
+            <span>My Team</span>
+          </button>
+          <button
+            className={`view-toggle-btn ${viewScope === 'company' ? 'active' : ''}`}
+            onClick={() => setViewScope('company')}
+          >
+            <BusinessIcon fontSize="small" />
+            <span>Company</span>
+          </button>
         </div>
       </div>
 
@@ -291,7 +373,9 @@ const Dashboard: React.FC = () => {
                   ))}
                   {activeProjects.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="empty-table">No active projects</td>
+                      <td colSpan={3} className="empty-table">
+                        {viewScope === 'my' ? 'No projects assigned to you' : 'No active projects'}
+                      </td>
                     </tr>
                   )}
                 </tbody>
