@@ -1,9 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
 import opportunitiesService from '../services/opportunities';
-import { chatService } from '../services/chat';
 import { useAuth } from '../context/AuthContext';
 import FolderIcon from '@mui/icons-material/Folder';
 import AssignmentIcon from '@mui/icons-material/Assignment';
@@ -17,13 +16,6 @@ import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import BusinessIcon from '@mui/icons-material/Business';
 import './Dashboard.css';
-
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'titan';
-  timestamp: Date;
-}
 
 type ViewScope = 'my' | 'team' | 'company';
 
@@ -81,19 +73,6 @@ const Dashboard: React.FC = () => {
     }
   }, [allOpportunities, viewScope, user?.id]);
 
-  // Chat state
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hello! I'm Titan, your AI assistant. I can help you with project insights, customer data, scheduling, and answer questions about your business. How can I assist you today?",
-      sender: 'titan',
-      timestamp: new Date(),
-    },
-  ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
   // Computed values from filtered data
   const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
   const totalProjects = projects?.length || 0;
@@ -129,57 +108,6 @@ const Dashboard: React.FC = () => {
     { id: 4, action: 'Submittal marked approved', user: 'Emily Martinez', project: 'DEF Building', time: '6 hours ago' },
     { id: 5, action: 'Daily report submitted', user: 'Bob Wilson', project: 'GHI Complex', time: 'Yesterday' },
   ];
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputValue,
-      sender: 'user',
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    const messageText = inputValue;
-    setInputValue('');
-    setIsTyping(true);
-
-    try {
-      const response = await chatService.sendMessage(messageText, messages);
-
-      const titanResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response.response,
-        sender: 'titan',
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, titanResponse]);
-    } catch (error: any) {
-      console.error('Chat error:', error);
-
-      const errorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: error.response?.data?.error || 'Sorry, I encountered an error. Please try again.',
-        sender: 'titan',
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorResponse]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -410,72 +338,6 @@ const Dashboard: React.FC = () => {
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Titan Chat */}
-          <div className="dashboard-card chat-card">
-            <div className="chatbot-header">
-              <div className="chatbot-title-wrapper">
-                <div className="chatbot-avatar">🛡️</div>
-                <div>
-                  <h2 className="chatbot-title">Ask Titan</h2>
-                  <p className="chatbot-status">AI Assistant • Online</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="chatbot-messages">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`message ${message.sender === 'user' ? 'message-user' : 'message-titan'}`}
-                >
-                  <div className="message-content">
-                    {message.sender === 'titan' && (
-                      <div className="message-avatar">🛡️</div>
-                    )}
-                    <div className="message-bubble">
-                      <p>{message.text}</p>
-                      <span className="message-time">
-                        {message.timestamp.toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                    {message.sender === 'user' && (
-                      <div className="message-avatar">👤</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isTyping && (
-                <div className="message message-titan">
-                  <div className="message-content">
-                    <div className="message-avatar">🛡️</div>
-                    <div className="message-bubble typing-indicator">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <form className="chatbot-input-form" onSubmit={handleSendMessage}>
-              <input
-                type="text"
-                className="chatbot-input"
-                placeholder="Ask Titan anything..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-              />
-              <button type="submit" className="chatbot-send-btn" disabled={!inputValue.trim()}>
-                ➤
-              </button>
-            </form>
           </div>
         </div>
       </div>

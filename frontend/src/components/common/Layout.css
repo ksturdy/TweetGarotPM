@@ -94,6 +94,13 @@
   transition: margin-left 0.2s ease;
 }
 
+/* Header Right Section */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 /* User Menu */
 .user-menu {
   display: flex;

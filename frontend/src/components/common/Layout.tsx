@@ -1,8 +1,9 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
+import TitanChat from './TitanChat';
 import './Layout.css';
 
 interface LayoutProps {
@@ -33,13 +34,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               </>
             )}
           </Link>
-          <div className="user-menu">
-            <span className="user-name">
-              {user?.firstName} {user?.lastName}
-            </span>
-            <button onClick={logout} className="btn btn-header btn-sm">
-              Logout
-            </button>
+          <div className="header-right">
+            <TitanChat />
+            <div className="user-menu">
+              <span className="user-name">
+                {user?.firstName} {user?.lastName}
+              </span>
+              <button onClick={logout} className="btn btn-header btn-sm">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
