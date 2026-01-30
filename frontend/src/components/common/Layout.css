@@ -25,6 +25,34 @@
   justify-content: space-between;
   height: 64px;
   padding: 0 0.5rem;
+  position: relative;
+}
+
+/* Header Left Section - TITAN logo */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+/* Header Center Section - Ask Titan chat */
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.logo-default {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--white);
+  text-decoration: none;
+}
+
+.logo-default:hover {
+  text-decoration: none;
+  color: var(--white);
 }
 
 .logo {
@@ -75,6 +103,14 @@
   height: 44px;
   max-width: 180px;
   object-fit: contain;
+}
+
+/* Company logo displayed on the right side of header */
+.company-logo-image {
+  height: 44px;
+  max-width: 180px;
+  object-fit: contain;
+  border-radius: 4px;
 }
 
 /* Layout Body - Sidebar + Main */
@@ -141,6 +177,15 @@
     padding: 0;
   }
 
+  .header-left {
+    gap: 0.75rem;
+  }
+
+  .header-center {
+    position: static;
+    transform: none;
+  }
+
   .logo-titan {
     font-size: 1.5rem;
   }
@@ -156,5 +201,10 @@
 
   .user-name {
     display: none;
+  }
+
+  .company-logo-image {
+    height: 36px;
+    max-width: 120px;
   }
 }

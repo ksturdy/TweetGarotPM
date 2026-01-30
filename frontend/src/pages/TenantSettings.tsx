@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { getTenant, updateTenant, updateTenantSettings, uploadLogo, deleteLogo, TenantInfo } from '../services/tenant';
+import ImageCropper from '../components/common/ImageCropper';
+import '../components/common/ImageCropper.css';
 
 const TenantSettings: React.FC = () => {
   const { user } = useAuth();
@@ -27,6 +29,8 @@ const TenantSettings: React.FC = () => {
 
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [originalFileName, setOriginalFileName] = useState<string>('');
 
   const { data: tenant, isLoading } = useQuery<TenantInfo>({
     queryKey: ['tenant'],
@@ -132,8 +136,32 @@ const TenantSettings: React.FC = () => {
         showError('Logo file must be less than 5MB');
         return;
       }
-      uploadLogoMutation.mutate(file);
+      // Create a URL for the image and open the cropper
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageToCrop(reader.result as string);
+        setOriginalFileName(file.name);
+      };
+      reader.readAsDataURL(file);
     }
+    // Reset the input so the same file can be selected again
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleCropComplete = (croppedBlob: Blob) => {
+    // Create a File from the Blob
+    const fileName = originalFileName.replace(/\.[^/.]+$/, '') + '_cropped.png';
+    const croppedFile = new File([croppedBlob], fileName, { type: 'image/png' });
+    uploadLogoMutation.mutate(croppedFile);
+    setImageToCrop(null);
+    setOriginalFileName('');
+  };
+
+  const handleCropCancel = () => {
+    setImageToCrop(null);
+    setOriginalFileName('');
   };
 
   const handleDeleteLogo = () => {
@@ -487,6 +515,15 @@ const TenantSettings: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Image Cropper Modal */}
+      {imageToCrop && (
+        <ImageCropper
+          imageSrc={imageToCrop}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+        />
+      )}
     </div>
   );
 };

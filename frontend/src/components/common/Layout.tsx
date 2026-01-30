@@ -22,20 +22,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <ScrollToTop />
       <header className="header">
         <div className="header-content">
-          <Link to="/" className="logo">
-            {logoUrl ? (
-              <img src={logoUrl} alt={companyName || 'Company logo'} className="logo-image" />
-            ) : (
-              <>
-                <div className="logo-shield">🛡️</div>
-                <div className="logo-text">
-                  <div className="logo-titan">TITAN</div>
-                </div>
-              </>
-            )}
-          </Link>
-          <div className="header-right">
+          <div className="header-left">
+            <Link to="/" className="logo-default">
+              <div className="logo-shield">🛡️</div>
+              <div className="logo-text">
+                <div className="logo-titan">TITAN</div>
+              </div>
+            </Link>
+          </div>
+          <div className="header-center">
             <TitanChat />
+          </div>
+          <div className="header-right">
             <div className="user-menu">
               <span className="user-name">
                 {user?.firstName} {user?.lastName}
@@ -44,6 +42,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 Logout
               </button>
             </div>
+            {logoUrl && (
+              <img src={logoUrl} alt={companyName || 'Company logo'} className="company-logo-image" />
+            )}
           </div>
         </div>
       </header>

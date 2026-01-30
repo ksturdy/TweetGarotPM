@@ -65,6 +65,33 @@
   animation: titanChatSlideIn 0.2s ease;
 }
 
+/* Resize Handle */
+.titan-chat-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nw-resize;
+  z-index: 10;
+}
+
+.titan-chat-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.5);
+  border-top: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 2px 0 0 0;
+}
+
+.titan-chat-resize-handle:hover::before {
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
 @keyframes titanChatSlideIn {
   from {
     opacity: 0;
@@ -163,8 +190,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-height: 250px;
-  max-height: 320px;
+  min-height: 150px;
 }
 
 /* Message Styles */
@@ -207,6 +233,7 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-bottom-left-radius: 0.25rem;
+  color: #1e293b;
 }
 
 .titan-message-user .titan-message-bubble {
@@ -219,6 +246,11 @@
   margin: 0 0 0.25rem 0;
   line-height: 1.4;
   font-size: 0.8125rem;
+  color: inherit;
+}
+
+.titan-message-ai .titan-message-bubble p {
+  color: #1e293b;
 }
 
 .titan-message-time {
@@ -344,12 +376,16 @@
     top: 64px;
     right: 0;
     left: 0;
-    width: 100%;
-    max-height: calc(100vh - 64px);
+    width: 100% !important;
+    max-height: calc(100vh - 64px) !important;
     border-radius: 0;
   }
 
   .titan-chat-messages {
     max-height: calc(100vh - 200px);
+  }
+
+  .titan-chat-resize-handle {
+    display: none;
   }
 }

@@ -24,9 +24,13 @@ const TitanChat: React.FC = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [panelSize, setPanelSize] = useState({ width: 380, height: 500 });
+  const [isResizing, setIsResizing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
   // Keep open if there's an active conversation (more than the initial message)
   const hasActiveConversation = messages.length > 1;
@@ -135,6 +139,46 @@ const TitanChat: React.FC = () => {
     ]);
   };
 
+  // Resize handlers
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: panelSize.width,
+      height: panelSize.height,
+    };
+  };
+
+  useEffect(() => {
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const deltaX = resizeStartRef.current.x - e.clientX;
+      const deltaY = e.clientY - resizeStartRef.current.y;
+
+      const newWidth = Math.max(320, Math.min(600, resizeStartRef.current.width + deltaX));
+      const newHeight = Math.max(300, Math.min(700, resizeStartRef.current.height + deltaY));
+
+      setPanelSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleResizeEnd = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [isResizing]);
+
   return (
     <div
       ref={chatRef}
@@ -149,7 +193,19 @@ const TitanChat: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="titan-chat-panel">
+        <div
+          ref={panelRef}
+          className="titan-chat-panel"
+          style={{
+            width: `${panelSize.width}px`,
+            maxHeight: `${panelSize.height}px`
+          }}
+        >
+          <div
+            className="titan-chat-resize-handle"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          />
           <div className="titan-chat-header">
             <div className="titan-chat-header-info">
               <span className="titan-chat-avatar">🛡️</span>
