@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Line, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -58,6 +58,7 @@ interface SalesOpportunity {
 
 const SalesPipeline: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [view, setView] = useState<'table' | 'board'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -189,6 +190,20 @@ const SalesPipeline: React.FC = () => {
   };
 
   const opportunities: SalesOpportunity[] = apiOpportunities.map(mapApiToDisplay);
+
+  // Handle deep link from dashboard - open opportunity modal if ID is passed in state
+  useEffect(() => {
+    const state = location.state as { selectedOpportunityId?: number } | null;
+    if (state?.selectedOpportunityId && apiOpportunities.length > 0) {
+      const apiOpp = apiOpportunities.find(a => a.id === state.selectedOpportunityId);
+      if (apiOpp) {
+        setSelectedOpportunity(apiOpp);
+        setIsModalOpen(true);
+      }
+      // Clear the state so refreshing doesn't reopen
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.state, apiOpportunities, navigate, location.pathname]);
 
   // Get unique salespeople from opportunities
   const salespeople = useMemo(() => {

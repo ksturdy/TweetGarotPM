@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
 import opportunitiesService from '../services/opportunities';
@@ -24,6 +24,7 @@ type ViewScope = 'my' | 'team' | 'company';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [viewScope, setViewScope] = useState<ViewScope>('my');
 
   // Scroll to top when Dashboard mounts
@@ -363,7 +364,7 @@ const Dashboard: React.FC = () => {
                     recentOpportunities.map((opp: any) => (
                       <tr
                         key={opp.id}
-                        onClick={() => window.location.href = `/sales/opportunities/${opp.id}`}
+                        onClick={() => navigate('/sales', { state: { selectedOpportunityId: opp.id } })}
                         style={{ cursor: 'pointer' }}
                       >
                         <td>
@@ -372,7 +373,7 @@ const Dashboard: React.FC = () => {
                               🤝
                             </div>
                             <div className="sales-project-info">
-                              <h4>{opp.name}</h4>
+                              <h4>{opp.title}</h4>
                             </div>
                           </div>
                         </td>
