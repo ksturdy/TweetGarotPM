@@ -8,13 +8,6 @@ const HistoricalProject = {
     return result.rows;
   },
 
-  async findAllByTenant(tenantId) {
-    const result = await db.query(
-      'SELECT * FROM historical_projects WHERE tenant_id = $1 ORDER BY bid_date DESC NULLS LAST, created_at DESC',
-      [tenantId]
-    );
-    return result.rows;
-  },
 
   async findById(id) {
     const result = await db.query(
@@ -24,15 +17,9 @@ const HistoricalProject = {
     return result.rows[0];
   },
 
-  async findByIdAndTenant(id, tenantId) {
-    const result = await db.query(
-      'SELECT * FROM historical_projects WHERE id = $1 AND tenant_id = $2',
-      [id, tenantId]
-    );
-    return result.rows[0];
-  },
 
-  async create(data, tenantId = null) {
+  // Create a historical project (no tenant_id - table doesn't have that column)
+  async create(data) {
     const result = await db.query(
       `INSERT INTO historical_projects (
         name, bid_date, building_type, project_type, bid_type,
@@ -59,7 +46,7 @@ const HistoricalProject = {
         laminar_flow, louvers, hoods, fire_dampers, silencers,
         boilers, htx, pumps, cond_pumps, tower, air_sep, exp_tanks, filters, pot_feeder, buffer_tank, triple_duty,
         truck_rental, temp_heat, controls, insulation, balancing, electrical, general, allowance, geo_thermal,
-        notes, tenant_id
+        notes
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
@@ -69,7 +56,7 @@ const HistoricalProject = {
         $101, $102, $103, $104, $105, $106, $107, $108, $109, $110, $111, $112, $113, $114, $115, $116, $117, $118, $119, $120,
         $121, $122, $123, $124, $125, $126, $127, $128, $129, $130, $131, $132, $133, $134, $135, $136, $137, $138, $139, $140,
         $141, $142, $143, $144, $145, $146, $147, $148, $149, $150, $151, $152, $153, $154, $155, $156, $157, $158, $159, $160,
-        $161, $162, $163, $164, $165, $166
+        $161, $162, $163, $164, $165
       ) RETURNING *`,
       [
         data.name, data.bid_date, data.building_type, data.project_type, data.bid_type,
@@ -96,30 +83,32 @@ const HistoricalProject = {
         data.laminar_flow, data.louvers, data.hoods, data.fire_dampers, data.silencers,
         data.boilers, data.htx, data.pumps, data.cond_pumps, data.tower, data.air_sep, data.exp_tanks, data.filters, data.pot_feeder, data.buffer_tank, data.triple_duty,
         data.truck_rental, data.temp_heat, data.controls, data.insulation, data.balancing, data.electrical, data.general, data.allowance, data.geo_thermal,
-        data.notes, tenantId
+        data.notes
       ]
     );
     return result.rows[0];
   },
 
-  async bulkCreate(projects, tenantId = null) {
+  async bulkCreate(projects) {
     const inserted = [];
 
     for (const project of projects) {
-      const result = await this.create(project, tenantId);
+      const result = await this.create(project);
       inserted.push(result);
     }
 
     return inserted;
   },
 
-  async update(id, data, tenantId = null) {
-    let query = `UPDATE historical_projects SET
+  // Update a historical project (no tenant filtering - table doesn't have tenant_id)
+  async update(id, data) {
+    const query = `UPDATE historical_projects SET
       name = $1, bid_date = $2, building_type = $3, project_type = $4, bid_type = $5,
       total_cost = $6, total_sqft = $7, cost_per_sqft_with_index = $8, total_cost_per_sqft = $9,
       notes = $10,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $11`;
+    WHERE id = $11
+    RETURNING *`;
 
     const params = [
       data.name, data.bid_date, data.building_type, data.project_type, data.bid_type,
@@ -128,35 +117,150 @@ const HistoricalProject = {
       id
     ];
 
-    if (tenantId) {
-      query += ' AND tenant_id = $12';
-      params.push(tenantId);
-    }
-
-    query += ' RETURNING *';
-
     const result = await db.query(query, params);
     return result.rows[0];
   },
 
-  async delete(id, tenantId = null) {
-    let query = 'DELETE FROM historical_projects WHERE id = $1';
-    const params = [id];
-
-    if (tenantId) {
-      query += ' AND tenant_id = $2';
-      params.push(tenantId);
-    }
-
-    await db.query(query, params);
+  // Delete a historical project (no tenant filtering - table doesn't have tenant_id)
+  async delete(id) {
+    await db.query('DELETE FROM historical_projects WHERE id = $1', [id]);
   },
 
   async deleteAll() {
     await db.query('DELETE FROM historical_projects');
   },
 
-  async deleteAllByTenant(tenantId) {
-    await db.query('DELETE FROM historical_projects WHERE tenant_id = $1', [tenantId]);
+
+  // Find similar projects for budget generation (no tenant filtering - table doesn't have tenant_id)
+  async findSimilar(criteria) {
+    const { buildingType, projectType, bidType, sqft, limit = 5 } = criteria;
+
+    // Build query with similarity scoring
+    // Cast parameters to explicit types to avoid PostgreSQL type inference issues
+    const query = `
+      SELECT
+        id, name, building_type, project_type, bid_type,
+        total_sqft, total_cost, total_cost_per_sqft, bid_date,
+        pm_hours, pm_cost, sm_equip_cost, pf_equip_cost,
+        controls, insulation, balancing, electrical, general, allowance,
+        s_materials_with_escalation, r_materials_with_escalation,
+        e_material_with_escalation, o_materials_with_escalation,
+        hw_material_with_esc, chw_material_with_esc,
+        ahu, rtu, vav, boilers, pumps, chiller,
+        (
+          -- Building type match: 40 points
+          CASE WHEN building_type = $1::text THEN 40 ELSE 0 END +
+          -- Project type match: 35 points
+          CASE WHEN project_type = $2::text THEN 35 ELSE 0 END +
+          -- Bid type match: 10 points
+          CASE WHEN $3::text IS NULL OR bid_type = $3::text THEN 10 ELSE 0 END +
+          -- Square footage similarity: 15 points
+          CASE
+            WHEN total_sqft IS NULL OR $4::decimal IS NULL THEN 0
+            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 0.25 THEN 15
+            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 0.5 THEN 10
+            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 1.0 THEN 5
+            ELSE 0
+          END
+        ) as similarity_score
+      FROM historical_projects
+      WHERE total_cost IS NOT NULL AND total_cost > 0
+      ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
+      LIMIT $5::integer
+    `;
+
+    const params = [buildingType, projectType, bidType, sqft, limit];
+    const result = await db.query(query, params);
+    return result.rows;
+  },
+
+  // Get category averages for budget estimation (no tenant filtering)
+  async getCategoryAverages(buildingType, projectType) {
+    let query = `
+      SELECT
+        COUNT(*)::integer as project_count,
+        AVG(total_cost) as avg_total_cost,
+        AVG(total_cost_per_sqft) as avg_cost_per_sqft,
+        AVG(pm_cost) as avg_pm_cost,
+        AVG(sm_equip_cost) as avg_sm_equip_cost,
+        AVG(pf_equip_cost) as avg_pf_equip_cost,
+        AVG(controls) as avg_controls,
+        AVG(insulation) as avg_insulation,
+        AVG(balancing) as avg_balancing,
+        AVG(electrical) as avg_electrical,
+        AVG(general) as avg_general,
+        AVG(allowance) as avg_allowance,
+        AVG(s_field_cost) as avg_supply_labor,
+        AVG(s_materials_with_escalation) as avg_supply_material,
+        AVG(r_field_cost) as avg_return_labor,
+        AVG(r_materials_with_escalation) as avg_return_material,
+        AVG(e_field_cost) as avg_exhaust_labor,
+        AVG(e_material_with_escalation) as avg_exhaust_material,
+        AVG(o_field_cost) as avg_outside_air_labor,
+        AVG(o_materials_with_escalation) as avg_outside_air_material,
+        AVG(hw_field_cost) as avg_hw_labor,
+        AVG(hw_material_with_esc) as avg_hw_material,
+        AVG(chw_field_cost) as avg_chw_labor,
+        AVG(chw_material_with_esc) as avg_chw_material
+      FROM historical_projects
+      WHERE total_cost IS NOT NULL AND total_cost > 0
+    `;
+
+    const params = [];
+    let paramIndex = 1;
+
+    if (buildingType) {
+      query += ` AND building_type = $${paramIndex}`;
+      params.push(buildingType);
+      paramIndex++;
+    }
+
+    if (projectType) {
+      query += ` AND project_type = $${paramIndex}`;
+      params.push(projectType);
+    }
+
+    const result = await db.query(query, params);
+    return result.rows[0];
+  },
+
+  // Get distinct values for dropdown options (no tenant filtering)
+  async getDistinctValues(column) {
+    const allowedColumns = ['building_type', 'project_type', 'bid_type'];
+    if (!allowedColumns.includes(column)) {
+      throw new Error('Invalid column name');
+    }
+
+    const query = `
+      SELECT DISTINCT ${column} as value
+      FROM historical_projects
+      WHERE ${column} IS NOT NULL AND ${column} != ''
+      ORDER BY ${column}
+    `;
+
+    const result = await db.query(query);
+    return result.rows.map(r => r.value);
+  },
+
+  // Get statistics for dashboard (no tenant filtering)
+  async getStats() {
+    const query = `
+      SELECT
+        COUNT(*) as total_projects,
+        COUNT(DISTINCT building_type) as building_types,
+        COUNT(DISTINCT project_type) as project_types,
+        MIN(bid_date) as oldest_project,
+        MAX(bid_date) as newest_project,
+        AVG(total_cost) as avg_cost,
+        AVG(total_cost_per_sqft) as avg_cost_per_sqft,
+        MIN(total_cost) as min_cost,
+        MAX(total_cost) as max_cost
+      FROM historical_projects
+      WHERE total_cost IS NOT NULL AND total_cost > 0
+    `;
+
+    const result = await db.query(query);
+    return result.rows[0];
   }
 };
 

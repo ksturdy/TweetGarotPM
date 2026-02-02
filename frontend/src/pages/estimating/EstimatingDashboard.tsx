@@ -5,12 +5,20 @@ import './EstimatingDashboard.css';
 const EstimatingDashboard: React.FC = () => {
   const modules = [
     {
+      name: 'Budget Generator',
+      icon: '🤖',
+      path: '/estimating/budget-generator',
+      desc: 'AI-powered budgets from historical data',
+      color: '#10b981',
+      stats: { label1: 'Projects', value1: '492+', label2: 'AI Model', value2: 'Titan' },
+    },
+    {
       name: 'Cost Database',
       icon: '📚',
       path: '/estimating/cost-database',
       desc: 'HVAC cost item library & templates',
       color: '#8b5cf6',
-      stats: { total: 0, categories: 8 },
+      stats: { label1: 'Items', value1: '0', label2: 'Categories', value2: '8' },
     },
   ];
 
@@ -206,12 +214,12 @@ const EstimatingDashboard: React.FC = () => {
 
             <div className="module-stats">
               <div className="stat-item">
-                <div className="stat-number">0</div>
-                <div className="stat-label">Items</div>
+                <div className="stat-number">{module.stats.value1}</div>
+                <div className="stat-label">{module.stats.label1}</div>
               </div>
               <div className="stat-item">
-                <div className="stat-number">8</div>
-                <div className="stat-label">Categories</div>
+                <div className="stat-number">{module.stats.value2}</div>
+                <div className="stat-label">{module.stats.label2}</div>
               </div>
             </div>
 

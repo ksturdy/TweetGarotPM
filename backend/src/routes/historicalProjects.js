@@ -280,8 +280,8 @@ router.post('/import', async (req, res, next) => {
     const validRows = mappedProjects.length;
     const skippedRows = totalRows - validRows;
 
-    // Bulk insert all projects with tenant ID
-    const inserted = await HistoricalProject.bulkCreate(mappedProjects, req.tenantId);
+    // Bulk insert all projects (no tenant_id - table doesn't have that column)
+    const inserted = await HistoricalProject.bulkCreate(mappedProjects);
 
     res.json({
       message: `Successfully imported ${inserted.length} historical projects${skippedRows > 0 ? ` (skipped ${skippedRows} empty rows)` : ''}`,
@@ -294,20 +294,20 @@ router.post('/import', async (req, res, next) => {
   }
 });
 
-// Get all historical projects
+// Get all historical projects (no tenant filtering - table doesn't have tenant_id)
 router.get('/', async (req, res, next) => {
   try {
-    const projects = await HistoricalProject.findAllByTenant(req.tenantId);
+    const projects = await HistoricalProject.findAll();
     res.json(projects);
   } catch (error) {
     next(error);
   }
 });
 
-// Get single historical project
+// Get single historical project (no tenant filtering - table doesn't have tenant_id)
 router.get('/:id', async (req, res, next) => {
   try {
-    const project = await HistoricalProject.findByIdAndTenant(req.params.id, req.tenantId);
+    const project = await HistoricalProject.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
@@ -317,15 +317,15 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// Update historical project
+// Update historical project (no tenant filtering - table doesn't have tenant_id)
 router.put('/:id', async (req, res, next) => {
   try {
-    const project = await HistoricalProject.findByIdAndTenant(req.params.id, req.tenantId);
+    const project = await HistoricalProject.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const updated = await HistoricalProject.update(req.params.id, req.body, req.tenantId);
+    const updated = await HistoricalProject.update(req.params.id, req.body);
     res.json(updated);
   } catch (error) {
     next(error);
@@ -339,22 +339,22 @@ router.delete('/all', async (req, res, next) => {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
-    await HistoricalProject.deleteAllByTenant(req.tenantId);
+    await HistoricalProject.deleteAll();
     res.json({ message: 'All historical projects deleted' });
   } catch (error) {
     next(error);
   }
 });
 
-// Delete single historical project
+// Delete single historical project (no tenant filtering - table doesn't have tenant_id)
 router.delete('/:id', async (req, res, next) => {
   try {
-    const project = await HistoricalProject.findByIdAndTenant(req.params.id, req.tenantId);
+    const project = await HistoricalProject.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    await HistoricalProject.delete(req.params.id, req.tenantId);
+    await HistoricalProject.delete(req.params.id);
     res.json({ message: 'Project deleted successfully' });
   } catch (error) {
     next(error);

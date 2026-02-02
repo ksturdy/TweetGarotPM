@@ -32,6 +32,7 @@ import EstimateNew from './pages/estimating/EstimateNew';
 import EstimateDetail from './pages/estimating/EstimateDetail';
 import BudgetsList from './pages/estimating/BudgetsList';
 import CostDatabase from './pages/estimating/CostDatabase';
+import BudgetGenerator from './pages/estimating/BudgetGenerator';
 import AccountManagementList from './pages/accountManagement/AccountManagementList';
 import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
@@ -165,6 +166,7 @@ const App: React.FC = () => {
                 <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />
                 <Route path="/estimating/budgets" element={<EstimatingDashboard />} />
                 <Route path="/estimating/cost-database" element={<CostDatabase />} />
+                <Route path="/estimating/budget-generator" element={<BudgetGenerator />} />
                 <Route path="/account-management" element={<AccountManagementList />} />
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />

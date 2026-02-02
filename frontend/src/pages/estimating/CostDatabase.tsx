@@ -258,49 +258,45 @@ const CostDatabase: React.FC = () => {
 
   return (
     <div className="cost-database">
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/estimating">&larr; Back to Estimating</Link>
-      </div>
+      <Link to="/estimating" className="back-link">&larr; Back to Estimating</Link>
 
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <div>
-          <h1 className="page-title" style={{ margin: 0 }}>Cost Database</h1>
-          <p style={{ color: 'var(--secondary)', marginTop: '0.5rem' }}>
-            Manage your HVAC budget item library
-          </p>
+      <div className="page-header">
+        <div className="page-header-content">
+          <h1>Cost Database</h1>
+          <p>Manage your HVAC historical project data library</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-actions">
           <button
             className="btn btn-secondary"
             onClick={() => setShowImportModal(true)}
           >
-            📤 Import Excel
+            Import Excel
           </button>
           <button className="btn btn-primary">
-            + Add Item
+            + Add Project
           </button>
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="stats-grid" style={{ marginBottom: '2rem' }}>
-        <div className="stat-card card">
+      <div className="stats-grid">
+        <div className="stat-card">
           <div className="stat-icon">📊</div>
-          <div>
+          <div className="stat-info">
             <div className="stat-value">{projects.length}</div>
             <div className="stat-label">Historical Projects</div>
           </div>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card">
           <div className="stat-icon">🏗️</div>
-          <div>
-            <div className="stat-value">{projects.filter(p => p.building_type).length}</div>
+          <div className="stat-info">
+            <div className="stat-value">{new Set(projects.map(p => p.building_type).filter(Boolean)).size}</div>
             <div className="stat-label">Building Types</div>
           </div>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card">
           <div className="stat-icon">📅</div>
-          <div>
+          <div className="stat-info">
             <div className="stat-value">
               {projects.length > 0
                 ? new Date(Math.max(...projects.map(p => new Date(p.created_at || 0).getTime()))).toLocaleDateString()
@@ -310,9 +306,9 @@ const CostDatabase: React.FC = () => {
             <div className="stat-label">Last Import</div>
           </div>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card">
           <div className="stat-icon">💰</div>
-          <div>
+          <div className="stat-info">
             <div className="stat-value">
               ${filteredProjects.length > 0
                 ? Math.round(filteredProjects.reduce((sum, p) => sum + (parseFloat(p.total_cost) || 0), 0) / filteredProjects.length).toLocaleString()
@@ -322,9 +318,9 @@ const CostDatabase: React.FC = () => {
             <div className="stat-label">Avg Project Cost</div>
           </div>
         </div>
-        <div className="stat-card card">
+        <div className="stat-card">
           <div className="stat-icon">📐</div>
-          <div>
+          <div className="stat-info">
             <div className="stat-value">
               ${filteredProjects.length > 0
                 ? (() => {
@@ -342,12 +338,10 @@ const CostDatabase: React.FC = () => {
       </div>
 
       {/* Filter Controls */}
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
-              Building Type
-            </label>
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="filter-section">
+          <div className="filter-group">
+            <label>Building Type</label>
             <select
               className="form-input"
               value={filterBuildingType}
@@ -360,10 +354,8 @@ const CostDatabase: React.FC = () => {
               ))}
             </select>
           </div>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
-              Project Type
-            </label>
+          <div className="filter-group">
+            <label>Project Type</label>
             <select
               className="form-input"
               value={filterProjectType}
@@ -376,10 +368,8 @@ const CostDatabase: React.FC = () => {
               ))}
             </select>
           </div>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
-              Bid Type
-            </label>
+          <div className="filter-group">
+            <label>Bid Type</label>
             <select
               className="form-input"
               value={filterBidType}
@@ -396,9 +386,9 @@ const CostDatabase: React.FC = () => {
       </div>
 
       {/* Search Bar */}
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '300px' }}>
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="search-section">
+          <div className="search-input-wrapper">
             <input
               type="text"
               className="form-input"
@@ -407,7 +397,7 @@ const CostDatabase: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>
+          <div className="search-count">
             Showing {filteredProjects.length} of {projects.length} projects
           </div>
         </div>
