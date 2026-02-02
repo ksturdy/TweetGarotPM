@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { vendorsService, Vendor } from '../../services/vendors';
 import { PlacesSearch } from '../../components/PlacesSearch';
 import { Place } from '../../services/places';
-import './CustomerList.css';
+import '../../styles/SalesPipeline.css';
 
 interface DuplicateMatch {
   id: number;
@@ -195,64 +195,115 @@ const VendorList: React.FC = () => {
     }
   };
 
+  const getStatusBadgeClass = (status: string | undefined) => {
+    switch (status) {
+      case 'active': return 'awarded';
+      case 'inactive': return 'closed';
+      case 'suspended': return 'lost';
+      default: return 'lead';
+    }
+  };
+
   return (
-    <div className="customer-list-page">
-      <div className="page-header">
-        <div>
-          <Link to="/account-management" className="breadcrumb-link">
-            &larr; Back to Account Management
-          </Link>
-          <h1 className="page-title">Vendors & Subcontractors</h1>
-          <p className="page-subtitle">Accounts Payable</p>
+    <div className="sales-container">
+      {/* Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/account-management" className="breadcrumb-link" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
+              &larr; Back to Account Management
+            </Link>
+            <h1>Vendors & Subcontractors</h1>
+            <div className="sales-subtitle">Accounts Payable</div>
+          </div>
         </div>
-        <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}>
-            📤 Import from Excel
+        <div className="sales-header-actions">
+          <button className="sales-btn sales-btn-secondary" onClick={() => setShowImportModal(true)}>
+            Import from Excel
           </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <button className="sales-btn sales-btn-primary" onClick={() => setShowModal(true)}>
             + Add Vendor
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="filters-section card">
-        <div className="filters-grid">
-          <input
-            type="text"
-            placeholder="Search vendors..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
-          </select>
-          <select value={vendorTypeFilter} onChange={(e) => setVendorTypeFilter(e.target.value)}>
-            <option value="">All Types</option>
-            <option value="subcontractor">Subcontractor</option>
-            <option value="supplier">Supplier</option>
-            <option value="service_provider">Service Provider</option>
-          </select>
+      {/* KPI Cards */}
+      <div className="sales-kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="sales-kpi-card blue">
+          <div className="sales-kpi-label">Total Vendors</div>
+          <div className="sales-kpi-value">{vendors.length}</div>
+        </div>
+        <div className="sales-kpi-card green">
+          <div className="sales-kpi-label">Active</div>
+          <div className="sales-kpi-value">{vendors.filter((v: Vendor) => v.status === 'active').length}</div>
+        </div>
+        <div className="sales-kpi-card amber">
+          <div className="sales-kpi-label">Subcontractors</div>
+          <div className="sales-kpi-value">{vendors.filter((v: Vendor) => v.vendor_type === 'subcontractor').length}</div>
+        </div>
+        <div className="sales-kpi-card purple">
+          <div className="sales-kpi-label">Suppliers</div>
+          <div className="sales-kpi-value">{vendors.filter((v: Vendor) => v.vendor_type === 'supplier').length}</div>
         </div>
       </div>
 
-      {/* Vendor List */}
-      {isLoading ? (
-        <div className="loading">Loading vendors...</div>
-      ) : (
-        <div className="table-container card">
-          <table className="data-table">
+      {/* Table Section */}
+      <div className="sales-table-section">
+        <div className="sales-table-header">
+          <div className="sales-table-title">All Vendors</div>
+          <div className="sales-table-controls">
+            <div className="sales-search-box">
+              <span>🔍</span>
+              <input
+                type="text"
+                placeholder="Search vendors..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <select
+              className="sales-filter-btn"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="suspended">Suspended</option>
+            </select>
+            <select
+              className="sales-filter-btn"
+              value={vendorTypeFilter}
+              onChange={(e) => setVendorTypeFilter(e.target.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              <option value="">All Types</option>
+              <option value="subcontractor">Subcontractor</option>
+              <option value="supplier">Supplier</option>
+              <option value="service_provider">Service Provider</option>
+            </select>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+            Loading vendors...
+          </div>
+        ) : vendors.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>🏢</div>
+            <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>No vendors found</div>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click "Add Vendor" to create one.</p>
+          </div>
+        ) : (
+          <table className="sales-table">
             <thead>
               <tr>
                 <th>Facility/Location Name</th>
                 <th>Company</th>
                 <th>Type</th>
                 <th>Trade Specialty</th>
-                <th>Contact</th>
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Status</th>
@@ -260,30 +311,40 @@ const VendorList: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {vendors.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
-                    No vendors found. Click "Add Vendor" to create one.
+              {vendors.map((vendor: Vendor) => (
+                <tr key={vendor.id}>
+                  <td>
+                    <div className="sales-project-cell">
+                      <div className="sales-project-icon" style={{ background: 'var(--gradient-2)', fontSize: '14px', color: 'white' }}>
+                        {vendor.vendor_name?.[0] || vendor.company_name?.[0] || 'V'}
+                      </div>
+                      <div className="sales-project-info">
+                        <h4>{vendor.vendor_name || '-'}</h4>
+                      </div>
+                    </div>
                   </td>
-                </tr>
-              ) : (
-                vendors.map((vendor) => (
-                  <tr key={vendor.id}>
-                    <td><strong>{vendor.vendor_name}</strong></td>
-                    <td>{vendor.company_name || '-'}</td>
-                    <td>{vendor.vendor_type || '-'}</td>
-                    <td>{vendor.trade_specialty || '-'}</td>
-                    <td>{vendor.primary_contact || '-'}</td>
-                    <td>{vendor.phone || '-'}</td>
-                    <td>{vendor.email || '-'}</td>
-                    <td>
-                      <span className={`status-badge status-${vendor.status}`}>
-                        {vendor.status}
+                  <td>{vendor.company_name || '-'}</td>
+                  <td>
+                    {vendor.vendor_type && (
+                      <span className="sales-stage-badge opportunity-received">
+                        <span className="sales-stage-dot"></span>
+                        {vendor.vendor_type.replace('_', ' ')}
                       </span>
-                    </td>
-                    <td>
+                    )}
+                  </td>
+                  <td>{vendor.trade_specialty || '-'}</td>
+                  <td>{vendor.phone || '-'}</td>
+                  <td>{vendor.email || '-'}</td>
+                  <td>
+                    <span className={`sales-stage-badge ${getStatusBadgeClass(vendor.status)}`}>
+                      <span className="sales-stage-dot"></span>
+                      {vendor.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="sales-actions-cell">
                       <button
-                        className="btn-icon"
+                        className="sales-action-btn"
                         onClick={() => {
                           setEditingVendor(vendor);
                           setShowModal(true);
@@ -293,7 +354,7 @@ const VendorList: React.FC = () => {
                         ✏️
                       </button>
                       <button
-                        className="btn-icon"
+                        className="sales-action-btn"
                         onClick={() => {
                           if (window.confirm('Are you sure you want to delete this vendor?')) {
                             deleteMutation.mutate(vendor.id);
@@ -303,163 +364,184 @@ const VendorList: React.FC = () => {
                       >
                         🗑️
                       </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={handleCloseModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
-              <button className="close-btn" onClick={handleCloseModal}>×</button>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
+              <button onClick={handleCloseModal} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
             </div>
             <form onSubmit={handleSubmit} ref={formRef}>
-              {!editingVendor && (
-                <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label>Search Business</label>
-                  <PlacesSearch
-                    onSelect={handlePlaceSelect}
-                    placeholder="Search: name + city (e.g., Ferguson Plumbing Phoenix)"
-                    near="USA"
-                  />
-                  <small style={{ color: '#6b7280', fontSize: '12px' }}>
-                    Include business type and city for best results
-                  </small>
-                </div>
-              )}
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Company Name *</label>
-                  <input
-                    name="company_name"
-                    defaultValue={editingVendor?.company_name}
-                    onChange={handleCompanyNameChange}
-                    required
-                  />
-                  {duplicateWarning.length > 0 && !duplicateAcknowledged && (
-                    <div style={{
-                      marginTop: '8px',
-                      padding: '8px 12px',
-                      backgroundColor: '#fef3c7',
-                      border: '1px solid #f59e0b',
-                      borderRadius: '4px',
-                      fontSize: '13px'
-                    }}>
-                      <strong style={{ color: '#b45309' }}>Possible duplicate found:</strong>
-                      {duplicateWarning.map((match) => (
-                        <div key={match.id} style={{ marginTop: '4px', color: '#92400e' }}>
-                          {match.company_name}
-                          {match.vendor_name && ` - ${match.vendor_name}`}
-                          {(match.city || match.state) && ` (${[match.city, match.state].filter(Boolean).join(', ')})`}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="form-group">
-                  <label>Facility/Location Name</label>
-                  <input
-                    name="vendor_name"
-                    defaultValue={editingVendor?.vendor_name}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    name="email"
-                    defaultValue={editingVendor?.email}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Phone</label>
-                  <input
-                    name="phone"
-                    defaultValue={editingVendor?.phone}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Address</label>
-                  <input
-                    name="address_line1"
-                    defaultValue={editingVendor?.address_line1}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>City</label>
-                  <input
-                    name="city"
-                    defaultValue={editingVendor?.city}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>State</label>
-                  <input
-                    name="state"
-                    defaultValue={editingVendor?.state}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Zip Code</label>
-                  <input
-                    name="zip_code"
-                    defaultValue={editingVendor?.zip_code}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Vendor Type</label>
-                  <select name="vendor_type" defaultValue={editingVendor?.vendor_type}>
-                    <option value="">Select Type</option>
-                    <option value="subcontractor">Subcontractor</option>
-                    <option value="supplier">Supplier</option>
-                    <option value="service_provider">Service Provider</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Trade Specialty</label>
-                  <input
-                    name="trade_specialty"
-                    defaultValue={editingVendor?.trade_specialty}
-                    placeholder="e.g., HVAC, Electrical, Plumbing"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Payment Terms</label>
-                  <input
-                    name="payment_terms"
-                    defaultValue={editingVendor?.payment_terms}
-                    placeholder="e.g., Net 30"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Status</label>
-                  <select name="status" defaultValue={editingVendor?.status || 'active'}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="suspended">Suspended</option>
-                  </select>
-                </div>
-                <div className="form-group full-width">
-                  <label>Notes</label>
-                  <textarea
-                    name="notes"
-                    rows={3}
-                    defaultValue={editingVendor?.notes}
-                  />
+              <div style={{ padding: '20px 24px' }}>
+                {!editingVendor && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Search Business</label>
+                    <PlacesSearch
+                      onSelect={handlePlaceSelect}
+                      placeholder="Search: name + city (e.g., Ferguson Plumbing Phoenix)"
+                      near="USA"
+                    />
+                    <small style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                      Include business type and city for best results
+                    </small>
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Company Name *</label>
+                    <input
+                      name="company_name"
+                      defaultValue={editingVendor?.company_name}
+                      onChange={handleCompanyNameChange}
+                      required
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                    {duplicateWarning.length > 0 && !duplicateAcknowledged && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid var(--accent-amber)',
+                        borderRadius: '8px',
+                        fontSize: '13px'
+                      }}>
+                        <strong style={{ color: 'var(--accent-amber)' }}>Possible duplicate found:</strong>
+                        {duplicateWarning.map((match) => (
+                          <div key={match.id} style={{ marginTop: '4px', color: 'var(--text-secondary)' }}>
+                            {match.company_name}
+                            {match.vendor_name && ` - ${match.vendor_name}`}
+                            {(match.city || match.state) && ` (${[match.city, match.state].filter(Boolean).join(', ')})`}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Facility/Location Name</label>
+                    <input
+                      name="vendor_name"
+                      defaultValue={editingVendor?.vendor_name}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      defaultValue={editingVendor?.email}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Phone</label>
+                    <input
+                      name="phone"
+                      defaultValue={editingVendor?.phone}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Address</label>
+                    <input
+                      name="address_line1"
+                      defaultValue={editingVendor?.address_line1}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>City</label>
+                    <input
+                      name="city"
+                      defaultValue={editingVendor?.city}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>State</label>
+                    <input
+                      name="state"
+                      defaultValue={editingVendor?.state}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Zip Code</label>
+                    <input
+                      name="zip_code"
+                      defaultValue={editingVendor?.zip_code}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Vendor Type</label>
+                    <select
+                      name="vendor_type"
+                      defaultValue={editingVendor?.vendor_type}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                    >
+                      <option value="">Select Type</option>
+                      <option value="subcontractor">Subcontractor</option>
+                      <option value="supplier">Supplier</option>
+                      <option value="service_provider">Service Provider</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Trade Specialty</label>
+                    <input
+                      name="trade_specialty"
+                      defaultValue={editingVendor?.trade_specialty}
+                      placeholder="e.g., HVAC, Electrical, Plumbing"
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Payment Terms</label>
+                    <input
+                      name="payment_terms"
+                      defaultValue={editingVendor?.payment_terms}
+                      placeholder="e.g., Net 30"
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Status</label>
+                    <select
+                      name="status"
+                      defaultValue={editingVendor?.status || 'active'}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Notes</label>
+                    <textarea
+                      name="notes"
+                      rows={3}
+                      defaultValue={editingVendor?.notes}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', resize: 'vertical' }}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+                <button type="button" className="sales-btn sales-btn-secondary" onClick={handleCloseModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="sales-btn sales-btn-primary">
                   {editingVendor ? 'Update' : 'Create'} Vendor
                 </button>
               </div>
@@ -471,31 +553,32 @@ const VendorList: React.FC = () => {
       {/* Import Modal */}
       {showImportModal && (
         <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Import Vendors from Excel</h2>
-              <button className="close-btn" onClick={() => setShowImportModal(false)}>×</button>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Import Vendors from Excel</h2>
+              <button onClick={() => setShowImportModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
             </div>
-            <div className="import-content">
-              <p>Upload an Excel file (.xlsx or .xls) containing vendor data.</p>
-              <button className="btn btn-secondary" onClick={handleDownloadTemplate}>
-                📥 Download Template
+            <div style={{ padding: '24px' }}>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>Upload an Excel file (.xlsx or .xls) containing vendor data.</p>
+              <button className="sales-btn sales-btn-secondary" onClick={handleDownloadTemplate} style={{ marginBottom: '20px' }}>
+                Download Template
               </button>
-              <div className="file-upload">
+              <div style={{ marginTop: '16px' }}>
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  style={{ marginBottom: '12px' }}
                 />
-                {selectedFile && <p>Selected: {selectedFile.name}</p>}
+                {selectedFile && <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Selected: {selectedFile.name}</p>}
               </div>
             </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowImportModal(false)}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+              <button className="sales-btn sales-btn-secondary" onClick={() => setShowImportModal(false)}>
                 Cancel
               </button>
               <button
-                className="btn btn-primary"
+                className="sales-btn sales-btn-primary"
                 onClick={handleImport}
                 disabled={!selectedFile || importMutation.isPending}
               >

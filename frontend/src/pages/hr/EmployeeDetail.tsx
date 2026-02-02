@@ -7,6 +7,7 @@ import { officeLocationsApi } from '../../services/officeLocations';
 import { usersApi } from '../../services/users';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
+import '../../styles/SalesPipeline.css';
 
 const EmployeeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -125,40 +126,55 @@ const EmployeeDetail: React.FC = () => {
     }
   };
 
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'active': return 'awarded';
+      case 'inactive': return 'open';
+      case 'terminated': return 'lost';
+      default: return 'lead';
+    }
+  };
+
   if (isLoading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="sales-container">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '64vh' }}>
+          Loading...
+        </div>
+      </div>
+    );
   }
 
   if (!employee) {
-    return <div className="card">Employee not found</div>;
+    return (
+      <div className="sales-container">
+        <div className="sales-chart-card" style={{ textAlign: 'center', padding: '3rem' }}>
+          Employee not found
+        </div>
+      </div>
+    );
   }
 
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      active: 'badge-success',
-      inactive: 'badge-warning',
-      terminated: 'badge-danger',
-    };
-    return `badge ${classes[status] || 'badge-info'}`;
-  };
-
   return (
-    <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/hr/employees">&larr; Back to Employees</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>
-          {employee.first_name} {employee.last_name}
-        </h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+    <div className="sales-container">
+      {/* Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/hr/employees" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
+              &larr; Back to Employees
+            </Link>
+            <h1>{employee.first_name} {employee.last_name}</h1>
+            <div className="sales-subtitle">{employee.job_title || 'No job title'}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
           {!isEditing && hasWriteAccess && (
             <>
-              <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>
+              <button className="sales-btn sales-btn-secondary" onClick={() => setIsEditing(true)}>
                 Edit
               </button>
-              <button className="btn btn-danger" onClick={handleDelete}>
+              <button className="sales-btn" style={{ background: 'var(--accent-rose)', color: 'white' }} onClick={handleDelete}>
                 Delete
               </button>
             </>
@@ -166,360 +182,162 @@ const EmployeeDetail: React.FC = () => {
         </div>
       </div>
 
-      <div className="card">
+      {/* Content */}
+      <div className="sales-chart-card">
         {isEditing ? (
           <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">First Name *</label>
-                <input
-                  type="text"
-                  name="firstName"
-                  className="form-input"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  required
-                />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>First Name *</label>
+                <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} required style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Last Name *</label>
-                <input
-                  type="text"
-                  name="lastName"
-                  className="form-input"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  required
-                />
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Last Name *</label>
+                <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} required style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Email *</label>
-              <input
-                type="email"
-                name="email"
-                className="form-input"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Phone</label>
-                <input
-                  type="tel"
-                  name="phone"
-                  className="form-input"
-                  value={formData.phone}
-                  onChange={handleChange}
-                />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Email *</label>
+                <input type="email" name="email" value={formData.email} onChange={handleChange} required style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Mobile Phone</label>
-                <input
-                  type="tel"
-                  name="mobilePhone"
-                  className="form-input"
-                  value={formData.mobilePhone}
-                  onChange={handleChange}
-                />
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Phone</label>
+                <input type="tel" name="phone" value={formData.phone} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Department</label>
-                <select
-                  name="departmentId"
-                  className="form-input"
-                  value={formData.departmentId}
-                  onChange={handleChange}
-                >
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Mobile Phone</label>
+                <input type="tel" name="mobilePhone" value={formData.mobilePhone} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Department</label>
+                <select name="departmentId" value={formData.departmentId} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
                   <option value="">Select Department</option>
-                  {departments?.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
+                  {departments?.map((dept) => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
                 </select>
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Office Location</label>
-                <select
-                  name="officeLocationId"
-                  className="form-input"
-                  value={formData.officeLocationId}
-                  onChange={handleChange}
-                >
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Office Location</label>
+                <select name="officeLocationId" value={formData.officeLocationId} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
                   <option value="">Select Location</option>
-                  {locations?.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
+                  {locations?.map((loc) => (<option key={loc.id} value={loc.id}>{loc.name}</option>))}
                 </select>
               </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Job Title</label>
-                <input
-                  type="text"
-                  name="jobTitle"
-                  className="form-input"
-                  value={formData.jobTitle}
-                  onChange={handleChange}
-                />
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Job Title</label>
+                <input type="text" name="jobTitle" value={formData.jobTitle} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Hire Date</label>
-                <input
-                  type="date"
-                  name="hireDate"
-                  className="form-input"
-                  value={formData.hireDate}
-                  onChange={handleChange}
-                />
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Hire Date</label>
+                <input type="date" name="hireDate" value={formData.hireDate} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
               </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Employment Status</label>
-                <select
-                  name="employmentStatus"
-                  className="form-input"
-                  value={formData.employmentStatus}
-                  onChange={handleChange}
-                >
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Employment Status</label>
+                <select name="employmentStatus" value={formData.employmentStatus} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                   <option value="terminated">Terminated</option>
                 </select>
               </div>
-
-              <div className="form-group">
-                <label className="form-label">HR Role *</label>
-                <select
-                  name="role"
-                  className="form-input"
-                  value={formData.role}
-                  onChange={handleChange}
-                  required
-                >
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>HR Role *</label>
+                <select name="role" value={formData.role} onChange={handleChange} required style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
                   <option value="user">User (Read-Only)</option>
                   <option value="admin">Admin (Full Access)</option>
                 </select>
-                <small style={{ color: 'var(--secondary)' }}>
-                  Admin can create, edit, and delete HR data. User has read-only access.
-                </small>
+                <small style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Admin can create, edit, and delete HR data</small>
               </div>
-            </div>
-
-            <div className="form-group">
-              {!formData.userId && (
-                <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={createUserAccount}
-                      onChange={(e) => setCreateUserAccount(e.target.checked)}
-                      style={{ marginRight: '0.5rem' }}
-                    />
-                    <strong>Create Titan User Account</strong>
-                  </label>
-                  <small style={{ color: 'var(--secondary)', display: 'block', marginTop: '0.5rem' }}>
-                    Check this to create a login account for this employee
-                  </small>
-                </div>
-              )}
-
-              {createUserAccount && !formData.userId ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Password *</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={userPassword}
-                      onChange={(e) => setUserPassword(e.target.value)}
-                      required={createUserAccount}
-                      minLength={8}
-                      placeholder="Minimum 8 characters"
-                    />
+              <div style={{ gridColumn: '1 / -1' }}>
+                {!formData.userId && (
+                  <div style={{ marginBottom: '16px', padding: '16px', background: 'var(--bg-dark)', borderRadius: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={createUserAccount} onChange={(e) => setCreateUserAccount(e.target.checked)} style={{ marginRight: '8px' }} />
+                      <strong>Create Titan User Account</strong>
+                    </label>
+                    <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '8px' }}>Check this to create a login account for this employee</small>
                   </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">System Role *</label>
-                    <select
-                      className="form-input"
-                      value={userRole}
-                      onChange={(e) => setUserRole(e.target.value)}
-                      required={createUserAccount}
-                    >
-                      <option value="user">User</option>
-                      <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
+                )}
+                {createUserAccount && !formData.userId ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Password *</label>
+                      <input type="text" value={userPassword} onChange={(e) => setUserPassword(e.target.value)} required={createUserAccount} minLength={8} placeholder="Minimum 8 characters" style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>System Role *</label>
+                      <select value={userRole} onChange={(e) => setUserRole(e.target.value)} required={createUserAccount} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
+                        <option value="user">User</option>
+                        <option value="manager">Manager</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Link to Existing User Account</label>
+                    <select name="userId" value={formData.userId} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'white' }}>
+                      <option value="">No user account</option>
+                      {users?.map((user) => (<option key={user.id} value={user.id}>{user.first_name} {user.last_name} ({user.email})</option>))}
                     </select>
-                    <small style={{ color: 'var(--secondary)' }}>
-                      System role controls access to Titan features (different from HR role)
-                    </small>
+                    <small style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Optional: Link this employee to a system user account</small>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="form-label">Link to Existing User Account</label>
-                  <select
-                    name="userId"
-                    className="form-input"
-                    value={formData.userId}
-                    onChange={handleChange}
-                  >
-                    <option value="">No user account</option>
-                    {users?.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.first_name} {user.last_name} ({user.email})
-                      </option>
-                    ))}
-                  </select>
-                  <small style={{ color: 'var(--secondary)' }}>
-                    Optional: Link this employee to a system user account
-                  </small>
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Notes</label>
-              <textarea
-                name="notes"
-                className="form-input"
-                rows={4}
-                value={formData.notes}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setIsEditing(false);
-                  if (employee) {
-                    setFormData({
-                      userId: employee.user_id?.toString() || '',
-                      firstName: employee.first_name,
-                      lastName: employee.last_name,
-                      email: employee.email,
-                      phone: employee.phone || '',
-                      mobilePhone: employee.mobile_phone || '',
-                      departmentId: employee.department_id?.toString() || '',
-                      officeLocationId: employee.office_location_id?.toString() || '',
-                      jobTitle: employee.job_title || '',
-                      hireDate: employee.hire_date || '',
-                      employmentStatus: employee.employment_status,
-                      role: employee.role || 'user',
-                      notes: employee.notes || '',
-                    });
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-
-            {updateMutation.isError && (
-              <div className="error-message" style={{ marginTop: '1rem' }}>
-                Error updating employee. Please try again.
+                )}
               </div>
-            )}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Notes</label>
+                <textarea name="notes" rows={4} value={formData.notes} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', resize: 'vertical' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+              <button type="button" className="sales-btn sales-btn-secondary" onClick={() => { setIsEditing(false); if (employee) { setFormData({ userId: employee.user_id?.toString() || '', firstName: employee.first_name, lastName: employee.last_name, email: employee.email, phone: employee.phone || '', mobilePhone: employee.mobile_phone || '', departmentId: employee.department_id?.toString() || '', officeLocationId: employee.office_location_id?.toString() || '', jobTitle: employee.job_title || '', hireDate: employee.hire_date || '', employmentStatus: employee.employment_status, role: employee.role || 'user', notes: employee.notes || '' }); } }}>Cancel</button>
+              <button type="submit" className="sales-btn sales-btn-primary" disabled={updateMutation.isPending}>{updateMutation.isPending ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+            {updateMutation.isError && (<div style={{ color: 'var(--accent-rose)', marginTop: '16px', fontSize: '14px' }}>Error updating employee. Please try again.</div>)}
           </form>
         ) : (
           <div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <span className={getStatusBadge(employee.employment_status)}>{employee.employment_status}</span>
+            <div style={{ marginBottom: '24px' }}>
+              <span className={`sales-stage-badge ${getStatusBadgeClass(employee.employment_status)}`}>
+                <span className="sales-stage-dot"></span>
+                {employee.employment_status}
+              </span>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Email
-                </div>
-                <div>{employee.email}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Email</div>
+                <div style={{ fontSize: '14px' }}>{employee.email}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Phone
-                </div>
-                <div>{employee.phone || '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Phone</div>
+                <div style={{ fontSize: '14px' }}>{employee.phone || '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Mobile Phone
-                </div>
-                <div>{employee.mobile_phone || '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Mobile Phone</div>
+                <div style={{ fontSize: '14px' }}>{employee.mobile_phone || '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Job Title
-                </div>
-                <div>{employee.job_title || '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Job Title</div>
+                <div style={{ fontSize: '14px' }}>{employee.job_title || '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Department
-                </div>
-                <div>{employee.department_name || '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Department</div>
+                <div style={{ fontSize: '14px' }}>{employee.department_name || '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Office Location
-                </div>
-                <div>{employee.office_location_name || '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Office Location</div>
+                <div style={{ fontSize: '14px' }}>{employee.office_location_name || '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  Hire Date
-                </div>
-                <div>{employee.hire_date ? format(new Date(employee.hire_date), 'MMM d, yyyy') : '-'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Hire Date</div>
+                <div style={{ fontSize: '14px' }}>{employee.hire_date ? format(new Date(employee.hire_date), 'MMM d, yyyy') : '-'}</div>
               </div>
-
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-                  HR Role
-                </div>
-                <div>
-                  <span className={employee.role === 'admin' ? 'badge badge-primary' : 'badge badge-info'}>
-                    {employee.role === 'admin' ? 'Admin (Full Access)' : 'User (Read-Only)'}
-                  </span>
-                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>HR Role</div>
+                <div><span className={`sales-stage-badge ${employee.role === 'admin' ? 'quoted' : 'lead'}`}>{employee.role === 'admin' ? 'Admin (Full Access)' : 'User (Read-Only)'}</span></div>
               </div>
             </div>
-
             {employee.notes && (
-              <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                  Notes
-                </div>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{employee.notes}</div>
+              <div style={{ marginTop: '24px', padding: '16px', background: 'var(--bg-dark)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Notes</div>
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '14px' }}>{employee.notes}</div>
               </div>
             )}
           </div>

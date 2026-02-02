@@ -5,6 +5,7 @@ import { employeesApi, EmployeeFilters } from '../../services/employees';
 import { departmentsApi } from '../../services/departments';
 import { officeLocationsApi } from '../../services/officeLocations';
 import { useAuth } from '../../context/AuthContext';
+import '../../styles/SalesPipeline.css';
 
 const EmployeeList: React.FC = () => {
   const { user } = useAuth();
@@ -34,54 +35,88 @@ const EmployeeList: React.FC = () => {
     }));
   };
 
-  const getStatusBadge = (status: string) => {
-    const classes: Record<string, string> = {
-      active: 'badge-success',
-      inactive: 'badge-warning',
-      terminated: 'badge-danger',
-    };
-    return `badge ${classes[status] || 'badge-info'}`;
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'active': return 'awarded';
+      case 'inactive': return 'open';
+      case 'terminated': return 'lost';
+      default: return 'lead';
+    }
   };
 
-  // Check if user has write access
   const hasWriteAccess = user?.role === 'admin' || user?.hrAccess === 'write';
 
   if (isLoading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="sales-container">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '64vh' }}>
+          Loading...
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/hr">&larr; Back to HR Dashboard</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Employees</h1>
-        {hasWriteAccess && (
-          <Link to="/hr/employees/new" className="btn btn-primary">Add Employee</Link>
-        )}
-      </div>
-
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Search</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Name or email..."
-              value={filters.search || ''}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-            />
+    <div className="sales-container">
+      {/* Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/hr" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
+              &larr; Back to HR Dashboard
+            </Link>
+            <h1>Employees</h1>
+            <div className="sales-subtitle">Manage employee records</div>
           </div>
+        </div>
+        <div className="sales-header-actions">
+          {hasWriteAccess && (
+            <Link to="/hr/employees/new" className="sales-btn sales-btn-primary">
+              + Add Employee
+            </Link>
+          )}
+        </div>
+      </div>
 
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Department</label>
+      {/* KPI Cards */}
+      <div className="sales-kpi-grid">
+        <div className="sales-kpi-card blue">
+          <div className="sales-kpi-label">Total Showing</div>
+          <div className="sales-kpi-value">{employees?.length || 0}</div>
+        </div>
+        <div className="sales-kpi-card green">
+          <div className="sales-kpi-label">Active Filter</div>
+          <div className="sales-kpi-value">{filters.employmentStatus || 'All'}</div>
+        </div>
+        <div className="sales-kpi-card amber">
+          <div className="sales-kpi-label">Departments</div>
+          <div className="sales-kpi-value">{departments?.length || 0}</div>
+        </div>
+        <div className="sales-kpi-card purple">
+          <div className="sales-kpi-label">Locations</div>
+          <div className="sales-kpi-value">{locations?.length || 0}</div>
+        </div>
+      </div>
+
+      {/* Table Section */}
+      <div className="sales-table-section">
+        <div className="sales-table-header">
+          <div className="sales-table-title">All Employees</div>
+          <div className="sales-table-controls">
+            <div className="sales-search-box">
+              <span>🔍</span>
+              <input
+                type="text"
+                placeholder="Search employees..."
+                value={filters.search || ''}
+                onChange={(e) => handleFilterChange('search', e.target.value)}
+              />
+            </div>
             <select
-              className="form-input"
+              className="sales-filter-btn"
               value={filters.departmentId || ''}
               onChange={(e) => handleFilterChange('departmentId', e.target.value ? Number(e.target.value) : undefined)}
+              style={{ cursor: 'pointer' }}
             >
               <option value="">All Departments</option>
               {departments?.map((dept) => (
@@ -90,14 +125,11 @@ const EmployeeList: React.FC = () => {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Office Location</label>
             <select
-              className="form-input"
+              className="sales-filter-btn"
               value={filters.officeLocationId || ''}
               onChange={(e) => handleFilterChange('officeLocationId', e.target.value ? Number(e.target.value) : undefined)}
+              style={{ cursor: 'pointer' }}
             >
               <option value="">All Locations</option>
               {locations?.map((loc) => (
@@ -106,14 +138,11 @@ const EmployeeList: React.FC = () => {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Employment Status</label>
             <select
-              className="form-input"
+              className="sales-filter-btn"
               value={filters.employmentStatus || ''}
               onChange={(e) => handleFilterChange('employmentStatus', e.target.value || undefined)}
+              style={{ cursor: 'pointer' }}
             >
               <option value="">All Statuses</option>
               <option value="active">Active</option>
@@ -122,66 +151,78 @@ const EmployeeList: React.FC = () => {
             </select>
           </div>
         </div>
-      </div>
 
-      <div className="card">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Job Title</th>
-              <th>Department</th>
-              <th>Office Location</th>
-              <th>HR Role</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employees?.map((employee) => (
-              <tr key={employee.id}>
-                <td>
-                  <Link to={`/hr/employees/${employee.id}`}>
-                    {employee.first_name} {employee.last_name}
-                  </Link>
-                </td>
-                <td>{employee.email}</td>
-                <td>{employee.job_title || '-'}</td>
-                <td>{employee.department_name || '-'}</td>
-                <td>{employee.office_location_name || '-'}</td>
-                <td>
-                  <span className={employee.role === 'admin' ? 'badge badge-primary' : 'badge badge-info'}>
-                    {employee.role === 'admin' ? 'Admin' : 'User'}
-                  </span>
-                </td>
-                <td>
-                  <span className={getStatusBadge(employee.employment_status)}>
-                    {employee.employment_status}
-                  </span>
-                </td>
-                <td>
-                  {hasWriteAccess ? (
-                    <Link to={`/hr/employees/${employee.id}/edit`} className="btn btn-secondary btn-sm">
-                      Edit
-                    </Link>
-                  ) : (
-                    <Link to={`/hr/employees/${employee.id}`} className="btn btn-secondary btn-sm">
-                      View
-                    </Link>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {employees?.length === 0 && (
+        {employees?.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>👥</div>
+            <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>No employees found</div>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Try adjusting your filters</p>
+          </div>
+        ) : (
+          <table className="sales-table">
+            <thead>
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
-                  No employees found
-                </td>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Job Title</th>
+                <th>Department</th>
+                <th>Office Location</th>
+                <th>HR Role</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {employees?.map((employee) => (
+                <tr key={employee.id}>
+                  <td>
+                    <div className="sales-project-cell">
+                      <div className="sales-project-icon" style={{ background: 'var(--gradient-1)', fontSize: '14px', color: 'white' }}>
+                        {employee.first_name?.[0]}{employee.last_name?.[0]}
+                      </div>
+                      <div className="sales-project-info">
+                        <h4>
+                          <Link to={`/hr/employees/${employee.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                            {employee.first_name} {employee.last_name}
+                          </Link>
+                        </h4>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{employee.email}</td>
+                  <td>{employee.job_title || '-'}</td>
+                  <td>{employee.department_name || '-'}</td>
+                  <td>{employee.office_location_name || '-'}</td>
+                  <td>
+                    <span className={`sales-stage-badge ${employee.role === 'admin' ? 'quoted' : 'lead'}`}>
+                      <span className="sales-stage-dot"></span>
+                      {employee.role === 'admin' ? 'Admin' : 'User'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`sales-stage-badge ${getStatusBadgeClass(employee.employment_status)}`}>
+                      <span className="sales-stage-dot"></span>
+                      {employee.employment_status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="sales-actions-cell">
+                      {hasWriteAccess ? (
+                        <Link to={`/hr/employees/${employee.id}/edit`} className="sales-action-btn" title="Edit">
+                          ✏️
+                        </Link>
+                      ) : (
+                        <Link to={`/hr/employees/${employee.id}`} className="sales-action-btn" title="View">
+                          👁️
+                        </Link>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
