@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
 import opportunitiesService from '../services/opportunities';
 import { estimatesApi } from '../services/estimates';
+import { dashboardApi, AttentionItem } from '../services/dashboard';
+import { employeesApi } from '../services/employees';
+import { teamsApi } from '../services/teams';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import HandshakeIcon from '@mui/icons-material/Handshake';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +36,22 @@ const Dashboard: React.FC = () => {
     document.documentElement.scrollTop = 0;
   }, []);
 
+  // Fetch the current user's employee record (for manager_id filtering)
+  const { data: currentEmployeeResponse } = useQuery({
+    queryKey: ['current-employee', user?.id],
+    queryFn: () => user?.id ? employeesApi.getByUserId(user.id) : Promise.resolve(null),
+    enabled: !!user?.id,
+  });
+  const currentEmployeeId = currentEmployeeResponse?.data?.data?.id;
+
+  // Fetch team member employee IDs (for "My Team" filtering)
+  const { data: teamMemberIdsResponse } = useQuery({
+    queryKey: ['my-team-member-ids'],
+    queryFn: () => teamsApi.getMyTeamMemberIds(),
+    enabled: !!user?.id,
+  });
+  const teamMemberEmployeeIds = teamMemberIdsResponse?.data?.data || [];
+
   // Fetch all projects for filtering
   const { data: allProjects, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
@@ -58,15 +77,16 @@ const Dashboard: React.FC = () => {
 
     switch (viewScope) {
       case 'my':
-        return allProjects.filter((p: any) => p.manager_id === user?.id);
+        // Filter to user's projects only (manager_id references employees)
+        return allProjects.filter((p: any) => p.manager_id === currentEmployeeId);
       case 'team':
-        // For now, team view shows all (can be enhanced with team membership)
-        return allProjects;
+        // Filter to projects managed by any team member
+        return allProjects.filter((p: any) => teamMemberEmployeeIds.includes(p.manager_id));
       case 'company':
       default:
         return allProjects;
     }
-  }, [allProjects, viewScope, user?.id]);
+  }, [allProjects, viewScope, currentEmployeeId, teamMemberEmployeeIds]);
 
   // Filter opportunities based on view scope
   const opportunities = React.useMemo(() => {
@@ -74,10 +94,9 @@ const Dashboard: React.FC = () => {
 
     switch (viewScope) {
       case 'my':
-        return allOpportunities.filter((o: any) => o.assigned_to === user?.id);
       case 'team':
-        // For now, team view shows all (can be enhanced with team membership)
-        return allOpportunities;
+        // For 'my' and 'team' (until team membership is implemented), filter to user's opportunities
+        return allOpportunities.filter((o: any) => o.assigned_to === user?.id);
       case 'company':
       default:
         return allOpportunities;
@@ -125,15 +144,11 @@ const Dashboard: React.FC = () => {
       .slice(0, 5);
   }, [allEstimates]);
 
-  // Mock data for attention items (would come from API in real implementation)
-  const attentionItems = viewScope === 'my' ? [
-    { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
-    { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
-  ] : [
-    { id: 1, type: 'rfi', message: 'RFI #42 overdue by 3 days', project: 'ABC Tower', path: '/projects/1/rfis', severity: 'high' },
-    { id: 2, type: 'submittal', message: 'Submittal review due tomorrow', project: 'XYZ Hospital', path: '/projects/2/submittals', severity: 'medium' },
-    { id: 3, type: 'report', message: 'Daily report not submitted', project: 'DEF Building', path: '/projects/3/daily-reports', severity: 'low' },
-  ];
+  // Fetch attention items based on view scope
+  const { data: attentionItems = [] } = useQuery<AttentionItem[]>({
+    queryKey: ['attention-items', viewScope],
+    queryFn: () => dashboardApi.getAttentionItems(viewScope),
+  });
 
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -266,7 +281,15 @@ const Dashboard: React.FC = () => {
                   <Link key={item.id} to={item.path} className={`attention-item severity-${item.severity}`}>
                     <div className="attention-content">
                       <div className="attention-message">{item.message}</div>
-                      <div className="attention-project">{item.project}</div>
+                      <div className="attention-meta">
+                        <span className="attention-project">{item.project}</span>
+                        {item.responsiblePerson && (
+                          <span className="attention-responsible">
+                            <PersonIcon style={{ fontSize: '14px', marginRight: '4px', verticalAlign: 'middle' }} />
+                            {item.responsiblePerson}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <ArrowForwardIcon className="attention-arrow" fontSize="small" />
                   </Link>

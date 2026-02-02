@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
-import { usersApi } from '../../services/users';
+import { employeesApi, Employee } from '../../services/employees';
 import { format } from 'date-fns';
 
 // Market icons - matching opportunities
@@ -27,10 +27,11 @@ const ProjectDetail: React.FC = () => {
     queryFn: () => projectsApi.getById(Number(id)).then((res) => res.data),
   });
 
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll().then((res) => res.data),
+  const { data: employeesResponse } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll(),
   });
+  const employees = employeesResponse?.data?.data || [];
 
   const [formData, setFormData] = useState({
     name: '',
@@ -224,9 +225,12 @@ const ProjectDetail: React.FC = () => {
                   onChange={handleChange}
                 >
                   <option value="">Select Manager</option>
-                  {users?.filter(user => user.role === 'admin' || user.role === 'manager').map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.first_name} {user.last_name}
+                  {employees?.filter((emp: Employee) =>
+                    // Show active employees, OR the currently assigned manager (even if inactive)
+                    emp.employment_status === 'active' || emp.id.toString() === formData.manager_id
+                  ).map((emp: Employee) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name}{emp.employment_status !== 'active' ? ' (Inactive)' : ''}
                     </option>
                   ))}
                 </select>

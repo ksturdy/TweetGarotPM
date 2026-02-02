@@ -19,6 +19,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get all team member employee IDs for the current user's teams
+// This is used for "My Team" filtering on the dashboard
+router.get('/my-team-members', async (req, res) => {
+  try {
+    const employeeIds = await Team.getMyTeamMemberEmployeeIds(req.user.id, req.tenantId);
+    res.json({ data: employeeIds });
+  } catch (error) {
+    console.error('Error fetching team member IDs:', error);
+    res.status(500).json({ error: 'Failed to fetch team member IDs' });
+  }
+});
+
 // Get team by ID
 router.get('/:id', async (req, res) => {
   try {

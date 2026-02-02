@@ -6,6 +6,15 @@ import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
 import RFIPreviewModal from '../../components/rfis/RFIPreviewModal';
 import api from '../../services/api';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AddIcon from '@mui/icons-material/Add';
+import SummarizeIcon from '@mui/icons-material/Summarize';
+import EditIcon from '@mui/icons-material/Edit';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import SendIcon from '@mui/icons-material/Send';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import '../../styles/SalesPipeline.css';
 
 const RFIList: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -57,35 +66,42 @@ const RFIList: React.FC = () => {
     setIsPreviewOpen(true);
   };
 
-  const handleSend = async (rfiId: number) => {
-    if (!window.confirm('Send this RFI to the recipient?')) {
-      return;
-    }
-
-    setSendingRFI(rfiId);
+  const handleSend = async (rfi: RFI) => {
+    setSendingRFI(rfi.id);
     try {
-      const response = await api.post(`/rfi-actions/${rfiId}/send`);
-      if (response.data.preview) {
-        alert(`Email Preview:\n\nTo: ${response.data.emailData.to}\nSubject: ${response.data.emailData.subject}\n\n${response.data.note}`);
-      } else {
-        alert(`RFI sent successfully to ${response.data.emailData.to}`);
-      }
+      // Generate .eml file with PDF attached - open directly to trigger Outlook
+      const token = localStorage.getItem('token');
+      const emlUrl = `${api.defaults.baseURL}/rfi-actions/${rfi.id}/email-draft?token=${token}`;
+
+      // Open the .eml URL directly - browser should prompt to open with Outlook
+      window.open(emlUrl, '_blank');
+
     } catch (error) {
-      alert('Failed to send RFI. Please try again.');
-      console.error('Error sending RFI:', error);
+      alert('Failed to prepare email. Please try again.');
+      console.error('Error preparing email:', error);
     } finally {
       setSendingRFI(null);
     }
   };
 
-  const handleDownloadPDF = async (rfiId: number) => {
+  const handleDownloadPDF = async (rfiId: number, rfiNumber?: number) => {
     try {
-      const pdfWindow = window.open(`${api.defaults.baseURL}/rfi-actions/${rfiId}/pdf`, '_blank');
-      if (pdfWindow) {
-        pdfWindow.onload = () => {
-          pdfWindow.print();
-        };
-      }
+      const token = localStorage.getItem('token');
+      const url = `${api.defaults.baseURL}/rfi-actions/${rfiId}/pdf-download?token=${token}`;
+
+      // Fetch and trigger download
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to generate PDF');
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `RFI-${rfiNumber || rfiId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       alert('Failed to generate PDF. Please try again.');
       console.error('Error generating PDF:', error);
@@ -124,54 +140,72 @@ const RFIList: React.FC = () => {
   }
 
   return (
-    <div>
+    <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
       <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}`}>&larr; Back to {project?.name || 'Project'}</Link>
+        <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem' }}>
+          &larr; Back to {project?.name || 'Project'}
+        </Link>
       </div>
 
-      <div className="section-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>RFIs</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={handleGenerateReport} className="btn btn-secondary">
+      {/* Page Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <h1>RFI Log</h1>
+          <span className="sales-subtitle">
+            Showing {filteredRFIs?.length || 0} RFI{filteredRFIs?.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="sales-header-actions">
+          <button onClick={handleGenerateReport} className="sales-btn sales-btn-secondary">
+            <SummarizeIcon fontSize="small" />
             Generate Report
           </button>
-          <Link to={`/projects/${projectId}/rfis/new`} className="btn btn-primary">New RFI</Link>
+          <Link to={`/projects/${projectId}/rfis/new`} className="sales-btn sales-btn-primary" style={{ textDecoration: 'none' }}>
+            <AddIcon fontSize="small" />
+            New RFI
+          </Link>
         </div>
       </div>
 
-      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <label htmlFor="status-filter" style={{ fontWeight: 500 }}>Filter by Status:</label>
+      {/* Filter Section */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1rem',
+        marginBottom: '1.5rem',
+        padding: '1rem',
+        background: '#ffffff',
+        borderRadius: '12px',
+        border: '1px solid #e0e2e7'
+      }}>
+        <label htmlFor="status-filter" style={{ fontWeight: 500, color: '#5a5a72', fontSize: '0.875rem' }}>
+          Filter by Status:
+        </label>
         <select
           id="status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: '0.5rem',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontSize: '0.875rem',
-          }}
+          className="sales-filter-btn"
+          style={{ cursor: 'pointer' }}
         >
           <option value="all">All Statuses</option>
           <option value="open">Open</option>
           <option value="answered">Answered</option>
           <option value="closed">Closed</option>
         </select>
-        <span style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>
-          Showing {filteredRFIs?.length || 0} RFI{filteredRFIs?.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
-      <div className="card">
-        <table className="table">
+      {/* Table Section */}
+      <div className="sales-table-section">
+        <table className="sales-table">
           <thead>
             <tr>
               <th>#</th>
               <th>Subject</th>
               <th>Sent To</th>
               <th>Status</th>
-              <th>Created Date</th>
-              <th>Days Outstanding</th>
+              <th>Created</th>
+              <th>Days Out</th>
               <th>Due Date</th>
               <th>Assigned To</th>
               <th style={{ width: '200px' }}>Actions</th>
@@ -182,63 +216,87 @@ const RFIList: React.FC = () => {
               const daysOutstanding = getDaysOutstanding(rfi.created_at, rfi.status);
               return (
               <tr key={rfi.id}>
-                <td><Link to={`/projects/${projectId}/rfis/${rfi.id}`}>{rfi.number}</Link></td>
-                <td>{rfi.subject}</td>
+                <td>
+                  <Link to={`/projects/${projectId}/rfis/${rfi.id}`} style={{ color: '#3b82f6', fontWeight: 600, textDecoration: 'none' }}>
+                    {rfi.number}
+                  </Link>
+                </td>
+                <td>
+                  <div className="sales-project-cell">
+                    <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
+                      <DescriptionIcon style={{ color: 'white', fontSize: '18px' }} />
+                    </div>
+                    <div className="sales-project-info">
+                      <h4>{rfi.subject}</h4>
+                    </div>
+                  </div>
+                </td>
                 <td>
                   {rfi.recipient_company_name ? (
-                    <div style={{ fontSize: '0.875rem' }}>
-                      <div style={{ fontWeight: 500 }}>{rfi.recipient_company_name}</div>
+                    <div>
+                      <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{rfi.recipient_company_name}</div>
                       {rfi.recipient_contact_name && (
-                        <div style={{ color: 'var(--secondary)' }}>{rfi.recipient_contact_name}</div>
+                        <div style={{ color: '#8888a0', fontSize: '0.75rem' }}>{rfi.recipient_contact_name}</div>
                       )}
                     </div>
                   ) : (
-                    '-'
+                    <span style={{ color: '#8888a0' }}>-</span>
                   )}
                 </td>
-                <td><span className={getStatusBadge(rfi.status)}>{rfi.status}</span></td>
-                <td>{format(new Date(rfi.created_at), 'MMM d, yyyy')}</td>
+                <td>
+                  <span className={`sales-stage-badge ${rfi.status}`}>
+                    <span className="sales-stage-dot"></span>
+                    {rfi.status.charAt(0).toUpperCase() + rfi.status.slice(1)}
+                  </span>
+                </td>
+                <td style={{ fontSize: '0.875rem', color: '#5a5a72' }}>
+                  {format(new Date(rfi.created_at), 'MMM d, yyyy')}
+                </td>
                 <td>
                   {daysOutstanding !== null ? (
-                    <span style={{ fontWeight: 500, color: daysOutstanding > 7 ? 'var(--danger)' : 'inherit' }}>
+                    <span className={`sales-stage-badge ${daysOutstanding > 7 ? 'lost' : daysOutstanding > 3 ? 'quoted' : 'won'}`}>
+                      <span className="sales-stage-dot"></span>
                       {daysOutstanding} {daysOutstanding === 1 ? 'day' : 'days'}
                     </span>
                   ) : (
-                    '-'
+                    <span style={{ color: '#8888a0' }}>-</span>
                   )}
                 </td>
-                <td>{rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : '-'}</td>
-                <td>{rfi.assigned_to_name || '-'}</td>
+                <td style={{ fontSize: '0.875rem', color: '#5a5a72' }}>
+                  {rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : '-'}
+                </td>
+                <td style={{ fontSize: '0.875rem' }}>{rfi.assigned_to_name || '-'}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="sales-actions-cell">
                     <Link
                       to={`/projects/${projectId}/rfis/${rfi.id}/edit`}
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      className="sales-action-btn"
+                      title="Edit"
+                      style={{ textDecoration: 'none' }}
                     >
-                      Edit
+                      <EditIcon fontSize="small" />
                     </Link>
                     <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                      className="sales-action-btn"
                       onClick={() => handlePreview(rfi)}
+                      title="Preview"
                     >
-                      Preview
+                      <VisibilityIcon fontSize="small" />
                     </button>
                     <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => handleSend(rfi.id)}
+                      className="sales-action-btn"
+                      onClick={() => handleSend(rfi)}
                       disabled={sendingRFI === rfi.id}
+                      title="Email with Outlook"
                     >
-                      {sendingRFI === rfi.id ? 'Sending...' : 'Send'}
+                      {sendingRFI === rfi.id ? <HourglassEmptyIcon fontSize="small" /> : <SendIcon fontSize="small" />}
                     </button>
                     <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
-                      onClick={() => handleDownloadPDF(rfi.id)}
+                      className="sales-action-btn"
+                      onClick={() => handleDownloadPDF(rfi.id, rfi.number)}
+                      title="Download PDF"
                     >
-                      PDF
+                      <PictureAsPdfIcon fontSize="small" />
                     </button>
                   </div>
                 </td>
@@ -247,7 +305,7 @@ const RFIList: React.FC = () => {
             })}
             {filteredRFIs?.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
+                <td colSpan={9} style={{ textAlign: 'center', color: '#8888a0', padding: '3rem' }}>
                   No RFIs found
                 </td>
               </tr>

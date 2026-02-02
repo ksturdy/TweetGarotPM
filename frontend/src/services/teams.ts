@@ -98,6 +98,9 @@ export interface TeamInput {
 export const teamsApi = {
   getAll: () => api.get<{ data: Team[] }>('/teams'),
 
+  // Get all employee IDs from teams where the current user is a member
+  getMyTeamMemberIds: () => api.get<{ data: number[] }>('/teams/my-team-members'),
+
   getById: (id: number) => api.get<{ data: Team }>(`/teams/${id}`),
 
   create: (data: TeamInput) => api.post<{ data: Team }>('/teams', data),

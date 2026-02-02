@@ -48,7 +48,7 @@ async function gatherDatabaseContext(userId, tenantId) {
     };
 
     // Get customer stats (tenant-scoped)
-    const customerStats = await Customer.getStatsByTenant(tenantId);
+    const customerStats = await Customer.getStats(tenantId);
     const customers = await Customer.findAllByTenant(tenantId);
     context.customers = {
       stats: customerStats,
@@ -75,7 +75,7 @@ async function gatherDatabaseContext(userId, tenantId) {
     };
 
     // Get companies and contacts count (tenant-scoped)
-    const companies = await Company.findAllByTenant({}, tenantId);
+    const companies = await Company.findAllByTenant(tenantId);
     const db = require('../config/database');
     const contactsResult = await db.query(
       `SELECT COUNT(*) FROM contacts c
@@ -119,7 +119,7 @@ async function performIntelligentSearch(message, tenantId) {
     // Search customers - try each word individually to find matches (tenant-scoped)
     let allCustomerResults = [];
     for (const word of words) {
-      const results = await Customer.searchByTenant(word, tenantId);
+      const results = await Customer.search(word, tenantId);
       if (results && results.length > 0) {
         // Add results that aren't already in the array (by id)
         for (const result of results) {

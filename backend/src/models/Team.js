@@ -155,6 +155,62 @@ class Team {
   }
 
   /**
+   * Get all employee IDs from teams where the given user is a member or lead
+   * Used for "My Team" filtering on the dashboard
+   */
+  static async getMyTeamMemberEmployeeIds(userId, tenantId) {
+    // First, get the user's employee_id
+    const empResult = await db.query(
+      'SELECT id FROM employees WHERE user_id = $1 AND tenant_id = $2',
+      [userId, tenantId]
+    );
+
+    if (empResult.rows.length === 0) {
+      return []; // User has no employee record
+    }
+
+    const employeeId = empResult.rows[0].id;
+
+    // Find all teams where the user is a member or team lead
+    const result = await db.query(`
+      SELECT DISTINCT employee_id FROM (
+        -- All members of teams where user is a member
+        SELECT tm2.employee_id
+        FROM team_members tm
+        JOIN teams t ON tm.team_id = t.id
+        JOIN team_members tm2 ON tm2.team_id = t.id
+        WHERE tm.employee_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+        UNION
+
+        -- Team lead of those teams
+        SELECT t.team_lead_id as employee_id
+        FROM team_members tm
+        JOIN teams t ON tm.team_id = t.id
+        WHERE tm.employee_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND t.team_lead_id IS NOT NULL
+
+        UNION
+
+        -- All members of teams where user is the team lead
+        SELECT tm.employee_id
+        FROM teams t
+        JOIN team_members tm ON tm.team_id = t.id
+        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+        UNION
+
+        -- The team lead themselves (for teams they lead)
+        SELECT t.team_lead_id as employee_id
+        FROM teams t
+        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+      ) combined
+      WHERE employee_id IS NOT NULL
+    `, [employeeId, tenantId]);
+
+    return result.rows.map(r => r.employee_id);
+  }
+
+  /**
    * Get team member user IDs (for filtering related entities)
    * Includes both team members AND the team lead
    * Uses user_id link, email matching, and name matching as fallbacks

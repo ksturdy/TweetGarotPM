@@ -295,10 +295,27 @@
   color: #1f2937;
 }
 
+.attention-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
 .attention-project {
   font-size: 0.75rem;
   color: #6b7280;
-  margin-top: 0.125rem;
+}
+
+.attention-responsible {
+  font-size: 0.75rem;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
 }
 
 .attention-arrow {

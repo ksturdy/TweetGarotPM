@@ -20,6 +20,8 @@ import SubmittalList from './pages/submittals/SubmittalList';
 import SubmittalForm from './pages/submittals/SubmittalForm';
 import SubmittalDetail from './pages/submittals/SubmittalDetail';
 import ChangeOrderList from './pages/changeOrders/ChangeOrderList';
+import ChangeOrderForm from './pages/changeOrders/ChangeOrderForm';
+import ChangeOrderDetail from './pages/changeOrders/ChangeOrderDetail';
 import DailyReportList from './pages/dailyReports/DailyReportList';
 import ScheduleView from './pages/schedule/ScheduleView';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
@@ -203,6 +205,9 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/submittals/new" element={<SubmittalForm />} />
                 <Route path="/projects/:projectId/submittals/:id" element={<SubmittalDetail />} />
                 <Route path="/projects/:projectId/change-orders" element={<ChangeOrderList />} />
+                <Route path="/projects/:projectId/change-orders/new" element={<ChangeOrderForm />} />
+                <Route path="/projects/:projectId/change-orders/:id" element={<ChangeOrderDetail />} />
+                <Route path="/projects/:projectId/change-orders/:id/edit" element={<ChangeOrderForm />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
                 <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
