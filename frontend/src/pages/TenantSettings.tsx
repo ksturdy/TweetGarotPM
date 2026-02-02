@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { getTenant, updateTenant, updateTenantSettings, uploadLogo, deleteLogo, TenantInfo } from '../services/tenant';
 import ImageCropper from '../components/common/ImageCropper';
 import '../components/common/ImageCropper.css';
+import '../styles/SalesPipeline.css';
 
 const TenantSettings: React.FC = () => {
   const { user } = useAuth();
@@ -136,7 +137,6 @@ const TenantSettings: React.FC = () => {
         showError('Logo file must be less than 5MB');
         return;
       }
-      // Create a URL for the image and open the cropper
       const reader = new FileReader();
       reader.onload = () => {
         setImageToCrop(reader.result as string);
@@ -144,14 +144,12 @@ const TenantSettings: React.FC = () => {
       };
       reader.readAsDataURL(file);
     }
-    // Reset the input so the same file can be selected again
     if (e.target) {
       e.target.value = '';
     }
   };
 
   const handleCropComplete = (croppedBlob: Blob) => {
-    // Create a File from the Blob
     const fileName = originalFileName.replace(/\.[^/.]+$/, '') + '_cropped.png';
     const croppedFile = new File([croppedBlob], fileName, { type: 'image/png' });
     uploadLogoMutation.mutate(croppedFile);
@@ -174,346 +172,392 @@ const TenantSettings: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-            </div>
-          </div>
+      <div className="sales-container">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '64vh' }}>
+          Loading...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Company Settings</h1>
-
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-6">
-            {successMessage}
+    <div className="sales-container">
+      {/* Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <h1>Company Settings</h1>
+            <div className="sales-subtitle">Manage your company information and branding</div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
-            {errorMessage}
+      {/* Messages */}
+      {successMessage && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.1)',
+          border: '1px solid var(--accent-green)',
+          color: 'var(--accent-green)',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          {successMessage}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid var(--accent-rose)',
+          color: 'var(--accent-rose)',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          {errorMessage}
+        </div>
+      )}
+
+      {/* Logo & Branding Section */}
+      <div className="sales-chart-card" style={{ marginBottom: '20px' }}>
+        <div className="sales-chart-header">
+          <div>
+            <div className="sales-chart-title">Logo & Branding</div>
+            <div className="sales-chart-subtitle">Customize your company appearance</div>
           </div>
-        )}
+        </div>
 
-        {/* Logo & Branding Section */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Logo & Branding</h2>
-
-          <div className="flex items-start gap-8 mb-6">
-            {/* Logo Preview */}
-            <div className="flex-shrink-0">
-              <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50">
-                {tenant?.settings?.branding?.logo_url ? (
-                  <img
-                    src={tenant.settings.branding.logo_url}
-                    alt="Company logo"
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <span className="text-gray-400 text-sm text-center px-2">No logo uploaded</span>
-                )}
-              </div>
-            </div>
-
-            {/* Logo Upload Controls */}
-            <div className="flex-1">
-              <p className="text-sm text-gray-600 mb-3">
-                Upload your company logo. It will appear in the header when you're logged in.
-                Recommended size: 200x200 pixels. Max file size: 5MB.
-              </p>
-
-              {isAdmin && (
-                <div className="flex gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-                    onChange={handleLogoChange}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadLogoMutation.isPending}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {uploadLogoMutation.isPending ? 'Uploading...' : 'Upload Logo'}
-                  </button>
-                  {tenant?.settings?.branding?.logo_url && (
-                    <button
-                      onClick={handleDeleteLogo}
-                      disabled={deleteLogoMutation.isPending}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {deleteLogoMutation.isPending ? 'Removing...' : 'Remove Logo'}
-                    </button>
-                  )}
-                </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px', marginBottom: '24px' }}>
+          {/* Logo Preview */}
+          <div style={{ flexShrink: 0 }}>
+            <div style={{
+              width: '128px',
+              height: '128px',
+              border: '2px dashed var(--border)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              background: 'var(--bg-dark)'
+            }}>
+              {tenant?.settings?.branding?.logo_url ? (
+                <img
+                  src={tenant.settings.branding.logo_url}
+                  alt="Company logo"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px' }}>No logo uploaded</span>
               )}
             </div>
           </div>
 
-          {/* Branding Settings Form */}
-          {isAdmin && (
-            <form onSubmit={handleBrandingSubmit} className="border-t pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Display Name
-                  </label>
-                  <input
-                    type="text"
-                    value={brandingForm.company_name}
-                    onChange={(e) => setBrandingForm({ ...brandingForm, company_name: e.target.value })}
-                    placeholder={tenant?.name || 'Company Name'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Optional. Override how your company name appears in the app.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Primary Color
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={brandingForm.primary_color}
-                      onChange={(e) => setBrandingForm({ ...brandingForm, primary_color: e.target.value })}
-                      className="w-12 h-10 border border-gray-300 rounded-md cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={brandingForm.primary_color}
-                      onChange={(e) => setBrandingForm({ ...brandingForm, primary_color: e.target.value })}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={updateBrandingMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {updateBrandingMutation.isPending ? 'Saving...' : 'Save Branding'}
-              </button>
-            </form>
-          )}
-        </div>
+          {/* Logo Upload Controls */}
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+              Upload your company logo. It will appear in the header when you're logged in.
+              Recommended size: 200x200 pixels. Max file size: 5MB.
+            </p>
 
-        {/* Company Information Section */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Company Information</h2>
-            {isAdmin && !editingInfo && (
-              <button
-                onClick={() => setEditingInfo(true)}
-                className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-md"
-              >
-                Edit
-              </button>
+            {isAdmin && (
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                  onChange={handleLogoChange}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadLogoMutation.isPending}
+                  className="sales-btn sales-btn-primary"
+                >
+                  {uploadLogoMutation.isPending ? 'Uploading...' : 'Upload Logo'}
+                </button>
+                {tenant?.settings?.branding?.logo_url && (
+                  <button
+                    onClick={handleDeleteLogo}
+                    disabled={deleteLogoMutation.isPending}
+                    className="sales-btn"
+                    style={{ background: 'var(--accent-rose)', color: 'white' }}
+                  >
+                    {deleteLogoMutation.isPending ? 'Removing...' : 'Remove Logo'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
+        </div>
 
-          {editingInfo ? (
-            <form onSubmit={handleInfoSubmit}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Name
-                  </label>
-                  <input
-                    type="text"
-                    value={infoForm.name}
-                    onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={infoForm.email}
-                    onChange={(e) => setInfoForm({ ...infoForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={infoForm.phone}
-                    onChange={(e) => setInfoForm({ ...infoForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Website
-                  </label>
-                  <input
-                    type="url"
-                    value={infoForm.website}
-                    onChange={(e) => setInfoForm({ ...infoForm, website: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Address
-                  </label>
-                  <input
-                    type="text"
-                    value={infoForm.address}
-                    onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={infoForm.city}
-                    onChange={(e) => setInfoForm({ ...infoForm, city: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State
-                    </label>
-                    <input
-                      type="text"
-                      value={infoForm.state}
-                      onChange={(e) => setInfoForm({ ...infoForm, state: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      ZIP Code
-                    </label>
-                    <input
-                      type="text"
-                      value={infoForm.zipCode}
-                      onChange={(e) => setInfoForm({ ...infoForm, zipCode: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  disabled={updateInfoMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {updateInfoMutation.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingInfo(false)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Branding Settings Form */}
+        {isAdmin && (
+          <form onSubmit={handleBrandingSubmit} style={{ borderTop: '1px solid var(--border)', paddingTop: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
-                <span className="text-sm text-gray-500">Company Name</span>
-                <p className="font-medium">{tenant?.name || '-'}</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-500">Email</span>
-                <p className="font-medium">{tenant?.email || '-'}</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-500">Phone</span>
-                <p className="font-medium">{tenant?.phone || '-'}</p>
-              </div>
-              <div>
-                <span className="text-sm text-gray-500">Website</span>
-                <p className="font-medium">{tenant?.website || '-'}</p>
-              </div>
-              <div className="md:col-span-2">
-                <span className="text-sm text-gray-500">Address</span>
-                <p className="font-medium">
-                  {tenant?.address
-                    ? `${tenant.address}${tenant.city ? `, ${tenant.city}` : ''}${tenant.state ? `, ${tenant.state}` : ''} ${tenant.zip_code || ''}`
-                    : '-'}
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={brandingForm.company_name}
+                  onChange={(e) => setBrandingForm({ ...brandingForm, company_name: e.target.value })}
+                  placeholder={tenant?.name || 'Company Name'}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Optional. Override how your company name appears in the app.
                 </p>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Plan Information */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Plan Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <span className="text-sm text-gray-500">Current Plan</span>
-              <p className="font-medium text-lg">{tenant?.plan_display_name || tenant?.plan_name || 'Free'}</p>
-            </div>
-            <div>
-              <span className="text-sm text-gray-500">Account Slug</span>
-              <p className="font-medium font-mono bg-gray-100 px-2 py-1 rounded inline-block">{tenant?.slug}</p>
-            </div>
-          </div>
-
-          {tenant?.usage && tenant?.plan_limits && (
-            <div className="mt-6 border-t pt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Usage</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <span className="text-sm text-gray-500">Users</span>
-                  <p className="font-medium">
-                    {tenant.usage.users} / {tenant.plan_limits.max_users === -1 ? 'Unlimited' : tenant.plan_limits.max_users}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Projects</span>
-                  <p className="font-medium">
-                    {tenant.usage.projects} / {tenant.plan_limits.max_projects === -1 ? 'Unlimited' : tenant.plan_limits.max_projects}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Customers</span>
-                  <p className="font-medium">
-                    {tenant.usage.customers} / {tenant.plan_limits.max_customers === -1 ? 'Unlimited' : tenant.plan_limits.max_customers}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-500">Opportunities</span>
-                  <p className="font-medium">
-                    {tenant.usage.opportunities} / {tenant.plan_limits.max_opportunities === -1 ? 'Unlimited' : tenant.plan_limits.max_opportunities}
-                  </p>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Primary Color
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="color"
+                    value={brandingForm.primary_color}
+                    onChange={(e) => setBrandingForm({ ...brandingForm, primary_color: e.target.value })}
+                    style={{ width: '48px', height: '40px', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer' }}
+                  />
+                  <input
+                    type="text"
+                    value={brandingForm.primary_color}
+                    onChange={(e) => setBrandingForm({ ...brandingForm, primary_color: e.target.value })}
+                    style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                  />
                 </div>
               </div>
             </div>
+            <button
+              type="submit"
+              disabled={updateBrandingMutation.isPending}
+              className="sales-btn sales-btn-primary"
+            >
+              {updateBrandingMutation.isPending ? 'Saving...' : 'Save Branding'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Company Information Section */}
+      <div className="sales-chart-card" style={{ marginBottom: '20px' }}>
+        <div className="sales-chart-header">
+          <div>
+            <div className="sales-chart-title">Company Information</div>
+            <div className="sales-chart-subtitle">Your company contact details</div>
+          </div>
+          {isAdmin && !editingInfo && (
+            <button
+              onClick={() => setEditingInfo(true)}
+              className="sales-btn sales-btn-secondary"
+            >
+              Edit
+            </button>
           )}
         </div>
+
+        {editingInfo ? (
+          <form onSubmit={handleInfoSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Company Name *
+                </label>
+                <input
+                  type="text"
+                  value={infoForm.name}
+                  onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
+                  required
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={infoForm.email}
+                  onChange={(e) => setInfoForm({ ...infoForm, email: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={infoForm.phone}
+                  onChange={(e) => setInfoForm({ ...infoForm, phone: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Website
+                </label>
+                <input
+                  type="url"
+                  value={infoForm.website}
+                  onChange={(e) => setInfoForm({ ...infoForm, website: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={infoForm.address}
+                  onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  City
+                </label>
+                <input
+                  type="text"
+                  value={infoForm.city}
+                  onChange={(e) => setInfoForm({ ...infoForm, city: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={infoForm.state}
+                    onChange={(e) => setInfoForm({ ...infoForm, state: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    ZIP Code
+                  </label>
+                  <input
+                    type="text"
+                    value={infoForm.zipCode}
+                    onChange={(e) => setInfoForm({ ...infoForm, zipCode: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="submit"
+                disabled={updateInfoMutation.isPending}
+                className="sales-btn sales-btn-primary"
+              >
+                {updateInfoMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingInfo(false)}
+                className="sales-btn sales-btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Company Name</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.name || '-'}</p>
+            </div>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Email</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.email || '-'}</p>
+            </div>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Phone</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.phone || '-'}</p>
+            </div>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Website</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.website || '-'}</p>
+            </div>
+            <div style={{ gridColumn: 'span 2' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Address</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>
+                {tenant?.address
+                  ? `${tenant.address}${tenant.city ? `, ${tenant.city}` : ''}${tenant.state ? `, ${tenant.state}` : ''} ${tenant.zip_code || ''}`
+                  : '-'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Plan Information */}
+      <div className="sales-chart-card">
+        <div className="sales-chart-header">
+          <div>
+            <div className="sales-chart-title">Plan Information</div>
+            <div className="sales-chart-subtitle">Your current subscription details</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+          <div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Current Plan</span>
+            <p style={{ fontWeight: 600, fontSize: '18px', margin: '4px 0 0 0', color: 'var(--accent-blue)' }}>
+              {tenant?.plan_display_name || tenant?.plan_name || 'Free'}
+            </p>
+          </div>
+          <div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Account Slug</span>
+            <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>
+              <code style={{ background: 'var(--bg-dark)', padding: '4px 8px', borderRadius: '4px', fontSize: '14px' }}>
+                {tenant?.slug}
+              </code>
+            </p>
+          </div>
+        </div>
+
+        {tenant?.usage && tenant?.plan_limits && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '16px' }}>Usage</h3>
+            <div className="sales-kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              <div className="sales-kpi-card blue" style={{ padding: '16px' }}>
+                <div className="sales-kpi-label">Users</div>
+                <div className="sales-kpi-value" style={{ fontSize: '24px' }}>
+                  {tenant.usage.users} / {tenant.plan_limits.max_users === -1 ? '∞' : tenant.plan_limits.max_users}
+                </div>
+              </div>
+              <div className="sales-kpi-card green" style={{ padding: '16px' }}>
+                <div className="sales-kpi-label">Projects</div>
+                <div className="sales-kpi-value" style={{ fontSize: '24px' }}>
+                  {tenant.usage.projects} / {tenant.plan_limits.max_projects === -1 ? '∞' : tenant.plan_limits.max_projects}
+                </div>
+              </div>
+              <div className="sales-kpi-card amber" style={{ padding: '16px' }}>
+                <div className="sales-kpi-label">Customers</div>
+                <div className="sales-kpi-value" style={{ fontSize: '24px' }}>
+                  {tenant.usage.customers} / {tenant.plan_limits.max_customers === -1 ? '∞' : tenant.plan_limits.max_customers}
+                </div>
+              </div>
+              <div className="sales-kpi-card purple" style={{ padding: '16px' }}>
+                <div className="sales-kpi-label">Opportunities</div>
+                <div className="sales-kpi-value" style={{ fontSize: '24px' }}>
+                  {tenant.usage.opportunities} / {tenant.plan_limits.max_opportunities === -1 ? '∞' : tenant.plan_limits.max_opportunities}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Image Cropper Modal */}

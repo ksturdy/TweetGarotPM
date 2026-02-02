@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
 import TitanChat from './TitanChat';
+import FeedbackIcon from '@mui/icons-material/Feedback';
 import './Layout.css';
 
 interface LayoutProps {
@@ -28,6 +29,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="logo-text">
                 <div className="logo-titan">TITAN</div>
               </div>
+            </Link>
+            <Link to="/feedback" className="header-feedback-btn" title="Send Feedback">
+              <FeedbackIcon fontSize="small" />
             </Link>
           </div>
           <div className="header-center">

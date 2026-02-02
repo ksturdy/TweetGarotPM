@@ -19,7 +19,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import GavelIcon from '@mui/icons-material/Gavel';
-import FeedbackIcon from '@mui/icons-material/Feedback';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import './Sidebar.css';
@@ -58,11 +57,6 @@ const Sidebar: React.FC = () => {
       ],
     },
     {
-      label: 'Projects',
-      path: '/projects',
-      icon: <FolderIcon />,
-    },
-    {
       label: 'Estimating',
       icon: <CalculateIcon />,
       children: [
@@ -83,15 +77,9 @@ const Sidebar: React.FC = () => {
       ],
     },
     {
-      label: 'HR',
-      icon: <BadgeIcon />,
-      hrOnly: true,
-      children: [
-        { label: 'Dashboard', path: '/hr' },
-        { label: 'Employees', path: '/hr/employees' },
-        { label: 'Departments', path: '/hr/departments' },
-        { label: 'Locations', path: '/hr/locations' },
-      ],
+      label: 'Projects',
+      path: '/projects',
+      icon: <FolderIcon />,
     },
     {
       label: 'Safety',
@@ -103,14 +91,26 @@ const Sidebar: React.FC = () => {
       path: '/risk-management',
       icon: <GavelIcon />,
     },
+  ];
+
+  const adminItems: NavItem[] = [
     {
       label: 'Administration',
       path: '/administration',
       icon: <BusinessIcon />,
+      adminOnly: true,
     },
-  ];
-
-  const adminItems: NavItem[] = [
+    {
+      label: 'HR',
+      icon: <BadgeIcon />,
+      hrOnly: true,
+      children: [
+        { label: 'Dashboard', path: '/hr' },
+        { label: 'Employees', path: '/hr/employees' },
+        { label: 'Departments', path: '/hr/departments' },
+        { label: 'Locations', path: '/hr/locations' },
+      ],
+    },
     {
       label: 'Users',
       path: '/users',
@@ -118,15 +118,15 @@ const Sidebar: React.FC = () => {
       adminOnly: true,
     },
     {
-      label: 'Settings',
-      path: '/settings',
-      icon: <SettingsIcon />,
-      adminOnly: true,
-    },
-    {
       label: 'Security',
       path: '/security',
       icon: <SecurityIcon />,
+      adminOnly: true,
+    },
+    {
+      label: 'Settings',
+      path: '/settings',
+      icon: <SettingsIcon />,
       adminOnly: true,
     },
   ];
@@ -214,7 +214,7 @@ const Sidebar: React.FC = () => {
           {navItems.map(renderNavItem)}
         </nav>
 
-        {isAdmin && (
+        {(isAdmin || hasHRAccess) && (
           <>
             <div className="sidebar-divider"></div>
             <nav className="sidebar-nav sidebar-nav-admin">
@@ -222,18 +222,6 @@ const Sidebar: React.FC = () => {
             </nav>
           </>
         )}
-
-        <div className="sidebar-divider"></div>
-        <nav className="sidebar-nav">
-          <Link
-            to="/feedback"
-            className={`nav-item ${isPathActive('/feedback') ? 'active' : ''}`}
-            title={isCollapsed ? 'Feedback' : undefined}
-          >
-            <span className="nav-icon"><FeedbackIcon /></span>
-            {!isCollapsed && <span className="nav-label">Feedback</span>}
-          </Link>
-        </nav>
       </div>
 
       <button
