@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -32,11 +32,31 @@ interface NavItem {
   hrOnly?: boolean;
 }
 
+const STORAGE_KEY = 'sidebar-expanded-sections';
+const DEFAULT_EXPANDED = ['Sales', 'Estimating', 'Accounts'];
+
+const getInitialExpandedSections = (): string[] => {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return DEFAULT_EXPANDED;
+    }
+  }
+  return DEFAULT_EXPANDED;
+};
+
 const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
-  const [expandedSections, setExpandedSections] = useState<string[]>(['Sales', 'Accounts']);
+  const [expandedSections, setExpandedSections] = useState<string[]>(getInitialExpandedSections);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Persist expanded sections to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedSections));
+  }, [expandedSections]);
 
   const isAdmin = user?.role === 'admin';
   const hasHRAccess = user?.role === 'admin' || (user?.hrAccess && user.hrAccess !== 'none');
@@ -141,14 +161,41 @@ const Sidebar: React.FC = () => {
     if (path === '/') {
       return location.pathname === '/';
     }
-    return location.pathname.startsWith(path);
+    // Exact match or the path is a proper prefix (followed by /)
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  // Check if a child path is active, considering sibling paths
+  // Only returns true if this path is the BEST match among siblings
+  const isChildPathActive = (path: string, siblingPaths: string[]) => {
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+
+    // Check if this path matches
+    const matches = location.pathname === path || location.pathname.startsWith(path + '/');
+    if (!matches) return false;
+
+    // Check if any sibling has a more specific (longer) match
+    const hasMoreSpecificSibling = siblingPaths.some((siblingPath) => {
+      if (siblingPath === path) return false; // Skip self
+      // Check if sibling is a more specific match (longer path that also matches)
+      return (
+        siblingPath.length > path.length &&
+        siblingPath.startsWith(path) &&
+        (location.pathname === siblingPath || location.pathname.startsWith(siblingPath + '/'))
+      );
+    });
+
+    return !hasMoreSpecificSibling;
   };
 
   const isSectionActive = (item: NavItem) => {
     if (item.path) {
       return isPathActive(item.path);
     }
-    return item.children?.some((child) => isPathActive(child.path)) || false;
+    const childPaths = item.children?.map((c) => c.path) || [];
+    return item.children?.some((child) => isChildPathActive(child.path, childPaths)) || false;
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -158,6 +205,7 @@ const Sidebar: React.FC = () => {
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = expandedSections.includes(item.label);
     const isActive = isSectionActive(item);
+    const childPaths = item.children?.map((c) => c.path) || [];
 
     if (hasChildren) {
       return (
@@ -183,7 +231,7 @@ const Sidebar: React.FC = () => {
                 <Link
                   key={child.path}
                   to={child.path}
-                  className={`nav-child-item ${isPathActive(child.path) ? 'active' : ''}`}
+                  className={`nav-child-item ${isChildPathActive(child.path, childPaths) ? 'active' : ''}`}
                 >
                   {child.label}
                 </Link>
