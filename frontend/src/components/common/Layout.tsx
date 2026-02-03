@@ -32,6 +32,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Link>
             <Link to="/feedback" className="header-feedback-btn" title="Send Feedback">
               <FeedbackIcon fontSize="small" />
+              <span>Feedback</span>
             </Link>
           </div>
           <div className="header-center">

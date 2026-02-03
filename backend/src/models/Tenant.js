@@ -118,6 +118,26 @@ const Tenant = {
   },
 
   /**
+   * Update just the branding logo URL without overwriting other branding settings
+   */
+  async updateBrandingLogo(id, logoUrl) {
+    const result = await db.query(
+      `UPDATE tenants
+       SET settings = jsonb_set(
+         COALESCE(settings, '{}'::jsonb),
+         '{branding,logo_url}',
+         $1::jsonb,
+         true
+       ),
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *`,
+      [JSON.stringify(logoUrl), id]
+    );
+    return result.rows[0];
+  },
+
+  /**
    * Update tenant plan
    */
   async updatePlan(id, planId) {

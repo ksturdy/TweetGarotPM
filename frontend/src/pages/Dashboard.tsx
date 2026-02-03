@@ -55,6 +55,14 @@ const getMarketGradient = (market?: string): string => {
   return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
 };
 
+// Helper function to get time-based greeting
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  return 'Good Evening';
+};
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -243,7 +251,7 @@ const Dashboard: React.FC = () => {
       <div className="dashboard-header-row">
         <div className="dashboard-welcome">
           <div className="welcome-text">
-            <h1>Welcome back, {user?.firstName || 'User'}</h1>
+            <h1>{getGreeting()}, {user?.firstName || 'User'}</h1>
             <p>Here's what's happening with {getViewLabel()} projects today.</p>
           </div>
         </div>

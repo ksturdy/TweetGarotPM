@@ -145,12 +145,8 @@ router.post(
         logoUrl = `/uploads/logos/${req.file.filename}`;
       }
 
-      // Update tenant settings with logo URL
-      const tenant = await Tenant.updateSettings(req.tenantId, {
-        branding: {
-          logo_url: logoUrl,
-        },
-      });
+      // Update tenant settings with logo URL (use deep merge to preserve other branding settings)
+      const tenant = await Tenant.updateBrandingLogo(req.tenantId, logoUrl);
 
       res.json({
         message: 'Logo uploaded successfully',
@@ -172,12 +168,8 @@ router.delete(
   authorize('admin'),
   async (req, res, next) => {
     try {
-      // Clear logo URL from settings
-      const tenant = await Tenant.updateSettings(req.tenantId, {
-        branding: {
-          logo_url: null,
-        },
-      });
+      // Clear logo URL from settings (preserves other branding settings)
+      const tenant = await Tenant.updateBrandingLogo(req.tenantId, null);
 
       res.json({
         message: 'Logo removed successfully',

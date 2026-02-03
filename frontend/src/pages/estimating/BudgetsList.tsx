@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { budgetsApi, Budget, BudgetStats } from '../../services/budgets';
 import './BudgetsList.css';
+import '../../styles/SalesPipeline.css';
 
 const BudgetsList: React.FC = () => {
   const navigate = useNavigate();
@@ -157,6 +158,30 @@ const BudgetsList: React.FC = () => {
       {/* Summary Cards */}
       <div className="budgets-summary-grid">
         <div className="summary-card">
+          <div className="summary-icon amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </div>
+          <div className="summary-content">
+            <span className="summary-label">Drafts</span>
+            <span className="summary-value">{stats?.draft_count || 0}</span>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          </div>
+          <div className="summary-content">
+            <span className="summary-label">Finalized</span>
+            <span className="summary-value">{stats?.final_count || 0}</span>
+          </div>
+        </div>
+        <div className="summary-card">
           <div className="summary-icon blue">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -176,30 +201,6 @@ const BudgetsList: React.FC = () => {
           <div className="summary-content">
             <span className="summary-label">Total Value</span>
             <span className="summary-value">{formatCurrency(stats?.total_value)}</span>
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-icon green">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-          </div>
-          <div className="summary-content">
-            <span className="summary-label">Finalized</span>
-            <span className="summary-value">{stats?.final_count || 0}</span>
-          </div>
-        </div>
-        <div className="summary-card">
-          <div className="summary-icon amber">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </div>
-          <div className="summary-content">
-            <span className="summary-label">Drafts</span>
-            <span className="summary-value">{stats?.draft_count || 0}</span>
           </div>
         </div>
         <div className="summary-card">
@@ -234,13 +235,20 @@ const BudgetsList: React.FC = () => {
       {/* Table Section */}
       <div className="budgets-table-section">
       {/* Filters Row */}
-      <div className="budgets-toolbar">
-        <h3 className="budgets-table-title">Budget List</h3>
-        <div className="toolbar-filters">
+      <div className="sales-table-header">
+        <div className="sales-table-title">Budget List</div>
+        <div className="sales-table-controls">
           <select
-            className="filter-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb',
+              fontSize: '14px',
+              minWidth: '150px',
+              marginRight: '8px'
+            }}
           >
             <option value="">All Statuses</option>
             <option value="draft">Draft</option>
@@ -248,31 +256,34 @@ const BudgetsList: React.FC = () => {
             <option value="archived">Archived</option>
           </select>
           <select
-            className="filter-select"
             value={buildingTypeFilter}
             onChange={(e) => setBuildingTypeFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb',
+              fontSize: '14px',
+              minWidth: '150px',
+              marginRight: '8px'
+            }}
           >
             <option value="">All Building Types</option>
             {buildingTypes.map(type => (
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
-          <div className="search-box">
-            <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
+          <div className="sales-search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <input
               type="text"
-              className="search-input"
               placeholder="Search budgets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-        </div>
-        <div className="toolbar-info">
-          Showing {filteredBudgets.length} of {budgets.length} budgets
         </div>
       </div>
 
