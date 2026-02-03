@@ -237,7 +237,7 @@ const EstimatesList: React.FC = () => {
         <table className="estimates-table">
           <thead>
             <tr>
-              <th onClick={() => handleSort('estimate_number')} style={{ width: '100px' }}>
+              <th onClick={() => handleSort('estimate_number')} style={{ width: '140px' }}>
                 # <span className="sort-icon">{sortColumn === 'estimate_number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th onClick={() => handleSort('project_name')}>
