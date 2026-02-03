@@ -389,6 +389,20 @@
   margin-top: 0.125rem;
 }
 
+.project-manager {
+  display: flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: #5a5a72;
+}
+
+.project-manager span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
 .status-badge {
   display: inline-block;
   padding: 0.25rem 0.5rem;

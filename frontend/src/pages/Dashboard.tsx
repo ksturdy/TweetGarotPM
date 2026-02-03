@@ -317,6 +317,7 @@ const Dashboard: React.FC = () => {
                 <thead>
                   <tr>
                     <th>Project</th>
+                    <th>Manager</th>
                     <th>Status</th>
                     <th>Progress</th>
                   </tr>
@@ -329,6 +330,16 @@ const Dashboard: React.FC = () => {
                           {project.name}
                         </Link>
                         <div className="project-client">{project.client}</div>
+                      </td>
+                      <td>
+                        {project.manager_name ? (
+                          <div className="project-manager">
+                            <PersonIcon style={{ fontSize: '14px', marginRight: '4px', color: '#8888a0', verticalAlign: 'middle' }} />
+                            <span>{project.manager_name}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#8888a0' }}>-</span>
+                        )}
                       </td>
                       <td>
                         <span className={`status-badge status-${project.status}`}>
@@ -350,7 +361,7 @@ const Dashboard: React.FC = () => {
                   ))}
                   {activeProjects.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="empty-table">
+                      <td colSpan={4} className="empty-table">
                         {viewScope === 'my' ? 'No projects assigned to you' : 'No active projects'}
                       </td>
                     </tr>
