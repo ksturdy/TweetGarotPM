@@ -312,9 +312,13 @@ const EstimatesList: React.FC = () => {
                   </td>
                   <td>
                     <div className="estimate-customer-cell">
-                      <span className="customer-facility">{estimate.facility_name || '-'}</span>
-                      {estimate.customer_name && (
-                        <span className="customer-company">{estimate.customer_name}</span>
+                      <span className="customer-facility">
+                        {estimate.customer_facility || estimate.facility_name || '-'}
+                      </span>
+                      {(estimate.customer_owner || estimate.customer_name) && (
+                        <span className="customer-company">
+                          {estimate.customer_owner || estimate.customer_name}
+                        </span>
                       )}
                     </div>
                   </td>

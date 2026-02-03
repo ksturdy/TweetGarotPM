@@ -68,6 +68,9 @@ export interface Estimate {
   facility_name?: string;
   facility_customer_id?: number | null;
   send_estimate_to?: number | null;
+  // Linked customer fields (from JOIN)
+  customer_facility?: string;
+  customer_owner?: string;
   labor_cost?: number;
   material_cost?: number;
   equipment_cost?: number;
