@@ -995,7 +995,9 @@ const BudgetGenerator: React.FC = () => {
               <div className="card sections-card">
                 <h3 style={{ marginTop: 0 }}>Cost Breakdown</h3>
 
-                {currentBudget.sections.map((section, index) => (
+                {currentBudget.sections.map((section, index) => {
+                  const adjustment = editableValues.sectionAdjustments[section.name] || 0;
+                  return (
                   <div key={index} className="budget-section">
                     <div
                       className="section-header-row"
@@ -1005,12 +1007,20 @@ const BudgetGenerator: React.FC = () => {
                         {expandedSections[section.name] ? '▼' : '▶'}
                       </span>
                       <span className="section-name">{section.name}</span>
-                      {isEditMode && editableValues.sectionAdjustments[section.name] !== undefined &&
-                       editableValues.sectionAdjustments[section.name] !== 0 && (
-                        <span className="section-adjustment">
-                          ({editableValues.sectionAdjustments[section.name] >= 0 ? '+' : ''}
-                          {editableValues.sectionAdjustments[section.name]}%)
-                        </span>
+                      {isEditMode && (
+                        <div className="section-inline-slider" onClick={(e) => e.stopPropagation()}>
+                          <span className="inline-adjustment-label">
+                            {adjustment >= 0 ? '+' : ''}{adjustment}%
+                          </span>
+                          <input
+                            type="range"
+                            min="-50"
+                            max="50"
+                            step="1"
+                            value={adjustment}
+                            onChange={(e) => handleSectionAdjustment(section.name, parseFloat(e.target.value))}
+                          />
+                        </div>
                       )}
                       <span className="section-subtotal">{formatCurrency(section.subtotal)}</span>
                     </div>
@@ -1042,7 +1052,7 @@ const BudgetGenerator: React.FC = () => {
                       </div>
                     )}
                   </div>
-                ))}
+                );})}
 
                 {/* Totals Summary */}
                 <div className="totals-summary">

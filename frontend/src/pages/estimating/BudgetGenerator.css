@@ -1014,6 +1014,58 @@
   margin-right: 0.5rem;
 }
 
+/* Inline Section Slider in Cost Breakdown */
+.section-inline-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 1rem;
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 180px;
+}
+
+.section-inline-slider input[type="range"] {
+  flex: 1;
+  height: 4px;
+  background: #d1d5db;
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.section-inline-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #002356;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.section-inline-slider input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #002356;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.inline-adjustment-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #f59e0b;
+  min-width: 40px;
+  text-align: right;
+}
+
 /* Print Styles */
 @media print {
   .no-print {
@@ -1022,6 +1074,10 @@
 
   .print-only {
     display: block !important;
+  }
+
+  .section-inline-slider {
+    display: none !important;
   }
 
   .budget-generator {
