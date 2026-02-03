@@ -52,13 +52,24 @@ const RFIList: React.FC = () => {
     return `badge ${classes[priority] || 'badge-info'}`;
   };
 
-  const getDaysOutstanding = (createdDate: string, status: string) => {
-    if (status !== 'open') return null;
+  const getDaysAged = (createdDate: string) => {
     const created = new Date(createdDate);
     const today = new Date();
     const diffTime = Math.abs(today.getTime() - created.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
+  };
+
+  const getDaysOverdue = (dueDate: string | null, status: string) => {
+    if (!dueDate || status === 'closed') return null;
+    const due = new Date(dueDate);
+    const today = new Date();
+    // Reset time components for accurate day comparison
+    due.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - due.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : null;
   };
 
   const handlePreview = async (rfi: RFI) => {
@@ -205,15 +216,17 @@ const RFIList: React.FC = () => {
               <th>Sent To</th>
               <th>Status</th>
               <th>Created</th>
-              <th>Days Out</th>
+              <th>Days Aged</th>
               <th>Due Date</th>
+              <th>Days Overdue</th>
               <th>Assigned To</th>
               <th style={{ width: '200px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredRFIs?.map((rfi) => {
-              const daysOutstanding = getDaysOutstanding(rfi.created_at, rfi.status);
+              const daysAged = getDaysAged(rfi.created_at);
+              const daysOverdue = getDaysOverdue(rfi.due_date, rfi.status);
               return (
               <tr key={rfi.id}>
                 <td>
@@ -253,17 +266,23 @@ const RFIList: React.FC = () => {
                   {format(new Date(rfi.created_at), 'MMM d, yyyy')}
                 </td>
                 <td>
-                  {daysOutstanding !== null ? (
-                    <span className={`sales-stage-badge ${daysOutstanding > 7 ? 'lost' : daysOutstanding > 3 ? 'quoted' : 'won'}`}>
-                      <span className="sales-stage-dot"></span>
-                      {daysOutstanding} {daysOutstanding === 1 ? 'day' : 'days'}
-                    </span>
-                  ) : (
-                    <span style={{ color: '#8888a0' }}>-</span>
-                  )}
+                  <span className={`sales-stage-badge ${daysAged > 14 ? 'lost' : daysAged > 7 ? 'quoted' : 'won'}`}>
+                    <span className="sales-stage-dot"></span>
+                    {daysAged} {daysAged === 1 ? 'day' : 'days'}
+                  </span>
                 </td>
                 <td style={{ fontSize: '0.875rem', color: '#5a5a72' }}>
                   {rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : '-'}
+                </td>
+                <td>
+                  {daysOverdue !== null ? (
+                    <span className={`sales-stage-badge ${daysOverdue > 7 ? 'lost' : daysOverdue > 3 ? 'quoted' : 'won'}`}>
+                      <span className="sales-stage-dot"></span>
+                      {daysOverdue} {daysOverdue === 1 ? 'day' : 'days'}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#10b981' }}>-</span>
+                  )}
                 </td>
                 <td style={{ fontSize: '0.875rem' }}>{rfi.assigned_to_name || '-'}</td>
                 <td>
@@ -305,7 +324,7 @@ const RFIList: React.FC = () => {
             })}
             {filteredRFIs?.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', color: '#8888a0', padding: '3rem' }}>
+                <td colSpan={10} style={{ textAlign: 'center', color: '#8888a0', padding: '3rem' }}>
                   No RFIs found
                 </td>
               </tr>
