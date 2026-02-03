@@ -155,7 +155,7 @@ const TitanChat: React.FC = () => {
     const handleResizeMove = (e: MouseEvent) => {
       if (!isResizing) return;
 
-      const deltaX = resizeStartRef.current.x - e.clientX;
+      const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
 
       const newWidth = Math.max(320, Math.min(600, resizeStartRef.current.width + deltaX));

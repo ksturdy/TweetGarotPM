@@ -58,6 +58,7 @@ const placesRoutes = require('./routes/places');
 const teamRoutes = require('./routes/teams');
 const dashboardRoutes = require('./routes/dashboard');
 const budgetGeneratorRoutes = require('./routes/budgetGenerator');
+const budgetRoutes = require('./routes/budgets');
 
 const app = express();
 
@@ -114,6 +115,7 @@ app.use('/api/places', placesRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budget-generator', budgetGeneratorRoutes);
+app.use('/api/budgets', budgetRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

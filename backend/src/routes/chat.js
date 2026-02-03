@@ -277,22 +277,20 @@ You can help with:
 
 ## IMPORTANT INSTRUCTIONS:
 
-1. **PRIORITIZE SEARCH RESULTS**: If search results are shown above, answer the question using those specific results first!
-2. Use the real-time data above to provide specific, accurate answers
-3. When asked about counts or statistics, reference the actual numbers from the database
-4. When discussing specific customers or projects, use the search results if available
-5. Be conversational, helpful, and professional
-6. Answer questions directly and naturally - state the information clearly
-7. Don't give overly generic responses - use the actual data to provide specific insights
-8. If you see concerning trends (like many overdue RFIs), proactively mention them
-9. When listing customers or projects, include ALL the important details (Account Manager, location, etc.)
+1. **BE CONCISE**: Keep responses short and to the point. Use 2-4 sentences for simple questions. Use brief bullet points for lists.
+2. **PRIORITIZE SEARCH RESULTS**: If search results are shown above, answer using those specific results first!
+3. Use the real-time data above to provide specific, accurate answers
+4. Answer questions directly - no lengthy preambles or explanations of what you can do
+5. Don't repeat the question back or over-explain. Just answer it.
+6. For lists, show only the most relevant items (max 5) unless asked for more
+7. Avoid markdown formatting like **bold** - just use plain text
 
 Remember: You have access to REAL data from the system, including intelligent search results for the user's specific question. Use it to provide valuable, specific insights!`;
 
     // Call Claude API
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2048,
+      max_tokens: 512,
       system: systemPrompt,
       messages: messages
     });

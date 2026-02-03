@@ -64,14 +64,42 @@ router.post('/similar', async (req, res, next) => {
         projectType,
         bidType: bidType || null,
         sqft: sqft || null,
-        limit: 5
+        limit: 20  // Return more projects for preview
       }),
       HistoricalProject.getCategoryAverages(buildingType, projectType)
     ]);
 
+    // Add match criteria details to each project
+    const projectsWithMatchDetails = similarProjects.map(p => {
+      const sqftDiff = sqft && p.total_sqft
+        ? Math.abs(parseFloat(p.total_sqft) - sqft) / sqft
+        : null;
+
+      return {
+        ...p,
+        total_cost_per_sqft: parseFloat(p.total_cost_per_sqft) || (parseFloat(p.total_cost) / parseFloat(p.total_sqft)) || 0,
+        match_details: {
+          building_type: p.building_type === buildingType,
+          project_type: p.project_type === projectType,
+          bid_type: !bidType || p.bid_type === bidType,
+          sqft_within_25: sqftDiff !== null && sqftDiff <= 0.25,
+          sqft_within_50: sqftDiff !== null && sqftDiff <= 0.5,
+          sqft_diff_percent: sqftDiff !== null ? Math.round(sqftDiff * 100) : null
+        }
+      };
+    });
+
+    // Also include avg_sqft in averages
+    const avgSqft = similarProjects.length > 0
+      ? similarProjects.reduce((sum, p) => sum + (parseFloat(p.total_sqft) || 0), 0) / similarProjects.length
+      : 0;
+
     res.json({
-      similarProjects,
-      averages
+      similarProjects: projectsWithMatchDetails,
+      averages: {
+        ...averages,
+        avg_sqft: avgSqft
+      }
     });
   } catch (error) {
     console.error('Error finding similar projects:', error);
