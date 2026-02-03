@@ -310,7 +310,14 @@ const EstimatesList: React.FC = () => {
                       <span className="estimate-project-name">{estimate.project_name || 'Untitled'}</span>
                     </div>
                   </td>
-                  <td>{estimate.customer_name || '-'}</td>
+                  <td>
+                    <div className="estimate-customer-cell">
+                      <span className="customer-facility">{estimate.facility_name || estimate.location || '-'}</span>
+                      {estimate.customer_name && (
+                        <span className="customer-company">{estimate.customer_name}</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="estimate-amount">
                     ${Number(estimate.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </td>

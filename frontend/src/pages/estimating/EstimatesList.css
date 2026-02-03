@@ -365,6 +365,24 @@
   white-space: nowrap;
 }
 
+/* Customer Cell */
+.estimate-customer-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.estimate-customer-cell .customer-facility {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.estimate-customer-cell .customer-company {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* Status Select */
 .estimate-status-select {
   padding: 6px 12px;
