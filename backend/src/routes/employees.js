@@ -26,6 +26,35 @@ router.get('/', authorizeHR('read'), async (req, res) => {
   }
 });
 
+// Get employee by user ID - allows users to look up their own record, HR read for others
+// IMPORTANT: This route must come BEFORE /:id to prevent /user/:userId from matching /:id
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const requestedUserId = parseInt(req.params.userId, 10);
+    const currentUserId = req.user.id;
+
+    // Allow users to look up their own employee record without HR permissions
+    // For looking up other users' employee records, check HR read access
+    if (requestedUserId !== currentUserId) {
+      // Check if user has HR read access for looking up other employees
+      const hasHRAccess = req.user.role === 'admin' ||
+        (req.user.hrAccess && (req.user.hrAccess === 'read' || req.user.hrAccess === 'write'));
+      if (!hasHRAccess) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    const employee = await Employee.getByUserId(req.params.userId, req.tenantId);
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found for this user' });
+    }
+    res.json({ data: employee });
+  } catch (error) {
+    console.error('Error fetching employee by user ID:', error);
+    res.status(500).json({ error: 'Failed to fetch employee' });
+  }
+});
+
 // Get employee by ID - requires HR read access
 router.get('/:id', authorizeHR('read'), async (req, res) => {
   try {
@@ -36,20 +65,6 @@ router.get('/:id', authorizeHR('read'), async (req, res) => {
     res.json({ data: employee });
   } catch (error) {
     console.error('Error fetching employee:', error);
-    res.status(500).json({ error: 'Failed to fetch employee' });
-  }
-});
-
-// Get employee by user ID - requires HR read access
-router.get('/user/:userId', authorizeHR('read'), async (req, res) => {
-  try {
-    const employee = await Employee.getByUserId(req.params.userId, req.tenantId);
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found for this user' });
-    }
-    res.json({ data: employee });
-  } catch (error) {
-    console.error('Error fetching employee by user ID:', error);
     res.status(500).json({ error: 'Failed to fetch employee' });
   }
 });

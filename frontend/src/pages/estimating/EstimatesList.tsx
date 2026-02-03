@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import './EstimatesList.css';
+import '../../styles/SalesPipeline.css';
 
 const EstimatesList: React.FC = () => {
   const navigate = useNavigate();
@@ -58,6 +59,24 @@ const EstimatesList: React.FC = () => {
       'cancelled': '#6b7280',
     };
     return colors[status?.toLowerCase()] || '#3b82f6';
+  };
+
+  // Get status badge class (matching sales pipeline style)
+  const getStatusBadgeClass = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      'in progress': 'in-progress',
+      'submitted': 'submitted',
+      'awarded': 'awarded',
+      'lost': 'lost',
+      'cancelled': 'cancelled',
+    };
+    return statusMap[status?.toLowerCase()] || 'in-progress';
+  };
+
+  // Format status display text
+  const formatStatusText = (status: string): string => {
+    if (!status || status.toLowerCase() === 'in progress') return 'Bidding';
+    return status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
   // Get estimator initials
@@ -253,7 +272,7 @@ const EstimatesList: React.FC = () => {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">All Statuses</option>
-              <option value="in progress">In Progress</option>
+              <option value="in progress">Bidding</option>
               <option value="submitted">Submitted</option>
               <option value="awarded">Awarded</option>
               <option value="lost">Lost</option>
@@ -325,23 +344,11 @@ const EstimatesList: React.FC = () => {
                   <td className="estimate-amount">
                     ${Number(estimate.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="estimate-status-select"
-                      value={estimate.status || 'in progress'}
-                      onChange={(e) => handleStatusChange(e as any, estimate.id, e.target.value)}
-                      style={{
-                        background: `${getStatusColor(estimate.status)}15`,
-                        borderColor: getStatusColor(estimate.status),
-                        color: getStatusColor(estimate.status),
-                      }}
-                    >
-                      <option value="in progress">In Progress</option>
-                      <option value="submitted">Submitted</option>
-                      <option value="awarded">Awarded</option>
-                      <option value="lost">Lost</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                  <td>
+                    <span className={`sales-stage-badge ${getStatusBadgeClass(estimate.status)}`}>
+                      <span className="sales-stage-dot"></span>
+                      {formatStatusText(estimate.status)}
+                    </span>
                   </td>
                   <td>{estimate.created_at ? new Date(estimate.created_at).toLocaleDateString() : '-'}</td>
                   <td>

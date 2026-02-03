@@ -522,6 +522,7 @@
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .sales-stage-badge.lead {
@@ -587,6 +588,22 @@
 }
 
 .sales-stage-badge.closed {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6B7280;
+}
+
+/* Estimate Status badges */
+.sales-stage-badge.in-progress {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3B82F6;
+}
+
+.sales-stage-badge.submitted {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+}
+
+.sales-stage-badge.cancelled {
   background: rgba(107, 114, 128, 0.15);
   color: #6B7280;
 }

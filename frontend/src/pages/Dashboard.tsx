@@ -25,6 +25,36 @@ import '../styles/SalesPipeline.css';
 
 type ViewScope = 'my' | 'team' | 'company';
 
+// Helper function to get market icon
+const getMarketIcon = (market?: string): string => {
+  const marketIcons: { [key: string]: string } = {
+    'Healthcare': '🏥',
+    'Education': '🏫',
+    'Commercial': '🏢',
+    'Industrial': '🏭',
+    'Retail': '🏬',
+    'Government': '🏛️',
+    'Hospitality': '🏨',
+    'Data Center': '💾'
+  };
+  return marketIcons[market || ''] || '🏢';
+};
+
+// Helper function to get market gradient
+const getMarketGradient = (market?: string): string => {
+  const marketGradients: { [key: string]: string } = {
+    'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
+    'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
+    'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+    'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
+    'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+    'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+    'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
+    'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
+  };
+  return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
+};
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -39,18 +69,23 @@ const Dashboard: React.FC = () => {
   // Fetch the current user's employee record (for manager_id filtering)
   const { data: currentEmployeeResponse } = useQuery({
     queryKey: ['current-employee', user?.id],
-    queryFn: () => user?.id ? employeesApi.getByUserId(user.id) : Promise.resolve(null),
+    queryFn: () => user?.id ? employeesApi.getByUserId(user.id).then(res => res.data) : Promise.resolve(null),
     enabled: !!user?.id,
   });
-  const currentEmployeeId = currentEmployeeResponse?.data?.data?.id;
+  const currentEmployeeId = currentEmployeeResponse?.data?.id;
 
-  // Fetch team member employee IDs (for "My Team" filtering)
+  // Fetch team member IDs (for "My Team" filtering)
+  // employeeIds: for project filtering (manager_id references employees)
+  // userIds: for opportunity/estimate filtering (assigned_to/estimator_id reference users)
+  // names: for matching estimates by estimator_name text field
   const { data: teamMemberIdsResponse } = useQuery({
     queryKey: ['my-team-member-ids'],
     queryFn: () => teamsApi.getMyTeamMemberIds(),
     enabled: !!user?.id,
   });
-  const teamMemberEmployeeIds = teamMemberIdsResponse?.data?.data || [];
+  const teamMemberEmployeeIds = teamMemberIdsResponse?.data?.data?.employeeIds || [];
+  const teamMemberUserIds = teamMemberIdsResponse?.data?.data?.userIds || [];
+  const teamMemberNames = teamMemberIdsResponse?.data?.data?.names || [];
 
   // Fetch all projects for filtering
   const { data: allProjects, isLoading: projectsLoading } = useQuery({
@@ -78,10 +113,11 @@ const Dashboard: React.FC = () => {
     switch (viewScope) {
       case 'my':
         // Filter to user's projects only (manager_id references employees)
-        return allProjects.filter((p: any) => p.manager_id === currentEmployeeId);
+        // Use Number() to handle type mismatches between string/number IDs
+        return allProjects.filter((p: any) => Number(p.manager_id) === Number(currentEmployeeId));
       case 'team':
         // Filter to projects managed by any team member
-        return allProjects.filter((p: any) => teamMemberEmployeeIds.includes(p.manager_id));
+        return allProjects.filter((p: any) => teamMemberEmployeeIds.map(Number).includes(Number(p.manager_id)));
       case 'company':
       default:
         return allProjects;
@@ -94,14 +130,44 @@ const Dashboard: React.FC = () => {
 
     switch (viewScope) {
       case 'my':
-      case 'team':
-        // For 'my' and 'team' (until team membership is implemented), filter to user's opportunities
+        // Filter to user's opportunities only
         return allOpportunities.filter((o: any) => o.assigned_to === user?.id);
+      case 'team':
+        // Filter to opportunities assigned to any team member (using user IDs)
+        return allOpportunities.filter((o: any) => teamMemberUserIds.map(Number).includes(Number(o.assigned_to)));
       case 'company':
       default:
         return allOpportunities;
     }
-  }, [allOpportunities, viewScope, user?.id]);
+  }, [allOpportunities, viewScope, user?.id, teamMemberUserIds]);
+
+  // Filter estimates based on view scope
+  const estimates = React.useMemo(() => {
+    if (!allEstimates) return [];
+
+    // Current user's full name for matching estimator_name
+    const currentUserName = user ? `${user.firstName} ${user.lastName}` : '';
+
+    switch (viewScope) {
+      case 'my':
+        // Filter to user's estimates (check estimator_id, created_by, and estimator_name)
+        return allEstimates.filter((e: any) =>
+          Number(e.estimator_id) === Number(user?.id) ||
+          Number(e.created_by) === Number(user?.id) ||
+          (e.estimator_name && currentUserName && e.estimator_name.toLowerCase() === currentUserName.toLowerCase())
+        );
+      case 'team':
+        // Filter to estimates by any team member (check estimator_id, created_by, and estimator_name)
+        return allEstimates.filter((e: any) =>
+          teamMemberUserIds.map(Number).includes(Number(e.estimator_id)) ||
+          teamMemberUserIds.map(Number).includes(Number(e.created_by)) ||
+          (e.estimator_name && teamMemberNames.some((name: string) => name.toLowerCase() === e.estimator_name.toLowerCase()))
+        );
+      case 'company':
+      default:
+        return allEstimates;
+    }
+  }, [allEstimates, viewScope, user, teamMemberUserIds, teamMemberNames]);
 
   // Computed values from filtered data
   const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
@@ -120,29 +186,29 @@ const Dashboard: React.FC = () => {
     return stageName !== 'won' && stageName !== 'lost';
   }).length || 0;
 
-  // Sort opportunities by most recent (created_at or updated_at) - show ALL opportunities
+  // Sort filtered opportunities by most recent (created_at or updated_at)
   const recentOpportunities = React.useMemo(() => {
-    if (!allOpportunities) return [];
-    return [...allOpportunities]
+    if (!opportunities) return [];
+    return [...opportunities]
       .sort((a: any, b: any) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
         const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
         return dateB - dateA;
       })
       .slice(0, 5);
-  }, [allOpportunities]);
+  }, [opportunities]);
 
-  // Sort estimates by most recent (created_at or updated_at)
+  // Sort filtered estimates by most recent (created_at or updated_at)
   const recentEstimates = React.useMemo(() => {
-    if (!allEstimates) return [];
-    return [...allEstimates]
+    if (!estimates) return [];
+    return [...estimates]
       .sort((a: any, b: any) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
         const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
         return dateB - dateA;
       })
       .slice(0, 5);
-  }, [allEstimates]);
+  }, [estimates]);
 
   // Fetch attention items based on view scope
   const { data: attentionItems = [] } = useQuery<AttentionItem[]>({
@@ -387,10 +453,12 @@ const Dashboard: React.FC = () => {
               <table className="sales-table dashboard-compact-table">
                 <thead>
                   <tr>
-                    <th>Project / Opportunity</th>
-                    <th>Company</th>
-                    <th style={{ textAlign: 'right' }}>Value</th>
-                    <th>Stage</th>
+                    <th style={{ width: '26%' }}>Project / Opportunity</th>
+                    <th style={{ width: '20%' }}>Customer</th>
+                    <th style={{ width: '10%', textAlign: 'right' }}>Value</th>
+                    <th style={{ width: '12%' }}>Stage</th>
+                    <th style={{ width: '12%' }}>Date</th>
+                    <th style={{ width: '20%' }}>Salesperson</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,15 +471,26 @@ const Dashboard: React.FC = () => {
                       >
                         <td>
                           <div className="sales-project-cell">
-                            <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #F37B03, #ff9500)', width: '32px', height: '32px', fontSize: '0.75rem' }}>
-                              🤝
+                            <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market), width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                              {getMarketIcon(opp.market)}
                             </div>
                             <div className="sales-project-info">
                               <h4>{opp.title}</h4>
                             </div>
                           </div>
                         </td>
-                        <td>{opp.customer_name || '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
+                              {opp.facility_customer_name || opp.facility_name || opp.client_name || '-'}
+                            </span>
+                            {(opp.customer_name || opp.owner || opp.client_company) && (
+                              <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
+                                {opp.customer_name || opp.owner || opp.client_company}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="sales-value-cell">{formatCurrency(parseFloat(opp.estimated_value) || 0)}</td>
                         <td>
                           <span className={`sales-stage-badge ${opp.stage_name?.toLowerCase().replace(/\s+/g, '-') || 'unknown'}`}>
@@ -419,11 +498,15 @@ const Dashboard: React.FC = () => {
                             {opp.stage_name || 'Unknown'}
                           </span>
                         </td>
+                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
+                          {opp.updated_at ? new Date(opp.updated_at).toLocaleDateString() : (opp.created_at ? new Date(opp.created_at).toLocaleDateString() : '-')}
+                        </td>
+                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>{opp.assigned_to_name || '-'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="empty-table">No opportunities found</td>
+                      <td colSpan={6} className="empty-table">No opportunities found</td>
                     </tr>
                   )}
                 </tbody>
@@ -444,10 +527,12 @@ const Dashboard: React.FC = () => {
               <table className="sales-table dashboard-compact-table">
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Project Name</th>
-                    <th style={{ textAlign: 'right' }}>Amount</th>
-                    <th>Status</th>
+                    <th style={{ width: '26%' }}>Project / Estimate</th>
+                    <th style={{ width: '20%' }}>Customer</th>
+                    <th style={{ width: '10%', textAlign: 'right' }}>Value</th>
+                    <th style={{ width: '12%' }}>Status</th>
+                    <th style={{ width: '12%' }}>Date</th>
+                    <th style={{ width: '20%' }}>Estimator</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,32 +544,45 @@ const Dashboard: React.FC = () => {
                         style={{ cursor: 'pointer' }}
                       >
                         <td>
-                          <span style={{ color: '#3b82f6', fontWeight: 500 }}>{estimate.estimate_number}</span>
-                        </td>
-                        <td>
                           <div className="sales-project-cell">
-                            <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '32px', height: '32px', fontSize: '0.75rem' }}>
-                              📊
+                            <div className="sales-project-icon" style={{ background: getMarketGradient(estimate.building_type), width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                              {getMarketIcon(estimate.building_type)}
                             </div>
                             <div className="sales-project-info">
                               <h4>{estimate.project_name || 'Untitled'}</h4>
                             </div>
                           </div>
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
+                              {estimate.customer_facility || estimate.facility_name || '-'}
+                            </span>
+                            {(estimate.customer_owner || estimate.customer_name) && (
+                              <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
+                                {estimate.customer_owner || estimate.customer_name}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="sales-value-cell">
                           {formatCurrency(parseFloat(estimate.total_cost) || 0)}
                         </td>
                         <td>
                           <span className={`sales-stage-badge ${estimate.status?.toLowerCase().replace(/\s+/g, '-') || 'in-progress'}`}>
                             <span className="sales-stage-dot"></span>
-                            {estimate.status || 'In Progress'}
+                            {(!estimate.status || estimate.status.toLowerCase() === 'in progress') ? 'Bidding' : estimate.status.split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                           </span>
                         </td>
+                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
+                          {estimate.updated_at ? new Date(estimate.updated_at).toLocaleDateString() : (estimate.created_at ? new Date(estimate.created_at).toLocaleDateString() : '-')}
+                        </td>
+                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>{estimate.estimator_name || '-'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} className="empty-table">No estimates found</td>
+                      <td colSpan={6} className="empty-table">No estimates found</td>
                     </tr>
                   )}
                 </tbody>

@@ -98,8 +98,11 @@ export interface TeamInput {
 export const teamsApi = {
   getAll: () => api.get<{ data: Team[] }>('/teams'),
 
-  // Get all employee IDs from teams where the current user is a member
-  getMyTeamMemberIds: () => api.get<{ data: number[] }>('/teams/my-team-members'),
+  // Get all employee IDs, user IDs, and names from teams where the current user is a member
+  // employeeIds: for project filtering (manager_id references employees)
+  // userIds: for opportunity/estimate filtering (assigned_to/estimator_id reference users)
+  // names: for matching estimates by estimator_name text field
+  getMyTeamMemberIds: () => api.get<{ data: { employeeIds: number[]; userIds: number[]; names: string[] } }>('/teams/my-team-members'),
 
   getById: (id: number) => api.get<{ data: Team }>(`/teams/${id}`),
 

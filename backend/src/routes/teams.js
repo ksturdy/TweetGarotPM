@@ -19,12 +19,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get all team member employee IDs for the current user's teams
+// Get all team member IDs for the current user's teams
 // This is used for "My Team" filtering on the dashboard
+// Returns employee IDs (for project filtering), user IDs (for opportunity/estimate filtering),
+// and names (for matching estimates by estimator_name text field)
 router.get('/my-team-members', async (req, res) => {
   try {
-    const employeeIds = await Team.getMyTeamMemberEmployeeIds(req.user.id, req.tenantId);
-    res.json({ data: employeeIds });
+    const [employeeIds, userIds, names] = await Promise.all([
+      Team.getMyTeamMemberEmployeeIds(req.user.id, req.tenantId),
+      Team.getMyTeamMemberUserIds(req.user.id, req.tenantId),
+      Team.getMyTeamMemberNames(req.user.id, req.tenantId)
+    ]);
+    res.json({ data: { employeeIds, userIds, names } });
   } catch (error) {
     console.error('Error fetching team member IDs:', error);
     res.status(500).json({ error: 'Failed to fetch team member IDs' });
