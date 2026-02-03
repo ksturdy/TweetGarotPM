@@ -283,14 +283,14 @@ const CostDatabase: React.FC = () => {
         <div className="stat-card">
           <div className="stat-icon">📊</div>
           <div className="stat-info">
-            <div className="stat-value">{projects.length}</div>
+            <div className="stat-value">{filteredProjects.length}</div>
             <div className="stat-label">Historical Projects</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">🏗️</div>
           <div className="stat-info">
-            <div className="stat-value">{new Set(projects.map(p => p.building_type).filter(Boolean)).size}</div>
+            <div className="stat-value">{new Set(filteredProjects.map(p => p.building_type).filter(Boolean)).size}</div>
             <div className="stat-label">Building Types</div>
           </div>
         </div>
@@ -298,8 +298,8 @@ const CostDatabase: React.FC = () => {
           <div className="stat-icon">📅</div>
           <div className="stat-info">
             <div className="stat-value">
-              {projects.length > 0
-                ? new Date(Math.max(...projects.map(p => new Date(p.created_at || 0).getTime()))).toLocaleDateString()
+              {filteredProjects.length > 0
+                ? new Date(Math.max(...filteredProjects.map(p => new Date(p.created_at || 0).getTime()))).toLocaleDateString()
                 : '-'
               }
             </div>
