@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
-import '../../styles/SalesPipeline.css';
+import './EstimatesList.css';
 
 const EstimatesList: React.FC = () => {
   const navigate = useNavigate();
@@ -141,8 +141,8 @@ const EstimatesList: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="sales-container">
-        <div style={{ textAlign: 'center', padding: '40px' }}>
+      <div className="estimates-page">
+        <div className="estimates-loading">
           <div>Loading estimates...</div>
         </div>
       </div>
@@ -150,74 +150,64 @@ const EstimatesList: React.FC = () => {
   }
 
   return (
-    <div className="sales-container">
-      {/* Header */}
-      <div className="sales-page-header">
-        <div className="sales-page-title">
-          <div>
-            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Dashboard
-            </Link>
-            <h1>📊 Estimating</h1>
-            <div className="sales-subtitle">Manage Estimates, Budgets & Proposals</div>
-          </div>
+    <div className="estimates-page">
+      {/* Back Link */}
+      <Link to="/" className="back-link">&larr; Back to Dashboard</Link>
+
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="page-header-content">
+          <h1>Estimates</h1>
+          <p>Manage estimates, budgets and proposals</p>
         </div>
-        <div className="sales-header-actions" style={{ display: 'flex', gap: '0.75rem' }}>
-          <Link to="/estimating/budgets" className="sales-btn sales-btn-secondary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+        <div className="page-header-actions">
+          <Link to="/estimating/budgets" className="btn btn-secondary">
             New Budget
           </Link>
-          <Link to="/estimating/estimates/new" className="sales-btn sales-btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            New Estimate
+          <Link to="/estimating/estimates/new" className="btn btn-primary">
+            + New Estimate
           </Link>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '36px', height: '36px', fontSize: '1rem' }}>📋</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{estimates.length}</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Total Estimates</div>
+      {/* KPI Stats Cards */}
+      <div className="estimates-kpi-grid">
+        <div className="estimates-kpi-card">
+          <div className="estimates-kpi-icon blue">📋</div>
+          <div className="estimates-kpi-content">
+            <div className="estimates-kpi-value">{estimates.length}</div>
+            <div className="estimates-kpi-label">Total Estimates</div>
           </div>
         </div>
-        <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', width: '36px', height: '36px', fontSize: '1rem' }}>💰</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>${(totalValue / 1000000).toFixed(1)}M</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Total Value</div>
+        <div className="estimates-kpi-card">
+          <div className="estimates-kpi-icon orange">💰</div>
+          <div className="estimates-kpi-content">
+            <div className="estimates-kpi-value">${(totalValue / 1000000).toFixed(1)}M</div>
+            <div className="estimates-kpi-label">Total Value</div>
           </div>
         </div>
-        <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', width: '36px', height: '36px', fontSize: '1rem' }}>🏆</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>${(awardedValue / 1000000).toFixed(1)}M</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Awarded</div>
+        <div className="estimates-kpi-card">
+          <div className="estimates-kpi-icon green">🏆</div>
+          <div className="estimates-kpi-content">
+            <div className="estimates-kpi-value">${(awardedValue / 1000000).toFixed(1)}M</div>
+            <div className="estimates-kpi-label">Awarded</div>
           </div>
         </div>
-        <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', width: '36px', height: '36px', fontSize: '1rem' }}>⏳</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{inProgressCount + submittedCount}</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Active</div>
+        <div className="estimates-kpi-card">
+          <div className="estimates-kpi-icon purple">⏳</div>
+          <div className="estimates-kpi-content">
+            <div className="estimates-kpi-value">{inProgressCount + submittedCount}</div>
+            <div className="estimates-kpi-label">Active</div>
           </div>
         </div>
       </div>
 
       {/* Table Section */}
-      <div className="sales-table-section">
-        <div className="sales-table-header">
-          <div className="sales-table-title">All Estimates</div>
-          <div className="sales-table-controls">
-            <div className="sales-search-box">
+      <div className="estimates-table-section">
+        <div className="estimates-table-header">
+          <div className="estimates-table-title">All Estimates</div>
+          <div className="estimates-table-controls">
+            <div className="estimates-search-box">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -230,10 +220,9 @@ const EstimatesList: React.FC = () => {
               />
             </div>
             <select
-              className="sales-filter-select"
+              className="estimates-filter-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer' }}
             >
               <option value="">All Statuses</option>
               <option value="in progress">In Progress</option>
@@ -244,29 +233,30 @@ const EstimatesList: React.FC = () => {
             </select>
           </div>
         </div>
-        <table className="sales-table">
+
+        <table className="estimates-table">
           <thead>
             <tr>
-              <th className="sales-sortable" onClick={() => handleSort('estimate_number')} style={{ width: '100px' }}>
-                # <span className="sales-sort-icon">{sortColumn === 'estimate_number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('estimate_number')} style={{ width: '100px' }}>
+                # <span className="sort-icon">{sortColumn === 'estimate_number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('project_name')}>
-                Project Name <span className="sales-sort-icon">{sortColumn === 'project_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('project_name')}>
+                Project Name <span className="sort-icon">{sortColumn === 'project_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('customer_name')}>
-                Customer <span className="sales-sort-icon">{sortColumn === 'customer_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('customer_name')}>
+                Customer <span className="sort-icon">{sortColumn === 'customer_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('total_cost')} style={{ textAlign: 'right' }}>
-                Amount <span className="sales-sort-icon">{sortColumn === 'total_cost' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('total_cost')} style={{ textAlign: 'right' }}>
+                Amount <span className="sort-icon">{sortColumn === 'total_cost' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('status')}>
-                Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('status')}>
+                Status <span className="sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('created_at')}>
-                Created <span className="sales-sort-icon">{sortColumn === 'created_at' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('created_at')}>
+                Created <span className="sort-icon">{sortColumn === 'created_at' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('estimator_name')}>
-                Estimator <span className="sales-sort-icon">{sortColumn === 'estimator_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th onClick={() => handleSort('estimator_name')}>
+                Estimator <span className="sort-icon">{sortColumn === 'estimator_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th style={{ width: '120px' }}>Actions</th>
             </tr>
@@ -277,38 +267,29 @@ const EstimatesList: React.FC = () => {
                 <tr
                   key={estimate.id}
                   onClick={() => navigate(`/estimating/estimates/${estimate.id}`)}
-                  style={{ cursor: 'pointer' }}
                 >
                   <td>
-                    <span style={{ color: '#3b82f6', fontWeight: 500 }}>{estimate.estimate_number}</span>
+                    <span className="estimate-number">{estimate.estimate_number}</span>
                   </td>
                   <td>
-                    <div className="sales-project-cell">
-                      <div className="sales-project-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
-                        📊
-                      </div>
-                      <div className="sales-project-info">
-                        <h4>{estimate.project_name || 'Untitled'}</h4>
-                      </div>
+                    <div className="estimate-project-cell">
+                      <div className="estimate-project-icon">📊</div>
+                      <span className="estimate-project-name">{estimate.project_name || 'Untitled'}</span>
                     </div>
                   </td>
                   <td>{estimate.customer_name || '-'}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                  <td className="estimate-amount">
                     ${Number(estimate.total_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select
+                      className="estimate-status-select"
                       value={estimate.status || 'in progress'}
                       onChange={(e) => handleStatusChange(e as any, estimate.id, e.target.value)}
                       style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: `1px solid ${getStatusColor(estimate.status)}`,
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
                         background: `${getStatusColor(estimate.status)}15`,
+                        borderColor: getStatusColor(estimate.status),
                         color: getStatusColor(estimate.status),
-                        fontWeight: 500,
                       }}
                     >
                       <option value="in progress">In Progress</option>
@@ -321,32 +302,30 @@ const EstimatesList: React.FC = () => {
                   <td>{estimate.created_at ? new Date(estimate.created_at).toLocaleDateString() : '-'}</td>
                   <td>
                     {estimate.estimator_name ? (
-                      <div className="sales-salesperson-cell">
+                      <div className="estimator-cell">
                         <div
-                          className="sales-salesperson-avatar"
+                          className="estimator-avatar"
                           style={{ background: getEstimatorColor(estimate.estimator_name) }}
                         >
                           {getEstimatorInitials(estimate.estimator_name)}
                         </div>
-                        {estimate.estimator_name}
+                        <span className="estimator-name">{estimate.estimator_name}</span>
                       </div>
                     ) : (
                       <span style={{ color: '#9ca3af' }}>Unassigned</span>
                     )}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div className="estimate-actions">
                       <button
                         onClick={() => handleViewProposal(estimate.id)}
-                        className="sales-btn sales-btn-secondary"
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}
+                        className="btn btn-secondary btn-sm"
                       >
                         View
                       </button>
                       <Link
                         to={`/estimating/estimates/${estimate.id}`}
-                        className="sales-btn sales-btn-primary"
-                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', textDecoration: 'none' }}
+                        className="btn btn-primary btn-sm"
                       >
                         Edit
                       </Link>
@@ -356,14 +335,12 @@ const EstimatesList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
-                  <div>
-                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>No estimates found</h3>
-                    <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '1.5rem' }}>
-                      {searchQuery || statusFilter ? 'Try adjusting your filters' : 'Get started by creating your first estimate'}
-                    </p>
-                    <Link to="/estimating/estimates/new" className="sales-btn sales-btn-primary">
+                <td colSpan={8}>
+                  <div className="estimates-empty-state">
+                    <div className="empty-icon">📋</div>
+                    <h3>No estimates found</h3>
+                    <p>{searchQuery || statusFilter ? 'Try adjusting your filters' : 'Get started by creating your first estimate'}</p>
+                    <Link to="/estimating/estimates/new" className="btn btn-primary">
                       Create Estimate
                     </Link>
                   </div>

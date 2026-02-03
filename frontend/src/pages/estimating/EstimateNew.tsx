@@ -669,13 +669,11 @@ const EstimateNew: React.FC = () => {
 
   return (
     <div className="estimate-new">
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/estimating">&larr; Back to Estimates</Link>
-      </div>
+      <Link to="/estimating" className="back-link">&larr; Back to Estimates</Link>
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>Create New Estimate</h1>
+          <h1 className="page-title">Create New Estimate</h1>
           {savedData && (
             <p style={{ fontSize: '0.875rem', color: 'var(--success)', marginTop: '0.5rem' }}>
               📝 Draft restored from {new Date(savedData.lastSaved).toLocaleString()}

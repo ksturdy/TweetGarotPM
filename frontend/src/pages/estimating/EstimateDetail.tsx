@@ -425,16 +425,16 @@ const EstimateDetail: React.FC = () => {
   return (
     <div className="estimate-new">
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        <Link to="/estimating">&larr; All Estimates</Link>
+        <Link to="/estimating" className="back-link">&larr; All Estimates</Link>
         {estimate.customer_id && (
           <>
             <span style={{ color: '#6b7280' }}>|</span>
             <Link to={`/customers/${estimate.customer_id}/estimates`}>
-              &larr; {estimate.customer_name} Estimates
+              {estimate.customer_name} Estimates
             </Link>
             <span style={{ color: '#6b7280' }}>|</span>
             <Link to={`/customers/${estimate.customer_id}`}>
-              &larr; {estimate.customer_name} Details
+              {estimate.customer_name} Details
             </Link>
           </>
         )}
@@ -442,7 +442,7 @@ const EstimateDetail: React.FC = () => {
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>
+          <h1 className="page-title">
             Edit Estimate: {estimate.estimate_number}
           </h1>
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
