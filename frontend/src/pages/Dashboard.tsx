@@ -158,24 +158,40 @@ const Dashboard: React.FC = () => {
 
     switch (viewScope) {
       case 'my':
-        // Filter to user's estimates (check estimator_id, created_by, and estimator_name)
-        return allEstimates.filter((e: any) =>
-          Number(e.estimator_id) === Number(user?.id) ||
-          Number(e.created_by) === Number(user?.id) ||
-          (e.estimator_name && currentUserName && e.estimator_name.toLowerCase() === currentUserName.toLowerCase())
-        );
+        // Filter to user's estimates based on who is the assigned estimator
+        // If an estimator is assigned (estimator_id or estimator_name), use that
+        // Only fall back to created_by if no estimator is assigned
+        return allEstimates.filter((e: any) => {
+          const hasAssignedEstimator = e.estimator_id || e.estimator_name;
+
+          if (hasAssignedEstimator) {
+            // Check if current user is the assigned estimator
+            return Number(e.estimator_id) === Number(currentEmployeeId) ||
+              (e.estimator_name && currentUserName && e.estimator_name.toLowerCase() === currentUserName.toLowerCase());
+          } else {
+            // No estimator assigned - show if user created it
+            return Number(e.created_by) === Number(user?.id);
+          }
+        });
       case 'team':
-        // Filter to estimates by any team member (check estimator_id, created_by, and estimator_name)
-        return allEstimates.filter((e: any) =>
-          teamMemberUserIds.map(Number).includes(Number(e.estimator_id)) ||
-          teamMemberUserIds.map(Number).includes(Number(e.created_by)) ||
-          (e.estimator_name && teamMemberNames.some((name: string) => name.toLowerCase() === e.estimator_name.toLowerCase()))
-        );
+        // Filter to estimates by any team member
+        return allEstimates.filter((e: any) => {
+          const hasAssignedEstimator = e.estimator_id || e.estimator_name;
+
+          if (hasAssignedEstimator) {
+            // Check if a team member is the assigned estimator
+            return teamMemberEmployeeIds.map(Number).includes(Number(e.estimator_id)) ||
+              (e.estimator_name && teamMemberNames.some((name: string) => name.toLowerCase() === e.estimator_name.toLowerCase()));
+          } else {
+            // No estimator assigned - show if a team member created it
+            return teamMemberUserIds.map(Number).includes(Number(e.created_by));
+          }
+        });
       case 'company':
       default:
         return allEstimates;
     }
-  }, [allEstimates, viewScope, user, teamMemberUserIds, teamMemberNames]);
+  }, [allEstimates, viewScope, user, currentEmployeeId, teamMemberEmployeeIds, teamMemberUserIds, teamMemberNames]);
 
   // Computed values from filtered data
   const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
