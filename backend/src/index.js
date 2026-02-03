@@ -59,6 +59,7 @@ const teamRoutes = require('./routes/teams');
 const dashboardRoutes = require('./routes/dashboard');
 const budgetGeneratorRoutes = require('./routes/budgetGenerator');
 const budgetRoutes = require('./routes/budgets');
+const vistaDataRoutes = require('./routes/vistaData');
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budget-generator', budgetGeneratorRoutes);
 app.use('/api/budgets', budgetRoutes);
+app.use('/api/vista', vistaDataRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

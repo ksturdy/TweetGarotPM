@@ -68,6 +68,8 @@ import Campaigns from './pages/Campaigns';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
 import TenantSettings from './pages/TenantSettings';
+import VistaDataSettings from './pages/settings/VistaDataSettings';
+import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 // Platform Admin pages
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantList from './pages/platform/TenantList';
@@ -190,6 +192,8 @@ const App: React.FC = () => {
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/security" element={<SecuritySettings />} />
                 <Route path="/settings" element={<TenantSettings />} />
+                <Route path="/settings/vista-data" element={<VistaDataSettings />} />
+                <Route path="/settings/vista-data/linking" element={<VistaLinkingManager />} />
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />

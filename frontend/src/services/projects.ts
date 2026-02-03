@@ -13,6 +13,12 @@ export interface Project {
   market?: string;
   manager_id: number;
   manager_name: string;
+  department_id?: number;
+  department_name?: string;
+  department_number?: string;
+  contract_value?: number;
+  gross_margin_percent?: number;
+  backlog?: number;
   created_at: string;
 }
 

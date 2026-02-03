@@ -20,9 +20,10 @@ const Project = {
    */
   async findById(id) {
     const result = await db.query(
-      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name
+      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
+       LEFT JOIN departments d ON p.department_id = d.id
        WHERE p.id = $1`,
       [id]
     );
@@ -34,9 +35,10 @@ const Project = {
    */
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
-      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name
+      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
+       LEFT JOIN departments d ON p.department_id = d.id
        WHERE p.id = $1 AND p.tenant_id = $2`,
       [id, tenantId]
     );
@@ -48,9 +50,10 @@ const Project = {
    */
   async findAll(filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
+      LEFT JOIN departments d ON p.department_id = d.id
       WHERE 1=1
     `;
     const params = [];
@@ -76,9 +79,10 @@ const Project = {
    */
   async findAllByTenant(tenantId, filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
+      LEFT JOIN departments d ON p.department_id = d.id
       WHERE p.tenant_id = $1
     `;
     const params = [tenantId];

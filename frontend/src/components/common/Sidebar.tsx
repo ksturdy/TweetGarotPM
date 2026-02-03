@@ -19,6 +19,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import GavelIcon from '@mui/icons-material/Gavel';
+import SyncIcon from '@mui/icons-material/Sync';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import './Sidebar.css';
@@ -145,9 +146,12 @@ const Sidebar: React.FC = () => {
     },
     {
       label: 'Settings',
-      path: '/settings',
       icon: <SettingsIcon />,
       adminOnly: true,
+      children: [
+        { label: 'General', path: '/settings' },
+        { label: 'Vista Data', path: '/settings/vista-data' },
+      ],
     },
   ];
 

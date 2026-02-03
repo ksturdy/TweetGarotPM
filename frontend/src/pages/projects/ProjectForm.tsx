@@ -14,7 +14,7 @@ const ProjectForm: React.FC = () => {
     address: '',
     start_date: '',
     end_date: '',
-    status: 'active',
+    status: 'Open',
     description: '',
   });
 
@@ -123,7 +123,10 @@ const ProjectForm: React.FC = () => {
               value={formData.status}
               onChange={handleChange}
             >
-              <option value="active">Active</option>
+              <option value="Open">Open</option>
+              <option value="Soft-Closed">Soft-Closed</option>
+              <option value="Hard-Closed">Hard-Closed</option>
+              <option value="active">Active (Legacy)</option>
               <option value="on_hold">On Hold</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>

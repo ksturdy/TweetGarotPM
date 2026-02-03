@@ -8,19 +8,48 @@ const ProjectList: React.FC = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string>('number');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [statusFilter, setStatusFilter] = useState<string>('Open');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [marketFilter, setMarketFilter] = useState<string>('all');
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
 
-  // Helper function to get market icon
+  // Get unique values for filters
+  const uniqueStatuses = [...new Set((projects || []).map(p => p.status).filter(Boolean))].sort();
+  const uniqueDepartments = [...new Set((projects || []).map(p => p.department_number).filter(Boolean))].sort();
+  const uniqueMarkets = [...new Set((projects || []).map(p => p.market).filter(Boolean))].sort();
+
+  // Helper function to get market icon (VP Markets)
   const getMarketIcon = (market?: string): string => {
     const marketIcons: { [key: string]: string } = {
+      // VP Markets
+      'MFG-Food': '🍔',
+      'Health Care': '🏥',
+      'MFG-Other': '🏭',
+      'MFG-Paper': '📄',
+      'Amusement/Recreation': '🎢',
+      'Educational': '🏫',
+      'Manufacturing': '🏭',
+      'Commercial': '🏢',
+      'Office': '🏢',
+      'Power': '⚡',
+      'Lodging': '🏨',
+      'Religious': '⛪',
+      'Public Safety': '🚔',
+      'Transportation': '🚚',
+      'Communication': '📡',
+      'Conservation/Development': '🌲',
+      'Sewage/Waste Disposal': '♻️',
+      'Highway/Street': '🛣️',
+      'Water Supply': '💧',
+      'Residential': '🏠',
+      // Legacy mappings
       'Healthcare': '🏥',
       'Education': '🏫',
-      'Commercial': '🏢',
       'Industrial': '🏭',
       'Retail': '🏬',
       'Government': '🏛️',
@@ -30,12 +59,33 @@ const ProjectList: React.FC = () => {
     return marketIcons[market || ''] || '🏢';
   };
 
-  // Helper function to get market gradient
+  // Helper function to get market gradient (VP Markets)
   const getMarketGradient = (market?: string): string => {
     const marketGradients: { [key: string]: string } = {
+      // VP Markets
+      'MFG-Food': 'linear-gradient(135deg, #f97316, #eab308)',
+      'Health Care': 'linear-gradient(135deg, #10b981, #06b6d4)',
+      'MFG-Other': 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+      'MFG-Paper': 'linear-gradient(135deg, #64748b, #94a3b8)',
+      'Amusement/Recreation': 'linear-gradient(135deg, #ec4899, #f43f5e)',
+      'Educational': 'linear-gradient(135deg, #f59e0b, #f97316)',
+      'Manufacturing': 'linear-gradient(135deg, #6366f1, #3b82f6)',
+      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+      'Office': 'linear-gradient(135deg, #3b82f6, #06b6d4)',
+      'Power': 'linear-gradient(135deg, #eab308, #f59e0b)',
+      'Lodging': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
+      'Religious': 'linear-gradient(135deg, #8b5cf6, #a855f7)',
+      'Public Safety': 'linear-gradient(135deg, #ef4444, #f97316)',
+      'Transportation': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+      'Communication': 'linear-gradient(135deg, #14b8a6, #06b6d4)',
+      'Conservation/Development': 'linear-gradient(135deg, #22c55e, #10b981)',
+      'Sewage/Waste Disposal': 'linear-gradient(135deg, #84cc16, #22c55e)',
+      'Highway/Street': 'linear-gradient(135deg, #64748b, #475569)',
+      'Water Supply': 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
+      'Residential': 'linear-gradient(135deg, #a855f7, #ec4899)',
+      // Legacy mappings
       'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
       'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
       'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
       'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
       'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
@@ -48,6 +98,11 @@ const ProjectList: React.FC = () => {
   // Helper function to get status color
   const getStatusColor = (status: string): string => {
     const colors: { [key: string]: string } = {
+      // Vista statuses
+      'Open': '#10b981',
+      'Soft-Closed': '#f59e0b',
+      'Hard-Closed': '#6b7280',
+      // Legacy statuses
       active: '#10b981',
       on_hold: '#f59e0b',
       completed: '#3b82f6',
@@ -59,6 +114,11 @@ const ProjectList: React.FC = () => {
   // Helper function to get project icon based on status
   const getProjectIcon = (status: string): string => {
     const icons: { [key: string]: string } = {
+      // Vista statuses
+      'Open': '🏗️',
+      'Soft-Closed': '📋',
+      'Hard-Closed': '✅',
+      // Legacy statuses
       active: '🏗️',
       on_hold: '⏸️',
       completed: '✅',
@@ -70,6 +130,11 @@ const ProjectList: React.FC = () => {
   // Helper function to get project gradient based on status
   const getProjectGradient = (status: string): string => {
     const gradients: { [key: string]: string } = {
+      // Vista statuses
+      'Open': 'linear-gradient(135deg, #10b981, #06b6d4)',
+      'Soft-Closed': 'linear-gradient(135deg, #f59e0b, #f97316)',
+      'Hard-Closed': 'linear-gradient(135deg, #6b7280, #4b5563)',
+      // Legacy statuses
       active: 'linear-gradient(135deg, #10b981, #06b6d4)',
       on_hold: 'linear-gradient(135deg, #f59e0b, #f43f5e)',
       completed: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
@@ -98,13 +163,27 @@ const ProjectList: React.FC = () => {
     return colors[index];
   };
 
-  // Filter projects based on search term
-  const filteredProjects = (projects || []).filter(project =>
-    project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (project.client && project.client.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (project.manager_name && project.manager_name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter projects based on search term and dropdown filters
+  const filteredProjects = (projects || []).filter(project => {
+    // Apply dropdown filters first
+    if (statusFilter !== 'all' && project.status !== statusFilter) return false;
+    if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
+    if (marketFilter !== 'all' && project.market !== marketFilter) return false;
+
+    // Then apply search filter
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      project.name.toLowerCase().includes(term) ||
+      project.number.toLowerCase().includes(term) ||
+      (project.client && project.client.toLowerCase().includes(term)) ||
+      (project.status && project.status.toLowerCase().includes(term)) ||
+      (project.department_number && project.department_number.toLowerCase().includes(term)) ||
+      (project.market && project.market.toLowerCase().includes(term)) ||
+      (project.manager_name && project.manager_name.toLowerCase().includes(term)) ||
+      (project.start_date && new Date(project.start_date).toLocaleDateString('en-US').toLowerCase().includes(term))
+    );
+  });
 
   // Sort projects
   const sortedProjects = [...filteredProjects].sort((a, b) => {
@@ -120,13 +199,25 @@ const ProjectList: React.FC = () => {
         aValue = a.name.toLowerCase();
         bValue = b.name.toLowerCase();
         break;
-      case 'client':
-        aValue = (a.client || '').toLowerCase();
-        bValue = (b.client || '').toLowerCase();
+      case 'contract_value':
+        aValue = a.contract_value || 0;
+        bValue = b.contract_value || 0;
         break;
       case 'status':
         aValue = a.status;
         bValue = b.status;
+        break;
+      case 'department':
+        aValue = (a.department_number || '').toLowerCase();
+        bValue = (b.department_number || '').toLowerCase();
+        break;
+      case 'backlog':
+        aValue = a.backlog || 0;
+        bValue = b.backlog || 0;
+        break;
+      case 'gross_margin':
+        aValue = a.gross_margin_percent || 0;
+        bValue = b.gross_margin_percent || 0;
         break;
       case 'manager':
         aValue = (a.manager_name || '').toLowerCase();
@@ -153,6 +244,19 @@ const ProjectList: React.FC = () => {
       setSortColumn(column);
       setSortDirection('asc');
     }
+  };
+
+  // Calculate KPIs from filtered projects
+  const kpis = {
+    projectCount: filteredProjects.length,
+    totalContractValue: filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0),
+    totalBacklog: filteredProjects.reduce((sum, p) => sum + (Number(p.backlog) || 0), 0),
+    avgGrossMargin: filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null).length > 0
+      ? filteredProjects.reduce((sum, p) => sum + (Number(p.gross_margin_percent) || 0), 0) / filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null).length
+      : 0,
+    avgProjectValue: filteredProjects.length > 0
+      ? filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0) / filteredProjects.length
+      : 0
   };
 
   if (isLoading) {
@@ -197,48 +301,156 @@ const ProjectList: React.FC = () => {
         </div>
       </div>
 
+      {/* KPI Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '1rem',
+        marginBottom: '1rem'
+      }}>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Project Count</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1e293b' }}>{kpis.projectCount.toLocaleString()}</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Contract Value</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#3b82f6' }}>${(kpis.totalContractValue / 1000000).toFixed(1)}M</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Backlog</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#8b5cf6' }}>${(kpis.totalBacklog / 1000000).toFixed(1)}M</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Average GM%</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: kpis.avgGrossMargin >= 0 ? '#10b981' : '#ef4444' }}>{(kpis.avgGrossMargin * 100).toFixed(1)}%</div>
+        </div>
+        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Avg. Project Value</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f59e0b' }}>${Math.round(kpis.avgProjectValue).toLocaleString()}</div>
+        </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
+        padding: '1rem',
+        background: '#f8fafc',
+        borderRadius: '8px',
+        marginBottom: '1rem',
+        alignItems: 'flex-end'
+      }}>
+        <div style={{ flex: '1', minWidth: '200px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Search</label>
+          <div className="sales-search-box" style={{ width: '100%' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: '100%' }}
+            />
+          </div>
+        </div>
+        <div style={{ minWidth: '150px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Status</label>
+          <select
+            className="form-input"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+          >
+            <option value="all">All Statuses</option>
+            {uniqueStatuses.map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ minWidth: '150px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Department</label>
+          <select
+            className="form-input"
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+          >
+            <option value="all">All Departments</option>
+            {uniqueDepartments.map(dept => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ minWidth: '180px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Market</label>
+          <select
+            className="form-input"
+            value={marketFilter}
+            onChange={(e) => setMarketFilter(e.target.value)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+          >
+            <option value="all">All Markets</option>
+            {uniqueMarkets.map(market => (
+              <option key={market} value={market}>{market}</option>
+            ))}
+          </select>
+        </div>
+        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || searchTerm) && (
+          <button
+            className="sales-filter-btn"
+            onClick={() => {
+              setStatusFilter('all');
+              setDepartmentFilter('all');
+              setMarketFilter('all');
+              setSearchTerm('');
+            }}
+            style={{ padding: '0.5rem 1rem', height: 'fit-content' }}
+          >
+            Clear All
+          </button>
+        )}
+      </div>
+
       {/* Table Section */}
       <div className="sales-table-section">
         <div className="sales-table-header">
-          <div className="sales-table-title">All Projects</div>
-          <div className="sales-table-controls">
-            <div className="sales-search-box">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input
-                type="text"
-                placeholder="Search projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <button className="sales-filter-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-              </svg>
-              Filter
-            </button>
+          <div className="sales-table-title">
+            All Projects
+            <span style={{ fontSize: '0.875rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
+              ({filteredProjects.length.toLocaleString()} of {(projects || []).length.toLocaleString()})
+            </span>
           </div>
         </div>
         <table className="sales-table">
           <thead>
             <tr>
+              <th className="sales-sortable" onClick={() => handleSort('number')}>
+                Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('start_date')}>
                 Start Date <span className="sales-sort-icon">{sortColumn === 'start_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('name')}>
                 Project <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('client')}>
-                Client <span className="sales-sort-icon">{sortColumn === 'client' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('contract_value')}>
+                Contract Value <span className="sales-sort-icon">{sortColumn === 'contract_value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('number')}>
-                Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('gross_margin')}>
+                GM% <span className="sales-sort-icon">{sortColumn === 'gross_margin' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
+              <th className="sales-sortable" onClick={() => handleSort('backlog')}>
+                Backlog <span className="sales-sort-icon">{sortColumn === 'backlog' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('status')}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
+              <th className="sales-sortable" onClick={() => handleSort('department')}>
+                Department <span className="sales-sort-icon">{sortColumn === 'department' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('manager')}>
                 Project Manager <span className="sales-sort-icon">{sortColumn === 'manager' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -253,7 +465,8 @@ const ProjectList: React.FC = () => {
                   onClick={() => navigate(`/projects/${project.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</td>
+                  <td>{project.number}</td>
+                  <td>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-US') : '-'}</td>
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status) }}>
@@ -261,18 +474,22 @@ const ProjectList: React.FC = () => {
                       </div>
                       <div className="sales-project-info">
                         <h4>{project.name}</h4>
-                        <span>{project.address || 'No address specified'}</span>
+                        <span>{project.client || 'No client specified'}</span>
                       </div>
                     </div>
                   </td>
-                  <td>{project.client || '-'}</td>
-                  <td>{project.number}</td>
+                  <td>{project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '-'}</td>
+                  <td style={{ color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'inherit' }}>
+                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%` : '-'}
+                  </td>
+                  <td>{project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '-'}</td>
                   <td>
-                    <span className={`sales-stage-badge ${project.status}`}>
+                    <span className={`sales-stage-badge ${project.status.toLowerCase().replace('-', '_')}`}>
                       <span className="sales-stage-dot" style={{ background: getStatusColor(project.status) }}></span>
-                      {project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.replace('_', ' ').slice(1)}
+                      {project.status.includes('-') ? project.status : project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.replace('_', ' ').slice(1)}
                     </span>
                   </td>
+                  <td>{project.department_number || '-'}</td>
                   <td>
                     <div className="sales-salesperson-cell">
                       <div
@@ -288,7 +505,7 @@ const ProjectList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       className="mx-auto h-12 w-12 text-gray-400"

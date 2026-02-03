@@ -362,6 +362,39 @@ const ProjectDetail: React.FC = () => {
         )}
       </div>
 
+      {/* Financial Information */}
+      {(project.contract_value || project.gross_margin_percent !== undefined || project.backlog) && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem' }}>Financial Overview</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Contract Amount</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--primary)' }}>
+                {project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '-'}
+              </div>
+            </div>
+            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Gross Margin</div>
+              <div style={{
+                fontSize: '1.75rem',
+                fontWeight: 600,
+                color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'var(--text)'
+              }}>
+                {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
+                  ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%`
+                  : '-'}
+              </div>
+            </div>
+            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Backlog</div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--primary)' }}>
+                {project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '-'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="section-header" style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: 0 }}>Project Modules</h2>
         <Link to={`/projects/${id}/rfis/new`} className="btn btn-primary">
