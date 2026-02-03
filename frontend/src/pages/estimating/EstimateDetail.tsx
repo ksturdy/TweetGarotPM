@@ -64,6 +64,8 @@ const EstimateDetail: React.FC = () => {
 
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [estimatorSearch, setEstimatorSearch] = useState('');
+  const [showEstimatorDropdown, setShowEstimatorDropdown] = useState(false);
   const [sections, setSections] = useState<EstimateSection[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
@@ -121,6 +123,10 @@ const EstimateDetail: React.FC = () => {
 
       if (estimate.customer_name) {
         setCustomerSearch(estimate.customer_name);
+      }
+
+      if (estimate.estimator_name) {
+        setEstimatorSearch(estimate.estimator_name);
       }
 
       // Set link toggles based on existing data
@@ -210,6 +216,25 @@ const EstimateDetail: React.FC = () => {
         c.city?.toLowerCase().includes(customerSearch.toLowerCase())
       : true
   ).slice(0, 10);
+
+  const employees = employeesData?.data?.data || [];
+  const filteredEmployees = employees.filter((emp: any) => {
+    if (!estimatorSearch) return true;
+    const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+    return fullName.includes(estimatorSearch.toLowerCase()) ||
+           emp.first_name?.toLowerCase().includes(estimatorSearch.toLowerCase()) ||
+           emp.last_name?.toLowerCase().includes(estimatorSearch.toLowerCase());
+  }).slice(0, 10);
+
+  const handleEstimatorSelect = (employee: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      estimator_id: employee.id,
+      estimator_name: `${employee.first_name} ${employee.last_name}`,
+    }));
+    setEstimatorSearch(`${employee.first_name} ${employee.last_name}`);
+    setShowEstimatorDropdown(false);
+  };
 
   const addSection = () => {
     setSections((prev) => [
@@ -675,31 +700,86 @@ const EstimateDetail: React.FC = () => {
               />
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group" style={{ position: 'relative', marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator</label>
-              <select
-                name="estimator_id"
+              <input
+                type="text"
                 className="form-input"
-                value={formData.estimator_id || ''}
+                value={estimatorSearch}
                 onChange={(e) => {
-                  const selectedId = e.target.value ? parseInt(e.target.value) : undefined;
-                  const employees = employeesData?.data?.data || [];
-                  const selectedEmployee = employees.find((emp: any) => emp.id === selectedId);
-                  setFormData((prev) => ({
-                    ...prev,
-                    estimator_id: selectedId,
-                    estimator_name: selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : '',
-                  }));
+                  setEstimatorSearch(e.target.value);
+                  setShowEstimatorDropdown(true);
+                  // Clear selection if user is typing something different
+                  if (formData.estimator_name && e.target.value !== formData.estimator_name) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      estimator_id: undefined,
+                      estimator_name: '',
+                    }));
+                  }
                 }}
+                onFocus={() => setShowEstimatorDropdown(true)}
+                placeholder="Search estimator..."
                 style={{ padding: '0.5rem' }}
-              >
-                <option value="">Select...</option>
-                {employeesData?.data?.data?.map((employee: any) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.first_name} {employee.last_name}
-                  </option>
-                ))}
-              </select>
+              />
+              {showEstimatorDropdown && filteredEmployees && filteredEmployees.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    maxHeight: '250px',
+                    overflowY: 'auto',
+                    backgroundColor: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: '0.375rem',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    zIndex: 1000,
+                    marginTop: '0.25rem',
+                  }}
+                >
+                  {filteredEmployees.map((employee: any) => (
+                    <div
+                      key={employee.id}
+                      onClick={() => handleEstimatorSelect(employee)}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--background)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'white';
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                        {employee.first_name} {employee.last_name}
+                      </div>
+                      {employee.position && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
+                          {employee.position}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showEstimatorDropdown && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 999,
+                  }}
+                  onClick={() => setShowEstimatorDropdown(false)}
+                />
+              )}
             </div>
           </div>
 

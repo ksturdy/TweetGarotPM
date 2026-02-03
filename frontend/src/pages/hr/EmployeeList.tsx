@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { employeesApi, EmployeeFilters } from '../../services/employees';
@@ -9,9 +9,21 @@ import '../../styles/SalesPipeline.css';
 
 const EmployeeList: React.FC = () => {
   const { user } = useAuth();
+  const [searchInput, setSearchInput] = useState('');
   const [filters, setFilters] = useState<EmployeeFilters>({
     employmentStatus: 'active',
   });
+
+  // Debounce search input to avoid refetching on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => ({
+        ...prev,
+        search: searchInput || undefined,
+      }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const { data: employees, isLoading } = useQuery({
     queryKey: ['employees', filters],
@@ -108,8 +120,8 @@ const EmployeeList: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search employees..."
-                value={filters.search || ''}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <select
