@@ -80,6 +80,34 @@ const EstimatesList: React.FC = () => {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  // Get project gradient based on name (matching Sales Pipeline style)
+  const getProjectGradient = (name?: string): string => {
+    const gradients = [
+      'linear-gradient(135deg, #3b82f6, #8b5cf6)',  // blue to purple
+      'linear-gradient(135deg, #10b981, #06b6d4)',  // emerald to cyan
+      'linear-gradient(135deg, #f59e0b, #f43f5e)',  // amber to rose
+      'linear-gradient(135deg, #8b5cf6, #ec4899)',  // purple to pink
+      'linear-gradient(135deg, #06b6d4, #3b82f6)',  // cyan to blue
+    ];
+    if (!name) return gradients[0];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return gradients[Math.abs(hash) % gradients.length];
+  };
+
+  // Get project icon based on name
+  const getProjectIcon = (name?: string): string => {
+    const icons = ['🏢', '🏗️', '🏭', '🏥', '🎓'];
+    if (!name) return icons[0];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return icons[Math.abs(hash) % icons.length];
+  };
+
   // Sort estimates
   const sortedEstimates = [...estimates].sort((a: any, b: any) => {
     let aValue: any;
@@ -273,7 +301,12 @@ const EstimatesList: React.FC = () => {
                   </td>
                   <td>
                     <div className="estimate-project-cell">
-                      <div className="estimate-project-icon">📊</div>
+                      <div
+                        className="estimate-project-icon"
+                        style={{ background: getProjectGradient(estimate.project_name) }}
+                      >
+                        {getProjectIcon(estimate.project_name)}
+                      </div>
                       <span className="estimate-project-name">{estimate.project_name || 'Untitled'}</span>
                     </div>
                   </td>

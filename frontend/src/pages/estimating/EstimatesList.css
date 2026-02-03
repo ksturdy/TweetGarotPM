@@ -348,8 +348,8 @@
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  background: var(--gradient-1);
   flex-shrink: 0;
+  color: white;
 }
 
 .estimate-project-name {
