@@ -94,6 +94,7 @@ const Sidebar: React.FC = () => {
         { label: 'Customers', path: '/account-management/customers' },
         { label: 'Contacts', path: '/account-management/contacts' },
         { label: 'Vendors', path: '/account-management/vendors' },
+        { label: 'Work Orders', path: '/account-management/work-orders' },
         { label: 'Teams', path: '/account-management/teams' },
       ],
     },

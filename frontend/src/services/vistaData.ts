@@ -405,6 +405,32 @@ export interface AutoLinkDepartmentsResult {
   }>;
 }
 
+export interface AutoLinkCustomersResult {
+  message: string;
+  customers_linked: number;
+  details: Array<{
+    vp_id: number;
+    vp_customer_number: number;
+    vp_name: string;
+    titan_id: number;
+    titan_owner: string;
+    titan_facility: string;
+  }>;
+}
+
+export interface AutoLinkVendorsResult {
+  message: string;
+  vendors_linked: number;
+  details: Array<{
+    vp_id: number;
+    vp_vendor_number: number;
+    vp_name: string;
+    titan_id: number;
+    titan_vendor_name: string;
+    titan_company_name: string;
+  }>;
+}
+
 // ==================== SERVICE ====================
 
 export const vistaDataService = {
@@ -658,6 +684,11 @@ export const vistaDataService = {
     return response.data;
   },
 
+  importUnmatchedWorkOrdersToTitan: async (): Promise<ImportToTitanResult> => {
+    const response = await api.post('/vista/import-to-titan/work-orders');
+    return response.data;
+  },
+
   importUnmatchedDepartmentsToTitan: async (): Promise<ImportToTitanResult> => {
     const response = await api.post('/vista/import-to-titan/departments');
     return response.data;
@@ -707,6 +738,24 @@ export const vistaDataService = {
   // Auto-link all department codes that have exact matches to Titan departments
   autoLinkExactDepartmentMatches: async (): Promise<AutoLinkDepartmentsResult> => {
     const response = await api.post('/vista/auto-link-departments');
+    return response.data;
+  },
+
+  // Auto-link all VP customers that have exact name matches to Titan customers
+  autoLinkExactCustomerMatches: async (): Promise<AutoLinkCustomersResult> => {
+    const response = await api.post('/vista/auto-link-customers');
+    return response.data;
+  },
+
+  // Auto-link ALL VP customers that have any match (links top match for each)
+  autoLinkAllCustomerMatches: async (): Promise<AutoLinkCustomersResult> => {
+    const response = await api.post('/vista/auto-link-all-customer-matches');
+    return response.data;
+  },
+
+  // Auto-link all VP vendors that have exact name matches to Titan vendors
+  autoLinkExactVendorMatches: async (): Promise<AutoLinkVendorsResult> => {
+    const response = await api.post('/vista/auto-link-vendors');
     return response.data;
   },
 };

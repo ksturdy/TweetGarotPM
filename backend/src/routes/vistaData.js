@@ -17,6 +17,13 @@ const excelDateToJS = (excelDate) => {
   return jsDate.toISOString().split('T')[0]; // Return as YYYY-MM-DD
 };
 
+// Helper function to parse numbers, preserving 0 values (not treating them as null)
+const parseNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const num = parseFloat(value);
+  return isNaN(num) ? null : num;
+};
+
 // Configure multer for Excel file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -119,22 +126,22 @@ router.post('/import/upload', requireAdmin, upload.single('file'), async (req, r
             employee_number: row['Employee Number Emp Number'] ? String(row['Employee Number Emp Number']) : null,
             project_manager_name: row['Project Manager'] || '',
             department_code: row['Department'] || '',
-            orig_contract_amount: parseFloat(row['Orig Contract Amt']) || null,
-            contract_amount: parseFloat(row['Contract Amt']) || null,
-            billed_amount: parseFloat(row['Billed Amt']) || null,
-            received_amount: parseFloat(row['Received Amt']) || null,
-            backlog: parseFloat(row['Backlog']) || null,
-            projected_revenue: parseFloat(row['Projected Revenue']) || null,
-            gross_profit_percent: parseFloat(row['Gross Profit %']) || null,
-            earned_revenue: parseFloat(row['EarnedRevenue']) || null,
-            actual_cost: parseFloat(row['Actual Cost']) || null,
-            projected_cost: parseFloat(row['Projected Cost']) || null,
-            pf_hours_estimate: parseFloat(row['PF Hours Estimate']) || null,
-            pf_hours_jtd: parseFloat(row['PF Hours JTD']) || null,
-            sm_hours_estimate: parseFloat(row['SM Hours Estimate']) || null,
-            sm_hours_jtd: parseFloat(row['SM Hours JTD']) || null,
-            total_hours_estimate: parseFloat(row['Total Hours Estimate']) || null,
-            total_hours_jtd: parseFloat(row['Total Hours JTD']) || null,
+            orig_contract_amount: parseNumber(row['Orig Contract Amt']),
+            contract_amount: parseNumber(row['Contract Amt']),
+            billed_amount: parseNumber(row['Billed Amt']),
+            received_amount: parseNumber(row['Received Amt']),
+            backlog: parseNumber(row['Backlog']),
+            projected_revenue: parseNumber(row['Projected Revenue']),
+            gross_profit_percent: parseNumber(row['Gross Profit %']),
+            earned_revenue: parseNumber(row['EarnedRevenue']),
+            actual_cost: parseNumber(row['Actual Cost']),
+            projected_cost: parseNumber(row['Projected Cost']),
+            pf_hours_estimate: parseNumber(row['PF Hours Estimate']),
+            pf_hours_jtd: parseNumber(row['PF Hours JTD']),
+            sm_hours_estimate: parseNumber(row['SM Hours Estimate']),
+            sm_hours_jtd: parseNumber(row['SM Hours JTD']),
+            total_hours_estimate: parseNumber(row['Total Hours Estimate']),
+            total_hours_jtd: parseNumber(row['Total Hours JTD']),
             customer_number: row['Customer'] ? String(row['Customer']) : null,
             customer_name: row['Customer Name'] || '',
             ship_city: row['Ship City'] || '',
@@ -186,6 +193,12 @@ router.post('/import/upload', requireAdmin, upload.single('file'), async (req, r
         let updatedCount = 0;
 
         for (const row of data) {
+          // Try multiple possible column names for contract amount (including with spaces from Excel quirks)
+          const contractAmt = parseNumber(
+            row['Contract Amt'] ?? row[' Contract Amt '] ?? row['Contract Amount'] ?? row['ContractAmt'] ??
+            row['Orig Contract Amt'] ?? row['Original Contract'] ?? row['Total Contract']
+          );
+
           const woData = {
             work_order_number: String(row['Work Order'] || '').trim(),
             description: row['Description'] || '',
@@ -196,18 +209,18 @@ router.post('/import/upload', requireAdmin, upload.single('file'), async (req, r
             project_manager_name: row['Project Manager'] || '',
             department_code: row['Department'] || '',
             negotiated_work: row['Negotiated Work'] || '',
-            contract_amount: parseFloat(row['Contract Amt']) || null,
-            actual_cost: parseFloat(row['Actual Cost']) || null,
-            billed_amount: parseFloat(row['Billed Amt']) || null,
-            received_amount: parseFloat(row['Received Amt']) || null,
-            backlog: parseFloat(row['Backlog']) || null,
-            gross_profit_percent: parseFloat(row['Gross Profit %']) || null,
-            pf_hours_jtd: parseFloat(row['PF/SF/PF Hours JTD']) || null,
-            sm_hours_jtd: parseFloat(row['SM Hours JTD']) || null,
-            mep_jtd: parseFloat(row['MEP JTD']) || null,
-            material_jtd: parseFloat(row['Material JTD']) || null,
-            subcontracts_jtd: parseFloat(row['Subcontracts JTD']) || null,
-            rentals_jtd: parseFloat(row['Rentals JTD']) || null,
+            contract_amount: contractAmt,
+            actual_cost: parseNumber(row['Actual Cost']),
+            billed_amount: parseNumber(row['Billed Amt'] ?? row[' Billed Amt '] ?? row['Billed Amount'] ?? row['BilledAmt']),
+            received_amount: parseNumber(row['Received Amt'] ?? row['Received Amount'] ?? row['ReceivedAmt']),
+            backlog: parseNumber(row['Backlog']),
+            gross_profit_percent: parseNumber(row['Gross Profit %'] ?? row['Gross Profit Pct'] ?? row['GP%']),
+            pf_hours_jtd: parseNumber(row['PF/SF/PF Hours JTD'] ?? row['PF Hours JTD']),
+            sm_hours_jtd: parseNumber(row['SM Hours JTD']),
+            mep_jtd: parseNumber(row['MEP JTD']),
+            material_jtd: parseNumber(row['Material JTD']),
+            subcontracts_jtd: parseNumber(row['Subcontracts JTD']),
+            rentals_jtd: parseNumber(row['Rentals JTD']),
             customer_name: row['Customer'] || '',
             city: row['City'] || '',
             state: row['State'] || '',
@@ -900,6 +913,19 @@ router.post('/import-to-titan/contracts', requireAdmin, async (req, res, next) =
   }
 });
 
+// POST /api/vista/import-to-titan/work-orders - Import unmatched VP work orders as new Titan projects
+router.post('/import-to-titan/work-orders', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id);
+    res.json({
+      message: `Successfully imported ${result.imported} work orders as Titan projects`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/vista/import-to-titan/departments - Import unmatched VP department codes as new Titan departments
 router.post('/import-to-titan/departments', requireAdmin, async (req, res, next) => {
   try {
@@ -945,6 +971,48 @@ router.post('/auto-link-departments', requireAdmin, async (req, res, next) => {
 
     res.json({
       message: `Auto-linked ${result.codes_linked} department codes - updated ${result.contracts_updated} contracts and ${result.work_orders_updated} work orders`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/vista/auto-link-customers - Auto-link all exact customer matches
+router.post('/auto-link-customers', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
+
+    res.json({
+      message: `Auto-linked ${result.customers_linked} customers`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/vista/auto-link-all-customer-matches - Link ALL customer matches (any similarity)
+router.post('/auto-link-all-customer-matches', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.autoLinkAllCustomerMatches(req.tenantId, req.user.id);
+
+    res.json({
+      message: `Auto-linked ${result.customers_linked} customers`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/vista/auto-link-vendors - Auto-link all exact vendor matches
+router.post('/auto-link-vendors', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
+
+    res.json({
+      message: `Auto-linked ${result.vendors_linked} vendors`,
       ...result
     });
   } catch (error) {

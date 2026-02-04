@@ -610,7 +610,9 @@ const VistaData = {
 
   async getAllVPEmployees(filters = {}) {
     let query = `
-      SELECT vpe.*,
+      SELECT vpe.id, vpe.employee_number, vpe.first_name, vpe.last_name, vpe.hire_date,
+        vpe.active, vpe.linked_employee_id, vpe.link_status, vpe.import_batch_id,
+        vpe.created_at, vpe.updated_at, vpe.linked_at, vpe.linked_by,
         te.first_name || ' ' || te.last_name as linked_employee_name,
         te.employee_number as linked_employee_number
       FROM vp_employees vpe
@@ -754,7 +756,10 @@ const VistaData = {
 
   async getAllVPCustomers(filters = {}) {
     let query = `
-      SELECT vpc.*,
+      SELECT vpc.id, vpc.customer_number, vpc.name, vpc.address, vpc.address2,
+        vpc.city, vpc.state, vpc.zip, vpc.active, vpc.linked_customer_id,
+        vpc.link_status, vpc.import_batch_id, vpc.created_at, vpc.updated_at,
+        vpc.linked_at, vpc.linked_by,
         tc.customer_owner as linked_customer_owner,
         tc.customer_facility as linked_customer_facility
       FROM vp_customers vpc
@@ -897,7 +902,9 @@ const VistaData = {
   },
 
   async getAllVPVendors(filters = {}) {
-    let query = 'SELECT * FROM vp_vendors WHERE 1=1';
+    let query = `SELECT id, vendor_number, name, address, address2, city, state, zip,
+      active, linked_vendor_id, link_status, import_batch_id, created_at, updated_at,
+      linked_at, linked_by FROM vp_vendors WHERE 1=1`;
     const params = [];
     let paramCount = 1;
 
@@ -1542,7 +1549,7 @@ const VistaData = {
         // Create new Titan customer (using VP name as customer_owner)
         const newCustomer = await client.query(
           `INSERT INTO customers (
-            tenant_id, customer_owner, customer_facility, address, city, state, zip, created_at, updated_at
+            tenant_id, customer_owner, customer_facility, address, city, state, zip_code, created_at, updated_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           RETURNING id`,
           [
@@ -2025,6 +2032,88 @@ const VistaData = {
     }
   },
 
+  // Import unmatched VP work orders as new Titan projects
+  async importUnmatchedWorkOrdersToTitan(tenantId, userId) {
+    const client = await db.getClient();
+    let imported = 0;
+    const results = [];
+
+    try {
+      await client.query('BEGIN');
+
+      // Get all unlinked VP work orders
+      const unlinked = await client.query(
+        `SELECT id, work_order_number, description, customer_name, department_code,
+                contract_amount, status, employee_number, project_manager_name, linked_department_id
+         FROM vp_work_orders
+         WHERE tenant_id = $1 AND link_status = 'unmatched'
+         ORDER BY work_order_number`,
+        [tenantId]
+      );
+
+      for (const vpWorkOrder of unlinked.rows) {
+        // Look up the employee by employee_number to set as project manager
+        let managerId = null;
+        if (vpWorkOrder.employee_number) {
+          const employeeResult = await client.query(
+            `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
+            [tenantId, String(vpWorkOrder.employee_number)]
+          );
+          if (employeeResult.rows.length > 0) {
+            managerId = employeeResult.rows[0].id;
+          }
+        }
+
+        // Map VP status to Titan status (default to 'Open' if empty)
+        const projectStatus = vpWorkOrder.status && vpWorkOrder.status.trim() !== ''
+          ? vpWorkOrder.status
+          : 'Open';
+
+        // Create new Titan project with WO- prefix
+        const newProject = await client.query(
+          `INSERT INTO projects (
+            tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          RETURNING id`,
+          [
+            tenantId,
+            'WO-' + (vpWorkOrder.work_order_number || ''),
+            vpWorkOrder.description || 'Work Order ' + vpWorkOrder.work_order_number || 'Imported Work Order',
+            vpWorkOrder.customer_name || 'Unknown Client',
+            projectStatus,
+            managerId,
+            vpWorkOrder.linked_department_id || null
+          ]
+        );
+
+        // Link the VP work order to the new Titan project (we'll use a new column or just mark as manual_matched)
+        await client.query(
+          `UPDATE vp_work_orders SET
+            link_status = 'manual_matched',
+            linked_at = CURRENT_TIMESTAMP,
+            linked_by = $1
+          WHERE id = $2`,
+          [userId, vpWorkOrder.id]
+        );
+
+        imported++;
+        results.push({
+          vp_id: vpWorkOrder.id,
+          titan_id: newProject.rows[0].id,
+          name: vpWorkOrder.description || vpWorkOrder.work_order_number
+        });
+      }
+
+      await client.query('COMMIT');
+      return { imported, total: unlinked.rows.length, results };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Import unmatched VP department codes as new Titan departments
   async importUnmatchedDepartmentsToTitan(tenantId, userId) {
     const client = await db.getClient();
@@ -2153,6 +2242,187 @@ const VistaData = {
         work_orders_updated: totalWorkOrdersUpdated,
         total_updated: totalContractsUpdated + totalWorkOrdersUpdated,
         details: linkedCodes
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Auto-link VP customers to Titan customers where similarity >= 100% (rounded)
+  async autoLinkExactCustomerMatches(tenantId, userId) {
+    // Use the existing similarity-based duplicate finder to get 100% matches
+    const duplicates = await this.findCustomerDuplicates(tenantId, 0.995);
+
+    const client = await db.getClient();
+    let totalLinked = 0;
+    const linkedCustomers = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const dup of duplicates) {
+        // Get the top match if it's >= 100% (after rounding)
+        const topMatch = dup.potential_matches[0];
+        if (!topMatch || topMatch.similarity < 1.0) continue;
+
+        // Check if this Titan customer is already linked to another VP customer
+        const existingLink = await client.query(
+          `SELECT id FROM vp_customers WHERE linked_customer_id = $1 AND id != $2`,
+          [topMatch.titan_id, dup.vp_id]
+        );
+        if (existingLink.rows.length > 0) continue;
+
+        // Link the VP customer to Titan customer
+        await client.query(
+          `UPDATE vp_customers SET
+            linked_customer_id = $1,
+            link_status = 'auto_matched',
+            linked_at = CURRENT_TIMESTAMP,
+            linked_by = $2
+          WHERE id = $3`,
+          [topMatch.titan_id, userId, dup.vp_id]
+        );
+
+        totalLinked++;
+        linkedCustomers.push({
+          vp_id: dup.vp_id,
+          vp_customer_number: dup.vp_customer_number,
+          vp_name: dup.vp_name,
+          titan_id: topMatch.titan_id,
+          titan_owner: topMatch.titan_owner,
+          titan_facility: topMatch.titan_facility
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        customers_linked: totalLinked,
+        details: linkedCustomers
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Auto-link ALL VP customers that have any match (links top match for each)
+  async autoLinkAllCustomerMatches(tenantId, userId) {
+    // Use the existing similarity-based duplicate finder to get ALL matches
+    const duplicates = await this.findCustomerDuplicates(tenantId, 0.5);
+
+    const client = await db.getClient();
+    let totalLinked = 0;
+    const linkedCustomers = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const dup of duplicates) {
+        // Get the top match (highest similarity)
+        const topMatch = dup.potential_matches[0];
+        if (!topMatch) continue;
+
+        // Check if this Titan customer is already linked to another VP customer
+        const existingLink = await client.query(
+          `SELECT id FROM vp_customers WHERE linked_customer_id = $1 AND id != $2`,
+          [topMatch.titan_id, dup.vp_id]
+        );
+        if (existingLink.rows.length > 0) continue;
+
+        // Link the VP customer to Titan customer
+        await client.query(
+          `UPDATE vp_customers SET
+            linked_customer_id = $1,
+            link_status = 'auto_matched',
+            linked_at = CURRENT_TIMESTAMP,
+            linked_by = $2
+          WHERE id = $3`,
+          [topMatch.titan_id, userId, dup.vp_id]
+        );
+
+        totalLinked++;
+        linkedCustomers.push({
+          vp_id: dup.vp_id,
+          vp_customer_number: dup.vp_customer_number,
+          vp_name: dup.vp_name,
+          titan_id: topMatch.titan_id,
+          titan_owner: topMatch.titan_owner,
+          titan_facility: topMatch.titan_facility,
+          similarity: topMatch.similarity
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        customers_linked: totalLinked,
+        details: linkedCustomers
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Auto-link VP vendors to Titan vendors where similarity >= 100% (rounded)
+  async autoLinkExactVendorMatches(tenantId, userId) {
+    // Use the existing similarity-based duplicate finder to get 100% matches
+    const duplicates = await this.findVendorDuplicates(tenantId, 0.995);
+
+    const client = await db.getClient();
+    let totalLinked = 0;
+    const linkedVendors = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const dup of duplicates) {
+        // Get the top match if it's >= 100% (after rounding)
+        const topMatch = dup.potential_matches[0];
+        if (!topMatch || topMatch.similarity < 1.0) continue;
+
+        // Check if this Titan vendor is already linked to another VP vendor
+        const existingLink = await client.query(
+          `SELECT id FROM vp_vendors WHERE linked_vendor_id = $1 AND id != $2`,
+          [topMatch.titan_id, dup.vp_id]
+        );
+        if (existingLink.rows.length > 0) continue;
+
+        // Link the VP vendor to Titan vendor
+        await client.query(
+          `UPDATE vp_vendors SET
+            linked_vendor_id = $1,
+            link_status = 'auto_matched',
+            linked_at = CURRENT_TIMESTAMP,
+            linked_by = $2
+          WHERE id = $3`,
+          [topMatch.titan_id, userId, dup.vp_id]
+        );
+
+        totalLinked++;
+        linkedVendors.push({
+          vp_id: dup.vp_id,
+          vp_vendor_number: dup.vp_vendor_number,
+          vp_name: dup.vp_name,
+          titan_id: topMatch.titan_id,
+          titan_vendor_name: topMatch.titan_vendor_name,
+          titan_company_name: topMatch.titan_company_name
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        vendors_linked: totalLinked,
+        details: linkedVendors
       };
     } catch (error) {
       await client.query('ROLLBACK');
