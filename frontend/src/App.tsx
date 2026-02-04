@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/common/Layout';
 import Login from './pages/Login';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ChangePasswordModal from './components/security/ChangePasswordModal';
 import Dashboard from './pages/Dashboard';
 // Public pages
@@ -37,6 +39,8 @@ import AccountManagementList from './pages/accountManagement/AccountManagementLi
 import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
 import VendorList from './pages/accountManagement/VendorList';
+import WorkOrderList from './pages/accountManagement/WorkOrderList';
+import WorkOrderDetail from './pages/accountManagement/WorkOrderDetail';
 import TeamList from './pages/accountManagement/TeamList';
 import TeamDetail from './pages/accountManagement/TeamDetail';
 import CustomerDetail from './pages/CustomerDetail';
@@ -123,6 +127,8 @@ const App: React.FC = () => {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Platform Admin routes */}
         <Route
@@ -174,6 +180,8 @@ const App: React.FC = () => {
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />
                 <Route path="/account-management/vendors" element={<VendorList />} />
+                <Route path="/account-management/work-orders" element={<WorkOrderList />} />
+                <Route path="/account-management/work-orders/:id" element={<WorkOrderDetail />} />
                 <Route path="/account-management/teams" element={<TeamList />} />
                 <Route path="/account-management/teams/:id" element={<TeamDetail />} />
                 <Route path="/customers/:id" element={<CustomerDetail />} />

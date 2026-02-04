@@ -227,9 +227,124 @@ This email was sent from Tweet Garot PM.
   `.trim();
 };
 
+// Generate password reset email HTML
+const generatePasswordResetEmailHtml = (user, resetUrl) => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #002356, #004080);
+      color: white;
+      padding: 20px;
+      border-radius: 8px 8px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.1em;
+    }
+    .content {
+      background: #f9fafb;
+      padding: 30px;
+      border: 1px solid #e5e7eb;
+      border-top: none;
+    }
+    .btn {
+      display: inline-block;
+      background: #002356;
+      color: white !important;
+      padding: 14px 28px;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      margin: 20px 0;
+    }
+    .warning {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    .footer {
+      background: #f3f4f6;
+      padding: 15px 20px;
+      border: 1px solid #e5e7eb;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>TITAN</h1>
+  </div>
+  <div class="content">
+    <h2>Password Reset Request</h2>
+    <p>Hi ${user.first_name},</p>
+    <p>We received a request to reset the password for your TITAN account associated with ${user.email}.</p>
+    <p>Click the button below to reset your password:</p>
+    <p style="text-align: center;">
+      <a href="${resetUrl}" class="btn">Reset Password</a>
+    </p>
+    <p>Or copy and paste this link into your browser:</p>
+    <p style="word-break: break-all; font-size: 14px; color: #6b7280;">${resetUrl}</p>
+    <div class="warning">
+      <strong>Important:</strong> This link will expire in 1 hour. If you didn't request this password reset, you can safely ignore this email.
+    </div>
+  </div>
+  <div class="footer">
+    <p>This email was sent from TITAN Project Management.</p>
+    <p>If you didn't request a password reset, please contact your administrator.</p>
+  </div>
+</body>
+</html>
+  `;
+};
+
+// Generate password reset email plain text
+const generatePasswordResetEmailText = (user, resetUrl) => {
+  return `
+Password Reset Request - TITAN
+
+Hi ${user.first_name},
+
+We received a request to reset the password for your TITAN account associated with ${user.email}.
+
+To reset your password, visit the following link:
+${resetUrl}
+
+This link will expire in 1 hour.
+
+If you didn't request this password reset, you can safely ignore this email.
+
+---
+This email was sent from TITAN Project Management.
+If you didn't request a password reset, please contact your administrator.
+  `.trim();
+};
+
 module.exports = {
   isEmailConfigured,
   sendEmail,
   generateRFIEmailHtml,
   generateRFIEmailText,
+  generatePasswordResetEmailHtml,
+  generatePasswordResetEmailText,
 };

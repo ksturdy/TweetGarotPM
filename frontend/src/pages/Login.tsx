@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Login.css';
 
@@ -92,6 +92,12 @@ const Login: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+            </div>
+
+            <div style={{ textAlign: 'right', marginTop: '-8px', marginBottom: '16px' }}>
+              <Link to="/forgot-password" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                Forgot Password?
+              </Link>
             </div>
 
             <button type="submit" className="btn btn-primary btn-block" disabled={loading}>

@@ -5,6 +5,7 @@ const User = require('../models/User');
 const config = require('../config');
 const { authenticate } = require('../middleware/auth');
 const { getTenantById } = require('../middleware/tenant');
+const { sendEmail, generatePasswordResetEmailHtml, generatePasswordResetEmailText } = require('../utils/emailService');
 
 const router = express.Router();
 
@@ -266,5 +267,102 @@ router.get('/me', authenticate, async (req, res, next) => {
     next(error);
   }
 });
+
+// Forgot Password - Request reset email
+router.post(
+  '/forgot-password',
+  [body('email').isEmail().normalizeEmail()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { email } = req.body;
+
+      // Always return success to prevent email enumeration
+      const user = await User.findByEmail(email);
+
+      if (user && user.is_active !== false) {
+        // Create reset token
+        const token = await User.createPasswordResetToken(user.id);
+
+        // Build reset URL
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+
+        // Send email
+        const emailResult = await sendEmail({
+          to: user.email,
+          subject: 'Password Reset Request - TITAN',
+          html: generatePasswordResetEmailHtml(user, resetUrl),
+          text: generatePasswordResetEmailText(user, resetUrl),
+        });
+
+        // Log security event
+        await User.logSecurityEvent(user.id, 'password_reset_requested', null,
+          req.ip, req.get('User-Agent'));
+
+        if (!emailResult.success && !emailResult.preview) {
+          console.error('Failed to send password reset email:', emailResult.error);
+        }
+
+        // Log reset URL in development for testing
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('Password reset URL:', resetUrl);
+        }
+      }
+
+      // Always return success (security: don't reveal if email exists)
+      res.json({
+        message: 'If an account exists with this email, you will receive a password reset link shortly.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Reset Password - Set new password with token
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty().isLength({ min: 64, max: 64 }),
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters')
+      .matches(/[A-Z]/)
+      .withMessage('Password must contain at least one uppercase letter')
+      .matches(/[a-z]/)
+      .withMessage('Password must contain at least one lowercase letter')
+      .matches(/[0-9]/)
+      .withMessage('Password must contain at least one number'),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { token, password } = req.body;
+
+      // Find valid token
+      const resetToken = await User.findPasswordResetToken(token);
+
+      if (!resetToken) {
+        return res.status(400).json({
+          error: 'Invalid or expired reset link. Please request a new password reset.'
+        });
+      }
+
+      // Reset password (forceChange = false since user just set it)
+      await User.resetPassword(resetToken.user_id, password, false);
+
+      // Mark token as used
+      await User.markTokenAsUsed(token);
+
+      // Log security event
+      await User.logSecurityEvent(resetToken.user_id, 'password_reset_completed', null,
+        req.ip, req.get('User-Agent'));
+
+      res.json({ message: 'Password has been reset successfully. You can now log in with your new password.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 module.exports = router;
