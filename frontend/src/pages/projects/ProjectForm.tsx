@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
+import { customersApi, Customer } from '../../services/customers';
+import SearchableSelect from '../../components/SearchableSelect';
 
 const ProjectForm: React.FC = () => {
   const navigate = useNavigate();
@@ -16,10 +18,26 @@ const ProjectForm: React.FC = () => {
     end_date: '',
     status: 'Open',
     description: '',
+    customer_id: '',
+    owner_customer_id: '',
+  });
+
+  // Fetch customers for dropdowns
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll(),
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof formData) => projectsApi.create(data),
+    mutationFn: (data: typeof formData) => {
+      // Convert empty strings to undefined for customer IDs
+      const submitData = {
+        ...data,
+        customer_id: data.customer_id ? parseInt(data.customer_id) : undefined,
+        owner_customer_id: data.owner_customer_id ? parseInt(data.owner_customer_id) : undefined,
+      };
+      return projectsApi.create(submitData);
+    },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       navigate(`/projects/${response.data.id}`);
@@ -78,6 +96,30 @@ const ProjectForm: React.FC = () => {
               onChange={handleChange}
               required
             />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Customer (GC)</label>
+              <SearchableSelect
+                options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                value={formData.customer_id}
+                onChange={(value) => setFormData(prev => ({ ...prev, customer_id: value }))}
+                placeholder="-- Select Customer --"
+              />
+              <small style={{ color: '#64748b', fontSize: '0.75rem' }}>The General Contractor you have the contract with</small>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Owner</label>
+              <SearchableSelect
+                options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                value={formData.owner_customer_id}
+                onChange={(value) => setFormData(prev => ({ ...prev, owner_customer_id: value }))}
+                placeholder="-- Select Owner --"
+              />
+              <small style={{ color: '#64748b', fontSize: '0.75rem' }}>The building owner / end customer</small>
+            </div>
           </div>
 
           <div className="form-group">

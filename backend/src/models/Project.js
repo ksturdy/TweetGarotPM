@@ -20,10 +20,13 @@ const Project = {
    */
   async findById(id) {
     const result = await db.query(
-      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
+      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+              c.customer_owner as customer_name, oc.customer_owner as owner_name
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
        LEFT JOIN departments d ON p.department_id = d.id
+       LEFT JOIN customers c ON p.customer_id = c.id
+       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
        WHERE p.id = $1`,
       [id]
     );
@@ -35,10 +38,13 @@ const Project = {
    */
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
-      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
+      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+              c.customer_owner as customer_name, oc.customer_owner as owner_name
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
        LEFT JOIN departments d ON p.department_id = d.id
+       LEFT JOIN customers c ON p.customer_id = c.id
+       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
        WHERE p.id = $1 AND p.tenant_id = $2`,
       [id, tenantId]
     );
@@ -50,10 +56,13 @@ const Project = {
    */
   async findAll(filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+             c.customer_owner as customer_name, oc.customer_owner as owner_name
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN departments d ON p.department_id = d.id
+      LEFT JOIN customers c ON p.customer_id = c.id
+      LEFT JOIN customers oc ON p.owner_customer_id = oc.id
       WHERE 1=1
     `;
     const params = [];
@@ -79,10 +88,13 @@ const Project = {
    */
   async findAllByTenant(tenantId, filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+             c.customer_owner as customer_name, oc.customer_owner as owner_name
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN departments d ON p.department_id = d.id
+      LEFT JOIN customers c ON p.customer_id = c.id
+      LEFT JOIN customers oc ON p.owner_customer_id = oc.id
       WHERE p.tenant_id = $1
     `;
     const params = [tenantId];

@@ -19,6 +19,10 @@ export interface Project {
   contract_value?: number;
   gross_margin_percent?: number;
   backlog?: number;
+  customer_id?: number;
+  customer_name?: string;
+  owner_customer_id?: number;
+  owner_name?: string;
   created_at: string;
 }
 

@@ -121,3 +121,36 @@ export const getCustomerOpportunities = async (id: string) => {
   return response.data;
 };
 
+// Company-level functions (aggregates across all facilities)
+export const getCompanyMetrics = async (id: string, facilityId?: number) => {
+  const params = facilityId ? `?facility_id=${facilityId}` : '';
+  const response = await api.get(`/customers/${id}/company-metrics${params}`);
+  return response.data;
+};
+export const getCompanyFacilities = async (id: string) => {
+  const response = await api.get(`/customers/${id}/facilities`);
+  return response.data;
+};
+export const getCustomerWorkOrders = async (id: string, includeAll?: boolean) => {
+  const params = includeAll ? '?all=true' : '';
+  const response = await api.get(`/customers/${id}/work-orders${params}`);
+  return response.data;
+};
+export const getCustomerContacts = async (id: string) => {
+  const response = await api.get(`/customers/${id}/contacts`);
+  return response.data;
+};
+// Company-level data (all facilities)
+export const getCompanyProjects = async (id: string) => {
+  const response = await api.get(`/customers/${id}/company-projects`);
+  return response.data;
+};
+export const getCompanyBids = async (id: string) => {
+  const response = await api.get(`/customers/${id}/company-bids`);
+  return response.data;
+};
+export const getCompanyOpportunities = async (id: string) => {
+  const response = await api.get(`/customers/${id}/company-opportunities`);
+  return response.data;
+};
+

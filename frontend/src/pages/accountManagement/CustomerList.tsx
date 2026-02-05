@@ -13,7 +13,7 @@ const CustomerList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterState, setFilterState] = useState('all');
   const [filterManager, setFilterManager] = useState('all');
-  const [sortColumn, setSortColumn] = useState<string>('customer_facility');
+  const [sortColumn, setSortColumn] = useState<string>('customer_owner');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -225,10 +225,24 @@ const CustomerList: React.FC = () => {
   const states = ['all', ...new Set(customers.map(c => c.state).filter(Boolean))];
   const managers = ['all', ...new Set(customers.map(c => c.account_manager).filter(Boolean))];
 
-  // Filter customers
-  const filteredCustomers = customers.filter(customer => {
+  // Get unique companies with facility counts (deduplicate by customer_owner)
+  const uniqueCompanies = React.useMemo(() => {
+    const companyMap = new Map<string, Customer & { facility_count: number }>();
+    customers.forEach(customer => {
+      const key = customer.customer_owner || customer.customer_facility || `unknown-${customer.id}`;
+      if (!companyMap.has(key)) {
+        companyMap.set(key, { ...customer, facility_count: 1 });
+      } else {
+        const existing = companyMap.get(key)!;
+        existing.facility_count += 1;
+      }
+    });
+    return Array.from(companyMap.values());
+  }, [customers]);
+
+  // Filter customers (now filtering unique companies)
+  const filteredCustomers = uniqueCompanies.filter(customer => {
     const matchesSearch = !searchTerm ||
-      customer.customer_facility?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.customer_owner?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.account_manager?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -249,13 +263,13 @@ const CustomerList: React.FC = () => {
         aValue = a.favorite ? 1 : 0;
         bValue = b.favorite ? 1 : 0;
         break;
-      case 'customer_facility':
-        aValue = (a.customer_facility || '').toLowerCase();
-        bValue = (b.customer_facility || '').toLowerCase();
-        break;
       case 'customer_owner':
         aValue = (a.customer_owner || '').toLowerCase();
         bValue = (b.customer_owner || '').toLowerCase();
+        break;
+      case 'facility_count':
+        aValue = (a as any).facility_count || 0;
+        bValue = (b as any).facility_count || 0;
         break;
       case 'account_manager':
         aValue = (a.account_manager || '').toLowerCase();
@@ -296,7 +310,8 @@ const CustomerList: React.FC = () => {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      setSortDirection('asc');
+      // Default to 'desc' for favorite so favorites appear first
+      setSortDirection(column === 'favorite' ? 'desc' : 'asc');
     }
   };
 
@@ -361,14 +376,14 @@ const CustomerList: React.FC = () => {
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)', width: '36px', height: '36px', fontSize: '1rem' }}>🏢</div>
           <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{new Set(filteredCustomers.map(c => c.customer_owner).filter(Boolean)).size}</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Unique Companies</div>
+            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.length}</div>
+            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Companies</div>
           </div>
         </div>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '36px', height: '36px', fontSize: '1rem' }}>👥</div>
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '36px', height: '36px', fontSize: '1rem' }}>🏗️</div>
           <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.length}</div>
+            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.reduce((sum, c) => sum + ((c as any).facility_count || 1), 0)}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Facilities</div>
           </div>
         </div>
@@ -458,8 +473,8 @@ const CustomerList: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('customer_owner')}>
                 Company <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('customer_facility')}>
-                Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('facility_count')} style={{ textAlign: 'center' }}>
+                Facilities <span className="sales-sort-icon">{sortColumn === 'facility_count' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('market')}>
                 Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -525,11 +540,21 @@ const CustomerList: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td>
-                    <div className="sales-project-info" style={{ padding: '4px 0' }}>
-                      <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 500 }}>{customer.customer_facility || '-'}</h4>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{customer.address || 'No address'}</span>
-                    </div>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '28px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      color: '#3b82f6'
+                    }}>
+                      {(customer as any).facility_count}
+                    </span>
                   </td>
                   <td onClick={(e) => { e.stopPropagation(); setEditingCell({ id: customer.id, field: 'market' }); }}>
                     {editingCell?.id === customer.id && editingCell?.field === 'market' ? (

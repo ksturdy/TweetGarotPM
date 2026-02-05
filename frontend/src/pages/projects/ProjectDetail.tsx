@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
-import { employeesApi, Employee } from '../../services/employees';
+import { customersApi, Customer } from '../../services/customers';
+import SearchableSelect from '../../components/SearchableSelect';
 import { format } from 'date-fns';
 
 // Market icons - matching opportunities
@@ -14,51 +15,57 @@ const MARKET_OPTIONS = [
   { value: 'Retail', icon: '🏬', label: 'Retail' },
   { value: 'Government', icon: '🏛️', label: 'Government' },
   { value: 'Hospitality', icon: '🏨', label: 'Hospitality' },
-  { value: 'Data Center', icon: '💾', label: 'Data Center' }
+  { value: 'Data Center', icon: '💾', label: 'Data Center' },
+  // VP Markets
+  { value: 'MFG-Food', icon: '🍔', label: 'MFG-Food' },
+  { value: 'Health Care', icon: '🏥', label: 'Health Care' },
+  { value: 'MFG-Other', icon: '🏭', label: 'MFG-Other' },
+  { value: 'MFG-Paper', icon: '📄', label: 'MFG-Paper' },
+  { value: 'Amusement/Recreation', icon: '🎢', label: 'Amusement/Recreation' },
+  { value: 'Educational', icon: '🏫', label: 'Educational' },
+  { value: 'Manufacturing', icon: '🏭', label: 'Manufacturing' },
+  { value: 'Office', icon: '🏢', label: 'Office' },
+  { value: 'Power', icon: '⚡', label: 'Power' },
+  { value: 'Lodging', icon: '🏨', label: 'Lodging' },
+  { value: 'Religious', icon: '⛪', label: 'Religious' },
+  { value: 'Public Safety', icon: '🚔', label: 'Public Safety' },
+  { value: 'Transportation', icon: '🚚', label: 'Transportation' },
+  { value: 'Communication', icon: '📡', label: 'Communication' },
+  { value: 'Conservation/Development', icon: '🌲', label: 'Conservation/Development' },
+  { value: 'Sewage/Waste Disposal', icon: '♻️', label: 'Sewage/Waste Disposal' },
+  { value: 'Highway/Street', icon: '🛣️', label: 'Highway/Street' },
+  { value: 'Water Supply', icon: '💧', label: 'Water Supply' },
+  { value: 'Residential', icon: '🏠', label: 'Residential' },
 ];
 
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingTitan, setIsEditingTitan] = useState(false);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
     queryFn: () => projectsApi.getById(Number(id)).then((res) => res.data),
   });
 
-  const { data: employeesResponse } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => employeesApi.getAll(),
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll(),
   });
-  const employees = employeesResponse?.data?.data || [];
 
-  const [formData, setFormData] = useState({
-    name: '',
-    number: '',
-    client: '',
-    address: '',
-    start_date: '',
-    end_date: '',
-    status: '',
+  // Titan-editable fields only
+  const [titanFormData, setTitanFormData] = useState({
+    customer_id: '',
+    owner_customer_id: '',
     description: '',
-    market: '',
-    manager_id: '',
   });
 
   React.useEffect(() => {
     if (project) {
-      setFormData({
-        name: project.name,
-        number: project.number,
-        client: project.client,
-        address: project.address || '',
-        start_date: project.start_date || '',
-        end_date: project.end_date || '',
-        status: project.status,
+      setTitanFormData({
+        customer_id: project.customer_id?.toString() || '',
+        owner_customer_id: project.owner_customer_id?.toString() || '',
         description: project.description || '',
-        market: project.market || '',
-        manager_id: project.manager_id?.toString() || '',
       });
     }
   }, [project]);
@@ -68,30 +75,23 @@ const ProjectDetail: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setIsEditing(false);
+      setIsEditingTitan(false);
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleTitanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const submitData = {
-      name: formData.name,
-      number: formData.number,
-      client: formData.client,
-      address: formData.address || undefined,
-      startDate: formData.start_date || undefined,
-      endDate: formData.end_date || undefined,
-      status: formData.status,
-      description: formData.description || undefined,
-      market: formData.market || undefined,
-      managerId: formData.manager_id ? Number(formData.manager_id) : undefined,
+      customerId: titanFormData.customer_id ? Number(titanFormData.customer_id) : undefined,
+      ownerCustomerId: titanFormData.owner_customer_id ? Number(titanFormData.owner_customer_id) : undefined,
+      description: titanFormData.description || undefined,
     };
     updateMutation.mutate(submitData);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleTitanChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setTitanFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   if (isLoading) {
@@ -113,6 +113,19 @@ const ProjectDetail: React.FC = () => {
     { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
   ];
 
+  const getStatusColor = (status: string): string => {
+    const colors: { [key: string]: string } = {
+      'Open': '#10b981',
+      'Soft-Closed': '#f59e0b',
+      'Hard-Closed': '#6b7280',
+      'active': '#10b981',
+      'on_hold': '#f59e0b',
+      'completed': '#3b82f6',
+      'cancelled': '#ef4444'
+    };
+    return colors[status] || '#6b7280';
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '1rem' }}>
@@ -121,280 +134,272 @@ const ProjectDetail: React.FC = () => {
 
       <div className="section-header" style={{ marginBottom: '1rem' }}>
         <h1 className="page-title" style={{ margin: 0 }}>{project.name}</h1>
-        {!isEditing && (
-          <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
-            Edit Project
-          </button>
-        )}
       </div>
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        {isEditing ? (
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Project Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  className="form-input"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
+      {/* Two-column layout: Vista (left) and Titan (right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
 
-              <div className="form-group">
-                <label className="form-label">Project Number *</label>
-                <input
-                  type="text"
-                  name="number"
-                  className="form-input"
-                  value={formData.number}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
+        {/* LEFT SIDE: Vista Data (Read-only) */}
+        <div className="card" style={{ position: 'relative' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '1rem',
+            paddingBottom: '0.75rem',
+            borderBottom: '1px solid #e2e8f0'
+          }}>
+            <span style={{ fontSize: '1.25rem' }}>📊</span>
+            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Vista Project Data</h2>
+            <span style={{
+              fontSize: '0.7rem',
+              padding: '0.2rem 0.5rem',
+              background: '#f1f5f9',
+              borderRadius: '4px',
+              color: '#64748b',
+              marginLeft: 'auto'
+            }}>
+              Read-only
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Project Number</div>
+              <div style={{ fontWeight: 500 }}>{project.number}</div>
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Client *</label>
-              <input
-                type="text"
-                name="client"
-                className="form-input"
-                value={formData.client}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Address</label>
-              <input
-                type="text"
-                name="address"
-                className="form-input"
-                value={formData.address}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Status</label>
-                <select
-                  name="status"
-                  className="form-input"
-                  value={formData.status}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="active">Active</option>
-                  <option value="on_hold">On Hold</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Market</label>
-                <select
-                  name="market"
-                  className="form-input"
-                  value={formData.market}
-                  onChange={handleChange}
-                >
-                  <option value="">Select Market</option>
-                  {MARKET_OPTIONS.map((market) => (
-                    <option key={market.value} value={market.value}>
-                      {market.icon} {market.label}
-                    </option>
-                  ))}
-                </select>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Status</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: getStatusColor(project.status)
+                }}></span>
+                {project.status}
               </div>
             </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Project Manager</label>
-                <select
-                  name="manager_id"
-                  className="form-input"
-                  value={formData.manager_id}
-                  onChange={handleChange}
-                >
-                  <option value="">Select Manager</option>
-                  {employees?.filter((emp: Employee) =>
-                    // Show active employees, OR the currently assigned manager (even if inactive)
-                    emp.employment_status === 'active' || emp.id.toString() === formData.manager_id
-                  ).map((emp: Employee) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name}{emp.employment_status !== 'active' ? ' (Inactive)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Project Name</div>
+              <div style={{ fontWeight: 500 }}>{project.name}</div>
             </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Start Date</label>
-                <input
-                  type="date"
-                  name="start_date"
-                  className="form-input"
-                  value={formData.start_date}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">End Date</label>
-                <input
-                  type="date"
-                  name="end_date"
-                  className="form-input"
-                  value={formData.end_date}
-                  onChange={handleChange}
-                />
-              </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Client (Vista)</div>
+              <div>{project.client || '-'}</div>
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Description</label>
-              <textarea
-                name="description"
-                className="form-input"
-                rows={4}
-                value={formData.description}
-                onChange={handleChange}
-              />
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Address</div>
+              <div>{project.address || '-'}</div>
             </div>
-
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setIsEditing(false);
-                  if (project) {
-                    setFormData({
-                      name: project.name,
-                      number: project.number,
-                      client: project.client,
-                      address: project.address || '',
-                      start_date: project.start_date || '',
-                      end_date: project.end_date || '',
-                      status: project.status,
-                      description: project.description || '',
-                      market: project.market || '',
-                      manager_id: project.manager_id?.toString() || '',
-                    });
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-
-            {updateMutation.isError && (
-              <div className="error-message" style={{ marginTop: '1rem' }}>
-                Error updating project. Please try again.
-              </div>
-            )}
-          </form>
-        ) : (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Market</div>
               <div>
-                <div style={{ color: 'var(--secondary)', fontSize: '0.875rem' }}>{project.number}</div>
-                <div style={{ color: 'var(--secondary)', marginTop: '0.25rem' }}>{project.client}</div>
+                {project.market ? (
+                  <>
+                    {MARKET_OPTIONS.find(m => m.value === project.market)?.icon || ''} {project.market}
+                  </>
+                ) : '-'}
               </div>
-              <span className={`badge badge-${project.status === 'active' ? 'success' : 'info'}`}>
-                {project.status.replace('_', ' ')}
-              </span>
             </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Department</div>
+              <div>{project.department_number || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Project Manager</div>
+              <div>{project.manager_name || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Start Date</div>
+              <div>{project.start_date ? format(new Date(project.start_date), 'MMM d, yyyy') : '-'}</div>
+            </div>
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Address</div>
-                <div>{project.address || '-'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Market</div>
-                <div>
-                  {project.market ? (
-                    <>
-                      {MARKET_OPTIONS.find(m => m.value === project.market)?.icon || ''} {project.market}
-                    </>
-                  ) : '-'}
+          {/* Financial Info within Vista card */}
+          {(project.contract_value || project.gross_margin_percent !== undefined || project.backlog) && (
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.75rem' }}>Financial Overview</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                <div style={{ textAlign: 'center', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Contract</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.contract_value ? `$${(Number(project.contract_value) / 1000).toFixed(0)}K` : '-'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>GM%</div>
+                  <div style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : '#64748b'
+                  }}>
+                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
+                      ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%`
+                      : '-'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Backlog</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#8b5cf6' }}>
+                    {project.backlog ? `$${(Number(project.backlog) / 1000).toFixed(0)}K` : '-'}
+                  </div>
                 </div>
               </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Project Manager</div>
-                <div>{project.manager_name || '-'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Start Date</div>
-                <div>{project.start_date ? format(new Date(project.start_date), 'MMM d, yyyy') : '-'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>End Date</div>
-                <div>{project.end_date ? format(new Date(project.end_date), 'MMM d, yyyy') : '-'}</div>
-              </div>
             </div>
+          )}
+        </div>
 
-            {project.description && (
-              <div style={{ marginTop: '1.5rem' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Description</div>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{project.description}</div>
-              </div>
+        {/* RIGHT SIDE: Titan Data (Editable) */}
+        <div className="card">
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '1rem',
+            paddingBottom: '0.75rem',
+            borderBottom: '1px solid #e2e8f0'
+          }}>
+            <span style={{ fontSize: '1.25rem' }}>🔧</span>
+            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Titan Project Details</h2>
+            {!isEditingTitan && (
+              <button
+                className="btn btn-secondary"
+                style={{ marginLeft: 'auto', padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                onClick={() => setIsEditingTitan(true)}
+              >
+                Edit
+              </button>
             )}
           </div>
-        )}
+
+          {isEditingTitan ? (
+            <form onSubmit={handleTitanSubmit}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Customer (GC)</label>
+                <SearchableSelect
+                  options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                  value={titanFormData.customer_id}
+                  onChange={(value) => setTitanFormData(prev => ({ ...prev, customer_id: value }))}
+                  placeholder="-- Select Customer --"
+                />
+                <small style={{ color: '#64748b', fontSize: '0.7rem' }}>The General Contractor you have the contract with</small>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Owner</label>
+                <SearchableSelect
+                  options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                  value={titanFormData.owner_customer_id}
+                  onChange={(value) => setTitanFormData(prev => ({ ...prev, owner_customer_id: value }))}
+                  placeholder="-- Select Owner --"
+                />
+                <small style={{ color: '#64748b', fontSize: '0.7rem' }}>The building owner / end customer</small>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Notes</label>
+                <textarea
+                  name="description"
+                  className="form-input"
+                  rows={4}
+                  value={titanFormData.description}
+                  onChange={handleTitanChange}
+                  placeholder="Add project notes..."
+                  style={{ fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                  onClick={() => {
+                    setIsEditingTitan(false);
+                    if (project) {
+                      setTitanFormData({
+                        customer_id: project.customer_id?.toString() || '',
+                        owner_customer_id: project.owner_customer_id?.toString() || '',
+                        description: project.description || '',
+                      });
+                    }
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+
+              {updateMutation.isError && (
+                <div className="error-message" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                  Error updating project. Please try again.
+                </div>
+              )}
+            </form>
+          ) : (
+            <div>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Customer (GC)</div>
+                <div style={{ fontSize: '0.95rem' }}>
+                  {project.customer_name ? (
+                    <Link to={`/customers/${project.customer_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                      {project.customer_name}
+                    </Link>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not linked</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>The General Contractor you have the contract with</div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Owner</div>
+                <div style={{ fontSize: '0.95rem' }}>
+                  {project.owner_name ? (
+                    <Link to={`/customers/${project.owner_customer_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                      {project.owner_name}
+                    </Link>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Not linked</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>The building owner / end customer</div>
+              </div>
+
+              {project.description && (
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Notes</div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', color: '#475569' }}>{project.description}</div>
+                </div>
+              )}
+
+              {!project.customer_name && !project.owner_name && !project.description && (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '2rem 1rem',
+                  color: '#94a3b8',
+                  background: '#f8fafc',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔗</div>
+                  <div style={{ fontSize: '0.9rem' }}>No Titan data linked yet</div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Click Edit to link Customer and Owner</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Financial Information */}
-      {(project.contract_value || project.gross_margin_percent !== undefined || project.backlog) && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem' }}>Financial Overview</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Contract Amount</div>
-              <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--primary)' }}>
-                {project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '-'}
-              </div>
-            </div>
-            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Gross Margin</div>
-              <div style={{
-                fontSize: '1.75rem',
-                fontWeight: 600,
-                color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'var(--text)'
-              }}>
-                {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
-                  ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%`
-                  : '-'}
-              </div>
-            </div>
-            <div className="card" style={{ textAlign: 'center', padding: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Backlog</div>
-              <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--primary)' }}>
-                {project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '-'}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Project Modules */}
       <div className="section-header" style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: 0 }}>Project Modules</h2>
         <Link to={`/projects/${id}/rfis/new`} className="btn btn-primary">

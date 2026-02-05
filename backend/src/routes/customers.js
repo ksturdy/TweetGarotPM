@@ -46,6 +46,23 @@ router.get('/contacts/all', async (req, res, next) => {
   }
 });
 
+// Create a standalone contact (customer optional)
+router.post('/contacts', async (req, res, next) => {
+  try {
+    // If customer_id provided, verify it belongs to tenant
+    if (req.body.customer_id) {
+      const customer = await Customer.findByIdAndTenant(req.body.customer_id, req.tenantId);
+      if (!customer) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+    }
+    const contact = await Customer.createStandaloneContact(req.body, req.tenantId);
+    res.status(201).json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get customer statistics
 router.get('/stats', async (req, res, next) => {
   try {
@@ -93,6 +110,91 @@ router.get('/:id/metrics', async (req, res, next) => {
     }
     const metrics = await Customer.getMetrics(req.params.id, req.tenantId);
     res.json(metrics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get enhanced metrics for company (all facilities under same owner)
+router.get('/:id/company-metrics', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const metrics = await Customer.getCompanyMetrics(customer.customer_owner, req.tenantId, req.query.facility_id);
+    res.json(metrics);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get all facilities for a company (same customer_owner)
+router.get('/:id/facilities', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const facilities = await Customer.getFacilities(customer.customer_owner, req.tenantId);
+    res.json(facilities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get work orders for a customer (or all facilities with ?all=true)
+router.get('/:id/work-orders', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const includeAll = req.query.all === 'true';
+    const workOrders = await Customer.getWorkOrders(req.params.id, req.tenantId, includeAll);
+    res.json(workOrders);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get projects for company (all facilities)
+router.get('/:id/company-projects', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const projects = await Customer.getProjectsForCompany(req.params.id, req.tenantId);
+    res.json(projects);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get estimates/bids for company (all facilities)
+router.get('/:id/company-bids', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const bids = await Customer.getBidsForCompany(req.params.id, req.tenantId);
+    res.json(bids);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get opportunities for company (all facilities)
+router.get('/:id/company-opportunities', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const opportunities = await Customer.getOpportunitiesForCompany(req.params.id, req.tenantId);
+    res.json(opportunities);
   } catch (error) {
     next(error);
   }
@@ -199,27 +301,48 @@ router.post('/:id/contacts', async (req, res, next) => {
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
-    const contact = await Customer.createContact(req.params.id, req.body);
+    const contact = await Customer.createContact(req.params.id, req.body, req.tenantId);
     res.status(201).json(contact);
   } catch (error) {
     next(error);
   }
 });
 
-// Update contact
+// Update contact (standalone route with tenant verification)
 router.put('/contacts/:contactId', async (req, res, next) => {
   try {
-    // Note: Contact ownership is verified through the customer relationship
-    const contact = await Customer.updateContact(req.params.contactId, req.body);
+    // Verify contact belongs to tenant
+    const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
+    if (!existingContact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    // If changing customer_id, verify new customer belongs to tenant
+    if (req.body.customer_id && req.body.customer_id !== existingContact.customer_id) {
+      const customer = await Customer.findByIdAndTenant(req.body.customer_id, req.tenantId);
+      if (!customer) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+    }
+    // Merge existing customer_id if not provided in update
+    const updateData = {
+      ...req.body,
+      customer_id: req.body.customer_id !== undefined ? req.body.customer_id : existingContact.customer_id
+    };
+    const contact = await Customer.updateContact(req.params.contactId, updateData);
     res.json(contact);
   } catch (error) {
     next(error);
   }
 });
 
-// Delete contact
+// Delete contact (standalone route with tenant verification)
 router.delete('/contacts/:contactId', async (req, res, next) => {
   try {
+    // Verify contact belongs to tenant
+    const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
+    if (!existingContact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
     await Customer.deleteContact(req.params.contactId);
     res.json({ message: 'Contact deleted successfully' });
   } catch (error) {

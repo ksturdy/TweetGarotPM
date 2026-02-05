@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
@@ -6,7 +6,7 @@ import '../../styles/SalesPipeline.css';
 
 interface CustomerContact {
   id: number;
-  customer_id: number;
+  customer_id: number | null;
   first_name: string;
   last_name: string;
   title: string;
@@ -15,19 +15,50 @@ interface CustomerContact {
   mobile: string;
   is_primary: boolean;
   notes: string;
-  customer_facility: string;
-  customer_owner: string;
+  customer_facility: string | null;
+  customer_owner: string | null;
   city: string;
   state: string;
   created_at: string;
   updated_at: string;
 }
 
+interface Customer {
+  id: number;
+  customer_facility: string;
+  customer_owner: string;
+  city: string;
+  state: string;
+}
+
+const emptyContact: Omit<CustomerContact, 'id' | 'created_at' | 'updated_at'> = {
+  customer_id: null,
+  first_name: '',
+  last_name: '',
+  title: '',
+  email: '',
+  phone: '',
+  mobile: '',
+  is_primary: false,
+  notes: '',
+  customer_facility: null,
+  customer_owner: null,
+  city: '',
+  state: '',
+};
+
 const AccountManagementContacts: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
+  const [companySearch, setCompanySearch] = useState('');
+  const [facilitySearch, setFacilitySearch] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newContact, setNewContact] = useState(emptyContact);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [showFacilityDropdown, setShowFacilityDropdown] = useState(false);
 
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: ['all-contacts'],
@@ -37,21 +68,82 @@ const AccountManagementContacts: React.FC = () => {
     },
   });
 
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const response = await api.get('/customers');
+      return response.data;
+    },
+  });
+
+  // Get unique companies (customer_owner)
+  const uniqueCompanies = useMemo(() => {
+    const companies = new Map<string, Customer>();
+    customers.forEach((c: Customer) => {
+      if (c.customer_owner && !companies.has(c.customer_owner)) {
+        companies.set(c.customer_owner, c);
+      }
+    });
+    return Array.from(companies.values());
+  }, [customers]);
+
+  // Filter companies for dropdown search
+  const filteredCompanies = useMemo(() => {
+    if (!companySearch) return uniqueCompanies.slice(0, 50);
+    const search = companySearch.toLowerCase();
+    return uniqueCompanies
+      .filter((c: Customer) => c.customer_owner?.toLowerCase().includes(search))
+      .slice(0, 50);
+  }, [uniqueCompanies, companySearch]);
+
+  // Get facilities filtered by selected company
+  const filteredFacilities = useMemo(() => {
+    if (!selectedCompany) return [];
+    const facilities = customers.filter((c: Customer) => c.customer_owner === selectedCompany);
+    if (!facilitySearch) return facilities.slice(0, 50);
+    const search = facilitySearch.toLowerCase();
+    return facilities
+      .filter((c: Customer) => c.customer_facility?.toLowerCase().includes(search))
+      .slice(0, 50);
+  }, [customers, selectedCompany, facilitySearch]);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await api.post('/customers/contacts', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-contacts'] });
+      setShowAddModal(false);
+      setNewContact(emptyContact);
+      setCompanySearch('');
+      setFacilitySearch('');
+      setSelectedCompany(null);
+      setShowCompanyDropdown(false);
+      setShowFacilityDropdown(false);
+    },
+  });
+
   const updateMutation = useMutation({
-    mutationFn: async ({ contactId, customerId, data }: { contactId: number; customerId: number; data: any }) => {
-      const response = await api.put(`/customers/${customerId}/contacts/${contactId}`, data);
+    mutationFn: async ({ contactId, data }: { contactId: number; data: any }) => {
+      const response = await api.put(`/customers/contacts/${contactId}`, data);
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-contacts'] });
       setShowEditModal(false);
       setEditingContact(null);
+      setCompanySearch('');
+      setFacilitySearch('');
+      setSelectedCompany(null);
+      setShowCompanyDropdown(false);
+      setShowFacilityDropdown(false);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ contactId, customerId }: { contactId: number; customerId: number }) => {
-      await api.delete(`/customers/${customerId}/contacts/${contactId}`);
+    mutationFn: async (contactId: number) => {
+      await api.delete(`/customers/contacts/${contactId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-contacts'] });
@@ -60,13 +152,33 @@ const AccountManagementContacts: React.FC = () => {
 
   const handleEdit = (contact: CustomerContact) => {
     setEditingContact(contact);
+    setSelectedCompany(contact.customer_owner || null);
+    setCompanySearch('');
+    setFacilitySearch('');
+    setShowCompanyDropdown(false);
+    setShowFacilityDropdown(false);
     setShowEditModal(true);
   };
 
   const handleDelete = (contact: CustomerContact) => {
     if (window.confirm(`Are you sure you want to delete ${contact.first_name} ${contact.last_name}?`)) {
-      deleteMutation.mutate({ contactId: contact.id, customerId: contact.customer_id });
+      deleteMutation.mutate(contact.id);
     }
+  };
+
+  const handleCreateContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMutation.mutate({
+      customer_id: newContact.customer_id,
+      first_name: newContact.first_name,
+      last_name: newContact.last_name,
+      title: newContact.title,
+      email: newContact.email,
+      phone: newContact.phone,
+      mobile: newContact.mobile,
+      is_primary: newContact.is_primary,
+      notes: newContact.notes,
+    });
   };
 
   const handleUpdateContact = (e: React.FormEvent) => {
@@ -74,8 +186,8 @@ const AccountManagementContacts: React.FC = () => {
     if (editingContact) {
       updateMutation.mutate({
         contactId: editingContact.id,
-        customerId: editingContact.customer_id,
         data: {
+          customer_id: editingContact.customer_id,
           first_name: editingContact.first_name,
           last_name: editingContact.last_name,
           title: editingContact.title,
@@ -96,6 +208,7 @@ const AccountManagementContacts: React.FC = () => {
       contact.last_name?.toLowerCase().includes(searchLower) ||
       contact.email?.toLowerCase().includes(searchLower) ||
       contact.customer_facility?.toLowerCase().includes(searchLower) ||
+      contact.customer_owner?.toLowerCase().includes(searchLower) ||
       contact.title?.toLowerCase().includes(searchLower)
     );
   });
@@ -110,6 +223,287 @@ const AccountManagementContacts: React.FC = () => {
     );
   }
 
+  const inputStyle = { width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-primary)', color: 'var(--text-primary)' };
+  const labelStyle = { display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' } as React.CSSProperties;
+  const dropdownStyle = {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    right: 0,
+    background: '#ffffff',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    maxHeight: '200px',
+    overflowY: 'auto' as const,
+    zIndex: 10,
+    marginTop: '4px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  };
+
+  const renderContactForm = (
+    contact: typeof emptyContact | CustomerContact,
+    setContact: (c: any) => void,
+    onSubmit: (e: React.FormEvent) => void,
+    isEdit: boolean,
+    isPending: boolean,
+    isError: boolean
+  ) => (
+    <form onSubmit={onSubmit}>
+      <div style={{ padding: '20px 24px' }}>
+        {/* Company Selection */}
+        <div className="form-group" style={{ marginBottom: '16px' }}>
+          <label style={labelStyle}>Company (Optional)</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Click to select or type to search..."
+              value={companySearch}
+              onChange={(e) => setCompanySearch(e.target.value)}
+              onFocus={() => setShowCompanyDropdown(true)}
+              onBlur={() => setTimeout(() => setShowCompanyDropdown(false), 200)}
+              style={inputStyle}
+            />
+            {showCompanyDropdown && filteredCompanies.length > 0 && (
+              <div style={dropdownStyle}>
+                {filteredCompanies.map((customer: Customer) => (
+                  <div
+                    key={customer.customer_owner}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSelectedCompany(customer.customer_owner);
+                      setContact({ ...contact, customer_owner: customer.customer_owner, customer_id: null, customer_facility: null });
+                      setCompanySearch('');
+                      setFacilitySearch('');
+                      setShowCompanyDropdown(false);
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #e5e7eb',
+                      color: '#1f2937',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                  >
+                    <div style={{ fontWeight: 500, color: '#1f2937' }}>{customer.customer_owner}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {(selectedCompany || contact.customer_owner) && (
+            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="sales-stage-badge" style={{ background: 'var(--accent-blue)', color: 'white' }}>
+                {selectedCompany || contact.customer_owner}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCompany(null);
+                  setContact({ ...contact, customer_owner: null, customer_id: null, customer_facility: null });
+                  setFacilitySearch('');
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '16px' }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Facility/Location Selection - only show if company is selected */}
+        {(selectedCompany || contact.customer_owner) && (
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Facility/Location (Optional)</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Click to select or type to search..."
+                value={facilitySearch}
+                onChange={(e) => setFacilitySearch(e.target.value)}
+                onFocus={() => setShowFacilityDropdown(true)}
+                onBlur={() => setTimeout(() => setShowFacilityDropdown(false), 200)}
+                style={inputStyle}
+              />
+              {showFacilityDropdown && filteredFacilities.length > 0 && (
+                <div style={dropdownStyle}>
+                  {filteredFacilities.map((customer: Customer) => (
+                    <div
+                      key={customer.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setContact({ ...contact, customer_id: customer.id, customer_facility: customer.customer_facility });
+                        setFacilitySearch('');
+                        setShowFacilityDropdown(false);
+                      }}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #e5e7eb',
+                        color: '#1f2937',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                    >
+                      <div style={{ fontWeight: 500, color: '#1f2937' }}>{customer.customer_facility}</div>
+                      {customer.city && customer.state && (
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{customer.city}, {customer.state}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {contact.customer_id && contact.customer_facility && (
+              <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="sales-stage-badge" style={{ background: '#22c55e', color: 'white' }}>
+                  {contact.customer_facility}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setContact({ ...contact, customer_id: null, customer_facility: null })}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '16px' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="form-group">
+            <label style={labelStyle}>First Name *</label>
+            <input
+              type="text"
+              value={contact.first_name}
+              onChange={(e) => setContact({ ...contact, first_name: e.target.value })}
+              required
+              style={inputStyle}
+            />
+          </div>
+
+          <div className="form-group">
+            <label style={labelStyle}>Last Name *</label>
+            <input
+              type="text"
+              value={contact.last_name}
+              onChange={(e) => setContact({ ...contact, last_name: e.target.value })}
+              required
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '16px' }}>
+          <label style={labelStyle}>Title</label>
+          <input
+            type="text"
+            value={contact.title || ''}
+            onChange={(e) => setContact({ ...contact, title: e.target.value })}
+            placeholder="e.g., Facilities Manager, Director of Operations"
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+          <div className="form-group">
+            <label style={labelStyle}>Email</label>
+            <input
+              type="email"
+              value={contact.email || ''}
+              onChange={(e) => setContact({ ...contact, email: e.target.value })}
+              placeholder="contact@email.com"
+              style={inputStyle}
+            />
+          </div>
+
+          <div className="form-group">
+            <label style={labelStyle}>Office Phone</label>
+            <input
+              type="tel"
+              value={contact.phone || ''}
+              onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+              placeholder="(555) 123-4567"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '16px' }}>
+          <label style={labelStyle}>Mobile Phone</label>
+          <input
+            type="tel"
+            value={contact.mobile || ''}
+            onChange={(e) => setContact({ ...contact, mobile: e.target.value })}
+            placeholder="(555) 123-4567"
+            style={inputStyle}
+          />
+        </div>
+
+        <div className="form-group" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="checkbox"
+            id={isEdit ? 'is_primary_edit' : 'is_primary_add'}
+            checked={contact.is_primary}
+            onChange={(e) => setContact({ ...contact, is_primary: e.target.checked })}
+            style={{ width: 'auto' }}
+          />
+          <label htmlFor={isEdit ? 'is_primary_edit' : 'is_primary_add'} style={{ margin: 0, fontWeight: 'normal', fontSize: '14px', color: 'var(--text-primary)' }}>
+            Set as primary contact
+          </label>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '16px' }}>
+          <label style={labelStyle}>Notes</label>
+          <textarea
+            value={contact.notes || ''}
+            onChange={(e) => setContact({ ...contact, notes: e.target.value })}
+            placeholder="Any additional information about this contact..."
+            rows={3}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+        <button
+          type="button"
+          className="sales-btn sales-btn-secondary"
+          onClick={() => {
+            if (isEdit) {
+              setShowEditModal(false);
+              setEditingContact(null);
+            } else {
+              setShowAddModal(false);
+              setNewContact(emptyContact);
+            }
+            setCompanySearch('');
+            setFacilitySearch('');
+            setSelectedCompany(null);
+            setShowCompanyDropdown(false);
+            setShowFacilityDropdown(false);
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="sales-btn sales-btn-primary"
+          disabled={isPending}
+        >
+          {isPending ? 'Saving...' : (isEdit ? 'Update Contact' : 'Add Contact')}
+        </button>
+      </div>
+
+      {isError && (
+        <div style={{ color: 'var(--accent-rose)', padding: '0 24px 20px', fontSize: '14px' }}>
+          Failed to {isEdit ? 'update' : 'create'} contact. Please try again.
+        </div>
+      )}
+    </form>
+  );
+
   return (
     <div className="sales-container">
       {/* Header */}
@@ -122,6 +516,22 @@ const AccountManagementContacts: React.FC = () => {
             <h1>Contacts</h1>
             <div className="sales-subtitle">Manage all customer contacts</div>
           </div>
+        </div>
+        <div className="sales-page-actions">
+          <button
+            className="sales-btn sales-btn-primary"
+            onClick={() => {
+              setNewContact(emptyContact);
+              setCompanySearch('');
+              setFacilitySearch('');
+              setSelectedCompany(null);
+              setShowCompanyDropdown(false);
+              setShowFacilityDropdown(false);
+              setShowAddModal(true);
+            }}
+          >
+            + Add Contact
+          </button>
         </div>
       </div>
 
@@ -165,7 +575,7 @@ const AccountManagementContacts: React.FC = () => {
               {searchTerm ? 'No contacts match your search' : 'No contacts yet'}
             </div>
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-              {searchTerm ? 'Try a different search term' : 'Contacts will appear here as they are added to customers'}
+              {searchTerm ? 'Try a different search term' : 'Click "Add Contact" to create your first contact'}
             </p>
           </div>
         ) : (
@@ -174,10 +584,10 @@ const AccountManagementContacts: React.FC = () => {
               <tr>
                 <th>Name</th>
                 <th>Title</th>
-                <th>Customer</th>
+                <th>Company</th>
+                <th>Facility/Location</th>
                 <th>Email</th>
-                <th>Office Phone</th>
-                <th>Mobile</th>
+                <th>Phone</th>
                 <th>Primary</th>
                 <th>Actions</th>
               </tr>
@@ -197,21 +607,33 @@ const AccountManagementContacts: React.FC = () => {
                   </td>
                   <td>{contact.title || '-'}</td>
                   <td>
-                    <Link
-                      to={`/customers/${contact.customer_id}`}
-                      style={{ color: 'var(--accent-blue)', textDecoration: 'none', fontWeight: '500' }}
-                    >
-                      {contact.customer_facility}
-                    </Link>
-                    {contact.city && contact.state && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {contact.city}, {contact.state}
-                      </div>
+                    {contact.customer_owner ? (
+                      <span style={{ fontWeight: 500 }}>{contact.customer_owner}</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>-</span>
+                    )}
+                  </td>
+                  <td>
+                    {contact.customer_id && contact.customer_facility ? (
+                      <>
+                        <Link
+                          to={`/customers/${contact.customer_id}`}
+                          style={{ color: 'var(--accent-blue)', textDecoration: 'none', fontWeight: '500' }}
+                        >
+                          {contact.customer_facility}
+                        </Link>
+                        {contact.city && contact.state && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {contact.city}, {contact.state}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>-</span>
                     )}
                   </td>
                   <td>{contact.email || '-'}</td>
-                  <td>{contact.phone || '-'}</td>
-                  <td>{contact.mobile || '-'}</td>
+                  <td>{contact.phone || contact.mobile || '-'}</td>
                   <td>
                     {contact.is_primary && (
                       <span className="sales-stage-badge awarded">
@@ -237,141 +659,32 @@ const AccountManagementContacts: React.FC = () => {
         )}
       </div>
 
-      {/* Edit Contact Modal */}
-      {showEditModal && editingContact && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+      {/* Add Contact Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setNewContact(emptyContact); setCompanySearch(''); setFacilitySearch(''); setSelectedCompany(null); setShowCompanyDropdown(false); setShowFacilityDropdown(false); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Edit Contact</h2>
-              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Add New Contact</h2>
+              <button onClick={() => { setShowAddModal(false); setNewContact(emptyContact); setCompanySearch(''); setFacilitySearch(''); setSelectedCompany(null); setShowCompanyDropdown(false); setShowFacilityDropdown(false); }} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 ×
               </button>
             </div>
+            {renderContactForm(newContact, setNewContact, handleCreateContact, false, createMutation.isPending, createMutation.isError)}
+          </div>
+        </div>
+      )}
 
-            <div style={{ padding: '16px 24px 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
-              Editing contact for <strong>{editingContact.customer_facility}</strong>
+      {/* Edit Contact Modal */}
+      {showEditModal && editingContact && (
+        <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingContact(null); setCompanySearch(''); setFacilitySearch(''); setSelectedCompany(null); setShowCompanyDropdown(false); setShowFacilityDropdown(false); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>Edit Contact</h2>
+              <button onClick={() => { setShowEditModal(false); setEditingContact(null); setCompanySearch(''); setFacilitySearch(''); setSelectedCompany(null); setShowCompanyDropdown(false); setShowFacilityDropdown(false); }} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                ×
+              </button>
             </div>
-
-            <form onSubmit={handleUpdateContact}>
-              <div style={{ padding: '20px 24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>First Name *</label>
-                    <input
-                      type="text"
-                      value={editingContact.first_name}
-                      onChange={(e) => setEditingContact({ ...editingContact, first_name: e.target.value })}
-                      required
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Last Name *</label>
-                    <input
-                      type="text"
-                      value={editingContact.last_name}
-                      onChange={(e) => setEditingContact({ ...editingContact, last_name: e.target.value })}
-                      required
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Title</label>
-                  <input
-                    type="text"
-                    value={editingContact.title}
-                    onChange={(e) => setEditingContact({ ...editingContact, title: e.target.value })}
-                    placeholder="e.g., Facilities Manager, Director of Operations"
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Email</label>
-                    <input
-                      type="email"
-                      value={editingContact.email}
-                      onChange={(e) => setEditingContact({ ...editingContact, email: e.target.value })}
-                      placeholder="contact@email.com"
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Office Phone</label>
-                    <input
-                      type="tel"
-                      value={editingContact.phone}
-                      onChange={(e) => setEditingContact({ ...editingContact, phone: e.target.value })}
-                      placeholder="(555) 123-4567"
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Mobile Phone</label>
-                  <input
-                    type="tel"
-                    value={editingContact.mobile}
-                    onChange={(e) => setEditingContact({ ...editingContact, mobile: e.target.value })}
-                    placeholder="(555) 123-4567"
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px' }}
-                  />
-                </div>
-
-                <div className="form-group" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    id="is_primary"
-                    checked={editingContact.is_primary}
-                    onChange={(e) => setEditingContact({ ...editingContact, is_primary: e.target.checked })}
-                    style={{ width: 'auto' }}
-                  />
-                  <label htmlFor="is_primary" style={{ margin: 0, fontWeight: 'normal', fontSize: '14px', color: 'var(--text-primary)' }}>
-                    Set as primary contact
-                  </label>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>Notes</label>
-                  <textarea
-                    value={editingContact.notes}
-                    onChange={(e) => setEditingContact({ ...editingContact, notes: e.target.value })}
-                    placeholder="Any additional information about this contact..."
-                    rows={3}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', resize: 'vertical' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
-                <button
-                  type="button"
-                  className="sales-btn sales-btn-secondary"
-                  onClick={() => setShowEditModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="sales-btn sales-btn-primary"
-                  disabled={updateMutation.isPending}
-                >
-                  {updateMutation.isPending ? 'Saving...' : 'Update Contact'}
-                </button>
-              </div>
-
-              {updateMutation.isError && (
-                <div style={{ color: 'var(--accent-rose)', padding: '0 24px 20px', fontSize: '14px' }}>
-                  Failed to update contact. Please try again.
-                </div>
-              )}
-            </form>
+            {renderContactForm(editingContact, setEditingContact, handleUpdateContact, true, updateMutation.isPending, updateMutation.isError)}
           </div>
         </div>
       )}

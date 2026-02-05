@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
+import { customersApi, Customer } from '../../services/customers';
+import SearchableSelect from '../../components/SearchableSelect';
 import '../../styles/SalesPipeline.css';
 
 const ProjectList: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string>('number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -13,9 +16,20 @@ const ProjectList: React.FC = () => {
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [marketFilter, setMarketFilter] = useState<string>('all');
 
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkOwnerCustomerId, setBulkOwnerCustomerId] = useState<string>('');
+  const [bulkCustomerId, setBulkCustomerId] = useState<string>('');
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll().then((res) => res.data),
+  });
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll(),
   });
 
   // Get unique values for filters
@@ -173,15 +187,28 @@ const ProjectList: React.FC = () => {
     // Then apply search filter
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
+
+    // Format numeric values for searching (matches display format)
+    const contractValueStr = project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '';
+    const backlogStr = project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '';
+    const gmPercentStr = project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
+      ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%`
+      : '';
+
     return (
       project.name.toLowerCase().includes(term) ||
       project.number.toLowerCase().includes(term) ||
       (project.client && project.client.toLowerCase().includes(term)) ||
+      (project.customer_name && project.customer_name.toLowerCase().includes(term)) ||
+      (project.owner_name && project.owner_name.toLowerCase().includes(term)) ||
       (project.status && project.status.toLowerCase().includes(term)) ||
       (project.department_number && project.department_number.toLowerCase().includes(term)) ||
       (project.market && project.market.toLowerCase().includes(term)) ||
       (project.manager_name && project.manager_name.toLowerCase().includes(term)) ||
-      (project.start_date && new Date(project.start_date).toLocaleDateString('en-US').toLowerCase().includes(term))
+      (project.start_date && new Date(project.start_date).toLocaleDateString('en-US').toLowerCase().includes(term)) ||
+      contractValueStr.toLowerCase().includes(term) ||
+      backlogStr.toLowerCase().includes(term) ||
+      gmPercentStr.toLowerCase().includes(term)
     );
   });
 
@@ -257,6 +284,57 @@ const ProjectList: React.FC = () => {
     avgProjectValue: filteredProjects.length > 0
       ? filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0) / filteredProjects.length
       : 0
+  };
+
+  // Multi-select handlers
+  const handleSelectAll = () => {
+    if (selectedIds.size === sortedProjects.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedProjects.map(p => p.id)));
+    }
+  };
+
+  const handleSelectOne = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedIds.size === 0) return;
+    if (!bulkOwnerCustomerId && !bulkCustomerId) return;
+
+    setIsBulkUpdating(true);
+    try {
+      const updateData: any = {};
+      if (bulkOwnerCustomerId) {
+        updateData.ownerCustomerId = Number(bulkOwnerCustomerId);
+      }
+      if (bulkCustomerId) {
+        updateData.customerId = Number(bulkCustomerId);
+      }
+
+      // Update each selected project
+      await Promise.all(
+        Array.from(selectedIds).map(id => projectsApi.update(id, updateData))
+      );
+
+      // Refresh data and clear selection
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setSelectedIds(new Set());
+      setBulkOwnerCustomerId('');
+      setBulkCustomerId('');
+    } catch (error) {
+      console.error('Bulk update failed:', error);
+    } finally {
+      setIsBulkUpdating(false);
+    }
   };
 
   if (isLoading) {
@@ -415,6 +493,75 @@ const ProjectList: React.FC = () => {
         )}
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          padding: '0.75rem 1rem',
+          background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          color: 'white',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ fontWeight: 600 }}>
+            {selectedIds.size} project{selectedIds.size !== 1 ? 's' : ''} selected
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+            <SearchableSelect
+              options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+              value={bulkOwnerCustomerId}
+              onChange={setBulkOwnerCustomerId}
+              placeholder="-- Assign Owner --"
+              style={{ minWidth: '220px' }}
+            />
+            <SearchableSelect
+              options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+              value={bulkCustomerId}
+              onChange={setBulkCustomerId}
+              placeholder="-- Assign Customer (GC) --"
+              style={{ minWidth: '220px' }}
+            />
+            <button
+              onClick={handleBulkUpdate}
+              disabled={isBulkUpdating || (!bulkOwnerCustomerId && !bulkCustomerId)}
+              style={{
+                padding: '0.4rem 1rem',
+                background: (!bulkOwnerCustomerId && !bulkCustomerId) ? '#94a3b8' : 'white',
+                color: (!bulkOwnerCustomerId && !bulkCustomerId) ? '#64748b' : '#3b82f6',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 600,
+                cursor: (!bulkOwnerCustomerId && !bulkCustomerId) ? 'not-allowed' : 'pointer',
+                fontSize: '0.875rem'
+              }}
+            >
+              {isBulkUpdating ? 'Updating...' : 'Apply'}
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedIds(new Set());
+              setBulkOwnerCustomerId('');
+              setBulkCustomerId('');
+            }}
+            style={{
+              padding: '0.4rem 0.75rem',
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem'
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Table Section */}
       <div className="sales-table-section">
         <div className="sales-table-header">
@@ -428,6 +575,14 @@ const ProjectList: React.FC = () => {
         <table className="sales-table">
           <thead>
             <tr>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={sortedProjects.length > 0 && selectedIds.size === sortedProjects.length}
+                  onChange={handleSelectAll}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                />
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('number')}>
                 Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
@@ -463,8 +618,20 @@ const ProjectList: React.FC = () => {
                 <tr
                   key={project.id}
                   onClick={() => navigate(`/projects/${project.id}`)}
-                  style={{ cursor: 'pointer' }}
+                  style={{
+                    cursor: 'pointer',
+                    background: selectedIds.has(project.id) ? 'rgba(59, 130, 246, 0.1)' : undefined
+                  }}
                 >
+                  <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(project.id)}
+                      onChange={() => {}}
+                      onClick={(e) => handleSelectOne(project.id, e)}
+                      style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                    />
+                  </td>
                   <td>{project.number}</td>
                   <td>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-US') : '-'}</td>
                   <td>
@@ -474,7 +641,7 @@ const ProjectList: React.FC = () => {
                       </div>
                       <div className="sales-project-info">
                         <h4>{project.name}</h4>
-                        <span>{project.client || 'No client specified'}</span>
+                        <span>{project.owner_name || project.customer_name || project.client || 'No client specified'}</span>
                       </div>
                     </div>
                   </td>
@@ -505,7 +672,7 @@ const ProjectList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       className="mx-auto h-12 w-12 text-gray-400"
