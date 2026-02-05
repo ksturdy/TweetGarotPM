@@ -15,6 +15,7 @@ const CustomerList: React.FC = () => {
   const [filterManager, setFilterManager] = useState('all');
   const [sortColumn, setSortColumn] = useState<string>('customer_owner');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [hasUserSorted, setHasUserSorted] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
@@ -253,8 +254,15 @@ const CustomerList: React.FC = () => {
     return matchesSearch && matchesState && matchesManager;
   });
 
-  // Sort customers
+  // Sort customers - favorites at top on initial load only
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
+    // On initial load (before user sorts), put favorites at top
+    if (!hasUserSorted) {
+      const aFav = a.favorite ? 1 : 0;
+      const bFav = b.favorite ? 1 : 0;
+      if (aFav !== bFav) return bFav - aFav; // Favorites first
+    }
+
     let aValue: any;
     let bValue: any;
 
@@ -306,6 +314,7 @@ const CustomerList: React.FC = () => {
 
   // Handle sort column click
   const handleSort = (column: string) => {
+    setHasUserSorted(true); // User has explicitly sorted, disable favorites-first default
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
