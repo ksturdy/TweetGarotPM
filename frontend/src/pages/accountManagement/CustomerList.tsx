@@ -324,46 +324,22 @@ const CustomerList: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            accept=".xlsx,.xls"
-            style={{ display: 'none' }}
-          />
-          <button
-            className="sales-btn sales-btn-secondary"
-            onClick={handleDownloadTemplate}
-          >
+          <span style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'rgba(59, 130, 246, 0.1)',
+            borderRadius: '8px'
+          }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Download Template
-          </button>
-          <button
-            className="sales-btn sales-btn-secondary"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            {isUploading ? `Importing... ${uploadProgress}%` : 'Import Excel'}
-          </button>
-          <button
-            className="sales-btn sales-btn-primary"
-            onClick={() => setShowNewCustomerModal(true)}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            New Customer
-          </button>
+            Customers sync automatically from Vista
+          </span>
           {returnTo && (
             <button
               className="sales-btn"
@@ -479,11 +455,11 @@ const CustomerList: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('favorite')} style={{ width: '50px', textAlign: 'center' }}>
                 <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('customer_facility')}>
-                Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
-              </th>
               <th className="sales-sortable" onClick={() => handleSort('customer_owner')}>
                 Company <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
+              <th className="sales-sortable" onClick={() => handleSort('customer_facility')}>
+                Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'customer_facility' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('market')}>
                 Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -544,12 +520,17 @@ const CustomerList: React.FC = () => {
                         {getMarketIcon(customer.market)}
                       </div>
                       <div className="sales-project-info">
-                        <h4>{customer.customer_facility || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
-                        <span>{customer.address || 'No address specified'}</span>
+                        <h4>{customer.customer_owner || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
+                        <span>{customer.city && customer.state ? `${customer.city}, ${customer.state}` : (customer.city || customer.state || 'No location')}</span>
                       </div>
                     </div>
                   </td>
-                  <td>{customer.customer_owner || '-'}</td>
+                  <td>
+                    <div className="sales-project-info" style={{ padding: '4px 0' }}>
+                      <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 500 }}>{customer.customer_facility || '-'}</h4>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{customer.address || 'No address'}</span>
+                    </div>
+                  </td>
                   <td onClick={(e) => { e.stopPropagation(); setEditingCell({ id: customer.id, field: 'market' }); }}>
                     {editingCell?.id === customer.id && editingCell?.field === 'market' ? (
                       <select
@@ -654,7 +635,7 @@ const CustomerList: React.FC = () => {
                     </svg>
                     <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>No customers found</h3>
                     <p style={{ color: '#6b7280', fontSize: '14px' }}>
-                      {searchTerm ? 'Try adjusting your search terms' : 'Import your customer list from Excel to get started'}
+                      {searchTerm ? 'Try adjusting your search terms' : 'Customer records sync automatically from Vista'}
                     </p>
                   </div>
                 </td>
@@ -664,12 +645,6 @@ const CustomerList: React.FC = () => {
         </table>
       </div>
 
-      {/* New Customer Modal */}
-      {showNewCustomerModal && (
-        <CustomerFormModal
-          onClose={handleModalClose}
-        />
-      )}
     </div>
   );
 };

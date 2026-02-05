@@ -14,6 +14,9 @@ const VistaDataSettings: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [uploadDetails, setUploadDetails] = useState<string[]>([]);
+  const [notFoundCustomers, setNotFoundCustomers] = useState<string[]>([]);
 
   const isAdmin = user?.role === 'admin';
 
@@ -36,29 +39,46 @@ const VistaDataSettings: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['vista-import-history'] });
       queryClient.invalidateQueries({ queryKey: ['vista-contracts'] });
       queryClient.invalidateQueries({ queryKey: ['vista-work-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
 
-      const messages: string[] = [];
+      const details: string[] = [];
       if (data.contracts.total > 0) {
-        messages.push(`${data.contracts.total} contracts`);
+        details.push(`✓ ${data.contracts.total} contracts (${data.contracts.new} new, ${data.contracts.updated} updated)`);
       }
       if (data.workOrders.total > 0) {
-        messages.push(`${data.workOrders.total} work orders`);
+        details.push(`✓ ${data.workOrders.total} work orders (${data.workOrders.new} new, ${data.workOrders.updated} updated)`);
       }
       if (data.employees.total > 0) {
-        messages.push(`${data.employees.total} employees`);
+        details.push(`✓ ${data.employees.total} employees (${data.employees.new} new, ${data.employees.updated} updated)`);
       }
       if (data.customers.total > 0) {
-        messages.push(`${data.customers.total} customers`);
+        details.push(`✓ ${data.customers.total} customers (${data.customers.new} new, ${data.customers.updated} updated)`);
       }
       if (data.vendors.total > 0) {
-        messages.push(`${data.vendors.total} vendors`);
+        details.push(`✓ ${data.vendors.total} vendors (${data.vendors.new} new, ${data.vendors.updated} updated)`);
       }
-      showSuccess(`Imported: ${messages.join(', ')}`);
+      if (data.facilities && data.facilities.total > 0) {
+        details.push(`✓ ${data.facilities.total} facilities (${data.facilities.created} created, ${data.facilities.updated} updated, ${data.facilities.not_found} not found)`);
+        // Store not-found customer names for display
+        if (data.facilities.not_found_names && data.facilities.not_found_names.length > 0) {
+          setNotFoundCustomers(data.facilities.not_found_names);
+        } else {
+          setNotFoundCustomers([]);
+        }
+      } else {
+        setNotFoundCustomers([]);
+      }
+
+      setUploadDetails(details);
+      setUploadStatus('');
+      showSuccess(`Import complete! Processed ${data.sheetsProcessed?.length || 0} sheets.`);
       setUploading(false);
     },
     onError: (error: any) => {
       showError(error.response?.data?.message || 'Failed to import Vista data');
       setUploading(false);
+      setUploadStatus('');
+      setUploadDetails([]);
     },
   });
 
@@ -91,6 +111,18 @@ const VistaDataSettings: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       setUploading(true);
+      setUploadStatus(`Uploading ${file.name}...`);
+      setUploadDetails([]);
+      setSuccessMessage('');
+      setErrorMessage('');
+
+      // Show processing status after a brief delay
+      setTimeout(() => {
+        if (uploading) {
+          setUploadStatus('Processing Excel file... This may take a moment for large files.');
+        }
+      }, 2000);
+
       uploadMutation.mutate(file);
     }
     if (e.target) e.target.value = '';
@@ -217,7 +249,7 @@ const VistaDataSettings: React.FC = () => {
         <h3 style={{ marginBottom: '16px' }}>Import Vista Data</h3>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.875rem' }}>
           Upload the Vista Power Queries Excel file. The system will process all available sheets:
-          Contracts, Work Orders, Employees, Customers, and Vendors. Existing records will be updated; links will be preserved.
+          Contracts, Work Orders, Employees, Customers, Vendors, and Customer Facilities. Existing records will be updated; links will be preserved.
         </p>
         <input
           ref={fileInputRef}
@@ -230,10 +262,103 @@ const VistaDataSettings: React.FC = () => {
           className="sales-btn-primary"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          style={{ padding: '12px 24px' }}
+          style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '8px' }}
         >
-          {uploading ? 'Uploading...' : 'Upload Vista Excel File'}
+          {uploading && (
+            <span style={{
+              width: '16px',
+              height: '16px',
+              border: '2px solid rgba(255,255,255,0.3)',
+              borderTopColor: 'white',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+          )}
+          {uploading ? 'Processing...' : 'Upload Vista Excel File'}
         </button>
+
+        {/* Upload Status */}
+        {uploading && uploadStatus && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px 16px',
+            background: 'rgba(99, 102, 241, 0.1)',
+            borderRadius: '8px',
+            color: '#6366f1',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}>
+            <span style={{
+              width: '20px',
+              height: '20px',
+              border: '3px solid rgba(99, 102, 241, 0.3)',
+              borderTopColor: '#6366f1',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <span>{uploadStatus}</span>
+          </div>
+        )}
+
+        {/* Upload Results */}
+        {!uploading && uploadDetails.length > 0 && (
+          <div style={{
+            marginTop: '12px',
+            padding: '16px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            borderRadius: '8px',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+          }}>
+            <div style={{ fontWeight: 600, color: '#10b981', marginBottom: '8px' }}>
+              Import Results
+            </div>
+            {uploadDetails.map((detail, idx) => (
+              <div key={idx} style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '4px' }}>
+                {detail}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Not Found Customers Warning */}
+        {!uploading && notFoundCustomers.length > 0 && (
+          <div style={{
+            marginTop: '12px',
+            padding: '16px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            borderRadius: '8px',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+          }}>
+            <div style={{ fontWeight: 600, color: '#f59e0b', marginBottom: '8px' }}>
+              Facilities Not Matched ({notFoundCustomers.length}{notFoundCustomers.length >= 50 ? '+' : ''})
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '8px' }}>
+              These Customer_Owner values from the facilities file didn't match any customer in the database:
+            </div>
+            <div style={{
+              maxHeight: '150px',
+              overflowY: 'auto',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              background: 'rgba(0,0,0,0.1)',
+              padding: '8px',
+              borderRadius: '4px'
+            }}>
+              {notFoundCustomers.map((name, idx) => (
+                <div key={idx} style={{ marginBottom: '2px' }}>
+                  {name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
         <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             <strong>Contracts:</strong> {formatNumber(stats?.total_contracts)} ({formatNumber(stats?.unmatched_contracts)} unmatched)

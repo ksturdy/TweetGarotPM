@@ -218,12 +218,22 @@ const VendorList: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <button className="sales-btn sales-btn-secondary" onClick={() => setShowImportModal(true)}>
-            Import from Excel
-          </button>
-          <button className="sales-btn sales-btn-primary" onClick={() => setShowModal(true)}>
-            + Add Vendor
-          </button>
+          <span style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: '8px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Vendors sync automatically from Vista
+          </span>
         </div>
       </div>
 
@@ -294,7 +304,7 @@ const VendorList: React.FC = () => {
           <div style={{ textAlign: 'center', padding: '3rem' }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>🏢</div>
             <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>No vendors found</div>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click "Add Vendor" to create one.</p>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Vendor records sync automatically from Vista.</p>
           </div>
         ) : (
           <table className="sales-table">
@@ -352,17 +362,6 @@ const VendorList: React.FC = () => {
                         title="Edit"
                       >
                         ✏️
-                      </button>
-                      <button
-                        className="sales-action-btn"
-                        onClick={() => {
-                          if (window.confirm('Are you sure you want to delete this vendor?')) {
-                            deleteMutation.mutate(vendor.id);
-                          }
-                        }}
-                        title="Delete"
-                      >
-                        🗑️
                       </button>
                     </div>
                   </td>

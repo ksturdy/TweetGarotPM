@@ -183,6 +183,7 @@ export interface ImportResult {
   employees: { total: number; new: number; updated: number; batch_id: number | null };
   customers: { total: number; new: number; updated: number; batch_id: number | null };
   vendors: { total: number; new: number; updated: number; batch_id: number | null };
+  facilities?: { total: number; created: number; updated: number; not_found: number; not_found_names?: string[] };
   sheetsFound: string[];
   sheetsProcessed: string[];
 }
@@ -461,11 +462,25 @@ export interface AutoLinkVendorsResult {
   }>;
 }
 
+export interface ImportFacilitiesResult {
+  message: string;
+  total: number;
+  created: number;
+  updated: number;
+  not_found: number;
+  results: Array<{
+    customer_owner: string;
+    facility: string;
+    status: 'created' | 'updated' | 'not_found';
+    id?: number;
+  }>;
+}
+
 // ==================== TITAN-ONLY INTERFACES ====================
 
 export interface TitanOnlyProject {
   id: number;
-  project_number: string | null;
+  number: string | null;
   name: string;
   status: string | null;
   created_at: string;
@@ -477,7 +492,8 @@ export interface TitanOnlyEmployee {
   first_name: string | null;
   last_name: string | null;
   email: string | null;
-  active: boolean;
+  employment_status: string | null;
+  job_title: string | null;
 }
 
 export interface TitanOnlyCustomer {
@@ -488,10 +504,10 @@ export interface TitanOnlyCustomer {
 
 export interface TitanOnlyVendor {
   id: number;
-  name: string;
+  vendor_name: string;
   city: string | null;
   state: string | null;
-  active: boolean;
+  status: string | null;
 }
 
 // ==================== SERVICE ====================
@@ -841,6 +857,17 @@ export const vistaDataService = {
   // Auto-link all VP vendors that have exact name matches to Titan vendors
   autoLinkExactVendorMatches: async (): Promise<AutoLinkVendorsResult> => {
     const response = await api.post('/vista/auto-link-vendors');
+    return response.data;
+  },
+
+  // Import customer facilities from Excel file
+  importFacilities: async (file: File): Promise<ImportFacilitiesResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post('/vista/import/facilities', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 };

@@ -388,26 +388,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
             </div>
           </div>
 
-          <div className="modal-footer" style={{ justifyContent: isEditing ? 'space-between' : 'flex-end' }}>
-            {isEditing && (
-              <button
-                type="button"
-                className="btn-danger"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={deleteMutation.isPending}
-                style={{
-                  background: '#ef4444',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
-              >
-                Delete Customer
-              </button>
-            )}
+          <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="button" className="btn-secondary" onClick={onClose}>
                 Cancel
@@ -424,79 +405,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
             </div>
           )}
 
-          {deleteMutation.isError && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              Failed to delete customer. Please try again.
-            </div>
-          )}
         </form>
-
-        {/* Delete Confirmation Dialog */}
-        {showDeleteConfirm && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(0, 0, 0, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '12px',
-            }}
-          >
-            <div
-              style={{
-                background: 'white',
-                padding: '1.5rem',
-                borderRadius: '12px',
-                maxWidth: '400px',
-                textAlign: 'center',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-              }}
-            >
-              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>&#9888;</div>
-              <h3 style={{ marginBottom: '0.5rem', fontSize: '1.125rem', fontWeight: 600 }}>
-                Delete Customer
-              </h3>
-              <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-                Are you sure you want to delete <strong>{customer?.customer_facility}</strong>?
-                This action cannot be undone.
-              </p>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    border: '1px solid #e5e7eb',
-                    background: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate()}
-                  disabled={deleteMutation.isPending}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: '#ef4444',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                  }}
-                >
-                  {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

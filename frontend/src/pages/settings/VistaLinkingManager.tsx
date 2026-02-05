@@ -9,7 +9,7 @@ import { customersApi } from '../../services/customers';
 import { departmentsApi } from '../../services/departments';
 import '../../styles/SalesPipeline.css';
 
-type EntityType = 'contracts' | 'work-orders' | 'employees' | 'customers' | 'vendors' | 'departments';
+type EntityType = 'contracts' | 'work-orders' | 'employees' | 'customers' | 'vendors' | 'departments' | 'facilities';
 type FilterType = 'all' | 'unmatched' | 'auto_matched' | 'manual_matched' | 'ignored' | 'titan_only';
 type ViewMode = 'matches' | 'data';
 
@@ -855,6 +855,19 @@ const VistaLinkingManager: React.FC = () => {
           potentialMatches: departmentDuplicates?.length || 0,
         };
       }
+      case 'facilities': {
+        // Facilities are stored in customers table - count customers with facilities
+        const withFacility = customers?.filter((c: any) => c.customer_facility)?.length || 0;
+        const withoutFacility = (customers?.length || 0) - withFacility;
+        return {
+          vistaCount: withoutFacility,  // Customers needing facility data
+          titanCount: withFacility,      // Customers with facility data
+          linked: withFacility,
+          vistaUnlinked: 0,              // Don't show "unlinked" - not relevant for facilities
+          titanUnlinked: 0,
+          potentialMatches: 0,
+        };
+      }
       default:
         return defaultStats;
     }
@@ -870,12 +883,13 @@ const VistaLinkingManager: React.FC = () => {
       expandedEntity === 'customers' ? (viewMode === 'matches' ? customerDuplicatesLoading : vpCustomersLoading) :
       expandedEntity === 'vendors' ? (viewMode === 'matches' ? vendorDuplicatesLoading : vpVendorsLoading) :
       expandedEntity === 'departments' ? departmentDuplicatesLoading :
+      expandedEntity === 'facilities' ? !customers :
       false;
 
     return (
       <div className="sales-chart-card" style={{ marginTop: '16px' }}>
         {/* View Mode Toggle & Filters */}
-        {expandedEntity !== 'departments' && (
+        {expandedEntity !== 'departments' && expandedEntity !== 'facilities' && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -950,6 +964,8 @@ const VistaLinkingManager: React.FC = () => {
         return viewMode === 'matches' ? renderVendorMatches() : renderVendorsData();
       case 'departments':
         return renderDepartmentMatches();
+      case 'facilities':
+        return renderFacilitiesData();
       default:
         return null;
     }
@@ -1001,8 +1017,8 @@ const VistaLinkingManager: React.FC = () => {
                 <>
                   <th>Emp #</th>
                   <th>Name</th>
-                  <th>Email</th>
-                  <th>Active</th>
+                  <th>Job Title</th>
+                  <th>Status</th>
                 </>
               )}
               {expandedEntity === 'customers' && (
@@ -1016,7 +1032,7 @@ const VistaLinkingManager: React.FC = () => {
                   <th>Name</th>
                   <th>City</th>
                   <th>State</th>
-                  <th>Active</th>
+                  <th>Status</th>
                 </>
               )}
             </tr>
@@ -1024,7 +1040,7 @@ const VistaLinkingManager: React.FC = () => {
           <tbody>
             {expandedEntity === 'contracts' && (titanOnlyProjects || []).map((p: TitanOnlyProject) => (
               <tr key={p.id}>
-                <td>{p.project_number || '-'}</td>
+                <td>{p.number || '-'}</td>
                 <td>{p.name}</td>
                 <td>{p.status || '-'}</td>
                 <td>{new Date(p.created_at).toLocaleDateString()}</td>
@@ -1034,8 +1050,8 @@ const VistaLinkingManager: React.FC = () => {
               <tr key={e.id}>
                 <td>{e.employee_number || '-'}</td>
                 <td>{e.first_name} {e.last_name}</td>
-                <td>{e.email || '-'}</td>
-                <td>{e.active ? 'Yes' : 'No'}</td>
+                <td>{e.job_title || '-'}</td>
+                <td>{e.employment_status || '-'}</td>
               </tr>
             ))}
             {expandedEntity === 'customers' && (titanOnlyCustomers || []).map((c: TitanOnlyCustomer) => (
@@ -1046,10 +1062,10 @@ const VistaLinkingManager: React.FC = () => {
             ))}
             {expandedEntity === 'vendors' && (titanOnlyVendors || []).map((v: TitanOnlyVendor) => (
               <tr key={v.id}>
-                <td>{v.name}</td>
+                <td>{v.vendor_name}</td>
                 <td>{v.city || '-'}</td>
                 <td>{v.state || '-'}</td>
-                <td>{v.active ? 'Yes' : 'No'}</td>
+                <td>{v.status || '-'}</td>
               </tr>
             ))}
           </tbody>
@@ -1315,7 +1331,7 @@ const VistaLinkingManager: React.FC = () => {
     if (!departmentDuplicates || departmentDuplicates.length === 0) {
       return (
         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-          No unlinked department codes found.
+          No unlinked department codes found. All Vista department codes are linked to Titan departments.
         </div>
       );
     }
@@ -1337,40 +1353,151 @@ const VistaLinkingManager: React.FC = () => {
                 </div>
               </div>
             </div>
-            <table className="sales-table" style={{ fontSize: '0.875rem' }}>
-              <thead>
-                <tr>
-                  <th>Match</th>
-                  <th>Dept #</th>
-                  <th>Name</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dup.potential_matches.map((match, idx) => (
-                  <tr key={idx}>
-                    <td>{getSimilarityBadge(match.similarity)}</td>
-                    <td style={{ fontWeight: 500 }}>{match.titan_number || '-'}</td>
-                    <td>{match.titan_name || '-'}</td>
-                    <td>
-                      <button
-                        className="sales-btn-primary"
-                        style={{ padding: '4px 12px', fontSize: '0.75rem' }}
-                        onClick={() => linkDepartmentCodeMutation.mutate({
-                          departmentCode: dup.vp_department_code,
-                          departmentId: match.titan_id
-                        })}
-                        disabled={linkDepartmentCodeMutation.isPending}
-                      >
-                        Link
-                      </button>
-                    </td>
+            {dup.potential_matches.length > 0 ? (
+              <table className="sales-table" style={{ fontSize: '0.875rem' }}>
+                <thead>
+                  <tr>
+                    <th>Match</th>
+                    <th>Dept #</th>
+                    <th>Name</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {dup.potential_matches.map((match, idx) => (
+                    <tr key={idx}>
+                      <td>{getSimilarityBadge(match.similarity)}</td>
+                      <td style={{ fontWeight: 500 }}>{match.titan_number || '-'}</td>
+                      <td>{match.titan_name || '-'}</td>
+                      <td>
+                        <button
+                          className="sales-btn-primary"
+                          style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                          onClick={() => linkDepartmentCodeMutation.mutate({
+                            departmentCode: dup.vp_department_code,
+                            departmentId: match.titan_id
+                          })}
+                          disabled={linkDepartmentCodeMutation.isPending}
+                        >
+                          Link
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{
+                padding: '12px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: '6px',
+                color: '#ef4444',
+                fontSize: '0.875rem'
+              }}>
+                No matching Titan department found. Use "Import" button above to create this department in Titan.
+              </div>
+            )}
           </div>
         ))}
+      </div>
+    );
+  };
+
+  const renderFacilitiesData = () => {
+    if (!customers || customers.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+          No customers found. Import customers from Vista first, then import facilities.
+        </div>
+      );
+    }
+
+    const customersWithFacility = customers.filter((c: any) => c.customer_facility);
+    const customersWithoutFacility = customers.filter((c: any) => !c.customer_facility);
+
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+          <div style={{
+            flex: 1,
+            padding: '16px',
+            background: 'rgba(16, 185, 129, 0.1)',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
+              {customersWithFacility.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              With Facility
+            </div>
+          </div>
+          <div style={{
+            flex: 1,
+            padding: '16px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ef4444' }}>
+              {customersWithoutFacility.length}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+              Without Facility
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+          Showing {customers.length} customers - facilities imported from Customer List Excel file
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table className="sales-table">
+            <thead>
+              <tr>
+                <th>Company (Owner)</th>
+                <th>Facility/Location</th>
+                <th>City</th>
+                <th>State</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map((customer: any) => (
+                <tr key={customer.id}>
+                  <td style={{ fontWeight: 500 }}>{customer.customer_owner || '-'}</td>
+                  <td>{customer.customer_facility || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Not imported</span>}</td>
+                  <td>{customer.city || '-'}</td>
+                  <td>{customer.state || '-'}</td>
+                  <td>
+                    {customer.customer_facility ? (
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        color: '#10b981',
+                      }}>
+                        Has Facility
+                      </span>
+                    ) : (
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: '#ef4444',
+                      }}>
+                        Missing
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -1718,20 +1845,9 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('contracts')}
           actions={
-            <>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6' }}
-                onClick={() => {
-                  if (window.confirm('Import all unmatched VP contracts as Titan projects?')) {
-                    importContractsToTitanMutation.mutate();
-                  }
-                }}
-                disabled={importContractsToTitanMutation.isPending}
-              >
-                {importContractsToTitanMutation.isPending ? 'Importing...' : 'Import as Projects'}
-              </button>
-            </>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Contracts sync automatically from Vista
+            </span>
           }
         />
 
@@ -1761,18 +1877,9 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('employees')}
           actions={
-            <button
-              className="sales-btn-primary"
-              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981' }}
-              onClick={() => {
-                if (window.confirm('Import all unmatched VP employees to Titan?')) {
-                  importEmployeesToTitanMutation.mutate();
-                }
-              }}
-              disabled={importEmployeesToTitanMutation.isPending}
-            >
-              {importEmployeesToTitanMutation.isPending ? 'Importing...' : 'Import to Titan'}
-            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Employees sync automatically from Vista
+            </span>
           }
         />
 
@@ -1785,44 +1892,9 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('customers')}
           actions={
-            <>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981' }}
-                onClick={() => {
-                  if (window.confirm('Auto-link all 100% name matches?')) {
-                    autoLinkCustomersMutation.mutate();
-                  }
-                }}
-                disabled={autoLinkCustomersMutation.isPending}
-              >
-                {autoLinkCustomersMutation.isPending ? '...' : 'Auto-Link 100%'}
-              </button>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6' }}
-                onClick={() => {
-                  if (window.confirm('Link ALL matches (top match for each)?')) {
-                    autoLinkAllCustomersMutation.mutate();
-                  }
-                }}
-                disabled={autoLinkAllCustomersMutation.isPending}
-              >
-                {autoLinkAllCustomersMutation.isPending ? '...' : 'Link All'}
-              </button>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b' }}
-                onClick={() => {
-                  if (window.confirm('Import all unmatched VP customers to Titan?')) {
-                    importCustomersToTitanMutation.mutate();
-                  }
-                }}
-                disabled={importCustomersToTitanMutation.isPending}
-              >
-                {importCustomersToTitanMutation.isPending ? '...' : 'Import'}
-              </button>
-            </>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Customers sync automatically from Vista
+            </span>
           }
         />
 
@@ -1835,32 +1907,9 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('vendors')}
           actions={
-            <>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981' }}
-                onClick={() => {
-                  if (window.confirm('Auto-link all 100% name matches?')) {
-                    autoLinkVendorsMutation.mutate();
-                  }
-                }}
-                disabled={autoLinkVendorsMutation.isPending}
-              >
-                {autoLinkVendorsMutation.isPending ? '...' : 'Auto-Link 100%'}
-              </button>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b' }}
-                onClick={() => {
-                  if (window.confirm('Import all unmatched VP vendors to Titan?')) {
-                    importVendorsToTitanMutation.mutate();
-                  }
-                }}
-                disabled={importVendorsToTitanMutation.isPending}
-              >
-                {importVendorsToTitanMutation.isPending ? '...' : 'Import'}
-              </button>
-            </>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Vendors sync automatically from Vista
+            </span>
           }
         />
 
@@ -1873,32 +1922,26 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading || departmentDuplicatesLoading}
           onToggle={() => toggleEntity('departments')}
           actions={
-            <>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981' }}
-                onClick={() => {
-                  if (window.confirm('Auto-link all exact department code matches?')) {
-                    autoLinkDepartmentsMutation.mutate();
-                  }
-                }}
-                disabled={autoLinkDepartmentsMutation.isPending}
-              >
-                {autoLinkDepartmentsMutation.isPending ? '...' : 'Auto-Link 100%'}
-              </button>
-              <button
-                className="sales-btn-primary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#6366f1' }}
-                onClick={() => {
-                  if (window.confirm('Import unmatched VP department codes to Titan?')) {
-                    importDepartmentsToTitanMutation.mutate();
-                  }
-                }}
-                disabled={importDepartmentsToTitanMutation.isPending}
-              >
-                {importDepartmentsToTitanMutation.isPending ? '...' : 'Import'}
-              </button>
-            </>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Departments sync automatically from Vista
+            </span>
+          }
+        />
+
+        <EntityCard
+          title="Facilities"
+          icon="📍"
+          color="#ec4899"
+          stats={getEntityStats('facilities')}
+          vistaLabel="Missing"
+          titanLabel="Has Facility"
+          isExpanded={expandedEntity === 'facilities'}
+          isLoading={statsLoading || !customers}
+          onToggle={() => toggleEntity('facilities')}
+          actions={
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Upload Customer List via Vista Excel import
+            </span>
           }
         />
       </div>

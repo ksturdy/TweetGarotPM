@@ -78,15 +78,26 @@ const EmployeeList: React.FC = () => {
               &larr; Back to HR Dashboard
             </Link>
             <h1>Employees</h1>
-            <div className="sales-subtitle">Manage employee records</div>
+            <div className="sales-subtitle">View employee records</div>
           </div>
         </div>
         <div className="sales-header-actions">
-          {hasWriteAccess && (
-            <Link to="/hr/employees/new" className="sales-btn sales-btn-primary">
-              + Add Employee
-            </Link>
-          )}
+          <span style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            borderRadius: '8px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Employees sync automatically from Vista
+          </span>
         </div>
       </div>
 

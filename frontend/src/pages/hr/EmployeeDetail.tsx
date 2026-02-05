@@ -170,14 +170,9 @@ const EmployeeDetail: React.FC = () => {
         </div>
         <div className="sales-header-actions">
           {!isEditing && hasWriteAccess && (
-            <>
-              <button className="sales-btn sales-btn-secondary" onClick={() => setIsEditing(true)}>
-                Edit
-              </button>
-              <button className="sales-btn" style={{ background: 'var(--accent-rose)', color: 'white' }} onClick={handleDelete}>
-                Delete
-              </button>
-            </>
+            <button className="sales-btn sales-btn-secondary" onClick={() => setIsEditing(true)}>
+              Edit
+            </button>
           )}
         </div>
       </div>

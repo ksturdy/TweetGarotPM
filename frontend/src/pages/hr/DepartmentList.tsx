@@ -113,20 +113,26 @@ const DepartmentList: React.FC = () => {
               &larr; Back to HR Dashboard
             </Link>
             <h1>Departments</h1>
-            <div className="sales-subtitle">Manage company departments</div>
+            <div className="sales-subtitle">View company departments</div>
           </div>
         </div>
         <div className="sales-header-actions">
-          <button
-            className="sales-btn sales-btn-primary"
-            onClick={() => {
-              setIsAdding(true);
-              setEditingId(null);
-              setFormData({ name: '', description: '', departmentNumber: '', managerId: undefined });
-            }}
-          >
-            + Add Department
-          </button>
+          <span style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'rgba(99, 102, 241, 0.1)',
+            borderRadius: '8px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Departments sync automatically from Vista
+          </span>
         </div>
       </div>
 
@@ -146,11 +152,11 @@ const DepartmentList: React.FC = () => {
         </div>
       </div>
 
-      {/* Add/Edit Form */}
-      {(isAdding || editingId) && (
+      {/* Edit Form */}
+      {editingId && (
         <div className="sales-chart-card" style={{ marginBottom: '20px' }}>
           <div className="sales-chart-header">
-            <div className="sales-chart-title">{editingId ? 'Edit Department' : 'New Department'}</div>
+            <div className="sales-chart-title">Edit Department</div>
           </div>
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -193,7 +199,7 @@ const DepartmentList: React.FC = () => {
           <div style={{ textAlign: 'center', padding: '3rem' }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>🏢</div>
             <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>No departments found</div>
-            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Click "Add Department" to create one</p>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Department records sync automatically from Vista</p>
           </div>
         ) : (
           <table className="sales-table">
@@ -229,7 +235,6 @@ const DepartmentList: React.FC = () => {
                   <td>
                     <div className="sales-actions-cell">
                       <button className="sales-action-btn" onClick={() => handleEdit(dept)} title="Edit">✏️</button>
-                      <button className="sales-action-btn" onClick={() => handleDelete(dept.id, dept.name)} disabled={deleteMutation.isPending} title="Delete">🗑️</button>
                     </div>
                   </td>
                 </tr>
