@@ -557,8 +557,37 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       vendors: { imported: 0 }
     };
 
+    const autoLink = {
+      customers: { linked: 0 },
+      employees: { linked: 0 },
+      vendors: { linked: 0 },
+      departments: { linked: 0 }
+    };
+
     try {
-      // Auto-import contracts as projects
+      // FIRST: Auto-link 100% matches BEFORE importing new records
+      // This links Vista records to existing Titan records by exact match
+      console.log('[Vista Import] Auto-linking 100% matches...');
+
+      if (results.customers.total > 0) {
+        const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
+        autoLink.customers = customerLinkResult;
+        console.log(`[Vista Import] Auto-linked ${customerLinkResult.customers_linked} customers (100% match)`);
+      }
+
+      if (results.employees.total > 0) {
+        const empLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
+        autoLink.employees = empLinkResult;
+        console.log(`[Vista Import] Auto-linked ${empLinkResult.employees_linked} employees (100% match)`);
+      }
+
+      if (results.vendors.total > 0) {
+        const vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
+        autoLink.vendors = vendorLinkResult;
+        console.log(`[Vista Import] Auto-linked ${vendorLinkResult.vendors_linked} vendors (100% match)`);
+      }
+
+      // Auto-import contracts as projects (only those not linked)
       if (results.contracts.total > 0) {
         console.log('[Vista Import] Auto-importing contracts as projects...');
         const contractResult = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
@@ -566,7 +595,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${contractResult.imported} contracts as projects`);
       }
 
-      // Auto-import customers
+      // Auto-import customers (only those not linked)
       if (results.customers.total > 0) {
         console.log('[Vista Import] Auto-importing customers...');
         const customerResult = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
@@ -582,10 +611,12 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${deptResult.imported} departments`);
 
         // Auto-link departments after import
-        await VistaData.autoLinkExactDepartmentMatches(req.tenantId);
+        const deptLinkResult = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id);
+        autoLink.departments = deptLinkResult;
+        console.log(`[Vista Import] Auto-linked ${deptLinkResult.codes_linked} department codes`);
       }
 
-      // Auto-import employees
+      // Auto-import employees (only those not linked)
       if (results.employees.total > 0) {
         console.log('[Vista Import] Auto-importing employees...');
         const empResult = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id);
@@ -593,7 +624,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${empResult.imported} employees`);
       }
 
-      // Auto-import vendors
+      // Auto-import vendors (only those not linked)
       if (results.vendors.total > 0) {
         console.log('[Vista Import] Auto-importing vendors...');
         const vendorResult = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);
@@ -618,6 +649,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     res.json({
       message: `Successfully imported data from ${results.sheetsProcessed.length} sheet(s)`,
       ...results,
+      autoLink,
       autoImport
     });
   } catch (error) {
@@ -1384,6 +1416,106 @@ router.post('/auto-link-vendors', requireAdmin, async (req, res, next) => {
       message: `Auto-linked ${result.vendors_linked} vendors`,
       ...result
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/vista/auto-link-employees - Auto-link all exact employee matches
+router.post('/auto-link-employees', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
+
+    res.json({
+      message: `Auto-linked ${result.employees_linked} employees`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== DELETE TITAN-ONLY RECORDS ====================
+
+// DELETE /api/vista/titan-only/customers - Delete all Titan-only customers
+router.delete('/titan-only/customers', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.deleteTitanOnlyCustomers(req.tenantId);
+    res.json({
+      message: `Deleted ${result.deleted} Titan-only customers`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/vista/titan-only/employees - Delete all Titan-only employees
+router.delete('/titan-only/employees', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.deleteTitanOnlyEmployees(req.tenantId);
+    res.json({
+      message: `Deleted ${result.deleted} Titan-only employees`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/vista/titan-only/projects - Delete all Titan-only projects
+router.delete('/titan-only/projects', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.deleteTitanOnlyProjects(req.tenantId);
+    res.json({
+      message: `Deleted ${result.deleted} Titan-only projects`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/vista/titan-only/vendors - Delete all Titan-only vendors
+router.delete('/titan-only/vendors', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.deleteTitanOnlyVendors(req.tenantId);
+    res.json({
+      message: `Deleted ${result.deleted} Titan-only vendors`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== TITAN DUPLICATES ====================
+
+// GET /api/vista/titan-duplicates/customers - Find duplicate customers within Titan
+router.get('/titan-duplicates/customers', async (req, res, next) => {
+  try {
+    const duplicates = await VistaData.findTitanDuplicateCustomers(req.tenantId);
+    res.json(duplicates);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/titan-duplicates/employees - Find duplicate employees within Titan
+router.get('/titan-duplicates/employees', async (req, res, next) => {
+  try {
+    const duplicates = await VistaData.findTitanDuplicateEmployees(req.tenantId);
+    res.json(duplicates);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/titan-duplicates/projects - Find duplicate projects within Titan
+router.get('/titan-duplicates/projects', async (req, res, next) => {
+  try {
+    const duplicates = await VistaData.findTitanDuplicateProjects(req.tenantId);
+    res.json(duplicates);
   } catch (error) {
     next(error);
   }

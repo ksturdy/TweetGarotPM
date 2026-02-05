@@ -871,4 +871,62 @@ export const vistaDataService = {
     });
     return response.data;
   },
+
+  // Auto-link all VP employees that have exact employee number matches to Titan employees
+  autoLinkExactEmployeeMatches: async (): Promise<{ employees_linked: number }> => {
+    const response = await api.post('/vista/auto-link-employees');
+    return response.data;
+  },
+
+  // ==================== DELETE TITAN-ONLY RECORDS ====================
+
+  deleteTitanOnlyCustomers: async (): Promise<{ message: string; deleted: number; records: any[] }> => {
+    const response = await api.delete('/vista/titan-only/customers');
+    return response.data;
+  },
+
+  deleteTitanOnlyEmployees: async (): Promise<{ message: string; deleted: number; records: any[] }> => {
+    const response = await api.delete('/vista/titan-only/employees');
+    return response.data;
+  },
+
+  deleteTitanOnlyProjects: async (): Promise<{ message: string; deleted: number; records: any[] }> => {
+    const response = await api.delete('/vista/titan-only/projects');
+    return response.data;
+  },
+
+  deleteTitanOnlyVendors: async (): Promise<{ message: string; deleted: number; records: any[] }> => {
+    const response = await api.delete('/vista/titan-only/vendors');
+    return response.data;
+  },
+
+  // ==================== TITAN DUPLICATES ====================
+
+  getTitanDuplicateCustomers: async (): Promise<TitanDuplicate[]> => {
+    const response = await api.get('/vista/titan-duplicates/customers');
+    return response.data;
+  },
+
+  getTitanDuplicateEmployees: async (): Promise<TitanDuplicate[]> => {
+    const response = await api.get('/vista/titan-duplicates/employees');
+    return response.data;
+  },
+
+  getTitanDuplicateProjects: async (): Promise<TitanDuplicate[]> => {
+    const response = await api.get('/vista/titan-duplicates/projects');
+    return response.data;
+  },
 };
+
+// Titan Duplicate interface
+export interface TitanDuplicate {
+  id1: number;
+  name1: string;
+  number1?: string | null;
+  facility1?: string | null;
+  id2: number;
+  name2: string;
+  number2?: string | null;
+  facility2?: string | null;
+  similarity: number;
+}

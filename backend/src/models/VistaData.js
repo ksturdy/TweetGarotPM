@@ -2767,6 +2767,283 @@ const VistaData = {
     } finally {
       client.release();
     }
+  },
+
+  // ==================== DELETE TITAN-ONLY RECORDS ====================
+  // Delete Titan records that are not linked to Vista (for cleanup before Vista import)
+
+  async deleteTitanOnlyCustomers(tenantId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find Titan customers not linked to any Vista customer
+      const toDelete = await client.query(
+        `SELECT c.id, c.customer_owner, c.customer_facility
+         FROM customers c
+         LEFT JOIN vp_customers vpc ON vpc.linked_customer_id = c.id
+         WHERE c.tenant_id = $1 AND vpc.id IS NULL`,
+        [tenantId]
+      );
+
+      if (toDelete.rows.length === 0) {
+        await client.query('COMMIT');
+        return { deleted: 0, records: [] };
+      }
+
+      const idsToDelete = toDelete.rows.map(r => r.id);
+
+      // Delete customer contacts first (foreign key constraint)
+      await client.query(
+        `DELETE FROM customer_contacts WHERE customer_id = ANY($1)`,
+        [idsToDelete]
+      );
+
+      // Delete the customers
+      const result = await client.query(
+        `DELETE FROM customers WHERE id = ANY($1) RETURNING id, customer_owner, customer_facility`,
+        [idsToDelete]
+      );
+
+      await client.query('COMMIT');
+      return { deleted: result.rowCount, records: result.rows };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteTitanOnlyEmployees(tenantId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find Titan employees not linked to any Vista employee
+      const toDelete = await client.query(
+        `SELECT e.id, e.first_name, e.last_name, e.employee_number
+         FROM employees e
+         LEFT JOIN vp_employees vpe ON vpe.linked_employee_id = e.id
+         WHERE e.tenant_id = $1 AND vpe.id IS NULL`,
+        [tenantId]
+      );
+
+      if (toDelete.rows.length === 0) {
+        await client.query('COMMIT');
+        return { deleted: 0, records: [] };
+      }
+
+      const idsToDelete = toDelete.rows.map(r => r.id);
+
+      // Update projects to remove PM reference (set to null instead of deleting projects)
+      await client.query(
+        `UPDATE projects SET project_manager_id = NULL WHERE project_manager_id = ANY($1)`,
+        [idsToDelete]
+      );
+
+      // Delete the employees
+      const result = await client.query(
+        `DELETE FROM employees WHERE id = ANY($1) RETURNING id, first_name, last_name, employee_number`,
+        [idsToDelete]
+      );
+
+      await client.query('COMMIT');
+      return { deleted: result.rowCount, records: result.rows };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteTitanOnlyProjects(tenantId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find Titan projects not linked to any Vista contract
+      const toDelete = await client.query(
+        `SELECT p.id, p.number, p.name
+         FROM projects p
+         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $1
+         WHERE p.tenant_id = $1 AND vc.id IS NULL`,
+        [tenantId]
+      );
+
+      if (toDelete.rows.length === 0) {
+        await client.query('COMMIT');
+        return { deleted: 0, records: [] };
+      }
+
+      const idsToDelete = toDelete.rows.map(r => r.id);
+
+      // Delete related records first (cascades won't help here due to foreign keys)
+      // Note: This is a destructive operation and will remove all project data
+      await client.query(`DELETE FROM daily_report_entries WHERE daily_report_id IN (SELECT id FROM daily_reports WHERE project_id = ANY($1))`, [idsToDelete]);
+      await client.query(`DELETE FROM daily_reports WHERE project_id = ANY($1)`, [idsToDelete]);
+      await client.query(`DELETE FROM submittals WHERE project_id = ANY($1)`, [idsToDelete]);
+      await client.query(`DELETE FROM rfis WHERE project_id = ANY($1)`, [idsToDelete]);
+      await client.query(`DELETE FROM change_orders WHERE project_id = ANY($1)`, [idsToDelete]);
+      await client.query(`DELETE FROM schedule_items WHERE project_id = ANY($1)`, [idsToDelete]);
+
+      // Delete the projects
+      const result = await client.query(
+        `DELETE FROM projects WHERE id = ANY($1) RETURNING id, number, name`,
+        [idsToDelete]
+      );
+
+      await client.query('COMMIT');
+      return { deleted: result.rowCount, records: result.rows };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteTitanOnlyVendors(tenantId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find Titan vendors not linked to any Vista vendor
+      const toDelete = await client.query(
+        `SELECT v.id, v.vendor_name
+         FROM vendors v
+         LEFT JOIN vp_vendors vpv ON vpv.linked_vendor_id = v.id
+         WHERE v.tenant_id = $1 AND vpv.id IS NULL`,
+        [tenantId]
+      );
+
+      if (toDelete.rows.length === 0) {
+        await client.query('COMMIT');
+        return { deleted: 0, records: [] };
+      }
+
+      const idsToDelete = toDelete.rows.map(r => r.id);
+
+      // Delete the vendors
+      const result = await client.query(
+        `DELETE FROM vendors WHERE id = ANY($1) RETURNING id, vendor_name`,
+        [idsToDelete]
+      );
+
+      await client.query('COMMIT');
+      return { deleted: result.rowCount, records: result.rows };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // ==================== AUTO-LINK EMPLOYEES ====================
+  // Auto-link Vista employees to Titan employees by exact employee number match
+
+  async autoLinkExactEmployeeMatches(tenantId, userId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find exact matches by employee number (100% match)
+      const result = await client.query(
+        `UPDATE vp_employees vpe SET
+          linked_employee_id = e.id,
+          link_status = 'auto_matched',
+          link_confidence = 1.0,
+          linked_at = CURRENT_TIMESTAMP,
+          linked_by = $2
+         FROM employees e
+         WHERE vpe.employee_number = e.employee_number
+           AND e.tenant_id = $1
+           AND vpe.linked_employee_id IS NULL
+         RETURNING vpe.id, vpe.employee_number, e.id as titan_id`,
+        [tenantId, userId]
+      );
+
+      await client.query('COMMIT');
+      return {
+        employees_linked: result.rowCount,
+        linked: result.rows
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // ==================== FIND TITAN DUPLICATES ====================
+  // Find duplicate records within Titan (not Vista linking)
+
+  async findTitanDuplicateCustomers(tenantId) {
+    // Find customers with similar names (potential duplicates)
+    const result = await db.query(
+      `SELECT c1.id as id1, c1.customer_owner as name1, c1.customer_facility as facility1,
+              c2.id as id2, c2.customer_owner as name2, c2.customer_facility as facility2,
+              SIMILARITY(LOWER(c1.customer_owner), LOWER(c2.customer_owner)) as similarity
+       FROM customers c1
+       JOIN customers c2 ON c1.id < c2.id AND c1.tenant_id = c2.tenant_id
+       WHERE c1.tenant_id = $1
+         AND c1.customer_owner IS NOT NULL
+         AND c2.customer_owner IS NOT NULL
+         AND SIMILARITY(LOWER(c1.customer_owner), LOWER(c2.customer_owner)) > 0.7
+       ORDER BY similarity DESC
+       LIMIT 100`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async findTitanDuplicateEmployees(tenantId) {
+    // Find employees with same employee number or similar names
+    const result = await db.query(
+      `SELECT e1.id as id1, e1.first_name || ' ' || e1.last_name as name1, e1.employee_number as number1,
+              e2.id as id2, e2.first_name || ' ' || e2.last_name as name2, e2.employee_number as number2,
+              CASE
+                WHEN e1.employee_number IS NOT NULL AND e1.employee_number = e2.employee_number THEN 1.0
+                ELSE SIMILARITY(LOWER(e1.first_name || ' ' || e1.last_name), LOWER(e2.first_name || ' ' || e2.last_name))
+              END as similarity
+       FROM employees e1
+       JOIN employees e2 ON e1.id < e2.id AND e1.tenant_id = e2.tenant_id
+       WHERE e1.tenant_id = $1
+         AND (
+           (e1.employee_number IS NOT NULL AND e1.employee_number = e2.employee_number)
+           OR SIMILARITY(LOWER(e1.first_name || ' ' || e1.last_name), LOWER(e2.first_name || ' ' || e2.last_name)) > 0.7
+         )
+       ORDER BY similarity DESC
+       LIMIT 100`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async findTitanDuplicateProjects(tenantId) {
+    // Find projects with similar names or numbers
+    const result = await db.query(
+      `SELECT p1.id as id1, p1.name as name1, p1.number as number1,
+              p2.id as id2, p2.name as name2, p2.number as number2,
+              CASE
+                WHEN p1.number IS NOT NULL AND p1.number = p2.number THEN 1.0
+                ELSE SIMILARITY(LOWER(p1.name), LOWER(p2.name))
+              END as similarity
+       FROM projects p1
+       JOIN projects p2 ON p1.id < p2.id AND p1.tenant_id = p2.tenant_id
+       WHERE p1.tenant_id = $1
+         AND (
+           (p1.number IS NOT NULL AND p1.number = p2.number)
+           OR SIMILARITY(LOWER(p1.name), LOWER(p2.name)) > 0.7
+         )
+       ORDER BY similarity DESC
+       LIMIT 100`,
+      [tenantId]
+    );
+    return result.rows;
   }
 };
 

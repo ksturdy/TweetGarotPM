@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { vistaDataService, VPContract, VPWorkOrder, VPEmployee, VPCustomer, VPVendor, LinkData, EmployeeDuplicate, CustomerDuplicate, ContractDuplicate, DepartmentDuplicate, VendorDuplicate, ImportToTitanResult, LinkDepartmentCodeResult, AutoLinkDepartmentsResult, AutoLinkCustomersResult, AutoLinkVendorsResult, VPStats, TitanOnlyProject, TitanOnlyEmployee, TitanOnlyCustomer, TitanOnlyVendor } from '../../services/vistaData';
+import { vistaDataService, VPContract, VPWorkOrder, VPEmployee, VPCustomer, VPVendor, LinkData, EmployeeDuplicate, CustomerDuplicate, ContractDuplicate, DepartmentDuplicate, VendorDuplicate, ImportToTitanResult, LinkDepartmentCodeResult, AutoLinkDepartmentsResult, AutoLinkCustomersResult, AutoLinkVendorsResult, VPStats, TitanOnlyProject, TitanOnlyEmployee, TitanOnlyCustomer, TitanOnlyVendor, TitanDuplicate } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
 import { employeesApi } from '../../services/employees';
 import { customersApi } from '../../services/customers';
@@ -638,6 +638,58 @@ const VistaLinkingManager: React.FC = () => {
     },
   });
 
+  // DELETE Titan-only mutations
+  const deleteTitanOnlyCustomersMutation = useMutation({
+    mutationFn: vistaDataService.deleteTitanOnlyCustomers,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['titan-only-customers'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      showSuccess(`Deleted ${data.deleted} Titan-only customers`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to delete Titan-only customers');
+    },
+  });
+
+  const deleteTitanOnlyEmployeesMutation = useMutation({
+    mutationFn: vistaDataService.deleteTitanOnlyEmployees,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['titan-only-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      showSuccess(`Deleted ${data.deleted} Titan-only employees`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to delete Titan-only employees');
+    },
+  });
+
+  const deleteTitanOnlyProjectsMutation = useMutation({
+    mutationFn: vistaDataService.deleteTitanOnlyProjects,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['titan-only-projects'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      showSuccess(`Deleted ${data.deleted} Titan-only projects`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to delete Titan-only projects');
+    },
+  });
+
+  const deleteTitanOnlyVendorsMutation = useMutation({
+    mutationFn: vistaDataService.deleteTitanOnlyVendors,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['titan-only-vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      showSuccess(`Deleted ${data.deleted} Titan-only vendors`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to delete Titan-only vendors');
+    },
+  });
+
   const linkDepartmentCodeMutation = useMutation({
     mutationFn: ({ departmentCode, departmentId }: { departmentCode: string; departmentId: number }) =>
       vistaDataService.linkDepartmentCode(departmentCode, departmentId),
@@ -997,10 +1049,48 @@ const VistaLinkingManager: React.FC = () => {
       );
     }
 
+    const handleDeleteAll = () => {
+      const entityName = expandedEntity === 'contracts' ? 'projects' : expandedEntity;
+      if (window.confirm(`Are you sure you want to DELETE ALL ${data.length} Titan-only ${entityName}? This action cannot be undone.`)) {
+        if (expandedEntity === 'contracts') {
+          deleteTitanOnlyProjectsMutation.mutate();
+        } else if (expandedEntity === 'employees') {
+          deleteTitanOnlyEmployeesMutation.mutate();
+        } else if (expandedEntity === 'customers') {
+          deleteTitanOnlyCustomersMutation.mutate();
+        } else if (expandedEntity === 'vendors') {
+          deleteTitanOnlyVendorsMutation.mutate();
+        }
+      }
+    };
+
+    const isDeleting = deleteTitanOnlyProjectsMutation.isPending ||
+                       deleteTitanOnlyEmployeesMutation.isPending ||
+                       deleteTitanOnlyCustomersMutation.isPending ||
+                       deleteTitanOnlyVendorsMutation.isPending;
+
     return (
       <div>
-        <div style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-          Showing {data.length} Titan record(s) not linked to Vista
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            Showing {data.length} Titan record(s) not linked to Vista
+          </div>
+          <button
+            onClick={handleDeleteAll}
+            disabled={isDeleting}
+            style={{
+              padding: '8px 16px',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: isDeleting ? 'not-allowed' : 'pointer',
+              opacity: isDeleting ? 0.6 : 1,
+              fontWeight: 500,
+            }}
+          >
+            {isDeleting ? 'Deleting...' : `Delete All ${data.length} Records`}
+          </button>
         </div>
         <table className="sales-table" style={{ width: '100%' }}>
           <thead>
