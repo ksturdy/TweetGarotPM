@@ -558,6 +558,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     };
 
     const autoLink = {
+      contracts: { linked: 0 },
       customers: { linked: 0 },
       employees: { linked: 0 },
       vendors: { linked: 0 },
@@ -568,6 +569,13 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       // FIRST: Auto-link 100% matches BEFORE importing new records
       // This links Vista records to existing Titan records by exact match
       console.log('[Vista Import] Auto-linking 100% matches...');
+
+      // Auto-link contracts by contract_number = project.number
+      if (results.contracts.total > 0) {
+        const contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
+        autoLink.contracts = contractLinkResult;
+        console.log(`[Vista Import] Auto-linked ${contractLinkResult.contracts_linked} contracts (100% match by number)`);
+      }
 
       if (results.customers.total > 0) {
         const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
@@ -587,7 +595,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-linked ${vendorLinkResult.vendors_linked} vendors (100% match)`);
       }
 
-      // Auto-import contracts as projects (only those not linked)
+      // Auto-import contracts as projects (only those NOT already linked)
       if (results.contracts.total > 0) {
         console.log('[Vista Import] Auto-importing contracts as projects...');
         const contractResult = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
@@ -1428,6 +1436,20 @@ router.post('/auto-link-employees', requireAdmin, async (req, res, next) => {
 
     res.json({
       message: `Auto-linked ${result.employees_linked} employees`,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/vista/auto-link-contracts - Auto-link contracts by contract_number = project.number
+router.post('/auto-link-contracts', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
+
+    res.json({
+      message: `Auto-linked ${result.contracts_linked} contracts`,
       ...result
     });
   } catch (error) {

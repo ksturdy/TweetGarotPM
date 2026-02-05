@@ -2769,6 +2769,43 @@ const VistaData = {
     }
   },
 
+  // Auto-link VP contracts to Titan projects by exact contract number = project number match
+  async autoLinkExactContractMatches(tenantId, userId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Find Vista contracts that match Titan projects by contract_number = project.number
+      // Only link contracts that aren't already linked
+      const result = await client.query(
+        `UPDATE vp_contracts vc SET
+          linked_project_id = p.id,
+          link_status = 'auto_matched',
+          link_confidence = 1.0,
+          linked_at = CURRENT_TIMESTAMP,
+          linked_by = $2
+         FROM projects p
+         WHERE vc.contract_number = p.number
+           AND vc.tenant_id = $1
+           AND p.tenant_id = $1
+           AND vc.linked_project_id IS NULL
+         RETURNING vc.id, vc.contract_number, p.id as titan_id, p.name as titan_name`,
+        [tenantId, userId]
+      );
+
+      await client.query('COMMIT');
+      return {
+        contracts_linked: result.rowCount,
+        linked: result.rows
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // ==================== DELETE TITAN-ONLY RECORDS ====================
   // Delete Titan records that are not linked to Vista (for cleanup before Vista import)
 
