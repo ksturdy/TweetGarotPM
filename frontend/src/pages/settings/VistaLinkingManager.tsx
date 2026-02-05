@@ -24,11 +24,15 @@ interface EntityCardProps {
   icon: string;
   color: string;
   stats: {
-    total: number;
-    unmatched: number;
-    matched: number;
+    vistaCount: number;
+    titanCount: number;
+    linked: number;
+    vistaUnlinked: number;
+    titanUnlinked: number;
     potentialMatches?: number;
   };
+  vistaLabel?: string;
+  titanLabel?: string;
   isExpanded: boolean;
   isLoading: boolean;
   onToggle: () => void;
@@ -36,7 +40,7 @@ interface EntityCardProps {
 }
 
 const EntityCard: React.FC<EntityCardProps> = ({
-  title, icon, color, stats, isExpanded, isLoading, onToggle, actions
+  title, icon, color, stats, vistaLabel = 'Vista', titanLabel = 'Titan', isExpanded, isLoading, onToggle, actions
 }) => (
   <div
     style={{
@@ -74,23 +78,88 @@ const EntityCard: React.FC<EntityCardProps> = ({
       {isLoading ? (
         <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Loading...</div>
       ) : (
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700, color }}>{stats.total}</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Vista side */}
+          <div style={{
+            background: 'rgba(99, 102, 241, 0.1)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            minWidth: '70px',
+          }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#6366f1' }}>{stats.vistaCount.toLocaleString()}</span>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{vistaLabel}</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700, color: stats.unmatched > 0 ? '#ef4444' : '#10b981' }}>{stats.unmatched}</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Unlinked</span>
+
+          {/* Arrow and linked count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '1.25rem' }}>→</span>
+            <div style={{
+              background: stats.linked > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              minWidth: '70px',
+            }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: stats.linked > 0 ? '#10b981' : '#ef4444' }}>{stats.linked.toLocaleString()}</span>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Linked</span>
+            </div>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '1.25rem' }}>←</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-            <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>{stats.matched}</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Linked</span>
+
+          {/* Titan side */}
+          <div style={{
+            background: 'rgba(245, 158, 11, 0.1)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            minWidth: '70px',
+          }}>
+            <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#f59e0b' }}>{stats.titanCount.toLocaleString()}</span>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{titanLabel}</span>
           </div>
-          {stats.potentialMatches !== undefined && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-              <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#f59e0b' }}>{stats.potentialMatches}</span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Matches</span>
+
+          {/* Unlinked counts */}
+          {(stats.vistaUnlinked > 0 || stats.titanUnlinked > 0) && (
+            <div style={{
+              marginLeft: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              fontSize: '0.75rem',
+            }}>
+              {stats.vistaUnlinked > 0 && (
+                <span style={{ color: '#ef4444' }}>
+                  {stats.vistaUnlinked.toLocaleString()} {vistaLabel} unlinked
+                </span>
+              )}
+              {stats.titanUnlinked > 0 && (
+                <span style={{ color: '#f59e0b' }}>
+                  {stats.titanUnlinked.toLocaleString()} {titanLabel} unlinked
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Potential matches */}
+          {stats.potentialMatches !== undefined && stats.potentialMatches > 0 && (
+            <div style={{
+              marginLeft: 'auto',
+              background: 'rgba(245, 158, 11, 0.2)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}>
+              <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>{stats.potentialMatches}</span>
+              <span style={{ fontSize: '0.7rem', color: '#f59e0b', textTransform: 'uppercase' }}>Matches</span>
             </div>
           )}
         </div>
@@ -677,54 +746,91 @@ const VistaLinkingManager: React.FC = () => {
     );
   }
 
-  // Calculate stats for each entity
+  // Calculate stats for each entity - showing Vista vs Titan comparison
   const getEntityStats = (entity: EntityType) => {
-    if (!stats) return { total: 0, unmatched: 0, matched: 0, potentialMatches: 0 };
+    const defaultStats = { vistaCount: 0, titanCount: 0, linked: 0, vistaUnlinked: 0, titanUnlinked: 0, potentialMatches: 0 };
+    if (!stats) return defaultStats;
 
     switch (entity) {
-      case 'contracts':
+      case 'contracts': {
+        const vistaCount = stats.vista_contracts || stats.total_contracts || 0;
+        const titanCount = stats.titan_projects || 0;
+        const linked = stats.matched_contracts || 0;
         return {
-          total: stats.total_contracts,
-          unmatched: stats.unmatched_contracts,
-          matched: stats.matched_contracts,
+          vistaCount,
+          titanCount,
+          linked,
+          vistaUnlinked: stats.unmatched_contracts || 0,
+          titanUnlinked: titanCount - (stats.titan_projects_linked || 0),
           potentialMatches: contractDuplicates?.length || 0,
         };
-      case 'work-orders':
+      }
+      case 'work-orders': {
+        const vistaCount = stats.vista_work_orders || stats.total_work_orders || 0;
+        const linked = stats.matched_work_orders || 0;
         return {
-          total: stats.total_work_orders,
-          unmatched: stats.unmatched_work_orders,
-          matched: stats.matched_work_orders,
+          vistaCount,
+          titanCount: 0, // Work orders don't have a Titan equivalent yet
+          linked,
+          vistaUnlinked: stats.unmatched_work_orders || 0,
+          titanUnlinked: 0,
+          potentialMatches: 0,
         };
-      case 'employees':
+      }
+      case 'employees': {
+        const vistaCount = stats.vista_employees || stats.total_employees || 0;
+        const titanCount = stats.titan_employees || 0;
+        const linked = stats.linked_employees || 0;
         return {
-          total: stats.total_employees,
-          unmatched: stats.total_employees - stats.active_employees, // Approximation
-          matched: stats.active_employees,
+          vistaCount,
+          titanCount,
+          linked,
+          vistaUnlinked: vistaCount - linked,
+          titanUnlinked: titanCount - (stats.titan_employees_linked || 0),
           potentialMatches: employeeDuplicates?.length || 0,
         };
-      case 'customers':
+      }
+      case 'customers': {
+        const vistaCount = stats.vista_customers || stats.total_customers || 0;
+        const titanCount = stats.titan_customers || 0;
+        const linked = stats.linked_customers || 0;
         return {
-          total: stats.total_customers,
-          unmatched: stats.total_customers - stats.active_customers,
-          matched: stats.active_customers,
+          vistaCount,
+          titanCount,
+          linked,
+          vistaUnlinked: vistaCount - linked,
+          titanUnlinked: titanCount - (stats.titan_customers_linked || 0),
           potentialMatches: customerDuplicates?.length || 0,
         };
-      case 'vendors':
+      }
+      case 'vendors': {
+        const vistaCount = stats.vista_vendors || stats.total_vendors || 0;
+        const titanCount = stats.titan_vendors || 0;
+        const linked = stats.linked_vendors || 0;
         return {
-          total: stats.total_vendors,
-          unmatched: stats.total_vendors - stats.active_vendors,
-          matched: stats.active_vendors,
+          vistaCount,
+          titanCount,
+          linked,
+          vistaUnlinked: vistaCount - linked,
+          titanUnlinked: titanCount - (stats.titan_vendors_linked || 0),
           potentialMatches: vendorDuplicates?.length || 0,
         };
-      case 'departments':
+      }
+      case 'departments': {
+        const vistaCount = stats.vista_departments || 0;
+        const titanCount = stats.titan_departments || 0;
+        const linked = stats.linked_departments || 0;
         return {
-          total: departmentDuplicates?.length || 0,
-          unmatched: departmentDuplicates?.length || 0,
-          matched: 0,
+          vistaCount,
+          titanCount,
+          linked,
+          vistaUnlinked: vistaCount - linked,
+          titanUnlinked: 0, // Departments are created from Vista codes
           potentialMatches: departmentDuplicates?.length || 0,
         };
+      }
       default:
-        return { total: 0, unmatched: 0, matched: 0, potentialMatches: 0 };
+        return defaultStats;
     }
   };
 
@@ -1471,6 +1577,8 @@ const VistaLinkingManager: React.FC = () => {
           icon="📋"
           color="#3b82f6"
           stats={getEntityStats('contracts')}
+          vistaLabel="Vista"
+          titanLabel="Projects"
           isExpanded={expandedEntity === 'contracts'}
           isLoading={statsLoading}
           onToggle={() => toggleEntity('contracts')}
@@ -1497,6 +1605,8 @@ const VistaLinkingManager: React.FC = () => {
           icon="🔧"
           color="#8b5cf6"
           stats={getEntityStats('work-orders')}
+          vistaLabel="Vista"
+          titanLabel="Projects"
           isExpanded={expandedEntity === 'work-orders'}
           isLoading={statsLoading}
           onToggle={() => toggleEntity('work-orders')}

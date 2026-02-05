@@ -104,8 +104,13 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    console.log(`[Vista Import] Starting import of ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
+    const startTime = Date.now();
+
     // Parse the Excel file
+    console.log('[Vista Import] Parsing Excel file...');
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    console.log(`[Vista Import] Excel parsed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Sheets: ${workbook.SheetNames.join(', ')}`);
 
     const results = {
       contracts: { total: 0, new: 0, updated: 0, batch_id: null },
@@ -120,9 +125,11 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     // Process Contracts sheet (TGPBI_PMContractStatus)
     const contractSheetName = 'TGPBI_PMContractStatus';
     if (workbook.SheetNames.includes(contractSheetName)) {
+      console.log(`[Vista Import] Processing ${contractSheetName}...`);
       results.sheetsFound.push(contractSheetName);
       const worksheet = workbook.Sheets[contractSheetName];
       const data = XLSX.utils.sheet_to_json(worksheet);
+      console.log(`[Vista Import] ${contractSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
         // Create import batch for contracts
@@ -194,9 +201,11 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     // Process Work Orders sheet (TGPBI_SMWorkOrderStatus)
     const workOrderSheetName = 'TGPBI_SMWorkOrderStatus';
     if (workbook.SheetNames.includes(workOrderSheetName)) {
+      console.log(`[Vista Import] Processing ${workOrderSheetName}...`);
       results.sheetsFound.push(workOrderSheetName);
       const worksheet = workbook.Sheets[workOrderSheetName];
       const data = XLSX.utils.sheet_to_json(worksheet);
+      console.log(`[Vista Import] ${workOrderSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
         // Create import batch for work orders
@@ -425,11 +434,15 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       });
     }
 
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Vista Import] Complete in ${totalTime}s. Sheets processed: ${results.sheetsProcessed.join(', ')}`);
+
     res.json({
       message: `Successfully imported data from ${results.sheetsProcessed.length} sheet(s)`,
       ...results
     });
   } catch (error) {
+    console.error('[Vista Import] Error:', error.message);
     next(error);
   }
 });

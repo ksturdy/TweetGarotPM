@@ -120,18 +120,48 @@ export interface VPImportBatch {
 }
 
 export interface VPStats {
-  total_contracts: number;
-  unmatched_contracts: number;
+  // Vista counts
+  vista_contracts: number;
+  vista_work_orders: number;
+  vista_employees: number;
+  vista_customers: number;
+  vista_vendors: number;
+  vista_departments: number;
+
+  // Titan counts
+  titan_projects: number;
+  titan_projects_linked: number;
+  titan_employees: number;
+  titan_employees_linked: number;
+  titan_customers: number;
+  titan_customers_linked: number;
+  titan_vendors: number;
+  titan_vendors_linked: number;
+  titan_departments: number;
+
+  // Linked counts (Vista records linked to Titan)
   matched_contracts: number;
-  total_work_orders: number;
-  unmatched_work_orders: number;
+  unmatched_contracts: number;
   matched_work_orders: number;
-  total_employees: number;
+  unmatched_work_orders: number;
+  linked_employees: number;
+  linked_customers: number;
+  linked_vendors: number;
+  linked_departments: number;
+
+  // Active counts
   active_employees: number;
-  total_customers: number;
   active_customers: number;
-  total_vendors: number;
   active_vendors: number;
+
+  // Legacy fields for backwards compatibility
+  total_contracts: number;
+  total_work_orders: number;
+  total_employees: number;
+  total_customers: number;
+  total_vendors: number;
+
+  // Import timestamps
   last_contracts_import: string | null;
   last_work_orders_import: string | null;
   last_employees_import: string | null;

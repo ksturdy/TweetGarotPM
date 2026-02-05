@@ -1181,23 +1181,62 @@ const VistaData = {
   async getStats(tenantId) {
     const result = await db.query(`
       SELECT
-        (SELECT COUNT(*) FROM vp_contracts WHERE tenant_id = $1) as total_contracts,
+        -- Vista Contracts
+        (SELECT COUNT(*) FROM vp_contracts WHERE tenant_id = $1) as vista_contracts,
         (SELECT COUNT(*) FROM vp_contracts WHERE tenant_id = $1 AND link_status = 'unmatched') as unmatched_contracts,
         (SELECT COUNT(*) FROM vp_contracts WHERE tenant_id = $1 AND link_status IN ('auto_matched', 'manual_matched')) as matched_contracts,
-        (SELECT COUNT(*) FROM vp_work_orders WHERE tenant_id = $1) as total_work_orders,
+        -- Titan Projects (contracts link to projects)
+        (SELECT COUNT(*) FROM projects WHERE tenant_id = $1) as titan_projects,
+        (SELECT COUNT(*) FROM projects p WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_contracts vc WHERE vc.linked_project_id = p.id)) as titan_projects_linked,
+
+        -- Vista Work Orders
+        (SELECT COUNT(*) FROM vp_work_orders WHERE tenant_id = $1) as vista_work_orders,
         (SELECT COUNT(*) FROM vp_work_orders WHERE tenant_id = $1 AND link_status = 'unmatched') as unmatched_work_orders,
         (SELECT COUNT(*) FROM vp_work_orders WHERE tenant_id = $1 AND link_status IN ('auto_matched', 'manual_matched')) as matched_work_orders,
-        (SELECT COUNT(*) FROM vp_employees) as total_employees,
+
+        -- Vista Employees
+        (SELECT COUNT(*) FROM vp_employees) as vista_employees,
         (SELECT COUNT(*) FROM vp_employees WHERE active = true) as active_employees,
-        (SELECT COUNT(*) FROM vp_customers) as total_customers,
+        (SELECT COUNT(*) FROM vp_employees WHERE linked_employee_id IS NOT NULL) as linked_employees,
+        -- Titan Employees
+        (SELECT COUNT(*) FROM employees WHERE tenant_id = $1) as titan_employees,
+        (SELECT COUNT(*) FROM employees e WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_employees ve WHERE ve.linked_employee_id = e.id)) as titan_employees_linked,
+
+        -- Vista Customers
+        (SELECT COUNT(*) FROM vp_customers) as vista_customers,
         (SELECT COUNT(*) FROM vp_customers WHERE active = true) as active_customers,
-        (SELECT COUNT(*) FROM vp_vendors) as total_vendors,
+        (SELECT COUNT(*) FROM vp_customers WHERE linked_customer_id IS NOT NULL) as linked_customers,
+        -- Titan Customers
+        (SELECT COUNT(*) FROM customers WHERE tenant_id = $1) as titan_customers,
+        (SELECT COUNT(*) FROM customers c WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_customers vc WHERE vc.linked_customer_id = c.id)) as titan_customers_linked,
+
+        -- Vista Vendors
+        (SELECT COUNT(*) FROM vp_vendors) as vista_vendors,
         (SELECT COUNT(*) FROM vp_vendors WHERE active = true) as active_vendors,
+        (SELECT COUNT(*) FROM vp_vendors WHERE linked_vendor_id IS NOT NULL) as linked_vendors,
+        -- Titan Vendors
+        (SELECT COUNT(*) FROM vendors WHERE tenant_id = $1) as titan_vendors,
+        (SELECT COUNT(*) FROM vendors v WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_vendors vv WHERE vv.linked_vendor_id = v.id)) as titan_vendors_linked,
+
+        -- Vista Departments
+        (SELECT COUNT(DISTINCT department_code) FROM vp_contracts WHERE tenant_id = $1 AND department_code IS NOT NULL AND department_code != '') as vista_departments,
+        (SELECT COUNT(*) FROM department_code_links WHERE tenant_id = $1) as linked_departments,
+        -- Titan Departments
+        (SELECT COUNT(*) FROM departments WHERE tenant_id = $1) as titan_departments,
+
+        -- Import timestamps
         (SELECT MAX(imported_at) FROM vp_import_batches WHERE tenant_id = $1 AND file_type = 'contracts') as last_contracts_import,
         (SELECT MAX(imported_at) FROM vp_import_batches WHERE tenant_id = $1 AND file_type = 'work_orders') as last_work_orders_import,
         (SELECT MAX(imported_at) FROM vp_import_batches WHERE file_type = 'employees') as last_employees_import,
         (SELECT MAX(imported_at) FROM vp_import_batches WHERE file_type = 'customers') as last_customers_import,
-        (SELECT MAX(imported_at) FROM vp_import_batches WHERE file_type = 'vendors') as last_vendors_import
+        (SELECT MAX(imported_at) FROM vp_import_batches WHERE file_type = 'vendors') as last_vendors_import,
+
+        -- Legacy field names for backwards compatibility
+        (SELECT COUNT(*) FROM vp_contracts WHERE tenant_id = $1) as total_contracts,
+        (SELECT COUNT(*) FROM vp_work_orders WHERE tenant_id = $1) as total_work_orders,
+        (SELECT COUNT(*) FROM vp_employees) as total_employees,
+        (SELECT COUNT(*) FROM vp_customers) as total_customers,
+        (SELECT COUNT(*) FROM vp_vendors) as total_vendors
     `, [tenantId]);
     return result.rows[0];
   },
