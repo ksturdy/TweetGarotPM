@@ -79,8 +79,26 @@ router.get('/import/history', async (req, res, next) => {
   }
 });
 
+// Multer error handler wrapper
+const handleUpload = (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        // Multer-specific errors
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: 'File too large. Maximum size is 200MB.' });
+        }
+        return res.status(400).json({ message: `Upload error: ${err.message}` });
+      }
+      // Other errors (like invalid file type from fileFilter)
+      return res.status(400).json({ message: err.message });
+    }
+    next();
+  });
+};
+
 // POST /api/vista/import/upload - Import both contracts and work orders from single Excel file
-router.post('/import/upload', requireAdmin, upload.single('file'), async (req, res, next) => {
+router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
