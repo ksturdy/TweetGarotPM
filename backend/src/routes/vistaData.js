@@ -3,6 +3,9 @@ const router = express.Router();
 const VistaData = require('../models/VistaData');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 
@@ -24,11 +27,19 @@ const parseNumber = (value) => {
   return isNaN(num) ? null : num;
 };
 
-// Configure multer for Excel file uploads
+// Configure multer for Excel file uploads - use disk storage to avoid memory issues
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, os.tmpdir());
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, `vista-upload-${uniqueSuffix}${path.extname(file.originalname)}`);
+    }
+  }),
   limits: {
-    fileSize: 200 * 1024 * 1024, // 200MB limit for large VP data files
+    fileSize: 100 * 1024 * 1024, // 100MB limit (Render.com constraint)
   },
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
@@ -86,7 +97,7 @@ const handleUpload = (req, res, next) => {
       if (err instanceof multer.MulterError) {
         // Multer-specific errors
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ message: 'File too large. Maximum size is 200MB.' });
+          return res.status(400).json({ message: 'File too large. Maximum size is 100MB.' });
         }
         return res.status(400).json({ message: `Upload error: ${err.message}` });
       }
@@ -99,17 +110,19 @@ const handleUpload = (req, res, next) => {
 
 // POST /api/vista/import/upload - Import both contracts and work orders from single Excel file
 router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next) => {
+  let tempFilePath = null;
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    tempFilePath = req.file.path;
     console.log(`[Vista Import] Starting import of ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
     const startTime = Date.now();
 
-    // Parse the Excel file
-    console.log('[Vista Import] Parsing Excel file...');
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    // Parse the Excel file from disk to avoid memory issues
+    console.log('[Vista Import] Parsing Excel file from disk...');
+    const workbook = XLSX.readFile(tempFilePath);
     console.log(`[Vista Import] Excel parsed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Sheets: ${workbook.SheetNames.join(', ')}`);
 
     const results = {
@@ -590,6 +603,13 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[Vista Import] Complete in ${totalTime}s. Sheets processed: ${results.sheetsProcessed.join(', ')}`);
 
+    // Clean up temp file
+    if (tempFilePath) {
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.error('[Vista Import] Failed to delete temp file:', err.message);
+      });
+    }
+
     res.json({
       message: `Successfully imported data from ${results.sheetsProcessed.length} sheet(s)`,
       ...results,
@@ -597,6 +617,13 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     });
   } catch (error) {
     console.error('[Vista Import] Error:', error.message);
+    console.error('[Vista Import] Stack:', error.stack);
+    // Clean up temp file on error
+    if (tempFilePath) {
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.error('[Vista Import] Failed to delete temp file:', err.message);
+      });
+    }
     next(error);
   }
 });
@@ -619,13 +646,15 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
 
 // POST /api/vista/import/facilities - Import customer facilities from Excel
 router.post('/import/facilities', requireAdmin, upload.single('file'), async (req, res, next) => {
+  let tempFilePath = null;
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
+    tempFilePath = req.file.path;
     console.log(`[Facilities Import] Starting import of ${req.file.originalname}`);
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const workbook = XLSX.readFile(tempFilePath);
 
     // Find the data sheet (look for common names or use first sheet)
     let sheetName = workbook.SheetNames[0];
@@ -697,6 +726,13 @@ router.post('/import/facilities', requireAdmin, upload.single('file'), async (re
 
     console.log(`[Facilities Import] Complete. Created: ${created}, Updated: ${updated}, Not Found: ${notFound.length}`);
 
+    // Clean up temp file
+    if (tempFilePath) {
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.error('[Facilities Import] Failed to delete temp file:', err.message);
+      });
+    }
+
     res.json({
       message: `Facilities import complete`,
       total: data.length,
@@ -708,6 +744,12 @@ router.post('/import/facilities', requireAdmin, upload.single('file'), async (re
     });
   } catch (error) {
     console.error('[Facilities Import] Error:', error.message);
+    // Clean up temp file on error
+    if (tempFilePath) {
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.error('[Facilities Import] Failed to delete temp file:', err.message);
+      });
+    }
     next(error);
   }
 });

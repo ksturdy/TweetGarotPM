@@ -75,7 +75,15 @@ const VistaDataSettings: React.FC = () => {
       setUploading(false);
     },
     onError: (error: any) => {
-      showError(error.response?.data?.message || 'Failed to import Vista data');
+      let errorMsg = 'Failed to import Vista data';
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMsg = 'Upload timed out. Try a smaller file or check your connection.';
+      } else if (error.code === 'ERR_NETWORK') {
+        errorMsg = 'Network error. Check your connection and try again.';
+      } else if (error.response?.data?.message) {
+        errorMsg = error.response.data.message;
+      }
+      showError(errorMsg);
       setUploading(false);
       setUploadStatus('');
       setUploadDetails([]);

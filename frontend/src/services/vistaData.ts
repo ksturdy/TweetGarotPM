@@ -533,6 +533,7 @@ export const vistaDataService = {
 
     const response = await api.post('/vista/import/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 minute timeout for large file processing
     });
     return response.data;
   },
