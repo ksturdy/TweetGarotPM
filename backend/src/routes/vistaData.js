@@ -221,71 +221,93 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       }
     }
 
-    // Process Work Orders sheet (TGPBI_SMWorkOrderStatus)
+    // Process Work Orders sheet (TGPBI_SMWorkOrderStatus) - memory-efficient chunked processing
     const workOrderSheetName = 'TGPBI_SMWorkOrderStatus';
     if (sheetNames.includes(workOrderSheetName)) {
-      console.log(`[Vista Import] Processing ${workOrderSheetName}...`);
+      console.log(`[Vista Import] Processing ${workOrderSheetName} with chunked memory management...`);
       results.sheetsFound.push(workOrderSheetName);
-      const data = loadSheet(workOrderSheetName);
-      console.log(`[Vista Import] ${workOrderSheetName}: ${data.length} rows to process`);
 
-      if (data.length > 0) {
-        // Create import batch for work orders
+      // Get sheet reference and row count without loading all data
+      const woWorkbook = XLSX.readFile(tempFilePath, { sheets: workOrderSheetName });
+      const woSheet = woWorkbook.Sheets[workOrderSheetName];
+      const woRange = XLSX.utils.decode_range(woSheet['!ref'] || 'A1');
+      const totalWORows = woRange.e.r; // Total rows (0-indexed, excludes header)
+      console.log(`[Vista Import] ${workOrderSheetName}: ${totalWORows} rows to process`);
+
+      if (totalWORows > 0) {
+        // Create import batch
         const batch = await VistaData.createImportBatch({
           file_name: req.file.originalname,
           file_type: 'work_orders',
-          records_total: data.length,
+          records_total: totalWORows,
           imported_by: req.user.id
         }, req.tenantId);
 
         let newCount = 0;
         let updatedCount = 0;
+        const WO_CHUNK_SIZE = 500; // Process 500 rows at a time
 
-        for (const row of data) {
-          // Try multiple possible column names for contract amount (including with spaces from Excel quirks)
-          const contractAmt = parseNumber(
-            row['Contract Amt'] ?? row[' Contract Amt '] ?? row['Contract Amount'] ?? row['ContractAmt'] ??
-            row['Orig Contract Amt'] ?? row['Original Contract'] ?? row['Total Contract']
-          );
+        for (let startRow = 1; startRow <= totalWORows; startRow += WO_CHUNK_SIZE) {
+          const endRow = Math.min(startRow + WO_CHUNK_SIZE - 1, totalWORows);
+          console.log(`[Vista Import] Processing work orders rows ${startRow}-${endRow}...`);
 
-          const woData = {
-            work_order_number: String(row['Work Order'] || '').trim(),
-            description: row['Description'] || '',
-            entered_date: row['EnteredDateTime'] ? excelDateToJS(row['EnteredDateTime']) : null,
-            requested_date: row['RequestedDate'] ? excelDateToJS(row['RequestedDate']) : null,
-            status: row['Status'] || '',
-            employee_number: row['Project Manager Emp Number'] ? String(row['Project Manager Emp Number']) : null,
-            project_manager_name: row['Project Manager'] || '',
-            department_code: row['Department'] || '',
-            negotiated_work: row['Negotiated Work'] || '',
-            contract_amount: contractAmt,
-            actual_cost: parseNumber(row['Actual Cost']),
-            billed_amount: parseNumber(row['Billed Amt'] ?? row[' Billed Amt '] ?? row['Billed Amount'] ?? row['BilledAmt']),
-            received_amount: parseNumber(row['Received Amt'] ?? row['Received Amount'] ?? row['ReceivedAmt']),
-            backlog: parseNumber(row['Backlog']),
-            gross_profit_percent: parseNumber(row['Gross Profit %'] ?? row['Gross Profit Pct'] ?? row['GP%']),
-            pf_hours_jtd: parseNumber(row['PF/SF/PF Hours JTD'] ?? row['PF Hours JTD']),
-            sm_hours_jtd: parseNumber(row['SM Hours JTD']),
-            mep_jtd: parseNumber(row['MEP JTD']),
-            material_jtd: parseNumber(row['Material JTD']),
-            subcontracts_jtd: parseNumber(row['Subcontracts JTD']),
-            rentals_jtd: parseNumber(row['Rentals JTD']),
-            customer_name: row['Customer'] || '',
-            city: row['City'] || '',
-            state: row['State'] || '',
-            zip: row['Zip'] || '',
-            primary_market: row['Primary Market'] || '',
-            raw_data: null  // Don't store raw data to save memory
-          };
+          // Load only a chunk of rows
+          const chunkRange = { s: { r: 0, c: woRange.s.c }, e: { r: endRow, c: woRange.e.c } };
+          const chunkData = XLSX.utils.sheet_to_json(woSheet, { range: chunkRange, defval: '' });
 
-          if (!woData.work_order_number) continue;
+          // Skip header row in first chunk, process only the current chunk's rows
+          const chunkStartIdx = startRow === 1 ? 0 : startRow - 1;
+          const chunkEndIdx = endRow;
+          const rowsToProcess = chunkData.slice(chunkStartIdx, chunkEndIdx);
 
-          const result = await VistaData.upsertWorkOrder(woData, req.tenantId, batch.id);
-          if (result.isNew) {
-            newCount++;
-          } else {
-            updatedCount++;
+          for (const row of rowsToProcess) {
+            const contractAmt = parseNumber(
+              row['Contract Amt'] ?? row[' Contract Amt '] ?? row['Contract Amount'] ?? row['ContractAmt'] ??
+              row['Orig Contract Amt'] ?? row['Original Contract'] ?? row['Total Contract']
+            );
+
+            const woData = {
+              work_order_number: String(row['Work Order'] || '').trim(),
+              description: row['Description'] || '',
+              entered_date: row['EnteredDateTime'] ? excelDateToJS(row['EnteredDateTime']) : null,
+              requested_date: row['RequestedDate'] ? excelDateToJS(row['RequestedDate']) : null,
+              status: row['Status'] || '',
+              employee_number: row['Project Manager Emp Number'] ? String(row['Project Manager Emp Number']) : null,
+              project_manager_name: row['Project Manager'] || '',
+              department_code: row['Department'] || '',
+              negotiated_work: row['Negotiated Work'] || '',
+              contract_amount: contractAmt,
+              actual_cost: parseNumber(row['Actual Cost']),
+              billed_amount: parseNumber(row['Billed Amt'] ?? row[' Billed Amt '] ?? row['Billed Amount'] ?? row['BilledAmt']),
+              received_amount: parseNumber(row['Received Amt'] ?? row['Received Amount'] ?? row['ReceivedAmt']),
+              backlog: parseNumber(row['Backlog']),
+              gross_profit_percent: parseNumber(row['Gross Profit %'] ?? row['Gross Profit Pct'] ?? row['GP%']),
+              pf_hours_jtd: parseNumber(row['PF/SF/PF Hours JTD'] ?? row['PF Hours JTD']),
+              sm_hours_jtd: parseNumber(row['SM Hours JTD']),
+              mep_jtd: parseNumber(row['MEP JTD']),
+              material_jtd: parseNumber(row['Material JTD']),
+              subcontracts_jtd: parseNumber(row['Subcontracts JTD']),
+              rentals_jtd: parseNumber(row['Rentals JTD']),
+              customer_name: row['Customer'] || '',
+              city: row['City'] || '',
+              state: row['State'] || '',
+              zip: row['Zip'] || '',
+              primary_market: row['Primary Market'] || '',
+              raw_data: null
+            };
+
+            if (!woData.work_order_number) continue;
+
+            const result = await VistaData.upsertWorkOrder(woData, req.tenantId, batch.id);
+            if (result.isNew) {
+              newCount++;
+            } else {
+              updatedCount++;
+            }
           }
+
+          // Force garbage collection hint
+          if (global.gc) global.gc();
         }
 
         await VistaData.updateImportBatch(batch.id, {
@@ -293,7 +315,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
           records_updated: updatedCount
         });
 
-        results.workOrders = { total: data.length, new: newCount, updated: updatedCount, batch_id: batch.id };
+        results.workOrders = { total: totalWORows, new: newCount, updated: updatedCount, batch_id: batch.id };
         results.sheetsProcessed.push(workOrderSheetName);
       }
     }
