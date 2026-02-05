@@ -227,8 +227,8 @@ const ProjectList: React.FC = () => {
         bValue = b.name.toLowerCase();
         break;
       case 'contract_value':
-        aValue = a.contract_value || 0;
-        bValue = b.contract_value || 0;
+        aValue = Number(a.contract_value) || 0;
+        bValue = Number(b.contract_value) || 0;
         break;
       case 'status':
         aValue = a.status;
@@ -239,12 +239,12 @@ const ProjectList: React.FC = () => {
         bValue = (b.department_number || '').toLowerCase();
         break;
       case 'backlog':
-        aValue = a.backlog || 0;
-        bValue = b.backlog || 0;
+        aValue = Number(a.backlog) || 0;
+        bValue = Number(b.backlog) || 0;
         break;
       case 'gross_margin':
-        aValue = a.gross_margin_percent || 0;
-        bValue = b.gross_margin_percent || 0;
+        aValue = Number(a.gross_margin_percent) || 0;
+        bValue = Number(b.gross_margin_percent) || 0;
         break;
       case 'manager':
         aValue = (a.manager_name || '').toLowerCase();

@@ -37,7 +37,7 @@ interface Contact {
 
 type SortDirection = 'asc' | 'desc';
 type WorkOrderSortField = 'work_order_number' | 'description' | 'entered_date' | 'contract_amount' | 'status';
-type ProjectSortField = 'number' | 'name' | 'date' | 'contract_value' | 'status';
+type ProjectSortField = 'number' | 'name' | 'date' | 'contract_value' | 'backlog' | 'status';
 
 const SortIcon: React.FC<{ active: boolean; direction: SortDirection }> = ({ active, direction }) => (
   <span className={`cd-sort-icon ${active ? 'active' : ''}`}>
@@ -173,8 +173,8 @@ const CustomerDetail: React.FC = () => {
         return bVal - aVal;
       }
 
-      // Numeric comparison for contract_value
-      if (projSortField === 'contract_value') {
+      // Numeric comparison for contract_value and backlog
+      if (projSortField === 'contract_value' || projSortField === 'backlog') {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
         if (projSortDir === 'asc') return aVal - bVal;
@@ -538,6 +538,9 @@ const CustomerDetail: React.FC = () => {
                       <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>
                         Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} />
                       </th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>
+                        Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} />
+                      </th>
                       <th className="cd-sortable" onClick={() => handleProjSort('status')}>
                         Status <SortIcon active={projSortField === 'status'} direction={projSortDir} />
                       </th>
@@ -550,6 +553,7 @@ const CustomerDetail: React.FC = () => {
                         <td>{project.name}</td>
                         <td>{formatDate(project.date)}</td>
                         <td>{formatCurrency(project.contract_value)}</td>
+                        <td>{formatCurrency(project.backlog)}</td>
                         <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
                       </tr>
                     ))}

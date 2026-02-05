@@ -469,6 +469,7 @@ const Customer = {
         p.name,
         p.start_date as date,
         COALESCE(p.contract_value, 0) as contract_value,
+        COALESCE(p.backlog, 0) as backlog,
         0 as gm_percent,
         p.status,
         p.description,
@@ -484,7 +485,6 @@ const Customer = {
       WHERE p.tenant_id = $2
         AND (gc.customer_owner = $1 OR oc.customer_owner = $1)
       ORDER BY p.number DESC NULLS LAST
-      LIMIT 50
     `, [customerOwner, tenantId]);
     return result.rows;
   },
@@ -557,6 +557,7 @@ const Customer = {
         p.name,
         p.start_date as date,
         COALESCE(p.contract_value, 0) as contract_value,
+        COALESCE(p.backlog, 0) as backlog,
         0 as gm_percent,
         p.status,
         p.description,
@@ -567,7 +568,6 @@ const Customer = {
         END as relationship
       FROM projects p
       WHERE (p.customer_id = $1 OR p.owner_customer_id = $1) AND p.tenant_id = $2
-      ORDER BY p.number DESC NULLS LAST
     `, [customerId, tenantId]);
     return result.rows;
   },
