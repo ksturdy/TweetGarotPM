@@ -11,6 +11,145 @@ router.use(authenticate);
 router.use(tenantContext);
 router.use(requireFeature('estimates'));
 
+// Annual construction inflation rate (4% is typical, adjust as needed)
+const ANNUAL_INFLATION_RATE = 0.04;
+
+/**
+ * Calculate inflation-adjusted cost from a historical date to today
+ * @param {number} originalCost - The original cost value
+ * @param {Date|string} bidDate - The date of the original bid/project
+ * @returns {number} - The inflation-adjusted cost in today's dollars
+ */
+function adjustForInflation(originalCost, bidDate) {
+  if (!originalCost || !bidDate) return originalCost || 0;
+
+  const bidDateObj = new Date(bidDate);
+  const today = new Date();
+
+  // Calculate years between bid date and today
+  const yearsDiff = (today - bidDateObj) / (1000 * 60 * 60 * 24 * 365.25);
+
+  if (yearsDiff <= 0) return originalCost; // Future or current date
+
+  // Apply compound inflation: adjustedCost = originalCost * (1 + rate)^years
+  const inflationMultiplier = Math.pow(1 + ANNUAL_INFLATION_RATE, yearsDiff);
+
+  return originalCost * inflationMultiplier;
+}
+
+/**
+ * Apply inflation adjustment to all cost fields of a project
+ * @param {Object} project - The historical project object
+ * @returns {Object} - Project with all costs adjusted for inflation
+ */
+function adjustProjectCostsForInflation(project) {
+  if (!project || !project.bid_date) return project;
+
+  const bidDate = project.bid_date;
+
+  // List of cost fields to adjust
+  const costFields = [
+    'total_cost', 'pm_cost', 'sm_equip_cost', 'pf_equip_cost',
+    'controls', 'insulation', 'balancing', 'electrical', 'general', 'allowance',
+    's_field_cost', 's_shop_cost', 's_material_cost', 's_materials_with_escalation',
+    'r_field_cost', 'r_shop_cost', 'r_material_cost', 'r_materials_with_escalation',
+    'e_field_cost', 'e_shop_cost', 'e_material_cost', 'e_material_with_escalation',
+    'o_field_cost', 'o_shop_cost', 'o_material_cost', 'o_materials_with_escalation',
+    'w_field_cost', 'w_shop_cost', 'w_material_cost', 'w_materials_with_escalation',
+    'hw_field_cost', 'hw_material_cost', 'hw_material_with_esc',
+    'chw_field_cost', 'chw_material_cost', 'chw_material_with_esc',
+    'd_field_cost', 'd_material_cost', 'd_material_with_esc',
+    'g_field_cost', 'g_material_cost', 'g_material_with_esc',
+    'gs_field_cost', 'gs_material_cost', 'gs_material_with_esc',
+    'cw_field_cost', 'cw_material_cost', 'cw_material_with_esc',
+    'rad_field_cost', 'rad_material_cost', 'rad_material_with_esc',
+    'ref_field_cost', 'ref_material_cost', 'ref_material_with_esc',
+    'stmcond_field_cost', 'stmcond_material_cost', 'stmcond_material_with_esc',
+    'truck_rental', 'temp_heat', 'geo_thermal'
+  ];
+
+  const adjusted = { ...project };
+
+  for (const field of costFields) {
+    if (adjusted[field]) {
+      adjusted[field] = adjustForInflation(parseFloat(adjusted[field]), bidDate);
+    }
+  }
+
+  // Recalculate cost per sqft based on adjusted total cost
+  if (adjusted.total_cost && adjusted.total_sqft) {
+    adjusted.total_cost_per_sqft = adjusted.total_cost / parseFloat(adjusted.total_sqft);
+  }
+
+  // Store original values for reference
+  adjusted.original_total_cost = project.total_cost;
+  adjusted.inflation_adjusted = true;
+
+  return adjusted;
+}
+
+/**
+ * Adjust category averages for inflation based on average project age
+ * @param {Object} averages - The category averages object
+ * @param {Array} projects - Array of projects to calculate average age
+ * @returns {Object} - Averages adjusted for inflation
+ */
+function adjustAveragesForInflation(averages, projects) {
+  if (!averages || !projects || projects.length === 0) return averages;
+
+  // Calculate weighted average age of projects
+  const today = new Date();
+  let totalYears = 0;
+  let validCount = 0;
+
+  for (const project of projects) {
+    if (project.bid_date) {
+      const bidDate = new Date(project.bid_date);
+      const years = (today - bidDate) / (1000 * 60 * 60 * 24 * 365.25);
+      if (years > 0) {
+        totalYears += years;
+        validCount++;
+      }
+    }
+  }
+
+  const avgYears = validCount > 0 ? totalYears / validCount : 0;
+  const inflationMultiplier = Math.pow(1 + ANNUAL_INFLATION_RATE, avgYears);
+
+  // Cost fields in averages to adjust
+  const avgCostFields = [
+    'avg_total_cost', 'avg_pm_cost', 'avg_sm_equip_cost', 'avg_pf_equip_cost',
+    'avg_controls', 'avg_insulation', 'avg_balancing', 'avg_electrical',
+    'avg_general', 'avg_allowance',
+    'avg_supply_labor', 'avg_supply_material',
+    'avg_return_labor', 'avg_return_material',
+    'avg_exhaust_labor', 'avg_exhaust_material',
+    'avg_outside_air_labor', 'avg_outside_air_material',
+    'avg_hw_labor', 'avg_hw_material',
+    'avg_chw_labor', 'avg_chw_material'
+  ];
+
+  const adjusted = { ...averages };
+
+  for (const field of avgCostFields) {
+    if (adjusted[field]) {
+      adjusted[field] = parseFloat(adjusted[field]) * inflationMultiplier;
+    }
+  }
+
+  // Adjust cost per sqft
+  if (adjusted.avg_cost_per_sqft) {
+    adjusted.avg_cost_per_sqft = parseFloat(adjusted.avg_cost_per_sqft) * inflationMultiplier;
+  }
+
+  // Store inflation info
+  adjusted.inflation_rate = ANNUAL_INFLATION_RATE;
+  adjusted.avg_project_age_years = avgYears.toFixed(1);
+  adjusted.inflation_multiplier = inflationMultiplier.toFixed(3);
+
+  return adjusted;
+}
+
 // Initialize Anthropic client
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -69,15 +208,34 @@ router.post('/similar', async (req, res, next) => {
       HistoricalProject.getCategoryAverages(buildingType, projectType)
     ]);
 
-    // Add match criteria details to each project
+    // Add match criteria details and inflation adjustment to each project
     const projectsWithMatchDetails = similarProjects.map(p => {
       const sqftDiff = sqft && p.total_sqft
         ? Math.abs(parseFloat(p.total_sqft) - sqft) / sqft
         : null;
 
+      // Calculate inflation-adjusted costs
+      const originalCost = parseFloat(p.total_cost) || 0;
+      const adjustedCost = adjustForInflation(originalCost, p.bid_date);
+      const originalCostPerSqft = parseFloat(p.total_cost_per_sqft) || (originalCost / parseFloat(p.total_sqft)) || 0;
+      const adjustedCostPerSqft = adjustForInflation(originalCostPerSqft, p.bid_date);
+
+      // Calculate years since bid
+      const yearsSinceBid = p.bid_date
+        ? ((new Date() - new Date(p.bid_date)) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1)
+        : null;
+
       return {
         ...p,
-        total_cost_per_sqft: parseFloat(p.total_cost_per_sqft) || (parseFloat(p.total_cost) / parseFloat(p.total_sqft)) || 0,
+        // Original values
+        original_total_cost: originalCost,
+        original_cost_per_sqft: originalCostPerSqft,
+        // Inflation-adjusted values
+        total_cost: adjustedCost,
+        total_cost_per_sqft: adjustedCostPerSqft,
+        // Metadata
+        years_since_bid: yearsSinceBid,
+        inflation_adjusted: true,
         match_details: {
           building_type: p.building_type === buildingType,
           project_type: p.project_type === projectType,
@@ -139,15 +297,21 @@ router.post('/generate', async (req, res, next) => {
     const topProjects = similarProjects.slice(0, 3);
 
     // Get full details of top 3 projects
-    const projectDetails = await Promise.all(
+    const projectDetailsRaw = await Promise.all(
       topProjects.map(p => HistoricalProject.findById(p.id))
     );
 
+    // Apply inflation adjustment to project costs
+    const projectDetails = projectDetailsRaw.map(p => adjustProjectCostsForInflation(p));
+
     // Get category averages
-    const averages = await HistoricalProject.getCategoryAverages(
+    const averagesRaw = await HistoricalProject.getCategoryAverages(
       buildingType,
       projectType
     );
+
+    // Adjust averages for inflation based on average project age
+    const averages = adjustAveragesForInflation(averagesRaw, projectDetailsRaw);
 
     // Build AI prompt
     const systemPrompt = buildBudgetSystemPrompt(
@@ -185,20 +349,39 @@ router.post('/generate', async (req, res, next) => {
 
     res.json({
       budget: budgetJson,
-      similarProjects: topProjects.map(p => ({
-        id: p.id,
-        name: p.name,
-        buildingType: p.building_type,
-        projectType: p.project_type,
-        sqft: parseFloat(p.total_sqft) || 0,
-        totalCost: parseFloat(p.total_cost) || 0,
-        costPerSqft: parseFloat(p.total_cost_per_sqft) || 0,
-        similarityScore: p.similarity_score
-      })),
+      similarProjects: projectDetails.map((p, i) => {
+        const originalProject = topProjects[i];
+        const bidYear = p.bid_date ? new Date(p.bid_date).getFullYear() : null;
+        const yearsSinceBid = p.bid_date
+          ? ((new Date() - new Date(p.bid_date)) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1)
+          : null;
+        return {
+          id: p.id,
+          name: p.name,
+          buildingType: p.building_type,
+          projectType: p.project_type,
+          sqft: parseFloat(p.total_sqft) || 0,
+          // Inflation-adjusted values
+          totalCost: parseFloat(p.total_cost) || 0,
+          costPerSqft: parseFloat(p.total_cost_per_sqft) || 0,
+          // Original values for reference
+          originalTotalCost: parseFloat(p.original_total_cost) || 0,
+          originalCostPerSqft: p.original_total_cost && p.total_sqft
+            ? parseFloat(p.original_total_cost) / parseFloat(p.total_sqft)
+            : 0,
+          // Metadata
+          bidYear,
+          yearsSinceBid: yearsSinceBid ? parseFloat(yearsSinceBid) : null,
+          inflationAdjusted: true,
+          similarityScore: originalProject?.similarity_score || 0
+        };
+      }),
       averages: {
         projectCount: averages.project_count,
         avgCost: parseFloat(averages.avg_total_cost) || 0,
-        avgCostPerSqft: parseFloat(averages.avg_cost_per_sqft) || 0
+        avgCostPerSqft: parseFloat(averages.avg_cost_per_sqft) || 0,
+        inflationRate: ANNUAL_INFLATION_RATE,
+        avgProjectAgeYears: averages.avg_project_age_years ? parseFloat(averages.avg_project_age_years) : null
       },
       usage: {
         inputTokens: response.usage.input_tokens,
@@ -217,6 +400,10 @@ function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
 
+  // Calculate inflation info for prompt
+  const inflationRate = (ANNUAL_INFLATION_RATE * 100).toFixed(1);
+  const avgAge = averages.avg_project_age_years || 'N/A';
+
   return `You are Titan, an expert HVAC estimator for Tweet Garot Mechanical. Generate detailed budget estimates based on historical project data.
 
 ## NEW PROJECT DETAILS:
@@ -227,8 +414,13 @@ function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType
 - Square Footage: ${formatNumber(sqft)} SF
 ${scope ? `- Additional Scope Notes: ${scope}` : ''}
 
+## INFLATION ADJUSTMENT NOTICE:
+All historical costs have been adjusted for inflation to ${new Date().getFullYear()} dollars using a ${inflationRate}% annual inflation rate.
+Average project age in dataset: ${avgAge} years
+This ensures the estimate reflects current market conditions.
+
 ## HISTORICAL DATA ANALYSIS:
-Based on ${averages.project_count || 0} similar ${buildingType} ${projectType} projects:
+Based on ${averages.project_count || 0} similar ${buildingType} ${projectType} projects (costs adjusted to today's dollars):
 - Average Total Cost: ${formatCurrency(averages.avg_total_cost)}
 - Average Cost/SF: $${(parseFloat(averages.avg_cost_per_sqft) || 0).toFixed(2)}
 
@@ -247,14 +439,17 @@ Category Averages:
 - Hot Water Piping (Material): ${formatCurrency(averages.avg_hw_material)}
 - Chilled Water Piping (Material): ${formatCurrency(averages.avg_chw_material)}
 
-## TOP 3 COMPARABLE PROJECTS:
-${projectDetails.map((p, i) => `
+## TOP 3 COMPARABLE PROJECTS (All costs inflation-adjusted to ${new Date().getFullYear()} dollars):
+${projectDetails.map((p, i) => {
+  const bidYear = p.bid_date ? new Date(p.bid_date).getFullYear() : 'N/A';
+  const yearsAgo = p.bid_date ? ((new Date() - new Date(p.bid_date)) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1) : 'N/A';
+  return `
 ### Project ${i + 1}: ${p.name}
 - Building Type: ${p.building_type}, Project Type: ${p.project_type}, Bid Type: ${p.bid_type || 'N/A'}
 - Square Footage: ${formatNumber(p.total_sqft)} SF
-- Total Cost: ${formatCurrency(p.total_cost)}
-- Cost per SF: $${(parseFloat(p.total_cost_per_sqft) || 0).toFixed(2)}
-- Bid Date: ${p.bid_date ? new Date(p.bid_date).toLocaleDateString() : 'N/A'}
+- Total Cost (Adjusted): ${formatCurrency(p.total_cost)}${p.original_total_cost ? ` (Original ${bidYear}: ${formatCurrency(p.original_total_cost)})` : ''}
+- Cost per SF (Adjusted): $${(parseFloat(p.total_cost_per_sqft) || 0).toFixed(2)}
+- Bid Date: ${p.bid_date ? new Date(p.bid_date).toLocaleDateString() : 'N/A'} (${yearsAgo} years ago)
 
 Cost Breakdown:
 - PM Hours: ${p.pm_hours || 0}, PM Cost: ${formatCurrency(p.pm_cost)}
@@ -280,7 +475,8 @@ Piping:
 Equipment Counts:
 - AHU: ${p.ahu || 0}, RTU: ${p.rtu || 0}, VAV: ${p.vav || 0}
 - Boilers: ${p.boilers || 0}, Pumps: ${p.pumps || 0}, Chillers: ${p.chiller || 0}
-`).join('\n')}
+`;
+}).join('\n')}
 
 ## YOUR TASK:
 Generate a detailed HVAC budget estimate for the new ${formatNumber(sqft)} SF project. Scale costs proportionally based on the historical data and comparable projects.

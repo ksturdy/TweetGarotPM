@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject } from '../../services/budgetGenerator';
 import { budgetsApi, Budget } from '../../services/budgets';
+import BudgetReportModal from '../../components/estimates/BudgetReportModal';
 import './BudgetGenerator.css';
 
 // Register Chart.js components
@@ -72,6 +73,7 @@ const BudgetGenerator: React.FC = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loadingExisting, setLoadingExisting] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Ref for print
   const reportRef = useRef<HTMLDivElement>(null);
@@ -482,8 +484,8 @@ const BudgetGenerator: React.FC = () => {
   };
 
   const handleExportReport = () => {
-    // Open print dialog for the report
-    window.print();
+    // Open the professional report modal
+    setShowReportModal(true);
   };
 
   const handleEditModeToggle = () => {
@@ -604,6 +606,7 @@ const BudgetGenerator: React.FC = () => {
   };
 
   return (
+    <>
     <div className="budget-generator" ref={reportRef}>
       <Link to={isEditing ? '/estimating/budgets' : '/estimating'} className="back-link no-print">
         &larr; {isEditing ? 'Back to Budgets' : 'Back to Estimating'}
@@ -966,6 +969,11 @@ const BudgetGenerator: React.FC = () => {
                         <div className="comparable-header">
                           <span className="comparable-rank">#{index + 1}</span>
                           <span className="comparable-name">{project.name}</span>
+                          {project.bidYear && (
+                            <span className="comparable-year" style={{ marginLeft: 'auto', fontSize: '12px', color: '#666' }}>
+                              ({project.bidYear})
+                            </span>
+                          )}
                         </div>
                         <div className="comparable-details">
                           <div className="detail-row">
@@ -973,9 +981,15 @@ const BudgetGenerator: React.FC = () => {
                             <span>{formatNumber(project.sqft)} SF</span>
                           </div>
                           <div className="detail-row">
-                            <span>Total Cost:</span>
+                            <span>Total Cost (Today's $):</span>
                             <span>{formatCurrency(project.totalCost)}</span>
                           </div>
+                          {project.originalTotalCost && project.originalTotalCost !== project.totalCost && (
+                            <div className="detail-row" style={{ fontSize: '12px', color: '#666' }}>
+                              <span>Original ({project.bidYear}):</span>
+                              <span>{formatCurrency(project.originalTotalCost)}</span>
+                            </div>
+                          )}
                           <div className="detail-row">
                             <span>Cost/SF:</span>
                             <span>${(project.costPerSqft || 0).toFixed(2)}</span>
@@ -1141,20 +1155,25 @@ const BudgetGenerator: React.FC = () => {
                   </div>
 
                   {previewAverages && (
-                    <div className="preview-stats-bar">
-                      <div className="stat-item">
-                        <span className="stat-label">Avg Cost</span>
-                        <span className="stat-value">{formatCurrency(previewAverages.avg_total_cost)}</span>
+                    <>
+                      <div className="preview-stats-bar">
+                        <div className="stat-item">
+                          <span className="stat-label">Avg Cost</span>
+                          <span className="stat-value">{formatCurrency(previewAverages.avg_total_cost)}</span>
+                        </div>
+                        <div className="stat-item">
+                          <span className="stat-label">Avg Cost/SF</span>
+                          <span className="stat-value">${(parseFloat(previewAverages.avg_cost_per_sqft) || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="stat-item">
+                          <span className="stat-label">Avg Size</span>
+                          <span className="stat-value">{formatNumber(previewAverages.avg_sqft)} SF</span>
+                        </div>
                       </div>
-                      <div className="stat-item">
-                        <span className="stat-label">Avg Cost/SF</span>
-                        <span className="stat-value">${(parseFloat(previewAverages.avg_cost_per_sqft) || 0).toFixed(2)}</span>
+                      <div style={{ textAlign: 'center', fontSize: '11px', color: '#666', marginTop: '4px', fontStyle: 'italic' }}>
+                        * All costs adjusted for inflation to {new Date().getFullYear()} dollars (4% annual rate)
                       </div>
-                      <div className="stat-item">
-                        <span className="stat-label">Avg Size</span>
-                        <span className="stat-value">{formatNumber(previewAverages.avg_sqft)} SF</span>
-                      </div>
-                    </div>
+                    </>
                   )}
 
                   {previewProjects.length > 0 ? (
@@ -1185,18 +1204,34 @@ const BudgetGenerator: React.FC = () => {
                             </span>
                           </div>
 
+                          {/* Row 1: Original/Historical Data */}
+                          <div className="preview-project-details" style={{ borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '6px' }}>
+                            <div className="detail-item">
+                              <span className="detail-label">Bid Year</span>
+                              <span className="detail-value">{project.bid_date ? new Date(project.bid_date).getFullYear() : 'N/A'}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Original Cost</span>
+                              <span className="detail-value">{formatCurrency(project.original_total_cost)}</span>
+                            </div>
+                            <div className="detail-item">
+                              <span className="detail-label">Orig Cost/SF</span>
+                              <span className="detail-value">${(project.original_total_cost && project.total_sqft ? (project.original_total_cost / project.total_sqft) : 0).toFixed(2)}</span>
+                            </div>
+                          </div>
+                          {/* Row 2: Current/Adjusted Data */}
                           <div className="preview-project-details">
                             <div className="detail-item">
                               <span className="detail-label">Size</span>
-                              <span className="detail-value">{formatNumber(project.total_sqft)} SF</span>
+                              <span className="detail-value" style={{ fontWeight: 600 }}>{formatNumber(project.total_sqft)} SF</span>
                             </div>
                             <div className="detail-item">
-                              <span className="detail-label">Total Cost</span>
-                              <span className="detail-value">{formatCurrency(project.total_cost)}</span>
+                              <span className="detail-label">Today's Cost</span>
+                              <span className="detail-value" style={{ fontWeight: 600 }}>{formatCurrency(project.total_cost)}</span>
                             </div>
                             <div className="detail-item">
-                              <span className="detail-label">Cost/SF</span>
-                              <span className="detail-value">${(parseFloat(project.total_cost_per_sqft) || 0).toFixed(2)}</span>
+                              <span className="detail-label">Today's $/SF</span>
+                              <span className="detail-value" style={{ fontWeight: 600 }}>${(parseFloat(project.total_cost_per_sqft) || 0).toFixed(2)}</span>
                             </div>
                           </div>
                         </div>
@@ -1224,6 +1259,20 @@ const BudgetGenerator: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {/* Budget Report Modal */}
+    {currentBudget && (
+      <BudgetReportModal
+        budget={currentBudget}
+        comparableProjects={comparableProjects}
+        editableValues={editableValues}
+        bidType={bidType}
+        scope={scope}
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
+    )}
+    </>
   );
 };
 

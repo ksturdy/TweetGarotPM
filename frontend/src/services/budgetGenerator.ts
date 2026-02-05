@@ -15,6 +15,12 @@ export interface SimilarProject {
   totalCost: number;
   costPerSqft: number;
   similarityScore: number;
+  // Inflation adjustment fields
+  originalTotalCost?: number;
+  originalCostPerSqft?: number;
+  bidYear?: number | null;
+  yearsSinceBid?: number | null;
+  inflationAdjusted?: boolean;
 }
 
 export interface BudgetSectionItem {
