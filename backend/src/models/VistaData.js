@@ -1206,9 +1206,9 @@ const VistaData = {
         (SELECT COUNT(*) FROM vp_customers) as vista_customers,
         (SELECT COUNT(*) FROM vp_customers WHERE active = true) as active_customers,
         (SELECT COUNT(*) FROM vp_customers WHERE linked_customer_id IS NOT NULL) as linked_customers,
-        -- Titan Customers
-        (SELECT COUNT(*) FROM customers WHERE tenant_id = $1) as titan_customers,
-        (SELECT COUNT(*) FROM customers c WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_customers vc WHERE vc.linked_customer_id = c.id)) as titan_customers_linked,
+        -- Titan Customers (count unique companies/owners, not facilities)
+        (SELECT COUNT(DISTINCT customer_owner) FROM customers WHERE tenant_id = $1 AND customer_owner IS NOT NULL AND customer_owner != '') as titan_customers,
+        (SELECT COUNT(DISTINCT c.customer_owner) FROM customers c WHERE c.tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_customers vc WHERE vc.linked_customer_id = c.id)) as titan_customers_linked,
 
         -- Vista Vendors
         (SELECT COUNT(*) FROM vp_vendors) as vista_vendors,
@@ -1218,9 +1218,10 @@ const VistaData = {
         (SELECT COUNT(*) FROM vendors WHERE tenant_id = $1) as titan_vendors,
         (SELECT COUNT(*) FROM vendors v WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM vp_vendors vv WHERE vv.linked_vendor_id = v.id)) as titan_vendors_linked,
 
-        -- Vista Departments
+        -- Vista Departments (unique department codes from contracts)
         (SELECT COUNT(DISTINCT department_code) FROM vp_contracts WHERE tenant_id = $1 AND department_code IS NOT NULL AND department_code != '') as vista_departments,
-        (SELECT COUNT(*) FROM department_code_links WHERE tenant_id = $1) as linked_departments,
+        -- Linked departments = contracts that have a linked_department_id
+        (SELECT COUNT(DISTINCT linked_department_id) FROM vp_contracts WHERE tenant_id = $1 AND linked_department_id IS NOT NULL) as linked_departments,
         -- Titan Departments
         (SELECT COUNT(*) FROM departments WHERE tenant_id = $1) as titan_departments,
 
@@ -2469,6 +2470,62 @@ const VistaData = {
     } finally {
       client.release();
     }
+  },
+
+  // ==================== TITAN-ONLY RECORDS ====================
+  // Get Titan records that don't have a Vista link
+
+  async getTitanOnlyProjects(tenantId) {
+    const result = await db.query(
+      `SELECT p.id, p.project_number, p.name, p.status, p.created_at
+       FROM projects p
+       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $1
+       WHERE p.tenant_id = $1 AND vc.id IS NULL
+       ORDER BY p.name`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async getTitanOnlyEmployees(tenantId) {
+    const result = await db.query(
+      `SELECT e.id, e.employee_number, e.first_name, e.last_name, e.email, e.active
+       FROM employees e
+       LEFT JOIN vp_employees vpe ON vpe.linked_employee_id = e.id
+       WHERE e.tenant_id = $1 AND vpe.id IS NULL
+       ORDER BY e.last_name, e.first_name`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async getTitanOnlyCustomers(tenantId) {
+    // Get unique owners that don't have any facility linked to Vista
+    const result = await db.query(
+      `SELECT DISTINCT c.customer_owner as name, MIN(c.id) as id, COUNT(*) as facility_count
+       FROM customers c
+       LEFT JOIN vp_customers vpc ON vpc.linked_customer_id = c.id
+       WHERE c.tenant_id = $1
+         AND c.customer_owner IS NOT NULL
+         AND c.customer_owner != ''
+         AND vpc.id IS NULL
+       GROUP BY c.customer_owner
+       ORDER BY c.customer_owner`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async getTitanOnlyVendors(tenantId) {
+    const result = await db.query(
+      `SELECT v.id, v.name, v.city, v.state, v.active
+       FROM vendors v
+       LEFT JOIN vp_vendors vpv ON vpv.linked_vendor_id = v.id
+       WHERE v.tenant_id = $1 AND vpv.id IS NULL
+       ORDER BY v.name`,
+      [tenantId]
+    );
+    return result.rows;
   },
 
   // Link a VP department code to a Titan department (updates all contracts/work orders with that code)

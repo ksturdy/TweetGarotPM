@@ -461,6 +461,39 @@ export interface AutoLinkVendorsResult {
   }>;
 }
 
+// ==================== TITAN-ONLY INTERFACES ====================
+
+export interface TitanOnlyProject {
+  id: number;
+  project_number: string | null;
+  name: string;
+  status: string | null;
+  created_at: string;
+}
+
+export interface TitanOnlyEmployee {
+  id: number;
+  employee_number: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  active: boolean;
+}
+
+export interface TitanOnlyCustomer {
+  id: number;
+  name: string;
+  facility_count: number;
+}
+
+export interface TitanOnlyVendor {
+  id: number;
+  name: string;
+  city: string | null;
+  state: string | null;
+  active: boolean;
+}
+
 // ==================== SERVICE ====================
 
 export const vistaDataService = {
@@ -490,6 +523,28 @@ export const vistaDataService = {
 
   triggerAutoMatch: async (): Promise<AutoMatchResult> => {
     const response = await api.post('/vista/import/auto-match');
+    return response.data;
+  },
+
+  // ==================== TITAN-ONLY RECORDS ====================
+
+  getTitanOnlyProjects: async (): Promise<TitanOnlyProject[]> => {
+    const response = await api.get('/vista/titan-only/projects');
+    return response.data;
+  },
+
+  getTitanOnlyEmployees: async (): Promise<TitanOnlyEmployee[]> => {
+    const response = await api.get('/vista/titan-only/employees');
+    return response.data;
+  },
+
+  getTitanOnlyCustomers: async (): Promise<TitanOnlyCustomer[]> => {
+    const response = await api.get('/vista/titan-only/customers');
+    return response.data;
+  },
+
+  getTitanOnlyVendors: async (): Promise<TitanOnlyVendor[]> => {
+    const response = await api.get('/vista/titan-only/vendors');
     return response.data;
   },
 

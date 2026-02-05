@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { vistaDataService, VPContract, VPWorkOrder, VPEmployee, VPCustomer, VPVendor, LinkData, EmployeeDuplicate, CustomerDuplicate, ContractDuplicate, DepartmentDuplicate, VendorDuplicate, ImportToTitanResult, LinkDepartmentCodeResult, AutoLinkDepartmentsResult, AutoLinkCustomersResult, AutoLinkVendorsResult, VPStats } from '../../services/vistaData';
+import { vistaDataService, VPContract, VPWorkOrder, VPEmployee, VPCustomer, VPVendor, LinkData, EmployeeDuplicate, CustomerDuplicate, ContractDuplicate, DepartmentDuplicate, VendorDuplicate, ImportToTitanResult, LinkDepartmentCodeResult, AutoLinkDepartmentsResult, AutoLinkCustomersResult, AutoLinkVendorsResult, VPStats, TitanOnlyProject, TitanOnlyEmployee, TitanOnlyCustomer, TitanOnlyVendor } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
 import { employeesApi } from '../../services/employees';
 import { customersApi } from '../../services/customers';
@@ -10,7 +10,7 @@ import { departmentsApi } from '../../services/departments';
 import '../../styles/SalesPipeline.css';
 
 type EntityType = 'contracts' | 'work-orders' | 'employees' | 'customers' | 'vendors' | 'departments';
-type FilterType = 'all' | 'unmatched' | 'auto_matched' | 'manual_matched' | 'ignored';
+type FilterType = 'all' | 'unmatched' | 'auto_matched' | 'manual_matched' | 'ignored' | 'titan_only';
 type ViewMode = 'matches' | 'data';
 
 interface LinkModalData {
@@ -297,6 +297,31 @@ const VistaLinkingManager: React.FC = () => {
     queryKey: ['vista-department-duplicates'],
     queryFn: () => vistaDataService.getDepartmentDuplicates(0.5),
     enabled: expandedEntity === 'departments',
+  });
+
+  // Titan-only queries - records in Titan not linked to Vista
+  const { data: titanOnlyProjects, isLoading: titanOnlyProjectsLoading } = useQuery({
+    queryKey: ['titan-only-projects'],
+    queryFn: () => vistaDataService.getTitanOnlyProjects(),
+    enabled: expandedEntity === 'contracts' && filter === 'titan_only',
+  });
+
+  const { data: titanOnlyEmployees, isLoading: titanOnlyEmployeesLoading } = useQuery({
+    queryKey: ['titan-only-employees'],
+    queryFn: () => vistaDataService.getTitanOnlyEmployees(),
+    enabled: expandedEntity === 'employees' && filter === 'titan_only',
+  });
+
+  const { data: titanOnlyCustomers, isLoading: titanOnlyCustomersLoading } = useQuery({
+    queryKey: ['titan-only-customers'],
+    queryFn: () => vistaDataService.getTitanOnlyCustomers(),
+    enabled: expandedEntity === 'customers' && filter === 'titan_only',
+  });
+
+  const { data: titanOnlyVendors, isLoading: titanOnlyVendorsLoading } = useQuery({
+    queryKey: ['titan-only-vendors'],
+    queryFn: () => vistaDataService.getTitanOnlyVendors(),
+    enabled: expandedEntity === 'vendors' && filter === 'titan_only',
   });
 
   // Reference data for linking
@@ -766,13 +791,14 @@ const VistaLinkingManager: React.FC = () => {
         };
       }
       case 'work-orders': {
+        // Work orders are displayed directly from Vista - no separate Titan table
+        // The Vista work orders ARE the Titan work orders
         const vistaCount = stats.vista_work_orders || stats.total_work_orders || 0;
-        const linked = stats.matched_work_orders || 0;
         return {
           vistaCount,
-          titanCount: 0, // Work orders don't have a Titan equivalent yet
-          linked,
-          vistaUnlinked: stats.unmatched_work_orders || 0,
+          titanCount: vistaCount, // Vista work orders ARE Titan work orders
+          linked: vistaCount, // All are available in Titan
+          vistaUnlinked: 0,
           titanUnlinked: 0,
           potentialMatches: 0,
         };
@@ -876,11 +902,12 @@ const VistaLinkingManager: React.FC = () => {
                   className="sales-input"
                   style={{ width: 'auto' }}
                 >
-                  <option value="all">All</option>
-                  <option value="unmatched">Unmatched</option>
+                  <option value="all">All (Vista)</option>
+                  <option value="unmatched">Unmatched (Vista)</option>
                   <option value="auto_matched">Auto Matched</option>
                   <option value="manual_matched">Manual Matched</option>
                   <option value="ignored">Ignored</option>
+                  <option value="titan_only">Titan Only (not in Vista)</option>
                 </select>
                 <input
                   type="text"
@@ -905,6 +932,11 @@ const VistaLinkingManager: React.FC = () => {
   };
 
   const renderEntityContent = () => {
+    // Check for Titan-only filter
+    if (filter === 'titan_only' && viewMode === 'data') {
+      return renderTitanOnlyData();
+    }
+
     switch (expandedEntity) {
       case 'contracts':
         return viewMode === 'matches' ? renderContractMatches() : renderContractsData();
@@ -921,6 +953,109 @@ const VistaLinkingManager: React.FC = () => {
       default:
         return null;
     }
+  };
+
+  // Render Titan-only records (records in Titan not linked to Vista)
+  const renderTitanOnlyData = () => {
+    const isLoading = expandedEntity === 'contracts' ? titanOnlyProjectsLoading :
+                      expandedEntity === 'employees' ? titanOnlyEmployeesLoading :
+                      expandedEntity === 'customers' ? titanOnlyCustomersLoading :
+                      expandedEntity === 'vendors' ? titanOnlyVendorsLoading :
+                      false;
+
+    if (isLoading) {
+      return <div style={{ textAlign: 'center', padding: '2rem' }}>Loading Titan-only records...</div>;
+    }
+
+    const data = expandedEntity === 'contracts' ? titanOnlyProjects :
+                 expandedEntity === 'employees' ? titanOnlyEmployees :
+                 expandedEntity === 'customers' ? titanOnlyCustomers :
+                 expandedEntity === 'vendors' ? titanOnlyVendors :
+                 [];
+
+    if (!data || data.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+          No Titan-only records found. All Titan records are linked to Vista.
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div style={{ marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+          Showing {data.length} Titan record(s) not linked to Vista
+        </div>
+        <table className="sales-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              {expandedEntity === 'contracts' && (
+                <>
+                  <th>Project #</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                </>
+              )}
+              {expandedEntity === 'employees' && (
+                <>
+                  <th>Emp #</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Active</th>
+                </>
+              )}
+              {expandedEntity === 'customers' && (
+                <>
+                  <th>Company Name</th>
+                  <th>Facilities</th>
+                </>
+              )}
+              {expandedEntity === 'vendors' && (
+                <>
+                  <th>Name</th>
+                  <th>City</th>
+                  <th>State</th>
+                  <th>Active</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {expandedEntity === 'contracts' && (titanOnlyProjects || []).map((p: TitanOnlyProject) => (
+              <tr key={p.id}>
+                <td>{p.project_number || '-'}</td>
+                <td>{p.name}</td>
+                <td>{p.status || '-'}</td>
+                <td>{new Date(p.created_at).toLocaleDateString()}</td>
+              </tr>
+            ))}
+            {expandedEntity === 'employees' && (titanOnlyEmployees || []).map((e: TitanOnlyEmployee) => (
+              <tr key={e.id}>
+                <td>{e.employee_number || '-'}</td>
+                <td>{e.first_name} {e.last_name}</td>
+                <td>{e.email || '-'}</td>
+                <td>{e.active ? 'Yes' : 'No'}</td>
+              </tr>
+            ))}
+            {expandedEntity === 'customers' && (titanOnlyCustomers || []).map((c: TitanOnlyCustomer) => (
+              <tr key={c.id}>
+                <td>{c.name}</td>
+                <td>{c.facility_count}</td>
+              </tr>
+            ))}
+            {expandedEntity === 'vendors' && (titanOnlyVendors || []).map((v: TitanOnlyVendor) => (
+              <tr key={v.id}>
+                <td>{v.name}</td>
+                <td>{v.city || '-'}</td>
+                <td>{v.state || '-'}</td>
+                <td>{v.active ? 'Yes' : 'No'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   // === RENDER MATCHES ===
@@ -1606,23 +1741,14 @@ const VistaLinkingManager: React.FC = () => {
           color="#8b5cf6"
           stats={getEntityStats('work-orders')}
           vistaLabel="Vista"
-          titanLabel="Projects"
+          titanLabel="Titan"
           isExpanded={expandedEntity === 'work-orders'}
           isLoading={statsLoading}
           onToggle={() => toggleEntity('work-orders')}
           actions={
-            <button
-              className="sales-btn-primary"
-              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#8b5cf6' }}
-              onClick={() => {
-                if (window.confirm('Import all unmatched VP work orders as Titan projects?')) {
-                  importWorkOrdersToTitanMutation.mutate();
-                }
-              }}
-              disabled={importWorkOrdersToTitanMutation.isPending}
-            >
-              {importWorkOrdersToTitanMutation.isPending ? 'Importing...' : 'Import as Projects'}
-            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              Work orders sync directly from Vista
+            </span>
           }
         />
 

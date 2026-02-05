@@ -463,6 +463,48 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
   }
 });
 
+// ==================== TITAN-ONLY RECORDS ====================
+
+// GET /api/vista/titan-only/projects - Get Titan projects not linked to Vista
+router.get('/titan-only/projects', async (req, res, next) => {
+  try {
+    const projects = await VistaData.getTitanOnlyProjects(req.tenantId);
+    res.json(projects);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/titan-only/employees - Get Titan employees not linked to Vista
+router.get('/titan-only/employees', async (req, res, next) => {
+  try {
+    const employees = await VistaData.getTitanOnlyEmployees(req.tenantId);
+    res.json(employees);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/titan-only/customers - Get Titan customers not linked to Vista
+router.get('/titan-only/customers', async (req, res, next) => {
+  try {
+    const customers = await VistaData.getTitanOnlyCustomers(req.tenantId);
+    res.json(customers);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/titan-only/vendors - Get Titan vendors not linked to Vista
+router.get('/titan-only/vendors', async (req, res, next) => {
+  try {
+    const vendors = await VistaData.getTitanOnlyVendors(req.tenantId);
+    res.json(vendors);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== CONTRACTS ====================
 
 // GET /api/vista/contracts - Get all contracts
