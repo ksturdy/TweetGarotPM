@@ -120,10 +120,20 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     console.log(`[Vista Import] Starting import of ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`);
     const startTime = Date.now();
 
-    // Parse the Excel file from disk to avoid memory issues
-    console.log('[Vista Import] Parsing Excel file from disk...');
-    const workbook = XLSX.readFile(tempFilePath);
-    console.log(`[Vista Import] Excel parsed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Sheets: ${workbook.SheetNames.join(', ')}`);
+    // Parse Excel file with minimal memory - only get sheet names first
+    console.log('[Vista Import] Reading Excel structure...');
+    const workbook = XLSX.readFile(tempFilePath, {
+      sheetRows: 0,  // Don't load data yet, just structure
+      bookSheets: true
+    });
+    const sheetNames = workbook.SheetNames;
+    console.log(`[Vista Import] Found sheets: ${sheetNames.join(', ')}`);
+
+    // Helper to load a single sheet on demand
+    const loadSheet = (sheetName) => {
+      const wb = XLSX.readFile(tempFilePath, { sheets: sheetName });
+      return XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+    };
 
     const results = {
       contracts: { total: 0, new: 0, updated: 0, batch_id: null },
@@ -138,11 +148,10 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
     // Process Contracts sheet (TGPBI_PMContractStatus)
     const contractSheetName = 'TGPBI_PMContractStatus';
-    if (workbook.SheetNames.includes(contractSheetName)) {
+    if (sheetNames.includes(contractSheetName)) {
       console.log(`[Vista Import] Processing ${contractSheetName}...`);
       results.sheetsFound.push(contractSheetName);
-      const worksheet = workbook.Sheets[contractSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(contractSheetName);
       console.log(`[Vista Import] ${contractSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
@@ -189,7 +198,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             primary_market: row['Primary Market'] || '',
             negotiated_work: row['Negotiated Work'] || '',
             delivery_method: row['Delivery Method'] || '',
-            raw_data: row
+            raw_data: null  // Don't store raw data to save memory
           };
 
           if (!contractData.contract_number) continue;
@@ -214,11 +223,10 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
     // Process Work Orders sheet (TGPBI_SMWorkOrderStatus)
     const workOrderSheetName = 'TGPBI_SMWorkOrderStatus';
-    if (workbook.SheetNames.includes(workOrderSheetName)) {
+    if (sheetNames.includes(workOrderSheetName)) {
       console.log(`[Vista Import] Processing ${workOrderSheetName}...`);
       results.sheetsFound.push(workOrderSheetName);
-      const worksheet = workbook.Sheets[workOrderSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(workOrderSheetName);
       console.log(`[Vista Import] ${workOrderSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
@@ -267,7 +275,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             state: row['State'] || '',
             zip: row['Zip'] || '',
             primary_market: row['Primary Market'] || '',
-            raw_data: row
+            raw_data: null  // Don't store raw data to save memory
           };
 
           if (!woData.work_order_number) continue;
@@ -292,10 +300,9 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
     // Process Employees sheet (TGPREmployees)
     const employeeSheetName = 'TGPREmployees';
-    if (workbook.SheetNames.includes(employeeSheetName)) {
+    if (sheetNames.includes(employeeSheetName)) {
       results.sheetsFound.push(employeeSheetName);
-      const worksheet = workbook.Sheets[employeeSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(employeeSheetName);
 
       if (data.length > 0) {
         const batch = await VistaData.createImportBatch({
@@ -315,7 +322,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             last_name: row['Last Name'] || '',
             hire_date: row['Hire Date'] ? excelDateToJS(row['Hire Date']) : null,
             active: row['Active Y/N'] === 'Y',
-            raw_data: row
+            raw_data: null  // Don't store raw data to save memory
           };
 
           if (!empData.employee_number) continue;
@@ -340,10 +347,9 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
     // Process Customers sheet (TGARCustomers)
     const customerSheetName = 'TGARCustomers';
-    if (workbook.SheetNames.includes(customerSheetName)) {
+    if (sheetNames.includes(customerSheetName)) {
       results.sheetsFound.push(customerSheetName);
-      const worksheet = workbook.Sheets[customerSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(customerSheetName);
 
       if (data.length > 0) {
         const batch = await VistaData.createImportBatch({
@@ -366,7 +372,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             state: row['State'] || '',
             zip: row['Zip'] || '',
             active: row['Active Y/N'] === 'Y',
-            raw_data: row
+            raw_data: null  // Don't store raw data to save memory
           };
 
           if (!custData.customer_number) continue;
@@ -391,10 +397,9 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
     // Process Vendors sheet (TGAPVendors)
     const vendorSheetName = 'TGAPVendors';
-    if (workbook.SheetNames.includes(vendorSheetName)) {
+    if (sheetNames.includes(vendorSheetName)) {
       results.sheetsFound.push(vendorSheetName);
-      const worksheet = workbook.Sheets[vendorSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(vendorSheetName);
 
       if (data.length > 0) {
         const batch = await VistaData.createImportBatch({
@@ -417,7 +422,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             state: row['State'] || '',
             zip: row['Zip'] || '',
             active: row['Active Y/N'] === 'Y',
-            raw_data: row
+            raw_data: null  // Don't store raw data to save memory
           };
 
           if (!vendorData.vendor_number) continue;
@@ -443,14 +448,15 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     // Process Facilities (Customer List) - detect by column names
     // Look for a sheet with Customer_Owner-Facility or Customer_Owner columns
     let facilitiesSheetName = null;
-    for (const sheetName of workbook.SheetNames) {
-      const ws = workbook.Sheets[sheetName];
-      const testData = XLSX.utils.sheet_to_json(ws, { range: 0 });
+    for (const sn of sheetNames) {
+      // Load just first row to check columns
+      const wb = XLSX.readFile(tempFilePath, { sheets: sn, sheetRows: 2 });
+      const testData = XLSX.utils.sheet_to_json(wb.Sheets[sn]);
       if (testData.length > 0) {
         const firstRow = testData[0];
         // Check if this looks like a facilities file (has Customer_Owner-Facility column)
         if (firstRow.hasOwnProperty('Customer_Owner-Facility') || firstRow.hasOwnProperty('Customer_Owner')) {
-          facilitiesSheetName = sheetName;
+          facilitiesSheetName = sn;
           break;
         }
       }
@@ -459,8 +465,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     if (facilitiesSheetName) {
       console.log(`[Vista Import] Processing facilities from ${facilitiesSheetName}...`);
       results.sheetsFound.push(`${facilitiesSheetName} (Facilities)`);
-      const worksheet = workbook.Sheets[facilitiesSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const data = loadSheet(facilitiesSheetName);
 
       if (data.length > 0) {
         let createdCount = 0;
@@ -539,7 +544,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     if (results.sheetsProcessed.length === 0) {
       return res.status(400).json({
         message: 'No valid Vista data sheets found. Expected sheets: TGPBI_PMContractStatus, TGPBI_SMWorkOrderStatus, TGPREmployees, TGARCustomers, TGAPVendors, or a Customer List with Customer_Owner column',
-        availableSheets: workbook.SheetNames
+        availableSheets: sheetNames
       });
     }
 
@@ -654,14 +659,14 @@ router.post('/import/facilities', requireAdmin, upload.single('file'), async (re
 
     tempFilePath = req.file.path;
     console.log(`[Facilities Import] Starting import of ${req.file.originalname}`);
-    const workbook = XLSX.readFile(tempFilePath);
 
-    // Find the data sheet (look for common names or use first sheet)
-    let sheetName = workbook.SheetNames[0];
+    // Read sheet names first, then load only the sheet we need
+    const wbStructure = XLSX.readFile(tempFilePath, { sheetRows: 0, bookSheets: true });
+    const sheetName = wbStructure.SheetNames[0];
     console.log(`[Facilities Import] Using sheet: ${sheetName}`);
 
-    const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const workbook = XLSX.readFile(tempFilePath, { sheets: sheetName });
+    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     if (data.length === 0) {
       return res.status(400).json({ message: 'No data found in Excel file' });
