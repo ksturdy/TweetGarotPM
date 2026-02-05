@@ -2987,15 +2987,15 @@ const VistaData = {
       await client.query('BEGIN');
 
       // Find exact matches by employee number (100% match)
+      // Cast INTEGER employee_number to TEXT to match VARCHAR in employees table
       const result = await client.query(
         `UPDATE vp_employees vpe SET
           linked_employee_id = e.id,
           link_status = 'auto_matched',
-          link_confidence = 1.0,
           linked_at = CURRENT_TIMESTAMP,
           linked_by = $2
          FROM employees e
-         WHERE vpe.employee_number = e.employee_number
+         WHERE vpe.employee_number::TEXT = e.employee_number
            AND e.tenant_id = $1
            AND vpe.linked_employee_id IS NULL
          RETURNING vpe.id, vpe.employee_number, e.id as titan_id`,
