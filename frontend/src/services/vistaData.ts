@@ -878,6 +878,12 @@ export const vistaDataService = {
     return response.data;
   },
 
+  // Auto-link all VP contracts that have exact contract_number = project.number matches
+  autoLinkExactContractMatches: async (): Promise<{ contracts_linked: number }> => {
+    const response = await api.post('/vista/auto-link-contracts');
+    return response.data;
+  },
+
   // ==================== DELETE TITAN-ONLY RECORDS ====================
 
   deleteTitanOnlyCustomers: async (): Promise<{ message: string; deleted: number; records: any[] }> => {
