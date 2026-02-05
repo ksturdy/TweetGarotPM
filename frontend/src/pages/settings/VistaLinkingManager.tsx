@@ -690,6 +690,35 @@ const VistaLinkingManager: React.FC = () => {
     },
   });
 
+  // Auto-link 100% matches mutations
+  const autoLinkContractsMutation = useMutation({
+    mutationFn: vistaDataService.autoLinkExactContractMatches,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['vista-contracts'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-contract-duplicates'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['titan-only-projects'] });
+      showSuccess(`Auto-linked ${data.contracts_linked} contracts by number`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to auto-link contracts');
+    },
+  });
+
+  const autoLinkEmployeesMutation = useMutation({
+    mutationFn: vistaDataService.autoLinkExactEmployeeMatches,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['vista-vp-employees'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-employee-duplicates'] });
+      queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['titan-only-employees'] });
+      showSuccess(`Auto-linked ${data.employees_linked} employees by number`);
+    },
+    onError: (error: any) => {
+      showError(error.response?.data?.message || 'Failed to auto-link employees');
+    },
+  });
+
   const linkDepartmentCodeMutation = useMutation({
     mutationFn: ({ departmentCode, departmentId }: { departmentCode: string; departmentId: number }) =>
       vistaDataService.linkDepartmentCode(departmentCode, departmentId),
@@ -1935,9 +1964,14 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('contracts')}
           actions={
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Contracts sync automatically from Vista
-            </span>
+            <button
+              className="sales-btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              onClick={() => autoLinkContractsMutation.mutate()}
+              disabled={autoLinkContractsMutation.isPending}
+            >
+              {autoLinkContractsMutation.isPending ? 'Linking...' : 'Auto-Link 100% Matches'}
+            </button>
           }
         />
 
@@ -1967,9 +2001,14 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('employees')}
           actions={
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Employees sync automatically from Vista
-            </span>
+            <button
+              className="sales-btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              onClick={() => autoLinkEmployeesMutation.mutate()}
+              disabled={autoLinkEmployeesMutation.isPending}
+            >
+              {autoLinkEmployeesMutation.isPending ? 'Linking...' : 'Auto-Link 100% Matches'}
+            </button>
           }
         />
 
@@ -1982,9 +2021,14 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('customers')}
           actions={
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Customers sync automatically from Vista
-            </span>
+            <button
+              className="sales-btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              onClick={() => autoLinkCustomersMutation.mutate()}
+              disabled={autoLinkCustomersMutation.isPending}
+            >
+              {autoLinkCustomersMutation.isPending ? 'Linking...' : 'Auto-Link 100% Matches'}
+            </button>
           }
         />
 
@@ -1997,9 +2041,14 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading}
           onToggle={() => toggleEntity('vendors')}
           actions={
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Vendors sync automatically from Vista
-            </span>
+            <button
+              className="sales-btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              onClick={() => autoLinkVendorsMutation.mutate()}
+              disabled={autoLinkVendorsMutation.isPending}
+            >
+              {autoLinkVendorsMutation.isPending ? 'Linking...' : 'Auto-Link 100% Matches'}
+            </button>
           }
         />
 
@@ -2012,9 +2061,14 @@ const VistaLinkingManager: React.FC = () => {
           isLoading={statsLoading || departmentDuplicatesLoading}
           onToggle={() => toggleEntity('departments')}
           actions={
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              Departments sync automatically from Vista
-            </span>
+            <button
+              className="sales-btn-primary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              onClick={() => autoLinkDepartmentsMutation.mutate()}
+              disabled={autoLinkDepartmentsMutation.isPending}
+            >
+              {autoLinkDepartmentsMutation.isPending ? 'Linking...' : 'Auto-Link 100% Matches'}
+            </button>
           }
         />
 
