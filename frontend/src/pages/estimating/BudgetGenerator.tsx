@@ -214,12 +214,22 @@ const BudgetGenerator: React.FC = () => {
     }
   };
 
-  // Recalculate adjusted budget when edit values change
+  // Track if user has made edits (to avoid recalculating on initial edit mode entry)
+  const [hasUserEdited, setHasUserEdited] = useState(false);
+
+  // Recalculate adjusted budget only when user actually changes values
   useEffect(() => {
-    if (budget && isEditMode) {
+    if (budget && isEditMode && hasUserEdited) {
       calculateAdjustedBudget();
     }
-  }, [editableValues, isEditMode]);
+  }, [editableValues]);
+
+  // Reset hasUserEdited when exiting edit mode
+  useEffect(() => {
+    if (!isEditMode) {
+      setHasUserEdited(false);
+    }
+  }, [isEditMode]);
 
   const calculateAdjustedBudget = () => {
     if (!budget) return;
@@ -497,6 +507,7 @@ const BudgetGenerator: React.FC = () => {
   };
 
   const handlePercentChange = (field: 'overheadPercent' | 'profitPercent' | 'contingencyPercent', value: number) => {
+    setHasUserEdited(true);
     setEditableValues(prev => ({
       ...prev,
       [field]: value
@@ -504,6 +515,7 @@ const BudgetGenerator: React.FC = () => {
   };
 
   const handleSectionAdjustment = (sectionName: string, value: number) => {
+    setHasUserEdited(true);
     setEditableValues(prev => ({
       ...prev,
       sectionAdjustments: {
