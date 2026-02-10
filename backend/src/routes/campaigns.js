@@ -272,10 +272,31 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     console.log('[Report] Data loaded - companies:', companiesList.length, 'weeks:', weeksList.length, 'team:', teamList.length);
     if (teamList.length > 0) {
       console.log('[Report] Team members:', teamList.map(m => `${m.name} (emp:${m.employee_id}, type:${typeof m.employee_id})`));
+    } else {
+      console.log('[Report] WARNING: team is empty, deriving from company assignments');
     }
     if (companiesList.length > 0) {
       const sample = companiesList[0];
       console.log('[Report] Sample company:', { assigned_to_id: sample.assigned_to_id, type_id: typeof sample.assigned_to_id, assigned_to_name: sample.assigned_to_name });
+    }
+
+    // If team query returned empty, derive team from company assignments as fallback
+    let effectiveTeam = teamList;
+    if (teamList.length === 0 && companiesList.length > 0) {
+      const memberMap = {};
+      companiesList.forEach(c => {
+        if (c.assigned_to_name && c.assigned_to_id) {
+          if (!memberMap[c.assigned_to_id]) {
+            memberMap[c.assigned_to_id] = {
+              employee_id: c.assigned_to_id,
+              name: c.assigned_to_name,
+              role: c.assigned_to_id === campaign.owner_id ? 'owner' : 'member'
+            };
+          }
+        }
+      });
+      effectiveTeam = Object.values(memberMap);
+      console.log('[Report] Derived team:', effectiveTeam.map(m => `${m.name} (emp:${m.employee_id})`));
     }
 
     // Merge campaign_opportunities + main opportunities (normalized to same shape)
@@ -292,7 +313,7 @@ router.get('/:id/report-pdf', async (req, res, next) => {
 
     const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
 
-    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, teamList, opportunitiesList);
+    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList);
     console.log('[Report] HTML generated, length:', html.length);
 
     // In production (Render), use @sparticuz/chromium which bundles its own binary.
