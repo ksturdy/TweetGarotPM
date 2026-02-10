@@ -319,7 +319,7 @@ export default function CampaignDetail() {
         start_date: isLegacyPhoenix ? ef.startDate : ef.startDate,
         end_date: isLegacyPhoenix ? ef.endDate : ef.endDate,
         status: ef.status || 'planning',
-        owner_id: isLegacyPhoenix ? undefined : ef.ownerId,
+        owner_id: ef.ownerId || editEmployees.find(e => `${e.first_name} ${e.last_name}` === ef.owner)?.id || undefined,
         goal_description: ef.goal,
         target_pipeline_value: ef.targetValue,
         target_touchpoints: ef.targetTouchpoints || 0,
