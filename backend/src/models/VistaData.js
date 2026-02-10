@@ -310,6 +310,24 @@ const VistaData = {
     return result.rows[0];
   },
 
+  async updateProjectionOverrides(id, overrides, tenantId) {
+    const result = await db.query(
+      `UPDATE vp_contracts SET
+        user_adjusted_end_months = $1,
+        user_selected_contour = $2,
+        updated_at = NOW()
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [
+        overrides.user_adjusted_end_months ?? null,
+        overrides.user_selected_contour ?? null,
+        id,
+        tenantId
+      ]
+    );
+    return result.rows[0];
+  },
+
   // ==================== WORK ORDERS ====================
 
   async upsertWorkOrder(data, tenantId, batchId = null) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPContract } from '../../services/vistaData';
@@ -223,6 +223,9 @@ const ProjectedRevenue: React.FC = () => {
   // User-selected work contours per contract (contractId -> ContourType)
   const [selectedContours, setSelectedContours] = useState<Record<number, ContourType>>({});
 
+  // Track whether we've initialized overrides from DB data
+  const [overridesInitialized, setOverridesInitialized] = useState(false);
+
   // View mode: 'table' or 'graph'
   const [viewMode, setViewMode] = useState<'table' | 'graph'>('table');
 
@@ -245,6 +248,39 @@ const ProjectedRevenue: React.FC = () => {
     queryKey: ['vpContracts', 'projectedRevenue'],
     queryFn: () => vistaDataService.getAllContracts({ status: '' }), // Get all, filter client-side
   });
+
+  // Initialize overrides from DB data once contracts load
+  useEffect(() => {
+    if (contracts && !overridesInitialized) {
+      const endMonths: Record<number, number> = {};
+      const contours: Record<number, ContourType> = {};
+
+      contracts.forEach(c => {
+        if (c.user_adjusted_end_months != null) {
+          endMonths[c.id] = c.user_adjusted_end_months;
+        }
+        if (c.user_selected_contour) {
+          contours[c.id] = c.user_selected_contour as ContourType;
+        }
+      });
+
+      setAdjustedEndMonths(endMonths);
+      setSelectedContours(contours);
+      setOverridesInitialized(true);
+    }
+  }, [contracts, overridesInitialized]);
+
+  // Save projection override to backend
+  const saveProjectionOverride = useCallback(async (
+    contractId: number,
+    overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null }
+  ) => {
+    try {
+      await vistaDataService.updateProjectionOverrides(contractId, overrides);
+    } catch (err) {
+      console.error('Failed to save projection override:', err);
+    }
+  }, []);
 
   // Get unique filter values
   const filterOptions = useMemo(() => {
@@ -740,7 +776,8 @@ const ProjectedRevenue: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {projections.map((p) => (
+            {projections.map((p) => {
+              return (
               <tr key={p.contract.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 <td style={{ padding: '0.4rem 0.5rem', position: 'sticky', left: 0, background: '#fff' }}>
                   <div style={{ fontWeight: 500 }}>
@@ -781,14 +818,15 @@ const ProjectedRevenue: React.FC = () => {
                           ...prev,
                           [p.contract.id]: newMonths
                         }));
+                        saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newMonths });
                       }}
                       style={{
                         padding: '0.15rem 0.25rem',
                         fontSize: '0.65rem',
-                        border: adjustedEndMonths[p.contract.id] !== undefined ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                        border: adjustedEndMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
                         borderRadius: '3px',
-                        background: adjustedEndMonths[p.contract.id] !== undefined ? '#eff6ff' : 'transparent',
-                        color: '#64748b',
+                        background: adjustedEndMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
+                        color: adjustedEndMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
                         cursor: 'pointer',
                         width: '65px'
                       }}
@@ -819,17 +857,19 @@ const ProjectedRevenue: React.FC = () => {
                             ...prev,
                             [p.contract.id]: newContour
                           }));
+                          saveProjectionOverride(p.contract.id, { user_selected_contour: newContour });
                         }}
                         style={{
                           padding: '0.15rem 0.25rem',
                           fontSize: '0.65rem',
                           border: p.isAutoContour
                             ? '1px dashed #94a3b8'  // Dashed border for auto-selected
-                            : '1px solid #3b82f6', // Solid blue for user-selected
+                            : '1px solid #16a34a', // Solid green for user-selected
                           borderRadius: '3px',
-                          background: p.isAutoContour ? '#f8fafc' : '#eff6ff',
+                          background: p.isAutoContour ? '#f8fafc' : '#dcfce7',
                           cursor: 'pointer',
                           width: '55px',
+                          color: p.isAutoContour ? '#64748b' : '#15803d',
                           fontStyle: p.isAutoContour ? 'italic' : 'normal'
                         }}
                         title={p.isAutoContour
@@ -864,7 +904,8 @@ const ProjectedRevenue: React.FC = () => {
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
           <tfoot>
             <tr style={{ background: '#f1f5f9', fontWeight: 600 }}>
@@ -900,7 +941,7 @@ const ProjectedRevenue: React.FC = () => {
         Default end date is based on contract value and % complete (see Duration Rules). Click the Duration Rules button to adjust thresholds.
         <br />
         <strong>End dates:</strong> Click to change when a project completes.
-        <strong style={{ marginLeft: '1rem' }}>Contours:</strong> Auto-selected based on % complete (<span style={{ fontStyle: 'italic', border: '1px dashed #94a3b8', padding: '0 2px', borderRadius: '2px' }}>dashed</span>), or manually override (<span style={{ border: '1px solid #3b82f6', padding: '0 2px', borderRadius: '2px', background: '#eff6ff' }}>solid blue</span>).
+        <strong style={{ marginLeft: '1rem' }}>Contours:</strong> Auto-selected based on % complete (<span style={{ fontStyle: 'italic', border: '1px dashed #94a3b8', padding: '0 2px', borderRadius: '2px' }}>dashed</span>), or manually override (<span style={{ border: '1px solid #16a34a', padding: '0 2px', borderRadius: '2px', background: '#dcfce7', color: '#15803d' }}>green</span> = user-adjusted).
         <div style={{ marginTop: '0.5rem' }}>
           <strong>Work Contours:</strong>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', marginTop: '0.25rem' }}>
@@ -921,7 +962,13 @@ const ProjectedRevenue: React.FC = () => {
           <div style={{ marginTop: '0.5rem' }}>
             {Object.keys(adjustedEndMonths).length > 0 && (
               <button
-                onClick={() => setAdjustedEndMonths({})}
+                onClick={() => {
+                  // Clear from DB for each adjusted contract
+                  Object.keys(adjustedEndMonths).forEach(id => {
+                    saveProjectionOverride(Number(id), { user_adjusted_end_months: null });
+                  });
+                  setAdjustedEndMonths({});
+                }}
                 style={{
                   padding: '0.2rem 0.5rem',
                   fontSize: '0.65rem',
@@ -938,7 +985,13 @@ const ProjectedRevenue: React.FC = () => {
             )}
             {Object.values(selectedContours).some(c => c !== 'flat') && (
               <button
-                onClick={() => setSelectedContours({})}
+                onClick={() => {
+                  // Clear from DB for each adjusted contract
+                  Object.keys(selectedContours).forEach(id => {
+                    saveProjectionOverride(Number(id), { user_selected_contour: null });
+                  });
+                  setSelectedContours({});
+                }}
                 style={{
                   padding: '0.2rem 0.5rem',
                   fontSize: '0.65rem',

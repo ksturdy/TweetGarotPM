@@ -289,10 +289,15 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, teamList, opportunitiesList);
     console.log('[Report] HTML generated, length:', html.length);
 
-    browser = await puppeteer.launch({
+    const launchOptions = {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    });
+    };
+    // On Render/production, use system-installed Chromium
+    if (process.env.NODE_ENV === 'production') {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+    }
+    browser = await puppeteer.launch(launchOptions);
     console.log('[Report] Puppeteer launched');
 
     const page = await browser.newPage();

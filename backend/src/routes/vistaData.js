@@ -1021,6 +1021,24 @@ router.post('/contracts/:id/ignore', requireAdmin, async (req, res, next) => {
   }
 });
 
+// PATCH /api/vista/contracts/:id/projection - Update projection overrides (end months, contour)
+router.patch('/contracts/:id/projection', async (req, res, next) => {
+  try {
+    const { user_adjusted_end_months, user_selected_contour } = req.body;
+    const result = await VistaData.updateProjectionOverrides(
+      req.params.id,
+      { user_adjusted_end_months, user_selected_contour },
+      req.tenantId
+    );
+    if (!result) {
+      return res.status(404).json({ message: 'Contract not found' });
+    }
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== WORK ORDERS ====================
 
 // GET /api/vista/work-orders - Get all work orders
