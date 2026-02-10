@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPContract } from '../../services/vistaData';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { format, addMonths, addWeeks, startOfMonth, startOfWeek } from 'date-fns';
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -188,6 +188,7 @@ const LaborForecast: React.FC = () => {
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
   const [showSettings, setShowSettings] = useState(false);
   const [timeHorizon, setTimeHorizon] = useState<number>(12);
+  const [granularity, setGranularity] = useState<'monthly' | 'weekly'>('monthly');
 
   const getDurationForValue = (contractValue: number): number => {
     for (const rule of durationRules) {
@@ -260,6 +261,44 @@ const LaborForecast: React.FC = () => {
     }
     return cols;
   }, [timeHorizon]);
+
+  // ─── Weekly derivation ──────────────────────────────────
+
+  const weekInfo = useMemo(() => {
+    const weeks: { key: string; label: string; monthKey: string }[] = [];
+    const weeksPerMonth: Record<string, number> = {};
+    const now = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const horizonEnd = addMonths(startOfMonth(new Date()), timeHorizon);
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const totalWeeks = Math.ceil((horizonEnd.getTime() - now.getTime()) / msPerWeek);
+
+    for (let i = 0; i < totalWeeks; i++) {
+      const weekStart = addWeeks(now, i);
+      const key = format(weekStart, 'yyyy-MM-dd');
+      const monthKey = format(weekStart, 'yyyy-MM');
+      weeks.push({ key, label: format(weekStart, 'M/d'), monthKey });
+      weeksPerMonth[monthKey] = (weeksPerMonth[monthKey] || 0) + 1;
+    }
+
+    return { weeks, weeksPerMonth };
+  }, [timeHorizon]);
+
+  const displayColumns = useMemo(() => {
+    if (granularity === 'weekly' && timeHorizon <= 12) {
+      return weekInfo.weeks.map(w => ({ key: w.key, label: w.label, isYear: false, monthKey: w.monthKey }));
+    }
+    return columns.map(c => ({ ...c, monthKey: c.key }));
+  }, [granularity, timeHorizon, columns, weekInfo]);
+
+  const getHoursForColumn = useCallback((monthlyHours: Map<string, TradeMonthlyHours>, col: { key: string; monthKey: string }): TradeMonthlyHours => {
+    if (granularity !== 'weekly' || timeHorizon > 12) {
+      return monthlyHours.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+    }
+    const monthly = monthlyHours.get(col.monthKey);
+    if (!monthly) return { pf: 0, sm: 0, pl: 0, total: 0 };
+    const divisor = weekInfo.weeksPerMonth[col.monthKey] || 1;
+    return { pf: monthly.pf / divisor, sm: monthly.sm / divisor, pl: monthly.pl / divisor, total: monthly.total / divisor };
+  }, [granularity, timeHorizon, weekInfo]);
 
   // ─── Core projections ────────────────────────────────────
 
@@ -371,16 +410,16 @@ const LaborForecast: React.FC = () => {
 
   const columnTotals = useMemo(() => {
     const totals = new Map<string, TradeMonthlyHours>();
-    columns.forEach(col => {
+    displayColumns.forEach(col => {
       const agg: TradeMonthlyHours = { pf: 0, sm: 0, pl: 0, total: 0 };
       projections.forEach(p => {
-        const h = p.monthlyHours.get(col.key);
-        if (h) { agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total; }
+        const h = getHoursForColumn(p.monthlyHours, col);
+        agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total;
       });
       totals.set(col.key, agg);
     });
     return totals;
-  }, [projections, columns]);
+  }, [projections, displayColumns, getHoursForColumn]);
 
   const grandTotalHours = useMemo(() =>
     projections.reduce((sum, p) => sum + p.totalRemainingHours, 0), [projections]);
@@ -505,7 +544,7 @@ const LaborForecast: React.FC = () => {
               {[3, 6, 12, 18, 24, 36].map((months, i, arr) => (
                 <button
                   key={months}
-                  onClick={() => setTimeHorizon(months)}
+                  onClick={() => { setTimeHorizon(months); if (months > 12) setGranularity('monthly'); }}
                   style={{
                     padding: '0.35rem 0.5rem', fontSize: '0.75rem',
                     background: timeHorizon === months ? '#059669' : '#f1f5f9',
@@ -519,6 +558,34 @@ const LaborForecast: React.FC = () => {
                 </button>
               ))}
             </div>
+
+            {/* Granularity toggle (only for ≤12 month horizons) */}
+            {timeHorizon <= 12 && (
+              <div style={{ display: 'flex', gap: '0' }}>
+                <button
+                  onClick={() => setGranularity('monthly')}
+                  style={{
+                    padding: '0.35rem 0.5rem', fontSize: '0.75rem',
+                    background: granularity === 'monthly' ? '#0284c7' : '#f1f5f9',
+                    color: granularity === 'monthly' ? '#fff' : '#64748b',
+                    border: '1px solid #e2e8f0', borderRadius: '4px 0 0 4px', cursor: 'pointer',
+                  }}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setGranularity('weekly')}
+                  style={{
+                    padding: '0.35rem 0.5rem', fontSize: '0.75rem',
+                    background: granularity === 'weekly' ? '#0284c7' : '#f1f5f9',
+                    color: granularity === 'weekly' ? '#fff' : '#64748b',
+                    border: '1px solid #e2e8f0', borderRadius: '0 4px 4px 0', cursor: 'pointer',
+                  }}
+                >
+                  Weekly
+                </button>
+              </div>
+            )}
 
             {/* Data view toggle */}
             <div style={{ display: 'flex', gap: '0' }}>
@@ -669,10 +736,11 @@ const LaborForecast: React.FC = () => {
                       <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '90px' }}>Total Remaining</th>
                     </>
                   )}
-                  {columns.map(col => (
+                  {displayColumns.map(col => (
                     <th key={col.key} style={{
                       padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0',
-                      minWidth: col.isYear ? '70px' : '55px', background: col.isYear ? '#f1f5f9' : '#f8fafc'
+                      minWidth: granularity === 'weekly' ? '40px' : '55px', background: '#f8fafc',
+                      fontSize: granularity === 'weekly' ? '0.6rem' : '0.75rem',
                     }}>
                       {col.label}
                     </th>
@@ -759,15 +827,15 @@ const LaborForecast: React.FC = () => {
                           </select>
                         </div>
                       </td>
-                      {columns.map(col => {
-                        const h = p.monthlyHours.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                      {displayColumns.map(col => {
+                        const h = getHoursForColumn(p.monthlyHours, col);
                         return (
                           <td key={col.key} title={h.total > 0 ? cellTooltip(h) : ''}
                             style={{
                               padding: '0.4rem 0.5rem', textAlign: 'right',
                               color: h.total > 0 ? '#1e293b' : '#cbd5e1',
                               fontWeight: h.total > 0 ? 500 : 400,
-                              background: col.isYear ? '#fafafa' : 'transparent',
+                              fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
                             }}>
                             {fmtHeadcount(h.total, hoursPerPersonPerMonth)}
                           </td>
@@ -796,7 +864,7 @@ const LaborForecast: React.FC = () => {
                           : fmtHours(grandTotalsByTrade[trade.key as TradeName] || 0)
                         }
                       </td>
-                      {columns.map(col => {
+                      {displayColumns.map(col => {
                         const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                         const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
                         return (
@@ -806,7 +874,8 @@ const LaborForecast: React.FC = () => {
                               padding: '0.5rem', textAlign: 'right',
                               color: hours > 0 ? '#1e293b' : '#cbd5e1',
                               fontWeight: hours > 0 ? 500 : 400,
-                              background: col.isYear ? (trade.key === 'total' ? '#e8ecf0' : '#fafafa') : (trade.key === 'total' ? '#f1f5f9' : 'transparent'),
+                              background: trade.key === 'total' ? '#f1f5f9' : 'transparent',
+                              fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
                             }}>
                             {fmtHeadcount(hours, hoursPerPersonPerMonth)}
                           </td>
@@ -833,11 +902,11 @@ const LaborForecast: React.FC = () => {
                     <td style={{ padding: '0.5rem' }}>-</td>
                     <td style={{ padding: '0.5rem' }}>-</td>
                     <td style={{ padding: '0.5rem' }}>-</td>
-                    {columns.map(col => {
+                    {displayColumns.map(col => {
                       const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                       return (
                         <td key={col.key} title={ct.total > 0 ? cellTooltip(ct) : ''}
-                          style={{ padding: '0.5rem', textAlign: 'right', background: col.isYear ? '#e8ecf0' : '#f1f5f9' }}>
+                          style={{ padding: '0.5rem', textAlign: 'right', background: '#f1f5f9', fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem' }}>
                           {fmtHeadcount(ct.total, hoursPerPersonPerMonth)}
                         </td>
                       );
@@ -869,40 +938,51 @@ const LaborForecast: React.FC = () => {
       {/* ─── GRAPH VIEW ─── */}
       {viewMode === 'graph' && (
         <div className="card" style={{ padding: '1rem' }}>
-          {/* Stacked bar chart - Monthly Headcount */}
+          {/* Stacked bar chart */}
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '1rem', color: '#1e293b' }}>
-              Projected Headcount by Month (Next {timeHorizon} Months)
+              Projected Headcount by {granularity === 'weekly' && timeHorizon <= 12 ? 'Week' : 'Month'} (Next {timeHorizon} Months)
             </h3>
             <div style={{ height: '320px', position: 'relative' }}>
               {(() => {
-                const now = startOfMonth(new Date());
-                const monthlyData: { label: string; key: string; pf: number; sm: number; pl: number; total: number }[] = [];
+                const barCount = displayColumns.length;
+                const graphData = displayColumns.map(col => {
+                  const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                  return { label: col.label, key: col.key, monthKey: col.monthKey, ...ct };
+                });
+
                 let maxValue = 0;
-
-                for (let i = 0; i < timeHorizon; i++) {
-                  const monthDate = addMonths(now, i);
-                  const key = format(monthDate, 'yyyy-MM');
-                  const agg = { pf: 0, sm: 0, pl: 0, total: 0 };
-                  projections.forEach(p => {
-                    const h = p.monthlyHours.get(key);
-                    if (h) { agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total; }
-                  });
-                  monthlyData.push({ label: format(monthDate, 'MMM yy'), key, ...agg });
-                  const headcount = agg.total / hoursPerPersonPerMonth;
-                  if (headcount > maxValue) maxValue = headcount;
-                }
-
-                maxValue = Math.ceil(maxValue / 5) * 5; // Round up to nearest 5
+                graphData.forEach(d => {
+                  const hc = d.total / hoursPerPersonPerMonth;
+                  if (hc > maxValue) maxValue = hc;
+                });
+                maxValue = Math.ceil(maxValue / 5) * 5;
                 if (maxValue === 0) maxValue = 10;
 
-                const barWidth = 100 / timeHorizon;
+                const barWidth = 100 / barCount;
                 const chartHeight = 250;
+                const isWeekly = granularity === 'weekly' && timeHorizon <= 12;
 
-                const yearBoundaries: { index: number; year: string }[] = [];
-                monthlyData.forEach((d, i) => {
-                  if (d.key.endsWith('-01')) yearBoundaries.push({ index: i, year: d.key.substring(0, 4) });
-                });
+                // Boundaries: month boundaries for weekly, year boundaries for monthly
+                const boundaries: { index: number; label: string }[] = [];
+                if (isWeekly) {
+                  let lastMonth = '';
+                  graphData.forEach((d, i) => {
+                    if (d.monthKey !== lastMonth) {
+                      boundaries.push({ index: i, label: format(new Date(d.monthKey + '-01'), 'MMM yy') });
+                      lastMonth = d.monthKey;
+                    }
+                  });
+                } else {
+                  graphData.forEach((d, i) => {
+                    if (d.key.endsWith('-01')) boundaries.push({ index: i, label: d.key.substring(0, 4) });
+                  });
+                }
+
+                // Label frequency
+                const labelEvery = isWeekly
+                  ? (barCount <= 13 ? 1 : barCount <= 26 ? 2 : 4)
+                  : (barCount <= 12 ? 1 : barCount <= 18 ? 2 : 3);
 
                 return (
                   <svg width="100%" height={chartHeight + 50} style={{ overflow: 'visible' }}>
@@ -916,11 +996,11 @@ const LaborForecast: React.FC = () => {
                     <line x1="40" y1={chartHeight} x2="100%" y2={chartHeight} stroke="#e2e8f0" />
 
                     <g transform="translate(45, 0)">
-                      {yearBoundaries.map(yb => (
-                        <line key={`yl-${yb.year}`} x1={`${(yb.index / timeHorizon) * 95}%`} y1="0" x2={`${(yb.index / timeHorizon) * 95}%`} y2={chartHeight + 5} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
+                      {boundaries.map(b => (
+                        <line key={`bl-${b.index}`} x1={`${(b.index / barCount) * 95}%`} y1="0" x2={`${(b.index / barCount) * 95}%`} y2={chartHeight + 5} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
                       ))}
 
-                      {monthlyData.map((d, i) => {
+                      {graphData.map((d, i) => {
                         const hpp = hoursPerPersonPerMonth;
                         const pfHC = d.pf / hpp;
                         const smHC = d.sm / hpp;
@@ -931,45 +1011,42 @@ const LaborForecast: React.FC = () => {
                         const smH = maxValue > 0 ? (smHC / maxValue) * chartHeight : 0;
                         const plH = maxValue > 0 ? (plHC / maxValue) * chartHeight : 0;
 
-                        const xPercent = (i / timeHorizon) * 95;
-                        const showMonth = timeHorizon <= 12 ? true : i % (timeHorizon <= 18 ? 2 : 3) === 0;
+                        const xPercent = (i / barCount) * 95;
+                        const showLabel = i % labelEvery === 0;
 
                         return (
                           <g key={d.key}>
-                            {/* PL at bottom */}
                             <rect x={`${xPercent}%`} y={chartHeight - plH} width={`${barWidth * 0.8}%`} height={plH} fill={TRADES[2].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
                             </rect>
-                            {/* SM in middle */}
                             <rect x={`${xPercent}%`} y={chartHeight - plH - smH} width={`${barWidth * 0.8}%`} height={smH} fill={TRADES[1].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
                             </rect>
-                            {/* PF on top */}
                             <rect x={`${xPercent}%`} y={chartHeight - plH - smH - pfH} width={`${barWidth * 0.8}%`} height={pfH} fill={TRADES[0].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
                             </rect>
-                            {showMonth && (
-                              <text x={`${xPercent + barWidth * 0.4}%`} y={chartHeight + 14} fontSize="9" fill="#64748b" textAnchor="middle">
-                                {timeHorizon <= 6 ? d.label : d.label.substring(0, 3)}
+                            {showLabel && (
+                              <text x={`${xPercent + barWidth * 0.4}%`} y={chartHeight + 14} fontSize={isWeekly ? '8' : '9'} fill="#64748b" textAnchor="middle">
+                                {d.label}
                               </text>
                             )}
                           </g>
                         );
                       })}
 
-                      {yearBoundaries.map((yb, idx) => {
-                        const xStart = (yb.index / timeHorizon) * 95;
-                        const nextB = yearBoundaries[idx + 1];
-                        const xEnd = nextB ? (nextB.index / timeHorizon) * 95 : 95;
+                      {boundaries.map((b, idx) => {
+                        const xStart = (b.index / barCount) * 95;
+                        const nextB = boundaries[idx + 1];
+                        const xEnd = nextB ? (nextB.index / barCount) * 95 : 95;
                         return (
-                          <text key={`ylbl-${yb.year}`} x={`${(xStart + xEnd) / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
-                            {yb.year}
+                          <text key={`blbl-${b.index}`} x={`${(xStart + xEnd) / 2}%`} y={chartHeight + (isWeekly ? 30 : 32)} fontSize={isWeekly ? '9' : '11'} fontWeight="600" fill="#1e293b" textAnchor="middle">
+                            {b.label}
                           </text>
                         );
                       })}
-                      {yearBoundaries.length > 0 && yearBoundaries[0].index > 0 && (
-                        <text x={`${(yearBoundaries[0].index / timeHorizon) * 95 / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
-                          {monthlyData[0].key.substring(0, 4)}
+                      {!isWeekly && boundaries.length > 0 && boundaries[0].index > 0 && (
+                        <text x={`${(boundaries[0].index / barCount) * 95 / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
+                          {graphData[0].key.substring(0, 4)}
                         </text>
                       )}
                     </g>
