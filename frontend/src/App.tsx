@@ -62,6 +62,7 @@ import ProjectDrawings from './pages/projects/ProjectDrawings';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
 import ProjectedRevenue from './pages/projects/ProjectedRevenue';
+import LaborForecast from './pages/projects/LaborForecast';
 import FeedbackPage from './pages/FeedbackPage';
 import AdministrationDashboard from './pages/administration/AdministrationDashboard';
 import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashboard';
@@ -214,6 +215,7 @@ const App: React.FC = () => {
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />
                 <Route path="/projects" element={<ProjectList />} />
                 <Route path="/projects/projected-revenue" element={<ProjectedRevenue />} />
+                <Route path="/projects/labor-forecast" element={<LaborForecast />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/projects/:projectId/companies" element={<ProjectCompanies />} />
