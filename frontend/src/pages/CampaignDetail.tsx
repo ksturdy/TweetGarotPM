@@ -598,16 +598,40 @@ export default function CampaignDetail() {
 
   const [orphanReassignTo, setOrphanReassignTo] = useState('');
 
-  const handleReassignOrphans = () => {
+  const handleReassignOrphans = async () => {
     if (!orphanReassignTo || orphanedProspects.length === 0) return;
-    if (isLegacyPhoenix) {
+    if (dbCompanies.length > 0) {
+      // DB campaign: reassign each orphaned employee's prospects to the target
+      try {
+        const toMember = dbTeam.find((t: CampaignTeamMember) => t.name === orphanReassignTo);
+        const toEmployeeId = toMember?.employee_id
+          || editEmployees.find(e => `${e.first_name} ${e.last_name}` === orphanReassignTo)?.id;
+        if (!toEmployeeId) return;
+
+        // Group orphaned companies by their assigned_to_id
+        const orphanedByEmployee: Record<number, number[]> = {};
+        for (const prospect of orphanedProspects) {
+          const dbCompany = dbCompanies.find((c: CampaignCompany) => c.id === prospect.id);
+          if (dbCompany?.assigned_to_id) {
+            if (!orphanedByEmployee[dbCompany.assigned_to_id]) orphanedByEmployee[dbCompany.assigned_to_id] = [];
+            orphanedByEmployee[dbCompany.assigned_to_id].push(dbCompany.id);
+          }
+        }
+
+        for (const [fromId, companyIds] of Object.entries(orphanedByEmployee)) {
+          await reassignCompanies(campaignId, Number(fromId), toEmployeeId, companyIds);
+        }
+        queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      } catch (err) {
+        console.error('Failed to reassign orphaned prospects:', err);
+      }
+    } else if (isLegacyPhoenix) {
       setData((d: any) => d.map((c: any) =>
         c.assignedTo && !activeTeam.includes(c.assignedTo)
           ? { ...c, assignedTo: orphanReassignTo }
           : c
       ));
     }
-    // DB campaigns would handle this via the reassign API per orphaned name
     setOrphanReassignTo('');
   };
 
