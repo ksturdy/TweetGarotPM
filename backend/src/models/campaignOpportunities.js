@@ -6,7 +6,7 @@ const campaignOpportunities = {
     const query = `
       SELECT
         co.*,
-        o.name as linked_opportunity_name
+        o.title as linked_opportunity_name
       FROM campaign_opportunities co
       LEFT JOIN opportunities o ON co.linked_opportunity_id = o.id
       WHERE co.campaign_company_id = $1
@@ -24,7 +24,7 @@ const campaignOpportunities = {
         cc.name as company_name,
         cc.tier,
         cc.score,
-        o.name as linked_opportunity_name
+        o.title as linked_opportunity_name
       FROM campaign_opportunities co
       JOIN campaign_companies cc ON co.campaign_company_id = cc.id
       LEFT JOIN opportunities o ON co.linked_opportunity_id = o.id
@@ -42,7 +42,7 @@ const campaignOpportunities = {
         co.*,
         cc.name as company_name,
         cc.campaign_id,
-        o.name as linked_opportunity_name
+        o.title as linked_opportunity_name
       FROM campaign_opportunities co
       JOIN campaign_companies cc ON co.campaign_company_id = cc.id
       LEFT JOIN opportunities o ON co.linked_opportunity_id = o.id

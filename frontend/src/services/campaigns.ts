@@ -369,3 +369,20 @@ export const bulkCreateCampaignCompanies = async (campaignId: number, companies:
   const response = await api.post(`/campaigns/${campaignId}/companies/bulk`, { companies });
   return response.data;
 };
+
+export const downloadCampaignReport = async (campaignId: number, campaignName: string): Promise<void> => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${api.defaults.baseURL}/campaigns/${campaignId}/report-pdf`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw new Error('Failed to generate report');
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${campaignName.replace(/[^a-zA-Z0-9]/g, '_')}_Report.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};

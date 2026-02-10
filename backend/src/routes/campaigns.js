@@ -229,6 +229,55 @@ router.post('/:id/generate', async (req, res, next) => {
   }
 });
 
+// GENERATE campaign report PDF
+router.get('/:id/report-pdf', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const [companiesList, weeksList, teamList, opportunitiesList] = await Promise.all([
+      campaignCompanies.getByCampaignId(req.params.id),
+      campaigns.getWeeks(req.params.id),
+      campaigns.getTeamMembers(req.params.id),
+      campaignOpportunities.getByCampaignId(req.params.id)
+    ]);
+
+    const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
+    const puppeteer = require('puppeteer');
+
+    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, teamList, opportunitiesList);
+
+    let browser = null;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      });
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1056, height: 816 });
+      await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+      const pdfBuffer = await page.pdf({
+        format: 'Letter',
+        landscape: true,
+        printBackground: true,
+        margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+      });
+
+      const safeName = (campaign.name || 'Campaign').replace(/[^a-zA-Z0-9]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Report.pdf"`);
+      res.send(Buffer.from(pdfBuffer));
+    } finally {
+      if (browser) await browser.close();
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
 // BULK CREATE campaign companies
 router.post('/:campaignId/companies/bulk', async (req, res, next) => {
   try {
