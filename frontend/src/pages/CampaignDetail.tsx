@@ -414,11 +414,13 @@ export default function CampaignDetail() {
   // Transfer prospects between team members
   const [transferCounts, setTransferCounts] = useState<Record<string, number>>({});
   const [transferTargets, setTransferTargets] = useState<Record<string, string>>({});
+  const [transferMessage, setTransferMessage] = useState('');
 
   const handleTransferProspects = async (fromName: string) => {
     const count = transferCounts[fromName] || 0;
     const toName = transferTargets[fromName] || '';
     if (!count || !toName || count <= 0) return;
+    setTransferMessage('');
 
     const memberProspects = activeData
       .filter((c: any) => c.assignedTo === fromName)
@@ -441,18 +443,22 @@ export default function CampaignDetail() {
         const fromEmployeeId = fromMember?.employee_id;
         const toEmployeeId = toMember?.employee_id
           || editEmployees.find(e => `${e.first_name} ${e.last_name}` === toName)?.id;
-        if (fromEmployeeId && toEmployeeId) {
-          await reassignCompanies(campaignId, fromEmployeeId, toEmployeeId, transferIds);
-          queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+        if (!fromEmployeeId || !toEmployeeId) {
+          setTransferMessage(`Error: Could not find employee IDs (from: ${fromEmployeeId}, to: ${toEmployeeId})`);
+          return;
         }
-      } catch (err) {
-        console.error('Failed to transfer prospects:', err);
+        const result = await reassignCompanies(campaignId, fromEmployeeId, toEmployeeId, transferIds);
+        queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+        setTransferMessage(`Transferred ${result.count} prospect${result.count !== 1 ? 's' : ''} from ${fromName} to ${toName}`);
+      } catch (err: any) {
+        setTransferMessage(`Error: ${err?.response?.data?.error || err?.message || 'Transfer failed'}`);
       }
     } else if (isLegacyPhoenix) {
       const idSet = new Set(transferIds);
       setData((d: any) => d.map((c: any) =>
         idSet.has(c.id) ? { ...c, assignedTo: toName } : c
       ));
+      setTransferMessage(`Transferred ${transferIds.length} prospects from ${fromName} to ${toName}`);
     }
     // Clear the transfer inputs for this member
     setTransferCounts(prev => ({ ...prev, [fromName]: 0 }));
@@ -1578,6 +1584,17 @@ export default function CampaignDetail() {
                       Reassign
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Transfer feedback */}
+              {transferMessage && (
+                <div style={{ marginBottom: '12px', padding: '10px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 500,
+                  background: transferMessage.startsWith('Error') ? '#fef2f2' : '#f0fdf4',
+                  color: transferMessage.startsWith('Error') ? '#dc2626' : '#16a34a',
+                  border: `1px solid ${transferMessage.startsWith('Error') ? '#fecaca' : '#bbf7d0'}`
+                }}>
+                  {transferMessage}
                 </div>
               )}
 
