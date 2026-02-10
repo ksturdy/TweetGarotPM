@@ -64,73 +64,51 @@ const VistaData = {
       // Update existing record, preserve links
       const result = await db.query(
         `UPDATE vp_contracts SET
-          description = $1,
-          status = $2,
-          employee_number = $3,
-          project_manager_name = $4,
-          department_code = $5,
-          orig_contract_amount = $6,
-          contract_amount = $7,
-          billed_amount = $8,
-          received_amount = $9,
-          backlog = $10,
-          projected_revenue = $11,
-          gross_profit_percent = $12,
-          earned_revenue = $13,
-          actual_cost = $14,
-          projected_cost = $15,
-          pf_hours_estimate = $16,
-          pf_hours_jtd = $17,
-          sm_hours_estimate = $18,
-          sm_hours_jtd = $19,
-          total_hours_estimate = $20,
-          total_hours_jtd = $21,
-          customer_number = $22,
-          customer_name = $23,
-          ship_city = $24,
-          ship_state = $25,
-          ship_zip = $26,
-          primary_market = $27,
-          negotiated_work = $28,
-          delivery_method = $29,
-          raw_data = $30,
-          import_batch_id = $31,
+          description = $1, status = $2, employee_number = $3, project_manager_name = $4,
+          department_code = $5, orig_contract_amount = $6, contract_amount = $7,
+          billed_amount = $8, received_amount = $9, backlog = $10, projected_revenue = $11,
+          gross_profit_percent = $12, earned_revenue = $13, actual_cost = $14, projected_cost = $15,
+          pf_hours_estimate = $16, pf_hours_jtd = $17, sm_hours_estimate = $18, sm_hours_jtd = $19,
+          total_hours_estimate = $20, total_hours_jtd = $21, customer_number = $22, customer_name = $23,
+          ship_city = $24, ship_state = $25, ship_zip = $26, primary_market = $27,
+          negotiated_work = $28, delivery_method = $29, raw_data = $30, import_batch_id = $31,
+          -- New fields
+          material_jtd = $33, material_estimate = $34, material_projected = $35,
+          subcontracts_jtd = $36, subcontracts_estimate = $37, subcontracts_projected = $38,
+          rentals_jtd = $39, rentals_estimate = $40, rentals_projected = $41,
+          mep_equip_jtd = $42, mep_equip_estimate = $43, mep_equip_projected = $44,
+          pl_hours_estimate = $45, pl_hours_jtd = $46, pl_hours_projected = $47,
+          pf_hours_projected = $48, sm_hours_projected = $49, total_hours_projected = $50,
+          cash_flow = $51, gross_profit_dollars = $52, open_receivables = $53, current_est_cost = $54,
+          pending_change_orders = $55, approved_changes = $56, change_order_count = $57,
+          original_estimated_margin = $58, original_estimated_margin_pct = $59,
+          actual_labor_rate = $60, estimated_labor_rate = $61, current_est_labor_cost = $62,
+          ttl_labor_projected = $63, start_month = $64, month_closed = $65,
           imported_at = CURRENT_TIMESTAMP
         WHERE id = $32
         RETURNING *`,
         [
-          data.description,
-          data.status,
-          data.employee_number,
-          data.project_manager_name,
-          data.department_code,
-          data.orig_contract_amount,
-          data.contract_amount,
-          data.billed_amount,
-          data.received_amount,
-          data.backlog,
-          data.projected_revenue,
-          data.gross_profit_percent,
-          data.earned_revenue,
-          data.actual_cost,
-          data.projected_cost,
-          data.pf_hours_estimate,
-          data.pf_hours_jtd,
-          data.sm_hours_estimate,
-          data.sm_hours_jtd,
-          data.total_hours_estimate,
-          data.total_hours_jtd,
-          data.customer_number,
-          data.customer_name,
-          data.ship_city,
-          data.ship_state,
-          data.ship_zip,
-          data.primary_market,
-          data.negotiated_work,
-          data.delivery_method,
-          data.raw_data,
-          batchId,
-          existing.rows[0].id
+          data.description, data.status, data.employee_number, data.project_manager_name,
+          data.department_code, data.orig_contract_amount, data.contract_amount,
+          data.billed_amount, data.received_amount, data.backlog, data.projected_revenue,
+          data.gross_profit_percent, data.earned_revenue, data.actual_cost, data.projected_cost,
+          data.pf_hours_estimate, data.pf_hours_jtd, data.sm_hours_estimate, data.sm_hours_jtd,
+          data.total_hours_estimate, data.total_hours_jtd, data.customer_number, data.customer_name,
+          data.ship_city, data.ship_state, data.ship_zip, data.primary_market,
+          data.negotiated_work, data.delivery_method, data.raw_data, batchId,
+          existing.rows[0].id,
+          // New fields
+          data.material_jtd, data.material_estimate, data.material_projected,
+          data.subcontracts_jtd, data.subcontracts_estimate, data.subcontracts_projected,
+          data.rentals_jtd, data.rentals_estimate, data.rentals_projected,
+          data.mep_equip_jtd, data.mep_equip_estimate, data.mep_equip_projected,
+          data.pl_hours_estimate, data.pl_hours_jtd, data.pl_hours_projected,
+          data.pf_hours_projected, data.sm_hours_projected, data.total_hours_projected,
+          data.cash_flow, data.gross_profit_dollars, data.open_receivables, data.current_est_cost,
+          data.pending_change_orders, data.approved_changes, data.change_order_count,
+          data.original_estimated_margin, data.original_estimated_margin_pct,
+          data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
+          data.ttl_labor_projected, data.start_month, data.month_closed
         ]
       );
       return { record: result.rows[0], isNew: false };
@@ -144,43 +122,39 @@ const VistaData = {
           earned_revenue, actual_cost, projected_cost, pf_hours_estimate, pf_hours_jtd,
           sm_hours_estimate, sm_hours_jtd, total_hours_estimate, total_hours_jtd,
           customer_number, customer_name, ship_city, ship_state, ship_zip,
-          primary_market, negotiated_work, delivery_method, raw_data, import_batch_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+          primary_market, negotiated_work, delivery_method, raw_data, import_batch_id,
+          material_jtd, material_estimate, material_projected,
+          subcontracts_jtd, subcontracts_estimate, subcontracts_projected,
+          rentals_jtd, rentals_estimate, rentals_projected,
+          mep_equip_jtd, mep_equip_estimate, mep_equip_projected,
+          pl_hours_estimate, pl_hours_jtd, pl_hours_projected,
+          pf_hours_projected, sm_hours_projected, total_hours_projected,
+          cash_flow, gross_profit_dollars, open_receivables, current_est_cost,
+          pending_change_orders, approved_changes, change_order_count,
+          original_estimated_margin, original_estimated_margin_pct,
+          actual_labor_rate, estimated_labor_rate, current_est_labor_cost,
+          ttl_labor_projected, start_month, month_closed
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66)
         RETURNING *`,
         [
-          tenantId,
-          data.contract_number,
-          data.description,
-          data.status,
-          data.employee_number,
-          data.project_manager_name,
-          data.department_code,
-          data.orig_contract_amount,
-          data.contract_amount,
-          data.billed_amount,
-          data.received_amount,
-          data.backlog,
-          data.projected_revenue,
-          data.gross_profit_percent,
-          data.earned_revenue,
-          data.actual_cost,
-          data.projected_cost,
-          data.pf_hours_estimate,
-          data.pf_hours_jtd,
-          data.sm_hours_estimate,
-          data.sm_hours_jtd,
-          data.total_hours_estimate,
-          data.total_hours_jtd,
-          data.customer_number,
-          data.customer_name,
-          data.ship_city,
-          data.ship_state,
-          data.ship_zip,
-          data.primary_market,
-          data.negotiated_work,
-          data.delivery_method,
-          data.raw_data,
-          batchId
+          tenantId, data.contract_number, data.description, data.status, data.employee_number,
+          data.project_manager_name, data.department_code, data.orig_contract_amount, data.contract_amount,
+          data.billed_amount, data.received_amount, data.backlog, data.projected_revenue, data.gross_profit_percent,
+          data.earned_revenue, data.actual_cost, data.projected_cost, data.pf_hours_estimate, data.pf_hours_jtd,
+          data.sm_hours_estimate, data.sm_hours_jtd, data.total_hours_estimate, data.total_hours_jtd,
+          data.customer_number, data.customer_name, data.ship_city, data.ship_state, data.ship_zip,
+          data.primary_market, data.negotiated_work, data.delivery_method, data.raw_data, batchId,
+          data.material_jtd, data.material_estimate, data.material_projected,
+          data.subcontracts_jtd, data.subcontracts_estimate, data.subcontracts_projected,
+          data.rentals_jtd, data.rentals_estimate, data.rentals_projected,
+          data.mep_equip_jtd, data.mep_equip_estimate, data.mep_equip_projected,
+          data.pl_hours_estimate, data.pl_hours_jtd, data.pl_hours_projected,
+          data.pf_hours_projected, data.sm_hours_projected, data.total_hours_projected,
+          data.cash_flow, data.gross_profit_dollars, data.open_receivables, data.current_est_cost,
+          data.pending_change_orders, data.approved_changes, data.change_order_count,
+          data.original_estimated_margin, data.original_estimated_margin_pct,
+          data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
+          data.ttl_labor_projected, data.start_month, data.month_closed
         ]
       );
       return { record: result.rows[0], isNew: true };
@@ -252,6 +226,26 @@ const VistaData = {
       LEFT JOIN departments d ON vc.linked_department_id = d.id
       WHERE vc.id = $1 AND vc.tenant_id = $2`,
       [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async getContractByProjectId(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT vc.*,
+        p.name as linked_project_name,
+        p.number as linked_project_number,
+        e.first_name || ' ' || e.last_name as linked_employee_name,
+        c.customer_facility as linked_customer_facility,
+        c.customer_owner as linked_customer_owner,
+        d.name as linked_department_name
+      FROM vp_contracts vc
+      LEFT JOIN projects p ON vc.linked_project_id = p.id
+      LEFT JOIN employees e ON vc.linked_employee_id = e.id
+      LEFT JOIN customers c ON vc.linked_customer_id = c.id
+      LEFT JOIN departments d ON vc.linked_department_id = d.id
+      WHERE vc.linked_project_id = $1 AND vc.tenant_id = $2`,
+      [projectId, tenantId]
     );
     return result.rows[0];
   },
@@ -2198,6 +2192,7 @@ const VistaData = {
 
       for (const vpContract of unlinked.rows) {
         // Look up the employee by employee_number to set as project manager
+        // First check employees table directly, then fall back to vp_employees link
         let managerId = null;
         if (vpContract.employee_number) {
           const employeeResult = await client.query(
@@ -2206,6 +2201,16 @@ const VistaData = {
           );
           if (employeeResult.rows.length > 0) {
             managerId = employeeResult.rows[0].id;
+          } else {
+            // Fall back to vp_employees linked_employee_id
+            const vpEmpResult = await client.query(
+              `SELECT linked_employee_id FROM vp_employees
+               WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
+              [Number(vpContract.employee_number)]
+            );
+            if (vpEmpResult.rows.length > 0) {
+              managerId = vpEmpResult.rows[0].linked_employee_id;
+            }
           }
         }
 
@@ -2281,6 +2286,7 @@ const VistaData = {
 
       for (const vpWorkOrder of unlinked.rows) {
         // Look up the employee by employee_number to set as project manager
+        // First check employees table directly, then fall back to vp_employees link
         let managerId = null;
         if (vpWorkOrder.employee_number) {
           const employeeResult = await client.query(
@@ -2289,6 +2295,16 @@ const VistaData = {
           );
           if (employeeResult.rows.length > 0) {
             managerId = employeeResult.rows[0].id;
+          } else {
+            // Fall back to vp_employees linked_employee_id
+            const vpEmpResult = await client.query(
+              `SELECT linked_employee_id FROM vp_employees
+               WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
+              [Number(vpWorkOrder.employee_number)]
+            );
+            if (vpEmpResult.rows.length > 0) {
+              managerId = vpEmpResult.rows[0].linked_employee_id;
+            }
           }
         }
 

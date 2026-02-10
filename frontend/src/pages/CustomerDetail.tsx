@@ -258,15 +258,6 @@ const CustomerDetail: React.FC = () => {
             </svg>
             Back to Customers
           </Link>
-          <div className="cd-header-actions">
-            <button onClick={() => setShowEditModal(true)} className="cd-btn cd-btn-secondary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-              Edit
-            </button>
-          </div>
         </div>
 
         <div className="cd-header-main">
@@ -304,6 +295,75 @@ const CustomerDetail: React.FC = () => {
             {customer.active_customer && (
               <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>
             )}
+          </div>
+        </div>
+
+        {/* Vista vs Titan Data Sections */}
+        <div className="cd-data-sections">
+          {/* Vista Data - Read Only */}
+          <div className="cd-data-section cd-vista-section">
+            <div className="cd-data-section-header">
+              <h4>Vista Information</h4>
+              <span className="cd-readonly-badge">Read Only</span>
+            </div>
+            <div className="cd-data-grid">
+              <div className="cd-data-item">
+                <span className="cd-data-label">Company</span>
+                <span className="cd-data-value">{customer.customer_owner || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Facility</span>
+                <span className="cd-data-value">{customer.customer_facility || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Customer #</span>
+                <span className="cd-data-value">{customer.customer_number || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Address</span>
+                <span className="cd-data-value">{customer.address || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">City</span>
+                <span className="cd-data-value">{customer.city || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">State</span>
+                <span className="cd-data-value">{customer.state || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Market</span>
+                <span className="cd-data-value">{customer.market || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Account Manager</span>
+                <span className="cd-data-value">{customer.account_manager || '-'}</span>
+              </div>
+              <div className="cd-data-item">
+                <span className="cd-data-label">Status</span>
+                <span className="cd-data-value">{customer.active_customer ? 'Active' : 'Inactive'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Titan Data - Editable */}
+          <div className="cd-data-section cd-titan-section">
+            <div className="cd-data-section-header">
+              <h4>Titan Information</h4>
+              <button onClick={() => setShowEditModal(true)} className="cd-edit-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                Edit
+              </button>
+            </div>
+            <div className="cd-data-grid">
+              <div className="cd-data-item cd-data-item-full">
+                <span className="cd-data-label">Notes</span>
+                <span className="cd-data-value cd-notes-value">{customer.notes || 'No notes added'}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

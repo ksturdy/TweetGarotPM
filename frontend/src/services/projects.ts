@@ -23,6 +23,7 @@ export interface Project {
   customer_name?: string;
   owner_customer_id?: number;
   owner_name?: string;
+  favorite?: boolean;
   created_at: string;
 }
 
@@ -37,4 +38,6 @@ export const projectsApi = {
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
 
   delete: (id: number) => api.delete(`/projects/${id}`),
+
+  toggleFavorite: (id: number) => api.patch<Project>(`/projects/${id}/favorite`),
 };

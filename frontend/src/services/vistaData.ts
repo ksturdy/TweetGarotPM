@@ -21,12 +21,53 @@ export interface VPContract {
   earned_revenue: number | null;
   actual_cost: number | null;
   projected_cost: number | null;
+  // Hours - Pipefitter, Sheet Metal, Plumbing, Total
   pf_hours_estimate: number | null;
   pf_hours_jtd: number | null;
+  pf_hours_projected: number | null;
   sm_hours_estimate: number | null;
   sm_hours_jtd: number | null;
+  sm_hours_projected: number | null;
+  pl_hours_estimate: number | null;
+  pl_hours_jtd: number | null;
+  pl_hours_projected: number | null;
   total_hours_estimate: number | null;
   total_hours_jtd: number | null;
+  total_hours_projected: number | null;
+  // Cost breakdown
+  material_jtd: number | null;
+  material_estimate: number | null;
+  material_projected: number | null;
+  subcontracts_jtd: number | null;
+  subcontracts_estimate: number | null;
+  subcontracts_projected: number | null;
+  rentals_jtd: number | null;
+  rentals_estimate: number | null;
+  rentals_projected: number | null;
+  mep_equip_jtd: number | null;
+  mep_equip_estimate: number | null;
+  mep_equip_projected: number | null;
+  // Financial metrics
+  cash_flow: number | null;
+  gross_profit_dollars: number | null;
+  open_receivables: number | null;
+  current_est_cost: number | null;
+  // Change orders
+  pending_change_orders: number | null;
+  approved_changes: number | null;
+  change_order_count: number | null;
+  // Original margin
+  original_estimated_margin: number | null;
+  original_estimated_margin_pct: number | null;
+  // Labor rates
+  actual_labor_rate: number | null;
+  estimated_labor_rate: number | null;
+  current_est_labor_cost: number | null;
+  ttl_labor_projected: number | null;
+  // Dates
+  start_month: string | null;
+  month_closed: string | null;
+  // Customer and location
   customer_number: string | null;
   customer_name: string | null;
   ship_city: string | null;
@@ -588,6 +629,21 @@ export const vistaDataService = {
   getContractById: async (id: number): Promise<VPContract> => {
     const response = await api.get(`/vista/contracts/${id}`);
     return response.data;
+  },
+
+  getContractByProjectId: async (projectId: number): Promise<VPContract | null> => {
+    try {
+      const response = await api.get(`/vista/contracts/by-project/${projectId}`);
+      return response.data;
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 404) {
+          return null;
+        }
+      }
+      throw error;
+    }
   },
 
   linkContract: async (id: number, linkData: LinkData): Promise<VPContract> => {

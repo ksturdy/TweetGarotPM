@@ -60,6 +60,8 @@ import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
 import DrawingDetail from './pages/projects/DrawingDetail';
+import ProjectFinancials from './pages/projects/ProjectFinancials';
+import ProjectedRevenue from './pages/projects/ProjectedRevenue';
 import FeedbackPage from './pages/FeedbackPage';
 import AdministrationDashboard from './pages/administration/AdministrationDashboard';
 import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashboard';
@@ -69,6 +71,7 @@ import ContractReviewDetail from './pages/riskManagement/ContractReviewDetail';
 import SalesPipeline from './pages/SalesPipeline';
 import MobileSales from './pages/MobileSales';
 import Campaigns from './pages/Campaigns';
+import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
 import TenantSettings from './pages/TenantSettings';
@@ -167,6 +170,7 @@ const App: React.FC = () => {
                 <Route path="/sales" element={<SalesPipeline />} />
                 <Route path="/sales/mobile" element={<MobileSales />} />
                 <Route path="/campaigns" element={<Campaigns />} />
+                <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
                 <Route path="/estimating" element={<EstimatesList />} />
@@ -209,6 +213,7 @@ const App: React.FC = () => {
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />
                 <Route path="/projects" element={<ProjectList />} />
+                <Route path="/projects/projected-revenue" element={<ProjectedRevenue />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/projects/:projectId/companies" element={<ProjectCompanies />} />
@@ -225,6 +230,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/change-orders/:id/edit" element={<ChangeOrderForm />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:id/financials" element={<ProjectFinancials />} />
                 <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
                 <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />
                 <Route path="/projects/:id/drawings" element={<ProjectDrawings />} />

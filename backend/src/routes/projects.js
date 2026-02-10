@@ -83,6 +83,20 @@ router.put('/:id', authorize('admin', 'manager'), async (req, res, next) => {
   }
 });
 
+// Toggle project favorite status
+router.patch('/:id/favorite', async (req, res, next) => {
+  try {
+    const project = await Project.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const updated = await Project.update(req.params.id, { favorite: !project.favorite }, req.tenantId);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Delete project (with tenant check)
 router.delete('/:id', authorize('admin'), async (req, res, next) => {
   try {

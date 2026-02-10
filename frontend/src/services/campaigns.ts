@@ -15,6 +15,12 @@ export interface Campaign {
   contacted_count: number;
   opportunities_count: number;
   total_opportunity_value: number;
+  target_touchpoints: number;
+  target_opportunities: number;
+  target_estimates: number;
+  target_awards: number;
+  target_pipeline_value: number;
+  goal_description?: string;
   company_count?: number;
   contacted?: number;
   opportunities?: number;
@@ -123,9 +129,12 @@ export interface CampaignActivityLog {
 export interface CampaignTeamMember {
   id: number;
   campaign_id: number;
-  user_id: number;
+  employee_id: number;
+  user_id: number | null;
   name: string;
   email: string;
+  job_title?: string;
+  department_name?: string;
   role: 'owner' | 'member' | 'viewer';
   target_count: number;
   contacted_count: number;
@@ -134,7 +143,22 @@ export interface CampaignTeamMember {
   created_at: string;
 }
 
+export interface TeamEligibleEmployee {
+  id: number;
+  user_id: number | null;
+  first_name: string;
+  last_name: string;
+  email: string;
+  job_title: string | null;
+  department_name: string | null;
+}
+
 // Campaign APIs
+export const getTeamEligibleEmployees = async (): Promise<TeamEligibleEmployee[]> => {
+  const response = await api.get('/campaigns/team-eligible');
+  return response.data;
+};
+
 export const getCampaigns = async (): Promise<Campaign[]> => {
   const response = await api.get('/campaigns');
   return response.data;
@@ -174,8 +198,20 @@ export const getCampaignTeam = async (campaignId: number): Promise<CampaignTeamM
   return response.data;
 };
 
-export const addTeamMember = async (campaignId: number, userId: number, role: string = 'member'): Promise<CampaignTeamMember> => {
-  const response = await api.post(`/campaigns/${campaignId}/team`, { user_id: userId, role });
+export const addTeamMember = async (campaignId: number, employeeId: number, role: string = 'member'): Promise<CampaignTeamMember> => {
+  const response = await api.post(`/campaigns/${campaignId}/team`, { employee_id: employeeId, role });
+  return response.data;
+};
+
+export const removeTeamMember = async (campaignId: number, employeeId: number): Promise<void> => {
+  await api.delete(`/campaigns/${campaignId}/team/${employeeId}`);
+};
+
+export const reassignCompanies = async (campaignId: number, fromEmployeeId: number, toEmployeeId: number): Promise<{ count: number }> => {
+  const response = await api.put(`/campaigns/${campaignId}/team/reassign`, {
+    from_employee_id: fromEmployeeId,
+    to_employee_id: toEmployeeId
+  });
   return response.data;
 };
 
@@ -320,5 +356,16 @@ export const addCampaignNote = async (campaignId: number, companyId: number, not
 
 export const logContactAttempt = async (campaignId: number, companyId: number, method: string, notes?: string): Promise<CampaignActivityLog> => {
   const response = await api.post(`/campaigns/${campaignId}/companies/${companyId}/contact-attempt`, { method, notes });
+  return response.data;
+};
+
+// Campaign Generation APIs
+export const generateCampaign = async (campaignId: number): Promise<{ weeks: number; companies: number; team: number }> => {
+  const response = await api.post(`/campaigns/${campaignId}/generate`);
+  return response.data;
+};
+
+export const bulkCreateCampaignCompanies = async (campaignId: number, companies: Partial<CampaignCompany>[]): Promise<CampaignCompany[]> => {
+  const response = await api.post(`/campaigns/${campaignId}/companies/bulk`, { companies });
   return response.data;
 };

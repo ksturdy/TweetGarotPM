@@ -155,6 +155,12 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       console.log(`[Vista Import] ${contractSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
+        // Log available columns from first row for debugging
+        if (data[0]) {
+          const columns = Object.keys(data[0]);
+          console.log(`[Vista Import] ${contractSheetName} columns: ${columns.join(', ')}`);
+        }
+
         // Create import batch for contracts
         const batch = await VistaData.createImportBatch({
           file_name: req.file.originalname,
@@ -174,30 +180,78 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             employee_number: row['Employee Number Emp Number'] ? String(row['Employee Number Emp Number']) : null,
             project_manager_name: row['Project Manager'] || '',
             department_code: row['Department'] || '',
-            orig_contract_amount: parseNumber(row['Orig Contract Amt']),
-            contract_amount: parseNumber(row['Contract Amt']),
-            billed_amount: parseNumber(row['Billed Amt']),
-            received_amount: parseNumber(row['Received Amt']),
-            backlog: parseNumber(row['Backlog']),
-            projected_revenue: parseNumber(row['Projected Revenue']),
-            gross_profit_percent: parseNumber(row['Gross Profit %']),
-            earned_revenue: parseNumber(row['EarnedRevenue']),
-            actual_cost: parseNumber(row['Actual Cost']),
-            projected_cost: parseNumber(row['Projected Cost']),
-            pf_hours_estimate: parseNumber(row['PF Hours Estimate']),
-            pf_hours_jtd: parseNumber(row['PF Hours JTD']),
-            sm_hours_estimate: parseNumber(row['SM Hours Estimate']),
-            sm_hours_jtd: parseNumber(row['SM Hours JTD']),
-            total_hours_estimate: parseNumber(row['Total Hours Estimate']),
-            total_hours_jtd: parseNumber(row['Total Hours JTD']),
-            customer_number: row['Customer'] ? String(row['Customer']) : null,
-            customer_name: row['Customer Name'] || '',
-            ship_city: row['Ship City'] || '',
-            ship_state: row['Ship State'] || '',
-            ship_zip: row['Ship Zip'] || '',
-            primary_market: row['Primary Market'] || '',
-            negotiated_work: row['Negotiated Work'] || '',
-            delivery_method: row['Delivery Method'] || '',
+            // Handle column names with/without spaces (based on actual Excel columns)
+            orig_contract_amount: parseNumber(row[' Orig Contract Amt '] ?? row['Orig Contract Amt']),
+            contract_amount: parseNumber(row[' Contract Amt '] ?? row['Contract Amt']),
+            billed_amount: parseNumber(row[' Billed Amt '] ?? row['Billed Amt']),
+            received_amount: parseNumber(row[' Received Amt '] ?? row['Received Amt']),
+            backlog: parseNumber(row[' Backlog '] ?? row['Backlog']),
+            projected_revenue: parseNumber(row[' Projected Revenue '] ?? row['Projected Revenue']),
+            gross_profit_percent: parseNumber(row['Gross Profit %'] ?? row[' Gross Profit % ']),
+            earned_revenue: parseNumber(row[' EarnedRevenue '] ?? row['EarnedRevenue']),
+            actual_cost: parseNumber(row['Actual Cost'] ?? row[' Actual Cost ']),
+            projected_cost: parseNumber(row['Projected Cost'] ?? row[' Projected Cost ']),
+            // Hours - Pipefitter (PF)
+            pf_hours_estimate: parseNumber(row[' PF Hours Estimate '] ?? row['PF Hours Estimate']),
+            pf_hours_jtd: parseNumber(row[' PF Hours JTD '] ?? row['PF Hours JTD']),
+            pf_hours_projected: parseNumber(row[' PF Hours Projected '] ?? row['PF Hours Projected']),
+            // Hours - Sheet Metal (SM)
+            sm_hours_estimate: parseNumber(row[' SM Hours Estimate '] ?? row['SM Hours Estimate']),
+            sm_hours_jtd: parseNumber(row[' SM Hours JTD '] ?? row['SM Hours JTD']),
+            sm_hours_projected: parseNumber(row[' SM Hours Projected '] ?? row['SM Hours Projected']),
+            // Hours - Plumber (PL)
+            pl_hours_estimate: parseNumber(row[' PL Hours Estimate '] ?? row['PL Hours Estimate']),
+            pl_hours_jtd: parseNumber(row[' PL Hours JTD '] ?? row['PL Hours JTD']),
+            pl_hours_projected: parseNumber(row[' PL Hours Projected '] ?? row['PL Hours Projected']),
+            // Hours - Total
+            total_hours_estimate: parseNumber(row[' Total Hours Estimate '] ?? row['Total Hours Estimate']),
+            total_hours_jtd: parseNumber(row[' Total Hours JTD '] ?? row['Total Hours JTD']),
+            total_hours_projected: parseNumber(row[' Total Hours Projected '] ?? row['Total Hours Projected']),
+            // Cost breakdown - Material
+            material_jtd: parseNumber(row[' Material JTD '] ?? row['Material JTD']),
+            material_estimate: parseNumber(row[' Material Estimate '] ?? row['Material Estimate']),
+            material_projected: parseNumber(row[' Material Projected '] ?? row['Material Projected']),
+            // Cost breakdown - Subcontracts
+            subcontracts_jtd: parseNumber(row[' Subcontracts JTD '] ?? row['Subcontracts JTD']),
+            subcontracts_estimate: parseNumber(row[' Subcontracts Estimate '] ?? row['Subcontracts Estimate']),
+            subcontracts_projected: parseNumber(row[' Subcontracts Projected '] ?? row['Subcontracts Projected']),
+            // Cost breakdown - Rentals
+            rentals_jtd: parseNumber(row[' Rentals JTD '] ?? row['Rentals JTD']),
+            rentals_estimate: parseNumber(row[' Rentals Estimate '] ?? row['Rentals Estimate']),
+            rentals_projected: parseNumber(row[' Rentals Projected '] ?? row['Rentals Projected']),
+            // Cost breakdown - MEP Equipment
+            mep_equip_jtd: parseNumber(row[' MEP Equip JTD '] ?? row['MEP Equip JTD']),
+            mep_equip_estimate: parseNumber(row[' MEP Equip Estimate '] ?? row['MEP Equip Estimate']),
+            mep_equip_projected: parseNumber(row[' MEP Equip Projected '] ?? row['MEP Equip Projected']),
+            // Financial metrics
+            cash_flow: parseNumber(row[' Cash Flow '] ?? row['Cash Flow']),
+            gross_profit_dollars: parseNumber(row['Gross Profit'] ?? row[' Gross Profit ']),
+            open_receivables: parseNumber(row[' Open Receivables '] ?? row['Open Receivables']),
+            current_est_cost: parseNumber(row['Current Est Cost'] ?? row[' Current Est Cost ']),
+            // Change orders
+            pending_change_orders: parseNumber(row[' Pending Change Orders '] ?? row['Pending Change Orders']),
+            approved_changes: parseNumber(row['Approved Changes'] ?? row[' Approved Changes ']),
+            change_order_count: parseNumber(row['Quantity Of Change Orders'] ?? row[' Quantity Of Change Orders ']),
+            // Original margin
+            original_estimated_margin: parseNumber(row[' Original Estimated Margin '] ?? row['Original Estimated Margin']),
+            original_estimated_margin_pct: parseNumber(row['Original Estimated Margin %'] ?? row[' Original Estimated Margin % ']),
+            // Labor rates
+            actual_labor_rate: parseNumber(row['Actual Labor Rate'] ?? row[' Actual Labor Rate ']),
+            estimated_labor_rate: parseNumber(row['Estimated Labor Rate'] ?? row[' Estimated Labor Rate ']),
+            current_est_labor_cost: parseNumber(row['Current Est Labor Cost'] ?? row[' Current Est Labor Cost ']),
+            ttl_labor_projected: parseNumber(row['TTL Labor $ Projected'] ?? row[' TTL Labor $ Projected ']),
+            // Dates (Excel serial dates)
+            start_month: row['StartMonth'] ? excelDateToJS(row['StartMonth']) : null,
+            month_closed: row['MonthClosed'] ? excelDateToJS(row['MonthClosed']) : null,
+            // Customer and location
+            customer_number: (row['Customer'] ?? row[' Customer ']) ? String(row['Customer'] ?? row[' Customer ']) : null,
+            customer_name: row['Customer Name'] ?? row[' Customer Name '] ?? '',
+            ship_city: row['Ship City'] ?? row[' Ship City '] ?? row['City'] ?? '',
+            ship_state: row['Ship State'] ?? row[' Ship State '] ?? row['State'] ?? '',
+            ship_zip: row['Ship Zip'] ?? row[' Ship Zip '] ?? row['Zip'] ?? '',
+            primary_market: row['Primary Market'] ?? row[' Primary Market '] ?? '',
+            negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
+            delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
             raw_data: null  // Don't store raw data to save memory
           };
 
@@ -888,6 +942,19 @@ router.get('/contracts/unmatched', async (req, res, next) => {
   try {
     const contracts = await VistaData.getUnmatchedContracts(req.tenantId);
     res.json(contracts);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/contracts/by-project/:projectId - Get contract by linked project ID
+router.get('/contracts/by-project/:projectId', async (req, res, next) => {
+  try {
+    const contract = await VistaData.getContractByProjectId(req.params.projectId, req.tenantId);
+    if (!contract) {
+      return res.status(404).json({ message: 'No VP contract linked to this project' });
+    }
+    res.json(contract);
   } catch (error) {
     next(error);
   }

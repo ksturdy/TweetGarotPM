@@ -16,6 +16,17 @@ router.use(requireFeature('campaigns'));
 
 // ===== CAMPAIGNS =====
 
+// GET active employees for campaign team assignment (from employee directory)
+router.get('/team-eligible', async (req, res, next) => {
+  try {
+    const Employee = require('../models/Employee');
+    const employees = await Employee.getAll({ employment_status: 'active' }, req.tenantId);
+    res.json(employees);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET all campaigns
 router.get('/', async (req, res, next) => {
   try {
@@ -130,10 +141,45 @@ router.post('/:id/team', async (req, res, next) => {
     }
     const member = await campaigns.addTeamMember(
       req.params.id,
-      req.body.user_id,
+      req.body.employee_id,
       req.body.role
     );
     res.status(201).json(member);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// REMOVE team member
+router.delete('/:id/team/:employeeId', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const member = await campaigns.removeTeamMember(req.params.id, req.params.employeeId);
+    if (!member) {
+      return res.status(404).json({ error: 'Team member not found' });
+    }
+    res.json({ message: 'Team member removed', member });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// REASSIGN companies from one team member to another
+router.put('/:id/team/reassign', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const { from_employee_id, to_employee_id } = req.body;
+    if (!from_employee_id || !to_employee_id) {
+      return res.status(400).json({ error: 'from_employee_id and to_employee_id are required' });
+    }
+    const reassigned = await campaigns.reassignCompanies(req.params.id, from_employee_id, to_employee_id);
+    res.json({ message: `Reassigned ${reassigned.length} companies`, count: reassigned.length });
   } catch (error) {
     next(error);
   }
@@ -164,6 +210,34 @@ router.get('/:id/stats/weekly', async (req, res, next) => {
     }
     const stats = await campaigns.getWeeklyStats(req.params.id);
     res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GENERATE campaign (auto-create weeks, distribute prospects to team)
+router.post('/:id/generate', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const result = await campaigns.generate(req.params.id, req.tenantId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// BULK CREATE campaign companies
+router.post('/:campaignId/companies/bulk', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const result = await campaigns.bulkCreateCompanies(req.params.campaignId, req.body.companies);
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }

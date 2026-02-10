@@ -103,6 +103,7 @@ const ProjectDetail: React.FC = () => {
   }
 
   const modules = [
+    { path: 'financials', label: 'Financials', description: 'Contract financials and billing' },
     { path: 'companies', label: 'Companies', description: 'Stakeholders and contacts' },
     { path: 'specifications', label: 'Specifications', description: 'Project specifications with Q&A' },
     { path: 'drawings', label: 'Drawings', description: 'Construction drawings and plans' },
@@ -402,9 +403,6 @@ const ProjectDetail: React.FC = () => {
       {/* Project Modules */}
       <div className="section-header" style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: 0 }}>Project Modules</h2>
-        <Link to={`/projects/${id}/rfis/new`} className="btn btn-primary">
-          Create New RFI
-        </Link>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
         {modules.map((module) => (

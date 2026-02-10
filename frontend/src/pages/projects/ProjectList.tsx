@@ -12,6 +12,7 @@ const ProjectList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string>('number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [hasUserSorted, setHasUserSorted] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('Open');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [marketFilter, setMarketFilter] = useState<string>('all');
@@ -30,6 +31,27 @@ const ProjectList: React.FC = () => {
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
+  });
+
+  // Toggle favorite mutation with optimistic updates
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: (id: number) => projectsApi.toggleFavorite(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['projects'] });
+      const previousProjects = queryClient.getQueryData<Project[]>(['projects']);
+      queryClient.setQueryData<Project[]>(['projects'], (old) =>
+        old?.map(p => p.id === id ? { ...p, favorite: !p.favorite } : p) || []
+      );
+      return { previousProjects };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousProjects) {
+        queryClient.setQueryData(['projects'], context.previousProjects);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
   });
 
   // Get unique values for filters
@@ -212,12 +234,23 @@ const ProjectList: React.FC = () => {
     );
   });
 
-  // Sort projects
+  // Sort projects - favorites at top on initial load
   const sortedProjects = [...filteredProjects].sort((a, b) => {
+    // On initial load (before user sorts), put favorites at top
+    if (!hasUserSorted) {
+      const aFav = a.favorite ? 1 : 0;
+      const bFav = b.favorite ? 1 : 0;
+      if (aFav !== bFav) return bFav - aFav;
+    }
+
     let aValue: any;
     let bValue: any;
 
     switch (sortColumn) {
+      case 'favorite':
+        aValue = a.favorite ? 1 : 0;
+        bValue = b.favorite ? 1 : 0;
+        break;
       case 'number':
         aValue = a.number.toLowerCase();
         bValue = b.number.toLowerCase();
@@ -265,11 +298,12 @@ const ProjectList: React.FC = () => {
 
   // Handle sort column click
   const handleSort = (column: string) => {
+    setHasUserSorted(true);
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      setSortDirection('asc');
+      setSortDirection(column === 'favorite' ? 'desc' : 'asc');
     }
   };
 
@@ -358,6 +392,15 @@ const ProjectList: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <button
+            className="sales-btn sales-btn-secondary"
+            onClick={() => navigate('/projects/projected-revenue')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+            </svg>
+            Projected Revenue
+          </button>
           <button className="sales-btn sales-btn-secondary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -583,6 +626,9 @@ const ProjectList: React.FC = () => {
                   style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                 />
               </th>
+              <th className="sales-sortable" onClick={() => handleSort('favorite')} style={{ width: '50px', textAlign: 'center' }}>
+                <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('number')}>
                 Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
@@ -632,6 +678,31 @@ const ProjectList: React.FC = () => {
                       style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                     />
                   </td>
+                  <td
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavoriteMutation.mutate(project.id);
+                    }}
+                    style={{ textAlign: 'center', cursor: 'pointer' }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '1.25rem',
+                        color: project.favorite ? '#f59e0b' : '#d1d5db',
+                        transition: 'color 0.2s, transform 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.2)';
+                        if (!project.favorite) e.currentTarget.style.color = '#fbbf24';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        if (!project.favorite) e.currentTarget.style.color = '#d1d5db';
+                      }}
+                    >
+                      {project.favorite ? '\u2605' : '\u2606'}
+                    </span>
+                  </td>
                   <td>{project.number}</td>
                   <td>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-US') : '-'}</td>
                   <td>
@@ -645,11 +716,11 @@ const ProjectList: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td>{project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '-'}</td>
+                  <td>{project.contract_value ? `$${Math.round(Number(project.contract_value)).toLocaleString()}` : '-'}</td>
                   <td style={{ color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'inherit' }}>
-                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%` : '-'}
+                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null ? `${Math.round(Number(project.gross_margin_percent) * 100)}%` : '-'}
                   </td>
-                  <td>{project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '-'}</td>
+                  <td>{project.backlog ? `$${Math.round(Number(project.backlog)).toLocaleString()}` : '-'}</td>
                   <td>
                     <span className={`sales-stage-badge ${project.status.toLowerCase().replace('-', '_')}`}>
                       <span className="sales-stage-dot" style={{ background: getStatusColor(project.status) }}></span>
@@ -672,7 +743,7 @@ const ProjectList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       className="mx-auto h-12 w-12 text-gray-400"

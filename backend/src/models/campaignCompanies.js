@@ -6,13 +6,13 @@ const campaignCompanies = {
     let query = `
       SELECT
         cc.*,
-        CONCAT(u.first_name, ' ', u.last_name) as assigned_to_name,
+        CONCAT(e.first_name, ' ', e.last_name) as assigned_to_name,
         COUNT(DISTINCT cco.id) as contact_count,
         COUNT(DISTINCT co.id) as opportunity_count,
         COALESCE(SUM(co.value), 0) as total_opportunity_value,
         c.name as linked_company_name
       FROM campaign_companies cc
-      LEFT JOIN users u ON cc.assigned_to_id = u.id
+      LEFT JOIN employees e ON cc.assigned_to_id = e.id
       LEFT JOIN campaign_contacts cco ON cc.id = cco.campaign_company_id
       LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
       LEFT JOIN companies c ON cc.linked_company_id = c.id
@@ -45,7 +45,7 @@ const campaignCompanies = {
     }
 
     query += `
-      GROUP BY cc.id, u.first_name, u.last_name, c.name
+      GROUP BY cc.id, e.first_name, e.last_name, c.name
       ORDER BY cc.tier, cc.score DESC, cc.name
     `;
 
@@ -58,11 +58,11 @@ const campaignCompanies = {
     const query = `
       SELECT
         cc.*,
-        CONCAT(u.first_name, ' ', u.last_name) as assigned_to_name,
+        CONCAT(e.first_name, ' ', e.last_name) as assigned_to_name,
         c.name as campaign_name,
         comp.name as linked_company_name
       FROM campaign_companies cc
-      LEFT JOIN users u ON cc.assigned_to_id = u.id
+      LEFT JOIN employees e ON cc.assigned_to_id = e.id
       LEFT JOIN campaigns c ON cc.campaign_id = c.id
       LEFT JOIN companies comp ON cc.linked_company_id = comp.id
       WHERE cc.id = $1
