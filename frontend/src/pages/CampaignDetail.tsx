@@ -828,8 +828,9 @@ export default function CampaignDetail() {
                 setDownloadingReport(true);
                 try {
                   await downloadCampaignReport(campaignId, activeCampaignInfo.name || 'Campaign');
-                } catch (err) {
-                  alert('Failed to generate report. Please try again.');
+                } catch (err: any) {
+                  console.error('Report generation error:', err);
+                  alert(err?.message || 'Failed to generate report. Please try again.');
                 } finally {
                   setDownloadingReport(false);
                 }

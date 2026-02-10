@@ -380,7 +380,11 @@ export const downloadCampaignReport = async (campaignId: number, campaignName: s
   const response = await fetch(`${api.defaults.baseURL}/campaigns/${campaignId}/report-pdf`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!response.ok) throw new Error('Failed to generate report');
+  if (!response.ok) {
+    let detail = '';
+    try { const body = await response.json(); detail = body.error || body.message || ''; } catch { /* not JSON */ }
+    throw new Error(detail || `Failed to generate report (${response.status})`);
+  }
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');

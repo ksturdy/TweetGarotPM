@@ -245,7 +245,10 @@ router.post('/:id/regenerate-weeks', async (req, res, next) => {
 
 // GENERATE campaign report PDF
 router.get('/:id/report-pdf', async (req, res, next) => {
+  let browser = null;
   try {
+    console.log('[Report] Starting PDF generation for campaign:', req.params.id, 'tenant:', req.tenantId);
+
     const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
@@ -266,11 +269,12 @@ router.get('/:id/report-pdf', async (req, res, next) => {
         ORDER BY o.estimated_value DESC
       `, [req.params.id])
     ]);
+    console.log('[Report] Data loaded - companies:', companiesList.length, 'weeks:', weeksList.length, 'team:', teamList.length);
 
     // Merge campaign_opportunities + main opportunities (normalized to same shape)
     const mainOpps = mainOppsResult.rows.map(o => ({
       name: o.title,
-      company_name: o.client_company || o.customer_owner || o.facility_name || '',
+      company_name: o.client_company || '',
       value: o.estimated_value,
       stage: o.stage_name || '',
       probability: o.probability || '',
@@ -283,32 +287,39 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const puppeteer = require('puppeteer');
 
     const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, teamList, opportunitiesList);
+    console.log('[Report] HTML generated, length:', html.length);
 
-    let browser = null;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      });
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1056, height: 816 });
-      await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
-      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
-      const pdfBuffer = await page.pdf({
-        format: 'Letter',
-        landscape: true,
-        printBackground: true,
-        margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
-      });
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    });
+    console.log('[Report] Puppeteer launched');
 
-      const safeName = (campaign.name || 'Campaign').replace(/[^a-zA-Z0-9]/g, '_');
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Report.pdf"`);
-      res.send(Buffer.from(pdfBuffer));
-    } finally {
-      if (browser) await browser.close();
-    }
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1056, height: 816 });
+    await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
+    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+    const pdfBuffer = await page.pdf({
+      format: 'Letter',
+      landscape: true,
+      printBackground: true,
+      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+    });
+    console.log('[Report] PDF generated, size:', pdfBuffer.length);
+
+    await browser.close();
+    browser = null;
+
+    const safeName = (campaign.name || 'Campaign').replace(/[^a-zA-Z0-9]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Report.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
   } catch (error) {
+    console.error('[Report] PDF generation failed:', error.message);
+    console.error('[Report] Stack:', error.stack);
+    if (browser) {
+      try { await browser.close(); } catch (e) { /* ignore */ }
+    }
     next(error);
   }
 });
