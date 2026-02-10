@@ -599,7 +599,7 @@ export default function CampaignDetail() {
     const byAction: any = {}; actions.forEach(a => byAction[a.key] = activeData.filter((c: any) => c.action === a.key).length);
     const contacted = activeData.filter((c: any) => c.status !== 'prospect').length;
     const opps = opportunities.length;
-    const totalOppValue = opportunities.reduce((sum: number, o: any) => sum + (o.estimated_value || 0), 0);
+    const totalOppValue = opportunities.reduce((sum: number, o: any) => sum + (parseFloat(o.estimated_value) || 0), 0);
     return { byStatus, byAction, contacted, opportunities: opps, totalOppValue };
   }, [activeData, opportunities]);
 
@@ -831,7 +831,7 @@ export default function CampaignDetail() {
                 { label: 'Total Prospects', value: activeData.length, color: '#6366f1' },
                 { label: 'Contacted', value: stats.contacted, color: '#3b82f6' },
                 { label: 'New Opportunities', value: stats.opportunities, color: '#10b981' },
-                { label: 'Opportunities Value', value: '$' + (stats.totalOppValue / 1000).toFixed(0) + 'K', color: '#8b5cf6' },
+                { label: 'Opportunities Value', value: '$' + stats.totalOppValue.toLocaleString('en-US'), color: '#8b5cf6' },
                 { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' }
               ].map((k, i) => (
                 <div key={i} style={{ ...card, padding: '16px' }}>
@@ -1843,12 +1843,16 @@ export default function CampaignDetail() {
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Campaign Owner</label>
                   {isLegacyPhoenix ? (
-                    <select value={ef.owner || ''} onChange={e => setEf({ owner: e.target.value })} style={input}>
-                      <option value="">Select Owner</option>
-                      {activeTeam.map((member: string) => (
-                        <option key={member} value={member}>{member}</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      options={ownerOptions}
+                      value={editEmployees.find(e => `${e.first_name} ${e.last_name}` === ef.owner)?.id.toString() || ''}
+                      onChange={(val) => {
+                        const emp = editEmployees.find(e => e.id.toString() === val);
+                        if (emp) setEf({ owner: `${emp.first_name} ${emp.last_name}` });
+                      }}
+                      placeholder="Search and select owner..."
+                      style={{ width: '100%' }}
+                    />
                   ) : (
                     <SearchableSelect
                       options={ownerOptions}
@@ -1884,21 +1888,26 @@ export default function CampaignDetail() {
                 {isLegacyPhoenix && (
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned Team Members</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {activeTeam.map((member: string) => (
-                        <label key={member} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: ef.assignedTeam?.includes(member) ? '#dbeafe' : '#f3f4f6', borderRadius: '6px', cursor: 'pointer', border: ef.assignedTeam?.includes(member) ? '1px solid #3b82f6' : '1px solid #e5e7eb' }}>
-                          <input
-                            type="checkbox"
-                            checked={ef.assignedTeam?.includes(member)}
-                            onChange={e => {
-                              if (e.target.checked) setEf({ assignedTeam: [...(ef.assignedTeam || []), member] });
-                              else setEf({ assignedTeam: (ef.assignedTeam || []).filter((m: string) => m !== member) });
-                            }}
-                            style={{ accentColor: '#3b82f6' }}
-                          />
-                          <span style={{ fontSize: '13px', fontWeight: 500 }}>{member}</span>
-                        </label>
-                      ))}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                      {editEmployees.map(emp => {
+                        const fullName = `${emp.first_name} ${emp.last_name}`;
+                        const isChecked = ef.assignedTeam?.includes(fullName);
+                        return (
+                          <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: isChecked ? '#dbeafe' : '#f3f4f6', borderRadius: '6px', cursor: 'pointer', border: isChecked ? '1px solid #3b82f6' : '1px solid #e5e7eb' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) setEf({ assignedTeam: [...(ef.assignedTeam || []), fullName] });
+                                else setEf({ assignedTeam: (ef.assignedTeam || []).filter((m: string) => m !== fullName) });
+                              }}
+                              style={{ accentColor: '#3b82f6' }}
+                            />
+                            <span style={{ fontSize: '13px', fontWeight: 500 }}>{fullName}</span>
+                            {emp.job_title && <span style={{ fontSize: '11px', color: '#64748b' }}>- {emp.job_title}</span>}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
