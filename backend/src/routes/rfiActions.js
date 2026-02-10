@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { generateRFIPdfHtml } = require('../utils/rfiPdfGenerator');
 const { generateRFILogPdfHtml } = require('../utils/rfiLogPdfGenerator');
+const { fetchLogoBase64 } = require('../utils/logoFetcher');
 const {
   isEmailConfigured,
   sendEmail,
@@ -33,7 +34,8 @@ router.get('/:id/pdf', async (req, res, next) => {
       return res.status(404).json({ error: 'RFI not found' });
     }
 
-    const html = generateRFIPdfHtml(rfi);
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+    const html = generateRFIPdfHtml(rfi, logoBase64);
 
     // Return HTML that can be printed to PDF by the browser
     res.setHeader('Content-Type', 'text/html');
@@ -269,7 +271,8 @@ router.get('/project/:projectId/log-report', async (req, res, next) => {
       rfis = rfis.filter(rfi => rfi.status === status);
     }
 
-    const html = generateRFILogPdfHtml(rfis, project.name);
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+    const html = generateRFILogPdfHtml(rfis, project.name, logoBase64);
 
     // Return HTML that can be printed to PDF by the browser
     res.setHeader('Content-Type', 'text/html');

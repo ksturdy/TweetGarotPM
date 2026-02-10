@@ -1,7 +1,4 @@
-const fs = require('fs');
-const path = require('path');
-
-const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities) => {
+const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities, logoBase64 = '') => {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -12,16 +9,6 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     const num = parseFloat(value) || 0;
     return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
-
-  // Load and convert logo to base64
-  let logoBase64 = '';
-  try {
-    const logoPath = path.join(__dirname, '../../uploads/TweetGarotLogo.png');
-    const logoBuffer = fs.readFileSync(logoPath);
-    logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-  } catch (error) {
-    console.error('Error loading logo:', error);
-  }
 
   // Compute stats
   const totalProspects = companies.length;

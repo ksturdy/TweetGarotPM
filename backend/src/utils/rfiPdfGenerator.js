@@ -1,7 +1,4 @@
-const fs = require('fs');
-const path = require('path');
-
-const generateRFIPdfHtml = (rfi) => {
+const generateRFIPdfHtml = (rfi, logoBase64 = '') => {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -15,16 +12,6 @@ const generateRFIPdfHtml = (rfi) => {
     if (discipline === 'other') return disciplineOther || 'Other';
     return discipline.charAt(0).toUpperCase() + discipline.slice(1);
   };
-
-  // Load and convert logo to base64
-  let logoBase64 = '';
-  try {
-    const logoPath = path.join(__dirname, '../../uploads/TweetGarotLogo.png');
-    const logoBuffer = fs.readFileSync(logoPath);
-    logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-  } catch (error) {
-    console.error('Error loading logo:', error);
-  }
 
   return `
 <!DOCTYPE html>

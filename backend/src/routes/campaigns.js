@@ -312,8 +312,10 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const opportunitiesList = [...campaignOppsList, ...mainOpps];
 
     const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
+    const { fetchLogoBase64 } = require('../utils/logoFetcher');
 
-    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList);
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList, logoBase64);
     console.log('[Report] HTML generated, length:', html.length);
 
     // In production (Render), use @sparticuz/chromium which bundles its own binary.
