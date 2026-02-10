@@ -187,6 +187,7 @@ const LaborForecast: React.FC = () => {
   const [hoursPerPersonPerMonth, setHoursPerPersonPerMonth] = useState<number>(173);
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
   const [showSettings, setShowSettings] = useState(false);
+  const [timeHorizon, setTimeHorizon] = useState<number>(12);
 
   const getDurationForValue = (contractValue: number): number => {
     for (const rule of durationRules) {
@@ -253,21 +254,12 @@ const LaborForecast: React.FC = () => {
   const columns = useMemo(() => {
     const cols: { key: string; label: string; isYear: boolean }[] = [];
     const now = startOfMonth(new Date());
-    const twelveMonthsOut = addMonths(now, 11);
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < timeHorizon; i++) {
       const date = addMonths(now, i);
       cols.push({ key: format(date, 'yyyy-MM'), label: format(date, 'MMM yy'), isYear: false });
     }
-    const currentYear = now.getFullYear();
-    const maxYear = currentYear + 3;
-    for (let year = currentYear; year <= maxYear; year++) {
-      const lastMonthOfYear = new Date(year, 11, 1);
-      if (lastMonthOfYear > twelveMonthsOut) {
-        cols.push({ key: String(year), label: String(year), isYear: true });
-      }
-    }
     return cols;
-  }, []);
+  }, [timeHorizon]);
 
   // ─── Core projections ────────────────────────────────────
 
@@ -275,7 +267,6 @@ const LaborForecast: React.FC = () => {
     if (!contracts) return [];
 
     const now = startOfMonth(new Date());
-    const twelveMonthsOut = addMonths(now, 11);
     const results: ProjectLaborProjection[] = [];
 
     const filtered = contracts.filter(c => {
@@ -350,14 +341,12 @@ const LaborForecast: React.FC = () => {
         for (let i = 0; i < remainingMonths; i++) {
           const monthDate = addMonths(now, i);
           const monthKey = format(monthDate, 'yyyy-MM');
-          const yearKey = String(monthDate.getFullYear());
 
           const pfHrs = (tradeHours[0].remaining / remainingMonths) * multipliers[i];
           const smHrs = (tradeHours[1].remaining / remainingMonths) * multipliers[i];
           const plHrs = (tradeHours[2].remaining / remainingMonths) * multipliers[i];
           const totalHrs = pfHrs + smHrs + plHrs;
 
-          // Monthly bucket
           const existing = monthlyHours.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
           monthlyHours.set(monthKey, {
             pf: existing.pf + pfHrs,
@@ -365,17 +354,6 @@ const LaborForecast: React.FC = () => {
             pl: existing.pl + plHrs,
             total: existing.total + totalHrs,
           });
-
-          // Year bucket (only for months beyond 12-month individual view)
-          if (monthDate > twelveMonthsOut) {
-            const yearExisting = monthlyHours.get(yearKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
-            monthlyHours.set(yearKey, {
-              pf: yearExisting.pf + pfHrs,
-              sm: yearExisting.sm + smHrs,
-              pl: yearExisting.pl + plHrs,
-              total: yearExisting.total + totalHrs,
-            });
-          }
         }
       }
 
@@ -521,6 +499,26 @@ const LaborForecast: React.FC = () => {
               </svg>
               Settings
             </button>
+
+            {/* Time horizon toggle */}
+            <div style={{ display: 'flex', gap: '0' }}>
+              {[3, 6, 12, 18, 24, 36].map((months, i, arr) => (
+                <button
+                  key={months}
+                  onClick={() => setTimeHorizon(months)}
+                  style={{
+                    padding: '0.35rem 0.5rem', fontSize: '0.75rem',
+                    background: timeHorizon === months ? '#059669' : '#f1f5f9',
+                    color: timeHorizon === months ? '#fff' : '#64748b',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: i === 0 ? '4px 0 0 4px' : i === arr.length - 1 ? '0 4px 4px 0' : '0',
+                    cursor: 'pointer', minWidth: '36px',
+                  }}
+                >
+                  {months}mo
+                </button>
+              ))}
+            </div>
 
             {/* Data view toggle */}
             <div style={{ display: 'flex', gap: '0' }}>
@@ -874,7 +872,7 @@ const LaborForecast: React.FC = () => {
           {/* Stacked bar chart - Monthly Headcount */}
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '1rem', color: '#1e293b' }}>
-              Projected Headcount by Month (Next 36 Months)
+              Projected Headcount by Month (Next {timeHorizon} Months)
             </h3>
             <div style={{ height: '320px', position: 'relative' }}>
               {(() => {
@@ -882,7 +880,7 @@ const LaborForecast: React.FC = () => {
                 const monthlyData: { label: string; key: string; pf: number; sm: number; pl: number; total: number }[] = [];
                 let maxValue = 0;
 
-                for (let i = 0; i < 36; i++) {
+                for (let i = 0; i < timeHorizon; i++) {
                   const monthDate = addMonths(now, i);
                   const key = format(monthDate, 'yyyy-MM');
                   const agg = { pf: 0, sm: 0, pl: 0, total: 0 };
@@ -898,7 +896,7 @@ const LaborForecast: React.FC = () => {
                 maxValue = Math.ceil(maxValue / 5) * 5; // Round up to nearest 5
                 if (maxValue === 0) maxValue = 10;
 
-                const barWidth = 100 / 36;
+                const barWidth = 100 / timeHorizon;
                 const chartHeight = 250;
 
                 const yearBoundaries: { index: number; year: string }[] = [];
@@ -919,7 +917,7 @@ const LaborForecast: React.FC = () => {
 
                     <g transform="translate(45, 0)">
                       {yearBoundaries.map(yb => (
-                        <line key={`yl-${yb.year}`} x1={`${(yb.index / 36) * 95}%`} y1="0" x2={`${(yb.index / 36) * 95}%`} y2={chartHeight + 5} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
+                        <line key={`yl-${yb.year}`} x1={`${(yb.index / timeHorizon) * 95}%`} y1="0" x2={`${(yb.index / timeHorizon) * 95}%`} y2={chartHeight + 5} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
                       ))}
 
                       {monthlyData.map((d, i) => {
@@ -933,8 +931,8 @@ const LaborForecast: React.FC = () => {
                         const smH = maxValue > 0 ? (smHC / maxValue) * chartHeight : 0;
                         const plH = maxValue > 0 ? (plHC / maxValue) * chartHeight : 0;
 
-                        const xPercent = (i / 36) * 95;
-                        const showMonth = i % 3 === 0;
+                        const xPercent = (i / timeHorizon) * 95;
+                        const showMonth = timeHorizon <= 12 ? true : i % (timeHorizon <= 18 ? 2 : 3) === 0;
 
                         return (
                           <g key={d.key}>
@@ -952,7 +950,7 @@ const LaborForecast: React.FC = () => {
                             </rect>
                             {showMonth && (
                               <text x={`${xPercent + barWidth * 0.4}%`} y={chartHeight + 14} fontSize="9" fill="#64748b" textAnchor="middle">
-                                {d.label.substring(0, 3)}
+                                {timeHorizon <= 6 ? d.label : d.label.substring(0, 3)}
                               </text>
                             )}
                           </g>
@@ -960,9 +958,9 @@ const LaborForecast: React.FC = () => {
                       })}
 
                       {yearBoundaries.map((yb, idx) => {
-                        const xStart = (yb.index / 36) * 95;
+                        const xStart = (yb.index / timeHorizon) * 95;
                         const nextB = yearBoundaries[idx + 1];
-                        const xEnd = nextB ? (nextB.index / 36) * 95 : 95;
+                        const xEnd = nextB ? (nextB.index / timeHorizon) * 95 : 95;
                         return (
                           <text key={`ylbl-${yb.year}`} x={`${(xStart + xEnd) / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
                             {yb.year}
@@ -970,7 +968,7 @@ const LaborForecast: React.FC = () => {
                         );
                       })}
                       {yearBoundaries.length > 0 && yearBoundaries[0].index > 0 && (
-                        <text x={`${(yearBoundaries[0].index / 36) * 95 / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
+                        <text x={`${(yearBoundaries[0].index / timeHorizon) * 95 / 2}%`} y={chartHeight + 32} fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
                           {monthlyData[0].key.substring(0, 4)}
                         </text>
                       )}
