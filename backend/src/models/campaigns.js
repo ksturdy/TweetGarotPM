@@ -350,6 +350,84 @@ const campaigns = {
     }
   },
 
+  // Regenerate weeks: delete old, create new from dates, redistribute target_week (keep assignments)
+  regenerateWeeks: async (campaignId, tenantId) => {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const campaignResult = await client.query(
+        'SELECT * FROM campaigns WHERE id = $1 AND tenant_id = $2',
+        [campaignId, tenantId]
+      );
+      const campaign = campaignResult.rows[0];
+      if (!campaign) throw new Error('Campaign not found');
+
+      // Delete existing weeks
+      await client.query('DELETE FROM campaign_weeks WHERE campaign_id = $1', [campaignId]);
+
+      // Create new weeks from start_date to end_date
+      const start = new Date(campaign.start_date);
+      const end = new Date(campaign.end_date);
+      let weekNumber = 1;
+      let weekStart = new Date(start);
+      while (weekStart < end) {
+        let weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        if (weekEnd > end) weekEnd = new Date(end);
+
+        const label = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          + ' - ' + weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+        await client.query(
+          `INSERT INTO campaign_weeks (campaign_id, week_number, start_date, end_date, label)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [campaignId, weekNumber, weekStart.toISOString().slice(0, 10), weekEnd.toISOString().slice(0, 10), label]
+        );
+
+        weekStart.setDate(weekStart.getDate() + 7);
+        weekNumber++;
+      }
+      const totalWeeks = weekNumber - 1;
+
+      // Redistribute target_week for all companies, grouped by assigned_to_id
+      // Each member's prospects get spread evenly across weeks by tier/score
+      const companiesResult = await client.query(
+        'SELECT id, assigned_to_id, tier, score FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
+        [campaignId]
+      );
+      const companies = companiesResult.rows;
+
+      // Group by assigned_to_id
+      const byMember = {};
+      companies.forEach(c => {
+        const key = c.assigned_to_id || 'unassigned';
+        if (!byMember[key]) byMember[key] = [];
+        byMember[key].push(c);
+      });
+
+      // For each member, spread their companies across weeks
+      for (const memberCompanies of Object.values(byMember)) {
+        const perWeek = Math.ceil(memberCompanies.length / totalWeeks);
+        for (let i = 0; i < memberCompanies.length; i++) {
+          const targetWeek = Math.min(Math.floor(i / perWeek) + 1, totalWeeks);
+          await client.query(
+            'UPDATE campaign_companies SET target_week = $1 WHERE id = $2',
+            [targetWeek, memberCompanies[i].id]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+      return { weeks: totalWeeks, companies: companies.length };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Bulk create campaign companies
   bulkCreateCompanies: async (campaignId, companiesArray) => {
     const client = await db.pool.connect();

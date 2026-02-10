@@ -583,7 +583,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
             <td>${o.company_name || '-'}</td>
             <td>${formatCurrency(o.value)}</td>
             <td>${stageLabels[o.stage] || o.stage || '-'}</td>
-            <td>${o.probability || 0}%</td>
+            <td>${typeof o.probability === 'number' ? o.probability + '%' : (o.probability || '-')}</td>
             <td>${o.close_date ? formatDate(o.close_date) : '-'}</td>
             <td style="font-size: 7pt;">${o.description || '-'}</td>
           </tr>

@@ -229,6 +229,20 @@ router.post('/:id/generate', async (req, res, next) => {
   }
 });
 
+// REGENERATE campaign weeks (delete old, create new from dates, redistribute)
+router.post('/:id/regenerate-weeks', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const result = await campaigns.regenerateWeeks(req.params.id, req.tenantId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GENERATE campaign report PDF
 router.get('/:id/report-pdf', async (req, res, next) => {
   try {
@@ -237,12 +251,33 @@ router.get('/:id/report-pdf', async (req, res, next) => {
       return res.status(404).json({ error: 'Campaign not found' });
     }
 
-    const [companiesList, weeksList, teamList, opportunitiesList] = await Promise.all([
+    const db = require('../config/database');
+    const [companiesList, weeksList, teamList, campaignOppsList, mainOppsResult] = await Promise.all([
       campaignCompanies.getByCampaignId(req.params.id),
       campaigns.getWeeks(req.params.id),
       campaigns.getTeamMembers(req.params.id),
-      campaignOpportunities.getByCampaignId(req.params.id)
+      campaignOpportunities.getByCampaignId(req.params.id),
+      db.query(`
+        SELECT o.*, ps.name as stage_name, u.first_name || ' ' || u.last_name as assigned_to_name
+        FROM opportunities o
+        LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+        LEFT JOIN users u ON o.assigned_to = u.id
+        WHERE o.campaign_id = $1
+        ORDER BY o.estimated_value DESC
+      `, [req.params.id])
     ]);
+
+    // Merge campaign_opportunities + main opportunities (normalized to same shape)
+    const mainOpps = mainOppsResult.rows.map(o => ({
+      name: o.title,
+      company_name: o.client_company || o.customer_owner || o.facility_name || '',
+      value: o.estimated_value,
+      stage: o.stage_name || '',
+      probability: o.probability || '',
+      close_date: o.estimated_start_date,
+      description: o.description
+    }));
+    const opportunitiesList = [...campaignOppsList, ...mainOpps];
 
     const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
     const puppeteer = require('puppeteer');

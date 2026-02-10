@@ -365,6 +365,11 @@ export const generateCampaign = async (campaignId: number): Promise<{ weeks: num
   return response.data;
 };
 
+export const regenerateCampaignWeeks = async (campaignId: number): Promise<{ weeks: number; companies: number }> => {
+  const response = await api.post(`/campaigns/${campaignId}/regenerate-weeks`);
+  return response.data;
+};
+
 export const bulkCreateCampaignCompanies = async (campaignId: number, companies: Partial<CampaignCompany>[]): Promise<CampaignCompany[]> => {
   const response = await api.post(`/campaigns/${campaignId}/companies/bulk`, { companies });
   return response.data;

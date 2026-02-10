@@ -9,7 +9,7 @@ import {
   getCampaign, updateCampaign,
   getCampaignCompanies, getCampaignWeeks, getCampaignTeam, getCampaignActivity,
   createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction,
-  addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport,
+  addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
   CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
 } from '../services/campaigns';
@@ -208,22 +208,28 @@ export default function CampaignDetail() {
 
   // Unified data accessors
   const activeData = useMemo(() => {
+    if (dbCompanies.length > 0) {
+      return dbCompanies.map((c: CampaignCompany) => ({
+        id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
+        assignedTo: c.assigned_to_name || 'Unassigned', address: c.address || '', phone: c.phone || '',
+        status: c.status, action: c.next_action, targetWeek: c.target_week
+      }));
+    }
     if (isLegacyPhoenix) return data;
-    return dbCompanies.map((c: CampaignCompany) => ({
-      id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
-      assignedTo: c.assigned_to_name || 'Unassigned', address: c.address || '', phone: c.phone || '',
-      status: c.status, action: c.next_action, targetWeek: c.target_week
-    }));
+    return [];
   }, [isLegacyPhoenix, data, dbCompanies]);
 
   const activeWeeks = useMemo(() => {
+    if (dbWeeks.length > 0) {
+      return dbWeeks.map((w: CampaignWeek) => ({
+        num: w.week_number,
+        start: new Date(w.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: w.label || `Week ${w.week_number}`
+      }));
+    }
     if (isLegacyPhoenix) return weeks;
-    return dbWeeks.map((w: CampaignWeek) => ({
-      num: w.week_number,
-      start: new Date(w.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      label: w.label || `Week ${w.week_number}`
-    }));
+    return [];
   }, [isLegacyPhoenix, dbWeeks]);
 
   // DB mutations for non-legacy campaigns
@@ -301,28 +307,33 @@ export default function CampaignDetail() {
     }
   };
 
-  const saveEditCampaign = async () => {
-    if (isLegacyPhoenix) {
-      // Legacy: already updates campaignInfo state via onChange handlers
-      setShowEditCampaign(false);
-      return;
-    }
-    // DB campaign: call API
+  const saveEditCampaign = async (andRegenerateWeeks = false) => {
+    const ef = isLegacyPhoenix ? campaignInfo : editForm;
+    if (!ef) return;
+
     try {
+      // Always persist to DB (campaign ID from URL)
       await updateCampaignMutation.mutateAsync({
-        name: editForm.name,
-        description: editForm.description,
-        start_date: editForm.startDate,
-        end_date: editForm.endDate,
-        status: editForm.status,
-        owner_id: editForm.ownerId,
-        goal_description: editForm.goal,
-        target_pipeline_value: editForm.targetValue,
-        target_touchpoints: editForm.targetTouchpoints,
-        target_opportunities: editForm.targetOpportunities,
-        target_estimates: editForm.targetEstimates,
-        target_awards: editForm.targetAwards,
+        name: ef.name,
+        description: ef.description,
+        start_date: isLegacyPhoenix ? ef.startDate : ef.startDate,
+        end_date: isLegacyPhoenix ? ef.endDate : ef.endDate,
+        status: ef.status || 'planning',
+        owner_id: isLegacyPhoenix ? undefined : ef.ownerId,
+        goal_description: ef.goal,
+        target_pipeline_value: ef.targetValue,
+        target_touchpoints: ef.targetTouchpoints || 0,
+        target_opportunities: ef.targetOpportunities || 0,
+        target_estimates: ef.targetEstimates || 0,
+        target_awards: ef.targetAwards || 0,
       });
+
+      if (andRegenerateWeeks) {
+        await regenerateCampaignWeeks(campaignId);
+        queryClient.invalidateQueries({ queryKey: ['campaign-weeks', campaignId] });
+        queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      }
+
       setShowEditCampaign(false);
       setEditForm(null);
     } catch (err) {
@@ -532,31 +543,38 @@ export default function CampaignDetail() {
   }, [campaignInfo]);
 
   const activeCampaignInfo = useMemo(() => {
+    if (dbCampaign) {
+      return {
+        name: dbCampaign.name || '',
+        description: dbCampaign.description || '',
+        startDate: dbCampaign.start_date || '',
+        endDate: dbCampaign.end_date || '',
+        goal: dbCampaign.goal_description || '',
+        targetValue: dbCampaign.target_pipeline_value || 0,
+        assignedTeam: dbTeam.map((t: CampaignTeamMember) => t.name),
+        status: dbCampaign.status || 'planning',
+        owner: dbCampaign.owner_name || ''
+      };
+    }
     if (isLegacyPhoenix) return campaignInfo;
-    return {
-      name: dbCampaign?.name || '',
-      description: dbCampaign?.description || '',
-      startDate: dbCampaign?.start_date || '',
-      endDate: dbCampaign?.end_date || '',
-      goal: dbCampaign?.goal_description || '',
-      targetValue: dbCampaign?.target_pipeline_value || 0,
-      assignedTeam: dbTeam.map((t: CampaignTeamMember) => t.name),
-      status: dbCampaign?.status || 'planning',
-      owner: dbCampaign?.owner_name || ''
-    };
+    return { name: '', description: '', startDate: '', endDate: '', goal: '', targetValue: 0, assignedTeam: [] as string[], status: 'planning', owner: '' };
   }, [isLegacyPhoenix, campaignInfo, dbCampaign, dbTeam]);
 
   const activeLogs = useMemo(() => {
+    if (dbActivity.length > 0) {
+      return dbActivity.map((l: CampaignActivityLog) => ({
+        id: l.id, cid: l.campaign_company_id, text: l.description,
+        time: l.created_at, name: l.company_name || l.user_name || ''
+      }));
+    }
     if (isLegacyPhoenix) return logs;
-    return dbActivity.map((l: CampaignActivityLog) => ({
-      id: l.id, cid: l.campaign_company_id, text: l.description,
-      time: l.created_at, name: l.company_name || l.user_name || ''
-    }));
+    return [];
   }, [isLegacyPhoenix, logs, dbActivity]);
 
   const activeTeam = useMemo(() => {
+    if (dbTeam.length > 0) return dbTeam.map((t: CampaignTeamMember) => t.name);
     if (isLegacyPhoenix) return campaignInfo.assignedTeam || team;
-    return dbTeam.map((t: CampaignTeamMember) => t.name);
+    return [];
   }, [isLegacyPhoenix, dbTeam, campaignInfo.assignedTeam]);
 
   // Detect orphaned prospects (assigned to someone not on the active team)
@@ -746,7 +764,7 @@ export default function CampaignDetail() {
   };
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #e5e5e5' };
-  const input: React.CSSProperties = { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', outline: 'none', background: '#fff', width: '100%' };
+  const input: React.CSSProperties = { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', outline: 'none', background: '#fff', width: '100%', fontFamily: 'inherit' };
   const btn: React.CSSProperties = { padding: '8px 16px', background: '#ea580c', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' };
   const btnSecondary: React.CSSProperties = { ...btn, background: '#f3f4f6', color: '#374151' };
 
@@ -1961,7 +1979,15 @@ export default function CampaignDetail() {
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowEditCampaign(false); setEditForm(null); }} style={btnSecondary}>Cancel</button>
               <button
-                onClick={saveEditCampaign}
+                onClick={() => saveEditCampaign(true)}
+                disabled={updateCampaignMutation.isPending}
+                style={{ ...btnSecondary, border: '1px solid #ea580c', color: '#ea580c', opacity: updateCampaignMutation.isPending ? 0.6 : 1 }}
+                title="Save changes and regenerate weekly schedule based on new dates"
+              >
+                {updateCampaignMutation.isPending ? 'Saving...' : 'Save & Regenerate Weeks'}
+              </button>
+              <button
+                onClick={() => saveEditCampaign(false)}
                 disabled={updateCampaignMutation.isPending}
                 style={{ ...btn, opacity: updateCampaignMutation.isPending ? 0.6 : 1 }}
               >
