@@ -270,6 +270,13 @@ router.get('/:id/report-pdf', async (req, res, next) => {
       `, [req.params.id])
     ]);
     console.log('[Report] Data loaded - companies:', companiesList.length, 'weeks:', weeksList.length, 'team:', teamList.length);
+    if (teamList.length > 0) {
+      console.log('[Report] Team members:', teamList.map(m => `${m.name} (emp:${m.employee_id}, type:${typeof m.employee_id})`));
+    }
+    if (companiesList.length > 0) {
+      const sample = companiesList[0];
+      console.log('[Report] Sample company:', { assigned_to_id: sample.assigned_to_id, type_id: typeof sample.assigned_to_id, assigned_to_name: sample.assigned_to_name });
+    }
 
     // Merge campaign_opportunities + main opportunities (normalized to same shape)
     const mainOpps = mainOppsResult.rows.map(o => ({

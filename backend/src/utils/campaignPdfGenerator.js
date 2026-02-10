@@ -309,7 +309,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     <div class="campaign-info">
       <strong>Campaign:</strong> ${campaign.name || ''} |
       <strong>Status:</strong> ${(campaign.status || '').charAt(0).toUpperCase() + (campaign.status || '').slice(1)} |
-      <strong>Owner:</strong> ${campaign.owner_name || 'N/A'} |
+      <strong>Owner:</strong> ${(team.find(m => m.role === 'owner') || {}).name || campaign.owner_name || 'N/A'} |
       <strong>Period:</strong> ${formatDate(campaign.start_date)} - ${formatDate(campaign.end_date)} |
       <strong>Report Date:</strong> ${formatDate(new Date().toISOString())}
     </div>
@@ -457,7 +457,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
               <td style="font-weight: bold;">${weekCompanies.length}</td>
               ${team.map(m => {
                 const memberWeekCount = weekCompanies.filter(c =>
-                  c.assigned_to_name === m.name || c.assigned_to_id === m.employee_id
+                  c.assigned_to_name === m.name || Number(c.assigned_to_id) === Number(m.employee_id)
                 ).length;
                 return `<td>${memberWeekCount}</td>`;
               }).join('')}
@@ -469,7 +469,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
           <td>${companies.length}</td>
           ${team.map(m => {
             const total = companies.filter(c =>
-              c.assigned_to_name === m.name || c.assigned_to_id === m.employee_id
+              c.assigned_to_name === m.name || Number(c.assigned_to_id) === Number(m.employee_id)
             ).length;
             return `<td>${total}</td>`;
           }).join('')}
@@ -481,7 +481,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     <div class="section-title">Weekly Goals by Salesperson</div>
     ${team.map(m => {
       const memberCompanies = companies.filter(c =>
-        c.assigned_to_name === m.name || c.assigned_to_id === m.employee_id
+        c.assigned_to_name === m.name || Number(c.assigned_to_id) === Number(m.employee_id)
       );
       if (memberCompanies.length === 0) return '';
       return `
