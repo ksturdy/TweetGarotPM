@@ -226,14 +226,28 @@ const campaigns = {
   },
 
   // Reassign all companies from one employee to another within a campaign
-  reassignCompanies: async (campaignId, fromEmployeeId, toEmployeeId) => {
-    const query = `
-      UPDATE campaign_companies
-      SET assigned_to_id = $1
-      WHERE campaign_id = $2 AND assigned_to_id = $3
-      RETURNING *
-    `;
-    const result = await db.query(query, [toEmployeeId, campaignId, fromEmployeeId]);
+  reassignCompanies: async (campaignId, fromEmployeeId, toEmployeeId, companyIds = null) => {
+    let query, params;
+    if (companyIds && companyIds.length > 0) {
+      // Partial reassign: only specified company IDs
+      query = `
+        UPDATE campaign_companies
+        SET assigned_to_id = $1
+        WHERE campaign_id = $2 AND assigned_to_id = $3 AND id = ANY($4::int[])
+        RETURNING *
+      `;
+      params = [toEmployeeId, campaignId, fromEmployeeId, companyIds];
+    } else {
+      // Full reassign: all companies from one employee to another
+      query = `
+        UPDATE campaign_companies
+        SET assigned_to_id = $1
+        WHERE campaign_id = $2 AND assigned_to_id = $3
+        RETURNING *
+      `;
+      params = [toEmployeeId, campaignId, fromEmployeeId];
+    }
+    const result = await db.query(query, params);
     return result.rows;
   },
 
@@ -390,32 +404,20 @@ const campaigns = {
       }
       const totalWeeks = weekNumber - 1;
 
-      // Redistribute target_week for all companies, grouped by assigned_to_id
-      // Each member's prospects get spread evenly across weeks by tier/score
+      // Redistribute target_week for all companies sorted by tier/score (best first)
       const companiesResult = await client.query(
-        'SELECT id, assigned_to_id, tier, score FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
+        'SELECT id FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
         [campaignId]
       );
       const companies = companiesResult.rows;
 
-      // Group by assigned_to_id
-      const byMember = {};
-      companies.forEach(c => {
-        const key = c.assigned_to_id || 'unassigned';
-        if (!byMember[key]) byMember[key] = [];
-        byMember[key].push(c);
-      });
-
-      // For each member, spread their companies across weeks
-      for (const memberCompanies of Object.values(byMember)) {
-        const perWeek = Math.ceil(memberCompanies.length / totalWeeks);
-        for (let i = 0; i < memberCompanies.length; i++) {
-          const targetWeek = Math.min(Math.floor(i / perWeek) + 1, totalWeeks);
-          await client.query(
-            'UPDATE campaign_companies SET target_week = $1 WHERE id = $2',
-            [targetWeek, memberCompanies[i].id]
-          );
-        }
+      // Assign sequentially: highest-priority prospects go to earliest weeks, evenly distributed
+      for (let i = 0; i < companies.length; i++) {
+        const targetWeek = Math.floor(i * totalWeeks / companies.length) + 1;
+        await client.query(
+          'UPDATE campaign_companies SET target_week = $1 WHERE id = $2',
+          [targetWeek, companies[i].id]
+        );
       }
 
       await client.query('COMMIT');

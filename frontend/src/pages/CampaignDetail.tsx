@@ -415,7 +415,7 @@ export default function CampaignDetail() {
   const [transferCounts, setTransferCounts] = useState<Record<string, number>>({});
   const [transferTargets, setTransferTargets] = useState<Record<string, string>>({});
 
-  const handleTransferProspects = (fromName: string) => {
+  const handleTransferProspects = async (fromName: string) => {
     const count = transferCounts[fromName] || 0;
     const toName = transferTargets[fromName] || '';
     if (!count || !toName || count <= 0) return;
@@ -431,11 +431,27 @@ export default function CampaignDetail() {
       });
 
     const toTransfer = memberProspects.slice(0, count);
-    const transferIds = new Set(toTransfer.map((c: any) => c.id));
+    const transferIds = toTransfer.map((c: any) => c.id);
 
-    if (isLegacyPhoenix) {
+    if (dbCompanies.length > 0) {
+      // DB campaign: call API to reassign specific companies
+      try {
+        const fromMember = dbTeam.find((t: CampaignTeamMember) => t.name === fromName);
+        const toMember = dbTeam.find((t: CampaignTeamMember) => t.name === toName);
+        const fromEmployeeId = fromMember?.employee_id;
+        const toEmployeeId = toMember?.employee_id
+          || editEmployees.find(e => `${e.first_name} ${e.last_name}` === toName)?.id;
+        if (fromEmployeeId && toEmployeeId) {
+          await reassignCompanies(campaignId, fromEmployeeId, toEmployeeId, transferIds);
+          queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+        }
+      } catch (err) {
+        console.error('Failed to transfer prospects:', err);
+      }
+    } else if (isLegacyPhoenix) {
+      const idSet = new Set(transferIds);
       setData((d: any) => d.map((c: any) =>
-        transferIds.has(c.id) ? { ...c, assignedTo: toName } : c
+        idSet.has(c.id) ? { ...c, assignedTo: toName } : c
       ));
     }
     // Clear the transfer inputs for this member
@@ -451,46 +467,39 @@ export default function CampaignDetail() {
     if (totalWeeks === 0) return;
     setShowRegenConfirm(true);
   };
-  const executeRegenerateWeeks = () => {
+  const executeRegenerateWeeks = async () => {
     setShowRegenConfirm(false);
-    const totalWeeks = isLegacyPhoenix ? weeks.length : activeWeeks.length;
-    if (isLegacyPhoenix) {
-      // Group prospects by team member, then distribute each member's prospects evenly across weeks
-      const currentData = [...data];
-      const byMember: Record<string, any[]> = {};
-      currentData.forEach((c: any) => {
-        const member = c.assignedTo || 'Unassigned';
-        if (!byMember[member]) byMember[member] = [];
-        byMember[member].push(c);
+    if (dbCompanies.length > 0) {
+      // DB campaign: call backend to regenerate weeks
+      try {
+        const result = await regenerateCampaignWeeks(campaignId);
+        queryClient.invalidateQueries({ queryKey: ['campaign-weeks', campaignId] });
+        queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+        setRegenMessage(`Redistributed ${result.companies} prospects across ${result.weeks} weeks`);
+      } catch (err) {
+        console.error('Failed to regenerate weeks:', err);
+      }
+    } else if (isLegacyPhoenix) {
+      const totalWeeks = weeks.length;
+      // Sort all prospects by tier/score (best first), then distribute evenly across weeks
+      const sorted = [...data].sort((a: any, b: any) => {
+        const tierOrder: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2 };
+        const tierDiff = (tierOrder[a.tier] || 1) - (tierOrder[b.tier] || 1);
+        if (tierDiff !== 0) return tierDiff;
+        return (b.score || 0) - (a.score || 0);
       });
 
       const weekAssignments: Record<number, number> = {};
-
-      // For each team member, sort their prospects by tier/score and spread across weeks
-      Object.values(byMember).forEach(memberProspects => {
-        memberProspects.sort((a: any, b: any) => {
-          const tierOrder: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2 };
-          const tierDiff = (tierOrder[a.tier] || 1) - (tierOrder[b.tier] || 1);
-          if (tierDiff !== 0) return tierDiff;
-          return (b.score || 0) - (a.score || 0);
-        });
-
-        const perWeek = Math.ceil(memberProspects.length / totalWeeks);
-        memberProspects.forEach((c: any, i: number) => {
-          weekAssignments[c.id] = Math.min(Math.floor(i / perWeek) + 1, totalWeeks);
-        });
+      sorted.forEach((c: any, i: number) => {
+        weekAssignments[c.id] = Math.floor(i * totalWeeks / sorted.length) + 1;
       });
 
-      // Build summary before updating - show per-member breakdown
-      const memberSummaries = Object.entries(byMember).map(([name, prospects]) => {
-        const weekBreakdown = Array.from({ length: totalWeeks }, (_, i) => {
-          const count = prospects.filter((c: any) => weekAssignments[c.id] === i + 1).length;
-          return count;
-        });
-        return `${name}: ${weekBreakdown.join(' / ')} (${prospects.length} total)`;
+      // Build summary
+      const weekBreakdown = Array.from({ length: totalWeeks }, (_, i) => {
+        return sorted.filter((c: any) => weekAssignments[c.id] === i + 1).length;
       });
-      const weekLabels = weeks.map(w => `Wk${w.num}`).join(' / ');
-      const summary = `Distribution by ${weekLabels}:\n\n${memberSummaries.join('\n')}`;
+      const weekLabels = weeks.map((w, i) => `Wk${w.num}: ${weekBreakdown[i]}`).join(', ');
+      const summary = `Distributed ${sorted.length} prospects: ${weekLabels}`;
 
       setData((d: any) => d.map((c: any) => ({
         ...c,

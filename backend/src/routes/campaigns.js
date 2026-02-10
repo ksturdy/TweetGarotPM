@@ -174,11 +174,11 @@ router.put('/:id/team/reassign', async (req, res, next) => {
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const { from_employee_id, to_employee_id } = req.body;
+    const { from_employee_id, to_employee_id, company_ids } = req.body;
     if (!from_employee_id || !to_employee_id) {
       return res.status(400).json({ error: 'from_employee_id and to_employee_id are required' });
     }
-    const reassigned = await campaigns.reassignCompanies(req.params.id, from_employee_id, to_employee_id);
+    const reassigned = await campaigns.reassignCompanies(req.params.id, from_employee_id, to_employee_id, company_ids || null);
     res.json({ message: `Reassigned ${reassigned.length} companies`, count: reassigned.length });
   } catch (error) {
     next(error);

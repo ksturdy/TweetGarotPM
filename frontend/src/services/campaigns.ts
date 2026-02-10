@@ -207,11 +207,15 @@ export const removeTeamMember = async (campaignId: number, employeeId: number): 
   await api.delete(`/campaigns/${campaignId}/team/${employeeId}`);
 };
 
-export const reassignCompanies = async (campaignId: number, fromEmployeeId: number, toEmployeeId: number): Promise<{ count: number }> => {
-  const response = await api.put(`/campaigns/${campaignId}/team/reassign`, {
+export const reassignCompanies = async (campaignId: number, fromEmployeeId: number, toEmployeeId: number, companyIds?: number[]): Promise<{ count: number }> => {
+  const body: any = {
     from_employee_id: fromEmployeeId,
     to_employee_id: toEmployeeId
-  });
+  };
+  if (companyIds && companyIds.length > 0) {
+    body.company_ids = companyIds;
+  }
+  const response = await api.put(`/campaigns/${campaignId}/team/reassign`, body);
   return response.data;
 };
 
