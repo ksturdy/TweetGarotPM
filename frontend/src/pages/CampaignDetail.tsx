@@ -438,9 +438,11 @@ export default function CampaignDetail() {
     if (dbCompanies.length > 0) {
       // DB campaign: call API to reassign specific companies
       try {
-        const fromMember = dbTeam.find((t: CampaignTeamMember) => t.name === fromName);
+        // Get fromEmployeeId directly from the companies being transferred (more reliable than dbTeam lookup)
+        const fromCompany = dbCompanies.find((c: CampaignCompany) => transferIds.includes(c.id));
+        const fromEmployeeId = fromCompany?.assigned_to_id;
+        // Get toEmployeeId from dbTeam or editEmployees
         const toMember = dbTeam.find((t: CampaignTeamMember) => t.name === toName);
-        const fromEmployeeId = fromMember?.employee_id;
         const toEmployeeId = toMember?.employee_id
           || editEmployees.find(e => `${e.first_name} ${e.last_name}` === toName)?.id;
         if (!fromEmployeeId || !toEmployeeId) {
