@@ -78,7 +78,9 @@ const corsOptions = {
       'http://localhost:3001',
       'https://titan-frontend-ag1d.onrender.com',
       'https://tweetgarotpm.com',
-      'https://www.tweetgarotpm.com'
+      'https://www.tweetgarotpm.com',
+      'https://titanpm3.com',
+      'https://www.titanpm3.com'
     ];
 
     if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
