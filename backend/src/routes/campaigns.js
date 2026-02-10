@@ -284,20 +284,28 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const opportunitiesList = [...campaignOppsList, ...mainOpps];
 
     const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
-    const puppeteer = require('puppeteer');
 
     const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, teamList, opportunitiesList);
     console.log('[Report] HTML generated, length:', html.length);
 
-    const launchOptions = {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    };
-    // On Render/production, use system-installed Chromium
+    // In production (Render), use @sparticuz/chromium which bundles its own binary.
+    // Locally, use full puppeteer which downloads its own Chrome.
     if (process.env.NODE_ENV === 'production') {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+      const chromium = require('@sparticuz/chromium');
+      const puppeteerCore = require('puppeteer-core');
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } else {
+      const puppeteer = require('puppeteer');
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      });
     }
-    browser = await puppeteer.launch(launchOptions);
     console.log('[Report] Puppeteer launched');
 
     const page = await browser.newPage();
