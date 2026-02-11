@@ -12,6 +12,10 @@ const poolConfig = process.env.DATABASE_URL
       database: process.env.DB_NAME || 'tweetgarot_pm',
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD,
+      // Enable SSL for Render hosts
+      ...(process.env.DB_HOST && process.env.DB_HOST.includes('render.com')
+        ? { ssl: { rejectUnauthorized: false } }
+        : {}),
     };
 
 const pool = new Pool(poolConfig);

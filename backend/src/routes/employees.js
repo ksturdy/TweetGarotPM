@@ -72,10 +72,6 @@ router.get('/:id', authorizeHR('read'), async (req, res) => {
 // Create employee - requires HR write access
 router.post('/', authorizeHR('write'), async (req, res) => {
   try {
-    console.log('=== CREATE EMPLOYEE DEBUG ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('===========================');
-
     let userId = req.body.user_id;
 
     // If createUserAccount is true, create a new user account
@@ -128,14 +124,6 @@ router.post('/', authorizeHR('write'), async (req, res) => {
 // Update employee - requires HR write access
 router.put('/:id', authorizeHR('write'), async (req, res) => {
   try {
-    console.log('=== UPDATE EMPLOYEE DEBUG ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('createUserAccount:', req.body.createUserAccount);
-    console.log('userPassword:', req.body.userPassword ? '[SET]' : '[NOT SET]');
-    console.log('first_name:', req.body.first_name);
-    console.log('last_name:', req.body.last_name);
-    console.log('===========================');
-
     // Verify employee belongs to tenant first
     const existingEmployee = await Employee.getByIdAndTenant(req.params.id, req.tenantId);
     if (!existingEmployee) {
