@@ -40,7 +40,7 @@ const opportunities = {
         ps.name as stage_name,
         ps.color as stage_color,
         ps.probability as stage_probability,
-        u.first_name || ' ' || u.last_name as assigned_to_name,
+        e.first_name || ' ' || e.last_name as assigned_to_name,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         c.customer_owner as customer_name,
         fc.customer_facility as facility_customer_name,
@@ -48,7 +48,7 @@ const opportunities = {
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers fc ON o.facility_customer_id = fc.id
@@ -72,11 +72,11 @@ const opportunities = {
           ps.name as stage_name,
           ps.color as stage_color,
           ps.display_order,
-          u.first_name || ' ' || u.last_name as assigned_to_name,
+          e.first_name || ' ' || e.last_name as assigned_to_name,
           (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
         FROM opportunities o
         LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-        LEFT JOIN users u ON o.assigned_to = u.id
+        LEFT JOIN employees e ON o.assigned_to = e.id
         WHERE o.tenant_id = $1
       )
       SELECT
@@ -121,8 +121,8 @@ const opportunities = {
         ps.name as stage_name,
         ps.color as stage_color,
         ps.probability as stage_probability,
-        u.first_name || ' ' || u.last_name as assigned_to_name,
-        u.email as assigned_to_email,
+        e.first_name || ' ' || e.last_name as assigned_to_name,
+        e.email as assigned_to_email,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
         c.customer_facility as customer_name,
@@ -130,7 +130,7 @@ const opportunities = {
         fc.customer_facility as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -153,8 +153,8 @@ const opportunities = {
         ps.name as stage_name,
         ps.color as stage_color,
         ps.probability as stage_probability,
-        u.first_name || ' ' || u.last_name as assigned_to_name,
-        u.email as assigned_to_email,
+        e.first_name || ' ' || e.last_name as assigned_to_name,
+        e.email as assigned_to_email,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
         c.customer_facility as customer_name,
@@ -162,7 +162,7 @@ const opportunities = {
         fc.customer_facility as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
@@ -387,11 +387,11 @@ const opportunities = {
         ps.name as stage_name,
         ps.color as stage_color,
         ps.probability as stage_probability,
-        u.first_name || ' ' || u.last_name as assigned_to_name,
+        e.first_name || ' ' || e.last_name as assigned_to_name,
         creator.first_name || ' ' || creator.last_name as created_by_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
       WHERE o.customer_id = $1 AND o.tenant_id = $2
       ORDER BY o.created_at DESC

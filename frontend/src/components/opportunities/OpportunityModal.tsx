@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
-import { usersApi, User } from '../../services/users';
+import { employeesApi, Employee } from '../../services/employees';
 import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
+import SearchableSelect from '../SearchableSelect';
 import VoiceNoteButton from './VoiceNoteButton';
 import ActivityTimeline from './ActivityTimeline';
 import QuickActions from './QuickActions';
@@ -56,13 +57,18 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const [linkToExistingGC, setLinkToExistingGC] = useState(!!opportunity?.gc_customer_id);
   const [linkToExistingFacility, setLinkToExistingFacility] = useState(!!opportunity?.facility_customer_id);
 
-  // Fetch users for assignment
-  const { data: usersResponse } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll()
+  // Fetch active employees for assignment
+  const { data: employeesResponse } = useQuery({
+    queryKey: ['employees', 'active'],
+    queryFn: () => employeesApi.getAll({ employmentStatus: 'active' })
   });
 
-  const users: User[] = usersResponse?.data || [];
+  const employees: Employee[] = (employeesResponse?.data as any)?.data || [];
+
+  const employeeOptions = employees.map((emp: Employee) => ({
+    value: emp.id,
+    label: `${emp.first_name} ${emp.last_name}${emp.job_title ? ` - ${emp.job_title}` : ''}`
+  }));
 
   // Fetch pipeline stages
   const { data: stages = [] } = useQuery({
@@ -656,19 +662,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="assigned_to">Assign To</label>
-                    <select
-                      id="assigned_to"
-                      name="assigned_to"
-                      value={formData.assigned_to}
-                      onChange={handleChange}
-                    >
-                      <option value="">Unassigned</option>
-                      {users.map((user: User) => (
-                        <option key={user.id} value={user.id}>
-                          {user.first_name} {user.last_name}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      options={employeeOptions}
+                      value={formData.assigned_to?.toString() || ''}
+                      onChange={(val) => setFormData(prev => ({ ...prev, assigned_to: val }))}
+                      placeholder="Unassigned"
+                    />
                   </div>
 
                   <div className="form-group">
