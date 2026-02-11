@@ -83,8 +83,8 @@ const Dashboard: React.FC = () => {
   const currentEmployeeId = currentEmployeeResponse?.data?.id;
 
   // Fetch team member IDs (for "My Team" filtering)
-  // employeeIds: for project filtering (manager_id references employees)
-  // userIds: for opportunity/estimate filtering (assigned_to/estimator_id reference users)
+  // employeeIds: for project and opportunity filtering (manager_id and assigned_to reference employees)
+  // userIds: for estimate filtering (estimator_id references users, but falling back to employeeIds)
   // names: for matching estimates by estimator_name text field
   const { data: teamMemberIdsResponse } = useQuery({
     queryKey: ['my-team-member-ids'],
@@ -138,16 +138,16 @@ const Dashboard: React.FC = () => {
 
     switch (viewScope) {
       case 'my':
-        // Filter to user's opportunities only
-        return allOpportunities.filter((o: any) => o.assigned_to === user?.id);
+        // Filter to user's opportunities (assigned_to references employees now)
+        return allOpportunities.filter((o: any) => Number(o.assigned_to) === Number(currentEmployeeId));
       case 'team':
-        // Filter to opportunities assigned to any team member (using user IDs)
-        return allOpportunities.filter((o: any) => teamMemberUserIds.map(Number).includes(Number(o.assigned_to)));
+        // Filter to opportunities assigned to any team member (using employee IDs)
+        return allOpportunities.filter((o: any) => teamMemberEmployeeIds.map(Number).includes(Number(o.assigned_to)));
       case 'company':
       default:
         return allOpportunities;
     }
-  }, [allOpportunities, viewScope, user?.id, teamMemberUserIds]);
+  }, [allOpportunities, viewScope, currentEmployeeId, teamMemberEmployeeIds]);
 
   // Filter estimates based on view scope
   const estimates = React.useMemo(() => {
@@ -194,7 +194,10 @@ const Dashboard: React.FC = () => {
   }, [allEstimates, viewScope, user, currentEmployeeId, teamMemberEmployeeIds, teamMemberUserIds, teamMemberNames]);
 
   // Computed values from filtered data
-  const activeProjects = projects?.filter((p: any) => p.status === 'active') || [];
+  // Include both 'active' and 'Open' statuses (Open is from Vista imports)
+  const activeProjects = projects?.filter((p: any) =>
+    p.status === 'active' || p.status === 'Open'
+  ) || [];
   const totalProjects = projects?.length || 0;
 
   const pipelineValue = opportunities?.reduce((sum: number, opp: any) => {
