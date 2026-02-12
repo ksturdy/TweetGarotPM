@@ -7,10 +7,10 @@ const MarketingList: React.FC = () => {
     {
       name: 'Proposals',
       icon: '📝',
-      path: '/marketing/proposals',
+      path: '/proposals',
       desc: 'Sales proposals & pitches',
       color: '#3b82f6',
-      ready: false,
+      ready: true,
     },
     {
       name: 'Branding',
@@ -39,10 +39,34 @@ const MarketingList: React.FC = () => {
     {
       name: 'Case Studies',
       icon: '📊',
-      path: '/marketing/case-studies',
+      path: '/case-studies',
       desc: 'Success stories & testimonials',
       color: '#10b981',
-      ready: false,
+      ready: true,
+    },
+    {
+      name: 'Service Offerings',
+      icon: '🔧',
+      path: '/settings/service-offerings',
+      desc: 'Service catalog & capabilities',
+      color: '#3b82f6',
+      ready: true,
+    },
+    {
+      name: 'Employee Resumes',
+      icon: '👥',
+      path: '/employee-resumes',
+      desc: 'Team profiles for proposals',
+      color: '#8b5cf6',
+      ready: true,
+    },
+    {
+      name: 'Proposal Templates',
+      icon: '📄',
+      path: '/proposal-templates',
+      desc: 'Reusable proposal templates',
+      color: '#06b6d4',
+      ready: true,
     },
     {
       name: 'Social Media',
@@ -154,6 +178,7 @@ const MarketingList: React.FC = () => {
             onClick={(e) => !category.ready && e.preventDefault()}
           >
             {!category.ready && <span className="coming-soon-badge">Coming Soon</span>}
+            {category.ready && <span className="in-dev-badge">In Development</span>}
             <div className="category-icon-wrapper">
               <div className="category-icon">{category.icon}</div>
             </div>
@@ -170,7 +195,7 @@ const MarketingList: React.FC = () => {
         <div className="stat-card card">
           <div className="stat-icon">🎯</div>
           <div>
-            <div className="stat-value">16</div>
+            <div className="stat-value">19</div>
             <div className="stat-label">Active Categories</div>
           </div>
         </div>

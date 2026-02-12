@@ -1,19 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Line, Doughnut } from 'react-chartjs-2';
+import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
   Filler
 } from 'chart.js';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { useQuery } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
@@ -28,7 +27,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
@@ -499,31 +498,23 @@ const SalesPipeline: React.FC = () => {
     return colors[sector] || '#6b7280';
   };
 
-  const marketChartData = {
+  // Market bar chart data
+  const marketBarChartData = {
     labels: marketSectors,
     datasets: [
       {
+        label: 'Pipeline Value',
         data: marketSectors.map(sector => marketData[sector].value),
         backgroundColor: marketSectors.map(sector => getSectorColor(sector)),
-        borderWidth: 2,
-        borderColor: '#ffffff'
+        borderRadius: 6,
+        barThickness: 40
       }
     ]
   };
 
-  const doughnutOptions: any = {
+  const marketBarChartOptions = {
     responsive: true,
-    maintainAspectRatio: true,
-    aspectRatio: 1.8,
-    cutout: '65%',
-    layout: {
-      padding: {
-        top: 10,
-        right: 5,
-        bottom: 10,
-        left: 10
-      }
-    },
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         display: false
@@ -533,32 +524,29 @@ const SalesPipeline: React.FC = () => {
         callbacks: {
           label: function(context: any) {
             const sector = context.label;
-            const value = formatCurrency(context.parsed);
-            const count = marketData[sector].count;
+            const value = formatCurrency(context.parsed.y);
+            const count = marketData[sector]?.count || 0;
             return `${sector}: ${value} (${count} opportunities)`;
           }
         }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: 'rgba(0, 0, 0, 0.05)'
+        },
+        ticks: {
+          callback: function(value: any) {
+            return formatCurrency(value);
+          }
+        }
       },
-      datalabels: {
-        display: true,
-        color: function(context: any) {
-          return getSectorColor(context.chart.data.labels[context.dataIndex]);
-        },
-        font: {
-          size: 9,
-          weight: 'bold'
-        },
-        formatter: function(value: number, context: any) {
-          const sector = context.chart.data.labels[context.dataIndex];
-          const count = marketData[sector].count;
-          const formattedValue = formatCurrency(value);
-          return `${sector}\nQty: ${count}\n${formattedValue}`;
-        },
-        anchor: 'end',
-        align: 'end',
-        offset: 5,
-        textAlign: 'left',
-        clamp: false
+      x: {
+        grid: {
+          display: false
+        }
       }
     }
   };
@@ -849,10 +837,7 @@ const SalesPipeline: React.FC = () => {
             </div>
           </div>
           <div className="sales-chart-container">
-            <div className="sales-market-chart-full">
-              {/* @ts-ignore */}
-              <Doughnut data={marketChartData} options={doughnutOptions} plugins={[ChartDataLabels]} />
-            </div>
+            <Bar data={marketBarChartData} options={marketBarChartOptions} />
           </div>
         </div>
       </div>

@@ -60,6 +60,11 @@ const dashboardRoutes = require('./routes/dashboard');
 const budgetGeneratorRoutes = require('./routes/budgetGenerator');
 const budgetRoutes = require('./routes/budgets');
 const vistaDataRoutes = require('./routes/vistaData');
+const caseStudyRoutes = require('./routes/caseStudies');
+const serviceOfferingRoutes = require('./routes/serviceOfferings');
+const employeeResumeRoutes = require('./routes/employeeResumes');
+const proposalTemplateRoutes = require('./routes/proposalTemplates');
+const proposalRoutes = require('./routes/proposals');
 
 const app = express();
 
@@ -153,6 +158,11 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budget-generator', budgetGeneratorRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/vista', vistaDataRoutes);
+app.use('/api/case-studies', caseStudyRoutes);
+app.use('/api/service-offerings', serviceOfferingRoutes);
+app.use('/api/employee-resumes', employeeResumeRoutes);
+app.use('/api/proposal-templates', proposalTemplateRoutes);
+app.use('/api/proposals', proposalRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

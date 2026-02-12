@@ -28,6 +28,17 @@ import DailyReportList from './pages/dailyReports/DailyReportList';
 import ScheduleView from './pages/schedule/ScheduleView';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
+import CaseStudyList from './pages/marketing/CaseStudyList';
+import CaseStudyForm from './pages/marketing/CaseStudyForm';
+import CaseStudyDetail from './pages/marketing/CaseStudyDetail';
+import ServiceOfferingList from './pages/settings/ServiceOfferingList';
+import EmployeeResumeList from './pages/hr/EmployeeResumeList';
+import EmployeeResumeForm from './pages/hr/EmployeeResumeForm';
+import ProposalTemplateList from './pages/marketing/ProposalTemplateList';
+import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
+import ProposalList from './pages/marketing/ProposalList';
+import ProposalDetail from './pages/marketing/ProposalDetail';
+import ProposalCreate from './pages/marketing/ProposalCreate';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -174,6 +185,15 @@ const App: React.FC = () => {
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
+                <Route path="/case-studies" element={<CaseStudyList />} />
+                <Route path="/case-studies/create" element={<CaseStudyForm />} />
+                <Route path="/case-studies/:id" element={<CaseStudyDetail />} />
+                <Route path="/proposal-templates" element={<ProposalTemplateList />} />
+                <Route path="/proposal-templates/create" element={<ProposalTemplateForm />} />
+                <Route path="/proposal-templates/:id" element={<ProposalTemplateForm />} />
+                <Route path="/proposals" element={<ProposalList />} />
+                <Route path="/proposals/create" element={<ProposalCreate />} />
+                <Route path="/proposals/:id" element={<ProposalDetail />} />
                 <Route path="/estimating" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />
                 <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />
@@ -207,6 +227,13 @@ const App: React.FC = () => {
                 <Route path="/settings" element={<TenantSettings />} />
                 <Route path="/settings/vista-data" element={<VistaDataSettings />} />
                 <Route path="/settings/vista-data/linking" element={<VistaLinkingManager />} />
+                <Route path="/settings/service-offerings" element={<ServiceOfferingList />} />
+
+                {/* HR Routes */}
+                <Route path="/employee-resumes" element={<EmployeeResumeList />} />
+                <Route path="/employee-resumes/create" element={<EmployeeResumeForm />} />
+                <Route path="/employee-resumes/:id" element={<EmployeeResumeForm />} />
+
                 <Route path="/feedback" element={<FeedbackPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
