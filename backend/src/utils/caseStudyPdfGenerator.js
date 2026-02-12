@@ -354,16 +354,19 @@ function generateCaseStudyPdfHtml(caseStudy, template = null, images = [], logoB
 }
 
 function getImageSrc(image) {
-  // For PDF generation, images need to be accessible via absolute URL or file path
+  // Prefer resolved image_url (R2 public URL or local path)
+  if (image.image_url) {
+    if (image.image_url.startsWith('http')) return image.image_url;
+    return image.image_url;
+  }
+  // Fallback to file_path
   const filePath = image.file_path || '';
+  if (filePath.startsWith('http')) return filePath;
   const normalized = filePath.replace(/\\/g, '/');
   const idx = normalized.indexOf('uploads/');
   if (idx !== -1) {
-    // Return the absolute file path for Puppeteer to load locally
     return 'file:///' + normalized;
   }
-  // If it's already a URL (R2), use as-is
-  if (filePath.startsWith('http')) return filePath;
   return filePath;
 }
 

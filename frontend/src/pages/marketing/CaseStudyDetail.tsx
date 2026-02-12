@@ -7,6 +7,9 @@ import CaseStudyForm from './CaseStudyForm';
 import CaseStudyPreviewModal from '../../components/caseStudies/CaseStudyPreviewModal';
 
 const getImageUrl = (filePath: string) => {
+  if (!filePath) return '';
+  // If already a full URL (R2 or presigned), use as-is
+  if (filePath.startsWith('http')) return filePath;
   const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
   if (idx !== -1) {
     return '/' + filePath.replace(/\\/g, '/').substring(idx);
@@ -338,7 +341,7 @@ const CaseStudyDetail: React.FC = () => {
                 }}
               >
                 <img
-                  src={getImageUrl(image.file_path)}
+                  src={image.image_url || getImageUrl(image.file_path)}
                   alt={image.caption || 'Case study image'}
                   style={{
                     width: '100%',

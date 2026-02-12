@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
 
 const getImageUrl = (filePath: string) => {
+  if (!filePath) return '';
+  // If already a full URL (R2 or presigned), use as-is
+  if (filePath.startsWith('http')) return filePath;
   // Handle absolute paths stored by multer (e.g. C:\...\uploads\case-studies\file.jpg)
   const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
   if (idx !== -1) {
@@ -158,13 +161,13 @@ const CaseStudyList: React.FC = () => {
               }}
             >
               {/* Hero Image */}
-              {caseStudy.hero_image_path && (
+              {(caseStudy.hero_image_url || caseStudy.hero_image_path) && (
                 <div
                   style={{
                     width: '100%',
                     height: '200px',
                     backgroundColor: '#f3f4f6',
-                    backgroundImage: `url(${getImageUrl(caseStudy.hero_image_path!)})`,
+                    backgroundImage: `url(${caseStudy.hero_image_url || getImageUrl(caseStudy.hero_image_path!)})`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                   }}
@@ -352,7 +355,7 @@ const CaseStudyList: React.FC = () => {
                         }}
                       >
                         <img
-                          src={getImageUrl(img.file_path)}
+                          src={img.image_url || getImageUrl(img.file_path)}
                           alt=""
                           style={{
                             width: '100%',

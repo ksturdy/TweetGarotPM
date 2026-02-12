@@ -39,7 +39,8 @@ export interface CaseStudy {
   updated_at: string;
   image_count?: number;
   hero_image_path?: string;
-  images?: { id: number; file_path: string; is_hero_image: boolean; caption?: string }[];
+  hero_image_url?: string;
+  images?: { id: number; file_path: string; image_url?: string; is_hero_image: boolean; caption?: string }[];
 }
 
 export interface CaseStudyImage {

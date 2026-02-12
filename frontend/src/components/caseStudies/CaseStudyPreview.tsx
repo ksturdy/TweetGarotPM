@@ -15,6 +15,8 @@ const DEFAULT_SECTIONS: LayoutSection[] = [
 ];
 
 const getImageUrl = (filePath: string) => {
+  if (!filePath) return '';
+  if (filePath.startsWith('http')) return filePath;
   const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
   if (idx !== -1) {
     return '/' + filePath.replace(/\\/g, '/').substring(idx);
@@ -151,7 +153,7 @@ const CaseStudyPreview: React.FC<CaseStudyPreviewProps> = ({ caseStudy, template
           {heroImage && (
             <div style={{ marginBottom: '10px' }}>
               <img
-                src={getImageUrl((heroImage as any).file_path)}
+                src={(heroImage as any).image_url || getImageUrl((heroImage as any).file_path)}
                 alt="Hero"
                 style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' as const, borderRadius: '4px' }}
               />
@@ -162,7 +164,7 @@ const CaseStudyPreview: React.FC<CaseStudyPreviewProps> = ({ caseStudy, template
               {otherImages.map((img: any) => (
                 <img
                   key={img.id}
-                  src={getImageUrl(img.file_path)}
+                  src={img.image_url || getImageUrl(img.file_path)}
                   alt={img.caption || ''}
                   style={{ width: '100%', height: '150px', objectFit: 'cover' as const, borderRadius: '4px' }}
                 />

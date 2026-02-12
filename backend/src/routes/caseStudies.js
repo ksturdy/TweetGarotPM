@@ -38,7 +38,16 @@ router.get('/', async (req, res) => {
     if (project_id) filters.project_id = parseInt(project_id);
 
     const caseStudies = await CaseStudy.findAllByTenant(req.tenantId, filters);
-    res.json(caseStudies);
+
+    // Resolve hero image URLs for list display
+    const withUrls = await Promise.all(
+      caseStudies.map(async (cs) => ({
+        ...cs,
+        hero_image_url: cs.hero_image_path ? await getFileUrl(cs.hero_image_path) : null,
+      }))
+    );
+
+    res.json(withUrls);
   } catch (error) {
     console.error('Error fetching case studies:', error);
     res.status(500).json({ error: 'Failed to fetch case studies' });
@@ -53,7 +62,13 @@ router.get('/featured', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 6;
     const caseStudies = await CaseStudy.getFeatured(req.tenantId, limit);
-    res.json(caseStudies);
+    const withUrls = await Promise.all(
+      caseStudies.map(async (cs) => ({
+        ...cs,
+        hero_image_url: cs.hero_image_path ? await getFileUrl(cs.hero_image_path) : null,
+      }))
+    );
+    res.json(withUrls);
   } catch (error) {
     console.error('Error fetching featured case studies:', error);
     res.status(500).json({ error: 'Failed to fetch featured case studies' });
@@ -71,10 +86,16 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Case study not found' });
     }
 
-    // Get images for this case study
+    // Get images for this case study, with resolved URLs
     const images = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    const imagesWithUrls = await Promise.all(
+      images.map(async (img) => ({
+        ...img,
+        image_url: await getFileUrl(img.file_path),
+      }))
+    );
 
-    res.json({ ...caseStudy, images });
+    res.json({ ...caseStudy, images: imagesWithUrls });
   } catch (error) {
     console.error('Error fetching case study:', error);
     res.status(500).json({ error: 'Failed to fetch case study' });
@@ -228,7 +249,10 @@ router.get('/:id/pdf', async (req, res) => {
       return res.status(404).json({ error: 'Case study not found' });
     }
 
-    const images = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    const rawImages = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    const images = await Promise.all(
+      rawImages.map(async (img) => ({ ...img, image_url: await getFileUrl(img.file_path) }))
+    );
     let template = null;
     if (caseStudy.template_id) {
       template = await CaseStudyTemplate.findByIdAndTenant(caseStudy.template_id, req.tenantId);
@@ -255,7 +279,10 @@ router.get('/:id/pdf-download', async (req, res) => {
       return res.status(404).json({ error: 'Case study not found' });
     }
 
-    const images = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    const rawImages = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    const images = await Promise.all(
+      rawImages.map(async (img) => ({ ...img, image_url: await getFileUrl(img.file_path) }))
+    );
     let template = null;
     if (caseStudy.template_id) {
       template = await CaseStudyTemplate.findByIdAndTenant(caseStudy.template_id, req.tenantId);
