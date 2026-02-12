@@ -72,6 +72,10 @@ const CaseStudy = {
     const result = await db.query(
       `SELECT cs.*,
               p.name as project_name,
+              p.contract_value as project_value,
+              p.start_date as project_start_date,
+              p.end_date as project_end_date,
+              p.square_footage as project_square_footage,
               c.customer_owner as customer_name,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
               CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name
@@ -93,9 +97,15 @@ const CaseStudy = {
     let query = `
       SELECT cs.*,
              p.name as project_name,
+             p.contract_value as project_value,
+             p.start_date as project_start_date,
+             p.end_date as project_end_date,
+             p.square_footage as project_square_footage,
              c.customer_owner as customer_name,
              CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
-             (SELECT COUNT(*) FROM case_study_images WHERE case_study_id = cs.id) as image_count
+             (SELECT COUNT(*) FROM case_study_images WHERE case_study_id = cs.id) as image_count,
+             (SELECT json_agg(json_build_object('id', csi.id, 'file_path', csi.file_path, 'is_hero_image', csi.is_hero_image) ORDER BY csi.display_order)
+              FROM case_study_images csi WHERE csi.case_study_id = cs.id) as images
       FROM case_studies cs
       LEFT JOIN projects p ON cs.project_id = p.id
       LEFT JOIN customers c ON cs.customer_id = c.id

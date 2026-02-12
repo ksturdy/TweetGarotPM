@@ -4,6 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi } from '../../services/caseStudies';
 import CaseStudyForm from './CaseStudyForm';
 
+const getImageUrl = (filePath: string) => {
+  const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
+  if (idx !== -1) {
+    return '/' + filePath.replace(/\\/g, '/').substring(idx);
+  }
+  return `/uploads/${filePath}`;
+};
+
 const CaseStudyDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -15,30 +23,6 @@ const CaseStudyDetail: React.FC = () => {
     queryKey: ['caseStudy', id],
     queryFn: () => caseStudiesApi.getById(parseInt(id!)).then(res => res.data),
     enabled: !!id,
-  });
-
-  const publishMutation = useMutation({
-    mutationFn: () => caseStudiesApi.publish(parseInt(id!)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
-      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
-    },
-  });
-
-  const submitForReviewMutation = useMutation({
-    mutationFn: () => caseStudiesApi.submitForReview(parseInt(id!)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
-      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
-    },
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: () => caseStudiesApi.archive(parseInt(id!)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
-      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
-    },
   });
 
   const deleteImageMutation = useMutation({
@@ -110,23 +94,19 @@ const CaseStudyDetail: React.FC = () => {
       {/* Header */}
       <div className="section-header" style={{ marginBottom: '2rem' }}>
         <div>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <span className={getStatusBadge(caseStudy.status)}>
-              {formatStatus(caseStudy.status)}
-            </span>
-            {caseStudy.featured && (
+          {caseStudy.featured && (
+            <div style={{ marginBottom: '0.5rem' }}>
               <span
                 className="badge"
                 style={{
-                  marginLeft: '0.5rem',
                   backgroundColor: '#fbbf24',
                   color: '#78350f',
                 }}
               >
                 Featured
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>
             {caseStudy.title}
           </h1>
@@ -145,43 +125,13 @@ const CaseStudyDetail: React.FC = () => {
             Back
           </button>
 
-          {caseStudy.status === 'draft' && (
-            <>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setIsEditing(true)}
-              >
-                Edit
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => submitForReviewMutation.mutate()}
-                disabled={submitForReviewMutation.isPending}
-              >
-                Submit for Review
-              </button>
-            </>
-          )}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsEditing(true)}
+          >
+            Edit
+          </button>
 
-          {caseStudy.status === 'under_review' && (
-            <button
-              className="btn btn-success"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              Publish
-            </button>
-          )}
-
-          {caseStudy.status === 'published' && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => archiveMutation.mutate()}
-              disabled={archiveMutation.isPending}
-            >
-              Archive
-            </button>
-          )}
         </div>
       </div>
 
@@ -219,6 +169,38 @@ const CaseStudyDetail: React.FC = () => {
                 Market
               </div>
               <div style={{ fontWeight: 600 }}>{caseStudy.market}</div>
+            </div>
+          )}
+          {caseStudy.project_value && (
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                Project Value
+              </div>
+              <div style={{ fontWeight: 600 }}>
+                ${Number(caseStudy.project_value).toLocaleString()}
+              </div>
+            </div>
+          )}
+          {caseStudy.project_square_footage && (
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                Square Footage
+              </div>
+              <div style={{ fontWeight: 600 }}>
+                {Number(caseStudy.project_square_footage).toLocaleString()} SF
+              </div>
+            </div>
+          )}
+          {(caseStudy.project_start_date || caseStudy.project_end_date) && (
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                Project Dates
+              </div>
+              <div style={{ fontWeight: 600 }}>
+                {caseStudy.project_start_date && new Date(caseStudy.project_start_date).toLocaleDateString()}
+                {caseStudy.project_start_date && caseStudy.project_end_date && ' – '}
+                {caseStudy.project_end_date && new Date(caseStudy.project_end_date).toLocaleDateString()}
+              </div>
             </div>
           )}
         </div>
@@ -339,7 +321,7 @@ const CaseStudyDetail: React.FC = () => {
                 }}
               >
                 <img
-                  src={`/uploads/${image.file_path}`}
+                  src={getImageUrl(image.file_path)}
                   alt={image.caption || 'Case study image'}
                   style={{
                     width: '100%',

@@ -3,6 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
 
+const getImageUrl = (filePath: string) => {
+  // Handle absolute paths stored by multer (e.g. C:\...\uploads\case-studies\file.jpg)
+  const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
+  if (idx !== -1) {
+    return '/' + filePath.replace(/\\/g, '/').substring(idx);
+  }
+  return `/uploads/${filePath}`;
+};
+
 const CaseStudyList: React.FC = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -155,7 +164,7 @@ const CaseStudyList: React.FC = () => {
                     width: '100%',
                     height: '200px',
                     backgroundColor: '#f3f4f6',
-                    backgroundImage: `url(/uploads/${caseStudy.hero_image_path})`,
+                    backgroundImage: `url(${getImageUrl(caseStudy.hero_image_path!)})`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                   }}
@@ -225,10 +234,10 @@ const CaseStudyList: React.FC = () => {
                   )}
                 </div>
 
-                {/* Metrics */}
-                {(caseStudy.cost_savings ||
-                  caseStudy.timeline_improvement_days ||
-                  caseStudy.quality_score) && (
+                {/* Project Metrics */}
+                {(caseStudy.project_value ||
+                  caseStudy.project_square_footage ||
+                  caseStudy.project_start_date) && (
                   <div
                     style={{
                       display: 'grid',
@@ -240,7 +249,7 @@ const CaseStudyList: React.FC = () => {
                       marginBottom: '1rem',
                     }}
                   >
-                    {caseStudy.cost_savings && (
+                    {caseStudy.project_value && (
                       <div style={{ textAlign: 'center' }}>
                         <div
                           style={{
@@ -249,7 +258,9 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--success)',
                           }}
                         >
-                          ${(caseStudy.cost_savings / 1000).toFixed(0)}K
+                          ${Number(caseStudy.project_value) >= 1000000
+                            ? (Number(caseStudy.project_value) / 1000000).toFixed(1) + 'M'
+                            : (Number(caseStudy.project_value) / 1000).toFixed(0) + 'K'}
                         </div>
                         <div
                           style={{
@@ -257,11 +268,11 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--secondary)',
                           }}
                         >
-                          Savings
+                          Value
                         </div>
                       </div>
                     )}
-                    {caseStudy.timeline_improvement_days && (
+                    {caseStudy.project_square_footage && (
                       <div style={{ textAlign: 'center' }}>
                         <div
                           style={{
@@ -270,7 +281,7 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--primary)',
                           }}
                         >
-                          {caseStudy.timeline_improvement_days}d
+                          {Number(caseStudy.project_square_footage).toLocaleString()}
                         </div>
                         <div
                           style={{
@@ -278,11 +289,11 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--secondary)',
                           }}
                         >
-                          Faster
+                          SF
                         </div>
                       </div>
                     )}
-                    {caseStudy.quality_score && (
+                    {caseStudy.project_start_date && (
                       <div style={{ textAlign: 'center' }}>
                         <div
                           style={{
@@ -291,7 +302,7 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--warning)',
                           }}
                         >
-                          {caseStudy.quality_score}%
+                          {new Date(caseStudy.project_start_date).getFullYear()}
                         </div>
                         <div
                           style={{
@@ -299,27 +310,79 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--secondary)',
                           }}
                         >
-                          Quality
+                          Year
                         </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Market & Images count */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '0.875rem',
-                    color: 'var(--secondary)',
-                  }}
-                >
-                  {caseStudy.market && <span>{caseStudy.market}</span>}
-                  {caseStudy.image_count !== undefined && (
-                    <span>{caseStudy.image_count} images</span>
-                  )}
-                </div>
+                {/* Market */}
+                {caseStudy.market && (
+                  <div
+                    style={{
+                      fontSize: '0.875rem',
+                      color: 'var(--secondary)',
+                      marginBottom: caseStudy.images?.length ? '0.75rem' : 0,
+                    }}
+                  >
+                    {caseStudy.market}
+                  </div>
+                )}
+
+                {/* Image Thumbnails */}
+                {caseStudy.images && caseStudy.images.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {caseStudy.images.slice(0, 5).map((img) => (
+                      <div
+                        key={img.id}
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          backgroundColor: '#f3f4f6',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <img
+                          src={getImageUrl(img.file_path)}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {caseStudy.images.length > 5 && (
+                      <div
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '6px',
+                          backgroundColor: '#f3f4f6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          color: 'var(--secondary)',
+                          fontWeight: 600,
+                          flexShrink: 0,
+                        }}
+                      >
+                        +{caseStudy.images.length - 5}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}

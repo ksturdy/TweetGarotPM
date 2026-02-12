@@ -7,6 +7,10 @@ export interface CaseStudy {
   subtitle?: string;
   project_id?: number;
   project_name?: string;
+  project_value?: number;
+  project_start_date?: string;
+  project_end_date?: string;
+  project_square_footage?: number;
   customer_id?: number;
   customer_name?: string;
   challenge: string;
@@ -33,6 +37,7 @@ export interface CaseStudy {
   updated_at: string;
   image_count?: number;
   hero_image_path?: string;
+  images?: { id: number; file_path: string; is_hero_image: boolean; caption?: string }[];
 }
 
 export interface CaseStudyImage {
