@@ -28,6 +28,8 @@ export interface CaseStudy {
   status: 'draft' | 'under_review' | 'published' | 'archived';
   featured: boolean;
   display_order?: number;
+  template_id?: number;
+  template_name?: string;
   created_by: number;
   created_by_name?: string;
   reviewed_by?: number;
@@ -100,4 +102,8 @@ export const caseStudiesApi = {
 
   downloadImage: (imageId: number) =>
     api.get(`/case-studies/images/${imageId}/download`, { responseType: 'blob' }),
+
+  // PDF
+  downloadPdf: (id: number) =>
+    api.get(`/case-studies/${id}/pdf-download`, { responseType: 'blob' }),
 };

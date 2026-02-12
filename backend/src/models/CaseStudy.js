@@ -22,6 +22,7 @@ const CaseStudy = {
       construction_type,
       project_size,
       services_provided,
+      template_id,
       created_by
     } = data;
 
@@ -30,15 +31,15 @@ const CaseStudy = {
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics, market, construction_type, project_size, services_provided,
-        created_by, tenant_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        template_id, created_by, tenant_id, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size,
-        services_provided, created_by, tenantId, 'draft'
+        services_provided, template_id || null, created_by, tenantId, 'draft'
       ]
     );
     return result.rows[0];
@@ -78,12 +79,14 @@ const CaseStudy = {
               p.square_footage as project_square_footage,
               c.customer_owner as customer_name,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
-              CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name
+              CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name,
+              cst.name as template_name
        FROM case_studies cs
        LEFT JOIN projects p ON cs.project_id = p.id
        LEFT JOIN customers c ON cs.customer_id = c.id
        LEFT JOIN users u ON cs.created_by = u.id
        LEFT JOIN users r ON cs.reviewed_by = r.id
+       LEFT JOIN case_study_templates cst ON cs.template_id = cst.id
        WHERE cs.id = $1 AND cs.tenant_id = $2`,
       [id, tenantId]
     );
@@ -103,6 +106,7 @@ const CaseStudy = {
              p.square_footage as project_square_footage,
              c.customer_owner as customer_name,
              CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
+             cst.name as template_name,
              (SELECT COUNT(*) FROM case_study_images WHERE case_study_id = cs.id) as image_count,
              (SELECT json_agg(json_build_object('id', csi.id, 'file_path', csi.file_path, 'is_hero_image', csi.is_hero_image) ORDER BY csi.display_order)
               FROM case_study_images csi WHERE csi.case_study_id = cs.id) as images
@@ -110,6 +114,7 @@ const CaseStudy = {
       LEFT JOIN projects p ON cs.project_id = p.id
       LEFT JOIN customers c ON cs.customer_id = c.id
       LEFT JOIN users u ON cs.created_by = u.id
+      LEFT JOIN case_study_templates cst ON cs.template_id = cst.id
       WHERE cs.tenant_id = $1
     `;
     const params = [tenantId];
@@ -166,6 +171,7 @@ const CaseStudy = {
       construction_type,
       project_size,
       services_provided,
+      template_id,
       featured,
       display_order
     } = data;
@@ -188,17 +194,18 @@ const CaseStudy = {
         construction_type = COALESCE($14, construction_type),
         project_size = COALESCE($15, project_size),
         services_provided = COALESCE($16, services_provided),
-        featured = COALESCE($17, featured),
-        display_order = COALESCE($18, display_order),
+        template_id = $17,
+        featured = COALESCE($18, featured),
+        display_order = COALESCE($19, display_order),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $19 AND tenant_id = $20
+       WHERE id = $20 AND tenant_id = $21
        RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size, services_provided,
-        featured, display_order, id, tenantId
+        template_id || null, featured, display_order, id, tenantId
       ]
     );
     return result.rows[0];

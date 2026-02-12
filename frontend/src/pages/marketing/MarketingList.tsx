@@ -45,6 +45,14 @@ const MarketingList: React.FC = () => {
       ready: true,
     },
     {
+      name: 'Case Study Templates',
+      icon: '📋',
+      path: '/case-study-templates',
+      desc: 'Layout templates for case studies',
+      color: '#059669',
+      ready: true,
+    },
+    {
       name: 'Service Offerings',
       icon: '🔧',
       path: '/settings/service-offerings',

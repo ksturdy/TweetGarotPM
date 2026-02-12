@@ -6,6 +6,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const { getFileInfo, deleteFile, getFileUrl } = require('../utils/fileStorage');
+const CaseStudyTemplate = require('../models/CaseStudyTemplate');
+const { generateCaseStudyPdfHtml } = require('../utils/caseStudyPdfGenerator');
+const { generateCaseStudyPdfBuffer } = require('../utils/caseStudyPdfBuffer');
+const { fetchLogoBase64 } = require('../utils/logoFetcher');
 
 // Configure upload middleware for case study images
 const caseStudyImageUpload = createUploadMiddleware({
@@ -208,6 +212,65 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting case study:', error);
     res.status(500).json({ error: 'Failed to delete case study' });
+  }
+});
+
+// ===== PDF ROUTES =====
+
+/**
+ * GET /api/case-studies/:id/pdf
+ * Get case study as HTML for browser print
+ */
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const caseStudy = await CaseStudy.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!caseStudy) {
+      return res.status(404).json({ error: 'Case study not found' });
+    }
+
+    const images = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    let template = null;
+    if (caseStudy.template_id) {
+      template = await CaseStudyTemplate.findByIdAndTenant(caseStudy.template_id, req.tenantId);
+    }
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+
+    const html = generateCaseStudyPdfHtml(caseStudy, template, images, logoBase64);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error generating case study PDF HTML:', error);
+    res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
+/**
+ * GET /api/case-studies/:id/pdf-download
+ * Download case study as PDF file
+ */
+router.get('/:id/pdf-download', async (req, res) => {
+  try {
+    const caseStudy = await CaseStudy.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!caseStudy) {
+      return res.status(404).json({ error: 'Case study not found' });
+    }
+
+    const images = await CaseStudyImage.findByCaseStudy(caseStudy.id);
+    let template = null;
+    if (caseStudy.template_id) {
+      template = await CaseStudyTemplate.findByIdAndTenant(caseStudy.template_id, req.tenantId);
+    }
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+
+    const pdfBuffer = await generateCaseStudyPdfBuffer(caseStudy, template, images, logoBase64);
+    const filename = `Case-Study-${caseStudy.title.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating case study PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF' });
   }
 });
 

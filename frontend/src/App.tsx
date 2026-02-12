@@ -31,6 +31,8 @@ import MarketingList from './pages/marketing/MarketingList';
 import CaseStudyList from './pages/marketing/CaseStudyList';
 import CaseStudyForm from './pages/marketing/CaseStudyForm';
 import CaseStudyDetail from './pages/marketing/CaseStudyDetail';
+import CaseStudyTemplateList from './pages/marketing/CaseStudyTemplateList';
+import CaseStudyTemplateForm from './pages/marketing/CaseStudyTemplateForm';
 import ServiceOfferingList from './pages/settings/ServiceOfferingList';
 import EmployeeResumeList from './pages/hr/EmployeeResumeList';
 import EmployeeResumeForm from './pages/hr/EmployeeResumeForm';
@@ -188,6 +190,9 @@ const App: React.FC = () => {
                 <Route path="/case-studies" element={<CaseStudyList />} />
                 <Route path="/case-studies/create" element={<CaseStudyForm />} />
                 <Route path="/case-studies/:id" element={<CaseStudyDetail />} />
+                <Route path="/case-study-templates" element={<CaseStudyTemplateList />} />
+                <Route path="/case-study-templates/create" element={<CaseStudyTemplateForm />} />
+                <Route path="/case-study-templates/:id" element={<CaseStudyTemplateForm />} />
                 <Route path="/proposal-templates" element={<ProposalTemplateList />} />
                 <Route path="/proposal-templates/create" element={<ProposalTemplateForm />} />
                 <Route path="/proposal-templates/:id" element={<ProposalTemplateForm />} />

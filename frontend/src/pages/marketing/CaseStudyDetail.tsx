@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi } from '../../services/caseStudies';
+import { caseStudyTemplatesApi } from '../../services/caseStudyTemplates';
 import CaseStudyForm from './CaseStudyForm';
+import CaseStudyPreviewModal from '../../components/caseStudies/CaseStudyPreviewModal';
 
 const getImageUrl = (filePath: string) => {
   const idx = filePath.replace(/\\/g, '/').indexOf('uploads/');
@@ -18,11 +20,19 @@ const CaseStudyDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const { data: caseStudy, isLoading, error } = useQuery({
     queryKey: ['caseStudy', id],
     queryFn: () => caseStudiesApi.getById(parseInt(id!)).then(res => res.data),
     enabled: !!id,
+  });
+
+  // Fetch template if case study has one
+  const { data: template } = useQuery({
+    queryKey: ['caseStudyTemplate', caseStudy?.template_id],
+    queryFn: () => caseStudyTemplatesApi.getById(caseStudy!.template_id!).then(res => res.data),
+    enabled: !!caseStudy?.template_id,
   });
 
   const deleteImageMutation = useMutation({
@@ -130,6 +140,13 @@ const CaseStudyDetail: React.FC = () => {
             onClick={() => setIsEditing(true)}
           >
             Edit
+          </button>
+
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowPreview(true)}
+          >
+            Preview / PDF
           </button>
 
         </div>
@@ -481,6 +498,14 @@ const CaseStudyDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <CaseStudyPreviewModal
+        caseStudy={caseStudy}
+        template={template}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 };

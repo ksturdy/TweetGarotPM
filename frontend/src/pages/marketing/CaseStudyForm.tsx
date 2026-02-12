@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
 import { projectsApi, Project } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
+import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
+import SearchableSelect from '../../components/SearchableSelect';
 
 const CaseStudyForm: React.FC = () => {
   const navigate = useNavigate();
@@ -28,6 +30,7 @@ const CaseStudyForm: React.FC = () => {
     construction_type: '',
     project_size: '',
     services_provided: [] as string[],
+    template_id: '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -50,6 +53,12 @@ const CaseStudyForm: React.FC = () => {
     queryFn: () => customersApi.getAll(),
   });
 
+  // Load templates
+  const { data: templates } = useQuery({
+    queryKey: ['caseStudyTemplates'],
+    queryFn: () => caseStudyTemplatesApi.getAll({ is_active: true }).then(res => res.data),
+  });
+
   useEffect(() => {
     if (caseStudy) {
       setFormData({
@@ -68,6 +77,7 @@ const CaseStudyForm: React.FC = () => {
         construction_type: caseStudy.construction_type || '',
         project_size: caseStudy.project_size || '',
         services_provided: caseStudy.services_provided || [],
+        template_id: caseStudy.template_id?.toString() || '',
       });
     }
   }, [caseStudy]);
@@ -85,7 +95,7 @@ const CaseStudyForm: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
       queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
-      navigate(`/case-studies/${id}`);
+      navigate('/case-studies');
     },
   });
 
@@ -120,6 +130,7 @@ const CaseStudyForm: React.FC = () => {
       ...formData,
       project_id: formData.project_id ? parseInt(formData.project_id) : null,
       customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
+      template_id: formData.template_id ? parseInt(formData.template_id) : null,
       cost_savings: formData.cost_savings ? parseFloat(formData.cost_savings) : null,
       timeline_improvement_days: formData.timeline_improvement_days
         ? parseInt(formData.timeline_improvement_days)
@@ -152,6 +163,23 @@ const CaseStudyForm: React.FC = () => {
   };
 
   const services = ['HVAC', 'Plumbing', 'Sheet Metal', 'Controls', 'Service'];
+
+  const customerOptions = useMemo(
+    () => (customers || []).map((c: Customer) => ({
+      value: c.id,
+      label: [c.customer_owner, c.customer_facility].filter(Boolean).join(' — '),
+      searchText: [c.customer_owner, c.customer_facility].filter(Boolean).join(' '),
+    })),
+    [customers]
+  );
+
+  const projectOptions = useMemo(
+    () => (projects || []).map((p: Project) => ({
+      value: p.id,
+      label: p.name,
+    })),
+    [projects]
+  );
 
   return (
     <div className="container">
@@ -205,39 +233,53 @@ const CaseStudyForm: React.FC = () => {
             />
           </div>
 
+          <div className="form-group">
+            <label className="form-label">Template (for Preview/PDF)</label>
+            <select
+              name="template_id"
+              className="form-input"
+              value={formData.template_id}
+              onChange={handleChange}
+            >
+              <option value="">No Template - Full Detail</option>
+              {templates?.map((t: CaseStudyTemplate) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.is_default ? ' (Default)' : ''}
+                </option>
+              ))}
+            </select>
+            <div style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: '0.25rem' }}>
+              Controls which sections appear in the printed/PDF version
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Customer</label>
-              <select
-                name="customer_id"
-                className="form-input"
+              <SearchableSelect
+                options={customerOptions}
                 value={formData.customer_id}
-                onChange={handleChange}
-              >
-                <option value="">Select Customer</option>
-                {customers?.map((customer: Customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.customer_owner || customer.customer_facility}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => {
+                  setFormData(prev => ({ ...prev, customer_id: val }));
+                  if (errors.customer_id) setErrors(prev => ({ ...prev, customer_id: '' }));
+                }}
+                placeholder="Search customers..."
+                style={{ width: '100%' }}
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Project</label>
-              <select
-                name="project_id"
-                className="form-input"
+              <SearchableSelect
+                options={projectOptions}
                 value={formData.project_id}
-                onChange={handleChange}
-              >
-                <option value="">Select Project</option>
-                {projects?.map((project: Project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => {
+                  setFormData(prev => ({ ...prev, project_id: val }));
+                  if (errors.project_id) setErrors(prev => ({ ...prev, project_id: '' }));
+                }}
+                placeholder="Search projects..."
+                style={{ width: '100%' }}
+              />
             </div>
           </div>
         </div>
