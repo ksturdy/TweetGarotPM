@@ -42,6 +42,43 @@ export interface Proposal {
   updated_at: string;
   section_count?: number;
   sections?: ProposalSection[];
+  case_studies?: ProposalCaseStudy[];
+  service_offerings?: ProposalServiceOffering[];
+  resumes?: ProposalResume[];
+}
+
+export interface ProposalCaseStudy {
+  junction_id: number;
+  id: number;
+  title: string;
+  subtitle?: string;
+  customer_name?: string;
+  market?: string;
+  project_value?: number;
+  case_study_status: string;
+  display_order: number;
+  notes?: string;
+}
+
+export interface ProposalServiceOffering {
+  junction_id: number;
+  id: number;
+  name: string;
+  description?: string;
+  category?: string;
+  icon_name?: string;
+  display_order: number;
+  custom_description?: string;
+}
+
+export interface ProposalResume {
+  junction_id: number;
+  id: number;
+  employee_name: string;
+  job_title: string;
+  summary?: string;
+  display_order: number;
+  role_on_project?: string;
 }
 
 export interface ProposalSection {
@@ -85,4 +122,29 @@ export const proposalsApi = {
 
   updateSection: (id: number, sectionId: number, data: Partial<ProposalSection>) =>
     api.put(`/proposals/${id}/sections/${sectionId}`, data),
+
+  // Case Studies
+  getCaseStudies: (id: number) => api.get(`/proposals/${id}/case-studies`),
+  addCaseStudy: (id: number, caseStudyId: number, data?: { notes?: string }) =>
+    api.post(`/proposals/${id}/case-studies`, { case_study_id: caseStudyId, ...data }),
+  removeCaseStudy: (id: number, caseStudyId: number) =>
+    api.delete(`/proposals/${id}/case-studies/${caseStudyId}`),
+
+  // Service Offerings
+  getServiceOfferings: (id: number) => api.get(`/proposals/${id}/service-offerings`),
+  addServiceOffering: (id: number, serviceOfferingId: number, data?: { custom_description?: string }) =>
+    api.post(`/proposals/${id}/service-offerings`, { service_offering_id: serviceOfferingId, ...data }),
+  removeServiceOffering: (id: number, serviceOfferingId: number) =>
+    api.delete(`/proposals/${id}/service-offerings/${serviceOfferingId}`),
+
+  // Resumes
+  getResumes: (id: number) => api.get(`/proposals/${id}/resumes`),
+  addResume: (id: number, resumeId: number, data?: { role_on_project?: string }) =>
+    api.post(`/proposals/${id}/resumes`, { resume_id: resumeId, ...data }),
+  removeResume: (id: number, resumeId: number) =>
+    api.delete(`/proposals/${id}/resumes/${resumeId}`),
+
+  // PDF
+  downloadPdf: (id: number) =>
+    api.get(`/proposals/${id}/pdf-download`, { responseType: 'blob' }),
 };

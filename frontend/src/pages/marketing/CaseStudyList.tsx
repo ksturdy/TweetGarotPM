@@ -33,7 +33,6 @@ const CaseStudyList: React.FC = () => {
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
       draft: 'badge badge-info',
-      under_review: 'badge badge-warning',
       published: 'badge badge-success',
       archived: 'badge',
     };
@@ -92,7 +91,6 @@ const CaseStudyList: React.FC = () => {
             >
               <option value="">All Statuses</option>
               <option value="draft">Draft</option>
-              <option value="under_review">Under Review</option>
               <option value="published">Published</option>
               <option value="archived">Archived</option>
             </select>

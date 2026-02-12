@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { proposalsApi } from '../../services/proposals';
 import { proposalTemplatesApi } from '../../services/proposalTemplates';
 import { customersApi } from '../../services/customers';
+import { caseStudiesApi } from '../../services/caseStudies';
+import { serviceOfferingsApi } from '../../services/serviceOfferings';
+import { employeeResumesApi } from '../../services/employeeResumes';
 import './ProposalCreate.css';
 
 const ProposalCreate: React.FC = () => {
@@ -26,6 +29,13 @@ const ProposalCreate: React.FC = () => {
     valid_until: '',
   });
 
+  const [selectedCaseStudyIds, setSelectedCaseStudyIds] = useState<number[]>([]);
+  const [selectedServiceOfferingIds, setSelectedServiceOfferingIds] = useState<number[]>([]);
+  const [selectedResumeIds, setSelectedResumeIds] = useState<number[]>([]);
+  const [csSearch, setCsSearch] = useState('');
+  const [soSearch, setSoSearch] = useState('');
+  const [resumeSearch, setResumeSearch] = useState('');
+
   // Fetch templates
   const { data: templates = [] } = useQuery({
     queryKey: ['proposalTemplates'],
@@ -43,6 +53,51 @@ const ProposalCreate: React.FC = () => {
       return response;
     },
   });
+
+  // Fetch published case studies
+  const { data: caseStudies = [] } = useQuery({
+    queryKey: ['caseStudies', { status: 'published' }],
+    queryFn: async () => {
+      const response = await caseStudiesApi.getAll({ status: 'published' });
+      return response.data;
+    },
+  });
+
+  // Fetch active service offerings
+  const { data: serviceOfferings = [] } = useQuery({
+    queryKey: ['serviceOfferings', { is_active: true }],
+    queryFn: async () => {
+      const response = await serviceOfferingsApi.getAll({ is_active: true });
+      return response.data;
+    },
+  });
+
+  // Fetch active resumes
+  const { data: resumes = [] } = useQuery({
+    queryKey: ['employeeResumes', { is_active: true }],
+    queryFn: async () => {
+      const response = await employeeResumesApi.getAll({ is_active: true });
+      return response.data;
+    },
+  });
+
+  const toggleCaseStudy = (id: number) => {
+    setSelectedCaseStudyIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleServiceOffering = (id: number) => {
+    setSelectedServiceOfferingIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleResume = (id: number) => {
+    setSelectedResumeIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   // Create mutation
   const createMutation = useMutation({
@@ -74,6 +129,11 @@ const ProposalCreate: React.FC = () => {
         delete data[key];
       }
     });
+
+    // Include selected attachments
+    if (selectedCaseStudyIds.length > 0) data.case_study_ids = selectedCaseStudyIds;
+    if (selectedServiceOfferingIds.length > 0) data.service_offering_ids = selectedServiceOfferingIds;
+    if (selectedResumeIds.length > 0) data.resume_ids = selectedResumeIds;
 
     createMutation.mutate(data);
   };
@@ -267,6 +327,118 @@ const ProposalCreate: React.FC = () => {
             </div>
           </>
         )}
+
+        {/* Attached Case Studies */}
+        <div className="card">
+          <h2 className="section-title">Case Studies ({selectedCaseStudyIds.length} selected)</h2>
+          <p className="help-text">Select published case studies to include in this proposal</p>
+          <input
+            type="text"
+            className="input search-input"
+            placeholder="Search case studies..."
+            value={csSearch}
+            onChange={(e) => setCsSearch(e.target.value)}
+          />
+          <div className="attachment-checklist">
+            {caseStudies
+              .filter((cs: any) =>
+                !csSearch || cs.title?.toLowerCase().includes(csSearch.toLowerCase()) ||
+                cs.customer_name?.toLowerCase().includes(csSearch.toLowerCase()) ||
+                cs.market?.toLowerCase().includes(csSearch.toLowerCase())
+              )
+              .map((cs: any) => (
+              <label key={cs.id} className={`attachment-item ${selectedCaseStudyIds.includes(cs.id) ? 'selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedCaseStudyIds.includes(cs.id)}
+                  onChange={() => toggleCaseStudy(cs.id)}
+                />
+                <div className="attachment-info">
+                  <div className="attachment-name">{cs.title}</div>
+                  <div className="attachment-meta">
+                    {cs.customer_name}{cs.market ? ` | ${cs.market}` : ''}
+                  </div>
+                </div>
+              </label>
+            ))}
+            {caseStudies.length === 0 && (
+              <p className="empty-text">No published case studies available</p>
+            )}
+          </div>
+        </div>
+
+        {/* Attached Service Offerings */}
+        <div className="card">
+          <h2 className="section-title">Service Offerings ({selectedServiceOfferingIds.length} selected)</h2>
+          <p className="help-text">Select service offerings to include in this proposal</p>
+          <input
+            type="text"
+            className="input search-input"
+            placeholder="Search service offerings..."
+            value={soSearch}
+            onChange={(e) => setSoSearch(e.target.value)}
+          />
+          <div className="attachment-checklist">
+            {serviceOfferings
+              .filter((so: any) =>
+                !soSearch || so.name?.toLowerCase().includes(soSearch.toLowerCase()) ||
+                so.category?.toLowerCase().includes(soSearch.toLowerCase()) ||
+                so.description?.toLowerCase().includes(soSearch.toLowerCase())
+              )
+              .map((so: any) => (
+              <label key={so.id} className={`attachment-item ${selectedServiceOfferingIds.includes(so.id) ? 'selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedServiceOfferingIds.includes(so.id)}
+                  onChange={() => toggleServiceOffering(so.id)}
+                />
+                <div className="attachment-info">
+                  <div className="attachment-name">{so.name}</div>
+                  <div className="attachment-meta">{so.category || 'General'}</div>
+                </div>
+              </label>
+            ))}
+            {serviceOfferings.length === 0 && (
+              <p className="empty-text">No active service offerings available</p>
+            )}
+          </div>
+        </div>
+
+        {/* Attached Team Resumes */}
+        <div className="card">
+          <h2 className="section-title">Team Resumes ({selectedResumeIds.length} selected)</h2>
+          <p className="help-text">Select team member resumes to include in this proposal</p>
+          <input
+            type="text"
+            className="input search-input"
+            placeholder="Search by name or title..."
+            value={resumeSearch}
+            onChange={(e) => setResumeSearch(e.target.value)}
+          />
+          <div className="attachment-checklist">
+            {resumes
+              .filter((r: any) =>
+                !resumeSearch || r.employee_name?.toLowerCase().includes(resumeSearch.toLowerCase()) ||
+                r.job_title?.toLowerCase().includes(resumeSearch.toLowerCase())
+              )
+              .map((r: any) => (
+              <label key={r.id} className={`attachment-item ${selectedResumeIds.includes(r.id) ? 'selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedResumeIds.includes(r.id)}
+                  onChange={() => toggleResume(r.id)}
+                />
+                <div className="attachment-info">
+                  <div className="attachment-name">{r.employee_name}</div>
+                  <div className="attachment-meta">{r.job_title}</div>
+                </div>
+              </label>
+            ))}
+            {resumes.length === 0 && (
+              <p className="empty-text">No active resumes available</p>
+            )}
+          </div>
+        </div>
 
         {/* Form Actions */}
         <div className="form-actions">

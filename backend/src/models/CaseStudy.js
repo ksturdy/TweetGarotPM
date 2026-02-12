@@ -264,6 +264,21 @@ const CaseStudy = {
   },
 
   /**
+   * Un-archive a case study (sets back to draft)
+   */
+  async unarchive(id, tenantId) {
+    const result = await db.query(
+      `UPDATE case_studies SET
+        status = 'draft',
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND tenant_id = $2 AND status = 'archived'
+       RETURNING *`,
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  /**
    * Submit for review (workflow action)
    */
   async submitForReview(id, tenantId) {

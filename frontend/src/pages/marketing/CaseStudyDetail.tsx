@@ -38,6 +38,44 @@ const CaseStudyDetail: React.FC = () => {
     enabled: !!caseStudy?.template_id,
   });
 
+  // Workflow mutations
+  const publishMutation = useMutation({
+    mutationFn: () => caseStudiesApi.publish(parseInt(id!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: () => caseStudiesApi.archive(parseInt(id!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: () => caseStudiesApi.unarchive(parseInt(id!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
+    },
+  });
+
+  const handleWorkflowAction = (action: string) => {
+    const labels: Record<string, string> = {
+      publish: 'publish this case study',
+      archive: 'archive this case study',
+      unarchive: 'un-archive this case study (moves back to draft)',
+    };
+    if (window.confirm(`Are you sure you want to ${labels[action]}?`)) {
+      if (action === 'publish') publishMutation.mutate();
+      if (action === 'archive') archiveMutation.mutate();
+      if (action === 'unarchive') unarchiveMutation.mutate();
+    }
+  };
+
   const deleteImageMutation = useMutation({
     mutationFn: (imageId: number) => caseStudiesApi.deleteImage(imageId),
     onSuccess: () => {
@@ -67,7 +105,6 @@ const CaseStudyDetail: React.FC = () => {
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
       draft: 'badge badge-info',
-      under_review: 'badge badge-warning',
       published: 'badge badge-success',
       archived: 'badge',
     };
@@ -128,6 +165,51 @@ const CaseStudyDetail: React.FC = () => {
               {caseStudy.subtitle}
             </p>
           )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <span className={getStatusBadge(caseStudy.status)}>
+              {formatStatus(caseStudy.status)}
+            </span>
+            {caseStudy.status === 'draft' && (
+              <>
+                <button
+                  className="btn"
+                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                  onClick={() => handleWorkflowAction('publish')}
+                  disabled={publishMutation.isPending}
+                >
+                  {publishMutation.isPending ? 'Publishing...' : 'Publish'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
+                  onClick={() => handleWorkflowAction('archive')}
+                  disabled={archiveMutation.isPending}
+                >
+                  Archive
+                </button>
+              </>
+            )}
+            {caseStudy.status === 'published' && (
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
+                onClick={() => handleWorkflowAction('archive')}
+                disabled={archiveMutation.isPending}
+              >
+                Archive
+              </button>
+            )}
+            {caseStudy.status === 'archived' && (
+              <button
+                className="btn btn-primary"
+                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
+                onClick={() => handleWorkflowAction('unarchive')}
+                disabled={unarchiveMutation.isPending}
+              >
+                {unarchiveMutation.isPending ? 'Un-archiving...' : 'Un-archive'}
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>

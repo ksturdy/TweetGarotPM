@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { processTemplate, buildProposalVariables } = require('../utils/templateProcessor');
 
 class Proposal {
   // Find all proposals for a tenant with optional filters
@@ -93,6 +94,50 @@ class Proposal {
     );
     proposal.sections = sectionsResult.rows;
 
+    // Get attached case studies (full content for sell sheets)
+    const caseStudiesResult = await db.query(`
+      SELECT pcs.id as junction_id, pcs.display_order, pcs.notes,
+             cs.id, cs.title, cs.subtitle, cs.market, cs.status as case_study_status,
+             cs.challenge, cs.solution, cs.results, cs.executive_summary,
+             cs.cost_savings, cs.timeline_improvement_days, cs.quality_score,
+             cs.additional_metrics, cs.construction_type, cs.project_size,
+             cs.services_provided, cs.customer_logo_url,
+             c.customer_owner as customer_name, c.customer_facility,
+             p.contract_value as project_value, p.name as project_name,
+             p.start_date as project_start_date, p.end_date as project_end_date
+      FROM proposal_case_studies pcs
+      JOIN case_studies cs ON pcs.case_study_id = cs.id
+      LEFT JOIN customers c ON cs.customer_id = c.id
+      LEFT JOIN projects p ON cs.project_id = p.id
+      WHERE pcs.proposal_id = $1
+      ORDER BY pcs.display_order
+    `, [id]);
+    proposal.case_studies = caseStudiesResult.rows;
+
+    // Get attached service offerings (full content for sell sheets)
+    const serviceOfferingsResult = await db.query(`
+      SELECT pso.id as junction_id, pso.display_order, pso.custom_description,
+             so.id, so.name, so.description, so.category, so.icon_name,
+             so.pricing_model, so.typical_duration_days
+      FROM proposal_service_offerings pso
+      JOIN service_offerings so ON pso.service_offering_id = so.id
+      WHERE pso.proposal_id = $1
+      ORDER BY pso.display_order
+    `, [id]);
+    proposal.service_offerings = serviceOfferingsResult.rows;
+
+    // Get attached resumes (full content for sell sheets)
+    const resumesResult = await db.query(`
+      SELECT pr.id as junction_id, pr.display_order, pr.role_on_project,
+             er.id, er.employee_name, er.job_title, er.summary,
+             er.years_experience, er.certifications, er.skills, er.education
+      FROM proposal_resumes pr
+      JOIN employee_resumes er ON pr.resume_id = er.id
+      WHERE pr.proposal_id = $1
+      ORDER BY pr.display_order
+    `, [id]);
+    proposal.resumes = resumesResult.rows;
+
     return proposal;
   }
 
@@ -163,6 +208,15 @@ class Proposal {
         }
       }
 
+      // Sync attached items if provided
+      if (data.case_study_ids || data.service_offering_ids || data.resume_ids) {
+        await Proposal.syncAttachments(proposal.id, {
+          case_study_ids: data.case_study_ids || [],
+          service_offering_ids: data.service_offering_ids || [],
+          resume_ids: data.resume_ids || [],
+        }, client);
+      }
+
       await client.query('COMMIT');
       return proposal;
     } catch (error) {
@@ -173,8 +227,8 @@ class Proposal {
     }
   }
 
-  // Create proposal from template
-  static async createFromTemplate(templateId, data, userId, tenantId) {
+  // Create proposal from template (with variable substitution)
+  static async createFromTemplate(templateId, data, userId, tenantId, context = {}) {
     const client = await db.pool.connect();
 
     try {
@@ -205,7 +259,28 @@ class Proposal {
       );
       const proposalNumber = numberResult.rows[0].proposal_number;
 
-      // Create proposal with template defaults
+      // Build template variables for substitution
+      const variables = buildProposalVariables({
+        proposal: {
+          proposal_number: proposalNumber,
+          title: data.title,
+          project_name: data.project_name,
+          project_location: data.project_location,
+          total_amount: data.total_amount,
+          valid_until: data.valid_until,
+          payment_terms: data.payment_terms,
+        },
+        customer: context.customer || {},
+        tenant: context.tenant || {},
+        user: context.user || {},
+      });
+
+      // Process template content with variable substitution
+      const executiveSummary = processTemplate(template.default_executive_summary, variables);
+      const companyOverview = processTemplate(template.default_company_overview, variables);
+      const termsAndConditions = processTemplate(template.default_terms_and_conditions, variables);
+
+      // Create proposal with processed template defaults
       const proposalResult = await client.query(
         `INSERT INTO proposals (
           tenant_id, proposal_number, customer_id, opportunity_id, template_id,
@@ -223,9 +298,9 @@ class Proposal {
           data.title,
           data.project_name || null,
           data.project_location || null,
-          template.default_executive_summary || null,
-          template.default_company_overview || null,
-          template.default_terms_and_conditions || null,
+          executiveSummary || null,
+          companyOverview || null,
+          termsAndConditions || null,
           'draft',
           data.valid_until || null,
           userId,
@@ -234,7 +309,7 @@ class Proposal {
 
       const proposal = proposalResult.rows[0];
 
-      // Copy template sections to proposal
+      // Copy template sections to proposal with variable substitution
       for (const section of sectionsResult.rows) {
         await client.query(
           `INSERT INTO proposal_sections (
@@ -243,11 +318,20 @@ class Proposal {
           [
             proposal.id,
             section.section_type,
-            section.title,
-            section.content,
+            processTemplate(section.title, variables),
+            processTemplate(section.content, variables),
             section.display_order,
           ]
         );
+      }
+
+      // Sync attached items if provided
+      if (data.case_study_ids || data.service_offering_ids || data.resume_ids) {
+        await Proposal.syncAttachments(proposal.id, {
+          case_study_ids: data.case_study_ids || [],
+          service_offering_ids: data.service_offering_ids || [],
+          resume_ids: data.resume_ids || [],
+        }, client);
       }
 
       await client.query('COMMIT');
@@ -507,6 +591,27 @@ class Proposal {
         );
       }
 
+      // Copy attached case studies
+      await client.query(`
+        INSERT INTO proposal_case_studies (proposal_id, case_study_id, display_order, notes)
+        SELECT $1, case_study_id, display_order, notes
+        FROM proposal_case_studies WHERE proposal_id = $2
+      `, [revision.id, id]);
+
+      // Copy attached service offerings
+      await client.query(`
+        INSERT INTO proposal_service_offerings (proposal_id, service_offering_id, display_order, custom_description)
+        SELECT $1, service_offering_id, display_order, custom_description
+        FROM proposal_service_offerings WHERE proposal_id = $2
+      `, [revision.id, id]);
+
+      // Copy attached resumes
+      await client.query(`
+        INSERT INTO proposal_resumes (proposal_id, resume_id, display_order, role_on_project)
+        SELECT $1, resume_id, display_order, role_on_project
+        FROM proposal_resumes WHERE proposal_id = $2
+      `, [revision.id, id]);
+
       await client.query('COMMIT');
       return revision;
     } catch (error) {
@@ -515,6 +620,143 @@ class Proposal {
     } finally {
       client.release();
     }
+  }
+
+  // === JUNCTION TABLE METHODS ===
+
+  // Sync all attachments (used during create)
+  static async syncAttachments(proposalId, attachments, client = null) {
+    const queryFn = client ? client.query.bind(client) : db.query.bind(db);
+
+    if (attachments.case_study_ids !== undefined) {
+      await queryFn('DELETE FROM proposal_case_studies WHERE proposal_id = $1', [proposalId]);
+      for (let i = 0; i < attachments.case_study_ids.length; i++) {
+        await queryFn(
+          'INSERT INTO proposal_case_studies (proposal_id, case_study_id, display_order) VALUES ($1, $2, $3)',
+          [proposalId, attachments.case_study_ids[i], i + 1]
+        );
+      }
+    }
+
+    if (attachments.service_offering_ids !== undefined) {
+      await queryFn('DELETE FROM proposal_service_offerings WHERE proposal_id = $1', [proposalId]);
+      for (let i = 0; i < attachments.service_offering_ids.length; i++) {
+        await queryFn(
+          'INSERT INTO proposal_service_offerings (proposal_id, service_offering_id, display_order) VALUES ($1, $2, $3)',
+          [proposalId, attachments.service_offering_ids[i], i + 1]
+        );
+      }
+    }
+
+    if (attachments.resume_ids !== undefined) {
+      await queryFn('DELETE FROM proposal_resumes WHERE proposal_id = $1', [proposalId]);
+      for (let i = 0; i < attachments.resume_ids.length; i++) {
+        await queryFn(
+          'INSERT INTO proposal_resumes (proposal_id, resume_id, display_order) VALUES ($1, $2, $3)',
+          [proposalId, attachments.resume_ids[i], i + 1]
+        );
+      }
+    }
+  }
+
+  // --- Case Studies ---
+
+  static async getCaseStudies(proposalId) {
+    const result = await db.query(`
+      SELECT pcs.id as junction_id, pcs.display_order, pcs.notes,
+             cs.id, cs.title, cs.subtitle, cs.customer_name, cs.market,
+             cs.status as case_study_status, cs.project_value
+      FROM proposal_case_studies pcs
+      JOIN case_studies cs ON pcs.case_study_id = cs.id
+      WHERE pcs.proposal_id = $1
+      ORDER BY pcs.display_order
+    `, [proposalId]);
+    return result.rows;
+  }
+
+  static async addCaseStudy(proposalId, caseStudyId, data = {}) {
+    const result = await db.query(`
+      INSERT INTO proposal_case_studies (proposal_id, case_study_id, display_order, notes)
+      VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM proposal_case_studies WHERE proposal_id = $1)), $4)
+      ON CONFLICT (proposal_id, case_study_id)
+      DO UPDATE SET notes = COALESCE(EXCLUDED.notes, proposal_case_studies.notes)
+      RETURNING *
+    `, [proposalId, caseStudyId, data.display_order || null, data.notes || null]);
+    return result.rows[0];
+  }
+
+  static async removeCaseStudy(proposalId, caseStudyId) {
+    const result = await db.query(
+      'DELETE FROM proposal_case_studies WHERE proposal_id = $1 AND case_study_id = $2 RETURNING *',
+      [proposalId, caseStudyId]
+    );
+    return result.rows[0];
+  }
+
+  // --- Service Offerings ---
+
+  static async getServiceOfferings(proposalId) {
+    const result = await db.query(`
+      SELECT pso.id as junction_id, pso.display_order, pso.custom_description,
+             so.id, so.name, so.description, so.category, so.icon_name
+      FROM proposal_service_offerings pso
+      JOIN service_offerings so ON pso.service_offering_id = so.id
+      WHERE pso.proposal_id = $1
+      ORDER BY pso.display_order
+    `, [proposalId]);
+    return result.rows;
+  }
+
+  static async addServiceOffering(proposalId, serviceOfferingId, data = {}) {
+    const result = await db.query(`
+      INSERT INTO proposal_service_offerings (proposal_id, service_offering_id, display_order, custom_description)
+      VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM proposal_service_offerings WHERE proposal_id = $1)), $4)
+      ON CONFLICT (proposal_id, service_offering_id)
+      DO UPDATE SET custom_description = COALESCE(EXCLUDED.custom_description, proposal_service_offerings.custom_description)
+      RETURNING *
+    `, [proposalId, serviceOfferingId, data.display_order || null, data.custom_description || null]);
+    return result.rows[0];
+  }
+
+  static async removeServiceOffering(proposalId, serviceOfferingId) {
+    const result = await db.query(
+      'DELETE FROM proposal_service_offerings WHERE proposal_id = $1 AND service_offering_id = $2 RETURNING *',
+      [proposalId, serviceOfferingId]
+    );
+    return result.rows[0];
+  }
+
+  // --- Resumes ---
+
+  static async getResumes(proposalId) {
+    const result = await db.query(`
+      SELECT pr.id as junction_id, pr.display_order, pr.role_on_project,
+             er.id, er.employee_name, er.job_title, er.summary
+      FROM proposal_resumes pr
+      JOIN employee_resumes er ON pr.resume_id = er.id
+      WHERE pr.proposal_id = $1
+      ORDER BY pr.display_order
+    `, [proposalId]);
+    return result.rows;
+  }
+
+  static async addResume(proposalId, resumeId, data = {}) {
+    const result = await db.query(`
+      INSERT INTO proposal_resumes (proposal_id, resume_id, display_order, role_on_project)
+      VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM proposal_resumes WHERE proposal_id = $1)), $4)
+      ON CONFLICT (proposal_id, resume_id)
+      DO UPDATE SET role_on_project = COALESCE(EXCLUDED.role_on_project, proposal_resumes.role_on_project)
+      RETURNING *
+    `, [proposalId, resumeId, data.display_order || null, data.role_on_project || null]);
+    return result.rows[0];
+  }
+
+  static async removeResume(proposalId, resumeId) {
+    const result = await db.query(
+      'DELETE FROM proposal_resumes WHERE proposal_id = $1 AND resume_id = $2 RETURNING *',
+      [proposalId, resumeId]
+    );
+    return result.rows[0];
   }
 
   // Delete proposal

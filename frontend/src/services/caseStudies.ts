@@ -89,6 +89,8 @@ export const caseStudiesApi = {
 
   archive: (id: number) => api.patch<CaseStudy>(`/case-studies/${id}/archive`),
 
+  unarchive: (id: number) => api.patch<CaseStudy>(`/case-studies/${id}/unarchive`),
+
   // Image management
   getImages: (caseStudyId: number) =>
     api.get<CaseStudyImage[]>(`/case-studies/${caseStudyId}/images`),

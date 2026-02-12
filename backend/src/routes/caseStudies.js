@@ -215,6 +215,24 @@ router.patch('/:id/archive', authorize('admin', 'manager'), async (req, res) => 
 });
 
 /**
+ * PATCH /api/case-studies/:id/unarchive
+ * Un-archive a case study back to draft (manager/admin only)
+ */
+router.patch('/:id/unarchive', authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const caseStudy = await CaseStudy.unarchive(req.params.id, req.tenantId);
+    if (!caseStudy) {
+      return res.status(404).json({ error: 'Case study not found or not archived' });
+    }
+
+    res.json(caseStudy);
+  } catch (error) {
+    console.error('Error un-archiving case study:', error);
+    res.status(500).json({ error: 'Failed to un-archive case study' });
+  }
+});
+
+/**
  * DELETE /api/case-studies/:id
  * Delete a case study (creator or admin)
  */

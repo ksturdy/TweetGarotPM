@@ -40,7 +40,7 @@ import ProposalTemplateList from './pages/marketing/ProposalTemplateList';
 import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
 import ProposalList from './pages/marketing/ProposalList';
 import ProposalDetail from './pages/marketing/ProposalDetail';
-import ProposalCreate from './pages/marketing/ProposalCreate';
+import ProposalWizard from './pages/marketing/ProposalWizard';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -197,7 +197,7 @@ const App: React.FC = () => {
                 <Route path="/proposal-templates/create" element={<ProposalTemplateForm />} />
                 <Route path="/proposal-templates/:id" element={<ProposalTemplateForm />} />
                 <Route path="/proposals" element={<ProposalList />} />
-                <Route path="/proposals/create" element={<ProposalCreate />} />
+                <Route path="/proposals/create" element={<ProposalWizard />} />
                 <Route path="/proposals/:id" element={<ProposalDetail />} />
                 <Route path="/estimating" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />

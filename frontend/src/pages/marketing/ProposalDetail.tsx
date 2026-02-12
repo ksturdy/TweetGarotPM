@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { proposalsApi } from '../../services/proposals';
+import { caseStudiesApi } from '../../services/caseStudies';
+import { serviceOfferingsApi } from '../../services/serviceOfferings';
+import { employeeResumesApi } from '../../services/employeeResumes';
+import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
 import './ProposalDetail.css';
 
 const ProposalDetail: React.FC = () => {
@@ -10,6 +14,10 @@ const ProposalDetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
+  const [showPreview, setShowPreview] = useState(false);
+  const [csSearch, setCsSearch] = useState('');
+  const [soSearch, setSoSearch] = useState('');
+  const [resumeSearch, setResumeSearch] = useState('');
 
   // Fetch proposal
   const { data: proposal, isLoading } = useQuery({
@@ -37,6 +45,65 @@ const ProposalDetail: React.FC = () => {
     onSuccess: (data: any) => {
       navigate(`/proposals/${data.data.id}?edit=true`);
     },
+  });
+
+  // Attachment mutations
+  const addCaseStudyMutation = useMutation({
+    mutationFn: (caseStudyId: number) => proposalsApi.addCaseStudy(parseInt(id!), caseStudyId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const removeCaseStudyMutation = useMutation({
+    mutationFn: (caseStudyId: number) => proposalsApi.removeCaseStudy(parseInt(id!), caseStudyId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const addServiceOfferingMutation = useMutation({
+    mutationFn: (serviceOfferingId: number) => proposalsApi.addServiceOffering(parseInt(id!), serviceOfferingId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const removeServiceOfferingMutation = useMutation({
+    mutationFn: (serviceOfferingId: number) => proposalsApi.removeServiceOffering(parseInt(id!), serviceOfferingId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const addResumeMutation = useMutation({
+    mutationFn: (resumeId: number) => proposalsApi.addResume(parseInt(id!), resumeId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const removeResumeMutation = useMutation({
+    mutationFn: (resumeId: number) => proposalsApi.removeResume(parseInt(id!), resumeId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  // Fetch available items for editing
+  const { data: availableCaseStudies = [] } = useQuery({
+    queryKey: ['caseStudies', { status: 'published' }],
+    queryFn: async () => {
+      const response = await caseStudiesApi.getAll({ status: 'published' });
+      return response.data;
+    },
+    enabled: isEditing,
+  });
+
+  const { data: availableServiceOfferings = [] } = useQuery({
+    queryKey: ['serviceOfferings', { is_active: true }],
+    queryFn: async () => {
+      const response = await serviceOfferingsApi.getAll({ is_active: true });
+      return response.data;
+    },
+    enabled: isEditing,
+  });
+
+  const { data: availableResumes = [] } = useQuery({
+    queryKey: ['employeeResumes', { is_active: true }],
+    queryFn: async () => {
+      const response = await employeeResumesApi.getAll({ is_active: true });
+      return response.data;
+    },
+    enabled: isEditing,
   });
 
   const handleStatusChange = (status: string) => {
@@ -124,6 +191,12 @@ const ProposalDetail: React.FC = () => {
           <p className="page-subtitle">{proposal.title}</p>
         </div>
         <div className="header-actions">
+          <button
+            className="btn"
+            onClick={() => setShowPreview(true)}
+          >
+            Preview / PDF
+          </button>
           {proposal.status === 'draft' && (
             <button
               className="btnSecondary"
@@ -218,6 +291,187 @@ const ProposalDetail: React.FC = () => {
         </div>
       )}
 
+      {/* Attached Case Studies */}
+      {((proposal.case_studies && proposal.case_studies.length > 0) || isEditing) && (
+        <div className="card">
+          <h2 className="section-title">Case Studies ({proposal.case_studies?.length || 0})</h2>
+          {!isEditing ? (
+            <div className="attachment-list">
+              {proposal.case_studies?.map((cs: any) => (
+                <div key={cs.id} className="attachment-display-item">
+                  <div className="attachment-name">{cs.title}</div>
+                  <div className="attachment-meta">
+                    {cs.customer_name}{cs.market ? ` | ${cs.market}` : ''}
+                    {cs.project_value ? ` | $${Number(cs.project_value).toLocaleString()}` : ''}
+                  </div>
+                  {cs.notes && <div className="attachment-notes">{cs.notes}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input search-input"
+                placeholder="Search case studies..."
+                value={csSearch}
+                onChange={(e) => setCsSearch(e.target.value)}
+              />
+              <div className="attachment-checklist">
+                {availableCaseStudies
+                  .filter((cs: any) =>
+                    !csSearch || cs.title?.toLowerCase().includes(csSearch.toLowerCase()) ||
+                    cs.customer_name?.toLowerCase().includes(csSearch.toLowerCase()) ||
+                    cs.market?.toLowerCase().includes(csSearch.toLowerCase())
+                  )
+                  .map((cs: any) => {
+                  const isAttached = proposal.case_studies?.some((a: any) => a.id === cs.id);
+                  return (
+                    <label key={cs.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={isAttached}
+                        onChange={() => isAttached
+                          ? removeCaseStudyMutation.mutate(cs.id)
+                          : addCaseStudyMutation.mutate(cs.id)
+                        }
+                      />
+                      <div className="attachment-info">
+                        <div className="attachment-name">{cs.title}</div>
+                        <div className="attachment-meta">
+                          {cs.customer_name}{cs.market ? ` | ${cs.market}` : ''}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {availableCaseStudies.length === 0 && (
+                  <p className="empty-text">No published case studies available</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Attached Service Offerings */}
+      {((proposal.service_offerings && proposal.service_offerings.length > 0) || isEditing) && (
+        <div className="card">
+          <h2 className="section-title">Service Offerings ({proposal.service_offerings?.length || 0})</h2>
+          {!isEditing ? (
+            <div className="attachment-list">
+              {proposal.service_offerings?.map((so: any) => (
+                <div key={so.id} className="attachment-display-item">
+                  <div className="attachment-name">{so.name}</div>
+                  <div className="attachment-meta">{so.category || 'General'}</div>
+                  {so.custom_description && <div className="attachment-notes">{so.custom_description}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input search-input"
+                placeholder="Search service offerings..."
+                value={soSearch}
+                onChange={(e) => setSoSearch(e.target.value)}
+              />
+              <div className="attachment-checklist">
+                {availableServiceOfferings
+                  .filter((so: any) =>
+                    !soSearch || so.name?.toLowerCase().includes(soSearch.toLowerCase()) ||
+                    so.category?.toLowerCase().includes(soSearch.toLowerCase()) ||
+                    so.description?.toLowerCase().includes(soSearch.toLowerCase())
+                  )
+                  .map((so: any) => {
+                  const isAttached = proposal.service_offerings?.some((a: any) => a.id === so.id);
+                  return (
+                    <label key={so.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={isAttached}
+                        onChange={() => isAttached
+                          ? removeServiceOfferingMutation.mutate(so.id)
+                          : addServiceOfferingMutation.mutate(so.id)
+                        }
+                    />
+                    <div className="attachment-info">
+                      <div className="attachment-name">{so.name}</div>
+                      <div className="attachment-meta">{so.category || 'General'}</div>
+                    </div>
+                  </label>
+                );
+              })}
+              {availableServiceOfferings.length === 0 && (
+                <p className="empty-text">No active service offerings available</p>
+              )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Attached Resumes */}
+      {((proposal.resumes && proposal.resumes.length > 0) || isEditing) && (
+        <div className="card">
+          <h2 className="section-title">Team Resumes ({proposal.resumes?.length || 0})</h2>
+          {!isEditing ? (
+            <div className="attachment-list">
+              {proposal.resumes?.map((r: any) => (
+                <div key={r.id} className="attachment-display-item">
+                  <div className="attachment-name">{r.employee_name}</div>
+                  <div className="attachment-meta">
+                    {r.job_title}
+                    {r.role_on_project ? ` | Role: ${r.role_on_project}` : ''}
+                  </div>
+                  {r.summary && <div className="attachment-notes">{r.summary}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input search-input"
+                placeholder="Search by name or title..."
+                value={resumeSearch}
+                onChange={(e) => setResumeSearch(e.target.value)}
+              />
+              <div className="attachment-checklist">
+                {availableResumes
+                  .filter((r: any) =>
+                    !resumeSearch || r.employee_name?.toLowerCase().includes(resumeSearch.toLowerCase()) ||
+                    r.job_title?.toLowerCase().includes(resumeSearch.toLowerCase())
+                  )
+                  .map((r: any) => {
+                  const isAttached = proposal.resumes?.some((a: any) => a.id === r.id);
+                return (
+                  <label key={r.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={isAttached}
+                      onChange={() => isAttached
+                        ? removeResumeMutation.mutate(r.id)
+                        : addResumeMutation.mutate(r.id)
+                      }
+                    />
+                    <div className="attachment-info">
+                      <div className="attachment-name">{r.employee_name}</div>
+                      <div className="attachment-meta">{r.job_title}</div>
+                    </div>
+                  </label>
+                );
+              })}
+              {availableResumes.length === 0 && (
+                <p className="empty-text">No active resumes available</p>
+              )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Terms & Conditions */}
       {proposal.terms_and_conditions && (
         <div className="card">
@@ -271,6 +525,12 @@ const ProposalDetail: React.FC = () => {
           )}
         </div>
       </div>
+      {/* Preview Modal */}
+      <ProposalPreviewModal
+        proposal={proposal}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
     </div>
   );
 };
