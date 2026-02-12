@@ -115,6 +115,12 @@ async function getFileUrl(filePath) {
     return await getPresignedUrl(filePath);
   } else {
     // Local file path (served via static middleware or download endpoint)
+    // Normalize absolute Windows paths (e.g. C:\...\uploads\case-studies\img.jpg)
+    const normalized = filePath.replace(/\\/g, '/');
+    const idx = normalized.indexOf('uploads/');
+    if (idx !== -1) {
+      return '/' + normalized.substring(idx);
+    }
     return `/${filePath}`;
   }
 }

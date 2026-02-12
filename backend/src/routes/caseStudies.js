@@ -39,12 +39,23 @@ router.get('/', async (req, res) => {
 
     const caseStudies = await CaseStudy.findAllByTenant(req.tenantId, filters);
 
-    // Resolve hero image URLs for list display
+    // Resolve hero image URLs and thumbnail image URLs for list display
     const withUrls = await Promise.all(
-      caseStudies.map(async (cs) => ({
-        ...cs,
-        hero_image_url: cs.hero_image_path ? await getFileUrl(cs.hero_image_path) : null,
-      }))
+      caseStudies.map(async (cs) => {
+        const images = cs.images
+          ? await Promise.all(
+              cs.images.map(async (img) => ({
+                ...img,
+                image_url: img.file_path ? await getFileUrl(img.file_path) : null,
+              }))
+            )
+          : null;
+        return {
+          ...cs,
+          hero_image_url: cs.hero_image_path ? await getFileUrl(cs.hero_image_path) : null,
+          images,
+        };
+      })
     );
 
     res.json(withUrls);
