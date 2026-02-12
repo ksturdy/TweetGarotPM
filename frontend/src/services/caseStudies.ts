@@ -30,6 +30,8 @@ export interface CaseStudy {
   display_order?: number;
   template_id?: number;
   template_name?: string;
+  customer_logo_url?: string;
+  customer_logo_resolved_url?: string;
   created_by: number;
   created_by_name?: string;
   reviewed_by?: number;
@@ -103,6 +105,15 @@ export const caseStudiesApi = {
 
   downloadImage: (imageId: number) =>
     api.get(`/case-studies/images/${imageId}/download`, { responseType: 'blob' }),
+
+  // Customer logo
+  uploadCustomerLogo: (caseStudyId: number, formData: FormData) =>
+    api.post<{ customer_logo_url: string; file_path: string }>(`/case-studies/${caseStudyId}/customer-logo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  deleteCustomerLogo: (caseStudyId: number) =>
+    api.delete(`/case-studies/${caseStudyId}/customer-logo`),
 
   // PDF
   downloadPdf: (id: number) =>

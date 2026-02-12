@@ -4,14 +4,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudyTemplatesApi, CaseStudyTemplate, LayoutSection } from '../../services/caseStudyTemplates';
 
 const DEFAULT_SECTIONS: LayoutSection[] = [
-  { key: 'project_info', label: 'Project Information', visible: true, order: 1 },
-  { key: 'executive_summary', label: 'Executive Summary', visible: true, order: 2 },
-  { key: 'challenge', label: 'Challenge', visible: true, order: 3 },
-  { key: 'solution', label: 'Our Solution', visible: true, order: 4 },
-  { key: 'results', label: 'Results', visible: true, order: 5 },
-  { key: 'metrics', label: 'Key Metrics', visible: true, order: 6 },
-  { key: 'images', label: 'Project Photos', visible: true, order: 7 },
-  { key: 'services_provided', label: 'Services Provided', visible: true, order: 8 },
+  { key: 'company_info', label: 'Company Information', visible: true, order: 1, column: 'left' },
+  { key: 'project_info', label: 'Project Information', visible: true, order: 2, column: 'left' },
+  { key: 'executive_summary', label: 'Executive Summary', visible: true, order: 3, column: 'right' },
+  { key: 'challenge', label: 'Challenge', visible: true, order: 4, column: 'right' },
+  { key: 'solution', label: 'Our Solution', visible: true, order: 5, column: 'right' },
+  { key: 'results', label: 'Results', visible: true, order: 6, column: 'right' },
+  { key: 'metrics', label: 'Key Metrics', visible: true, order: 7 },
+  { key: 'images', label: 'Project Photos', visible: true, order: 8 },
+  { key: 'services_provided', label: 'Services Provided', visible: true, order: 9, column: 'right' },
 ];
 
 const CaseStudyTemplateForm: React.FC = () => {
@@ -33,6 +34,7 @@ const CaseStudyTemplateForm: React.FC = () => {
   });
 
   const [sections, setSections] = useState<LayoutSection[]>([...DEFAULT_SECTIONS]);
+  const [layoutStyle, setLayoutStyle] = useState<'standard' | 'magazine'>('standard');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch existing template for edit mode
@@ -56,7 +58,34 @@ const CaseStudyTemplateForm: React.FC = () => {
         is_active: existingTemplate.is_active ?? true,
       });
       if (existingTemplate.layout_config?.sections) {
-        setSections(existingTemplate.layout_config.sections);
+        // Ensure existing templates get company_info if they don't have it
+        const loadedSections = existingTemplate.layout_config.sections;
+        const hasCompanyInfo = loadedSections.some((s: LayoutSection) => s.key === 'company_info');
+        if (!hasCompanyInfo) {
+          // Insert company_info before project_info
+          const projectInfoIdx = loadedSections.findIndex((s: LayoutSection) => s.key === 'project_info');
+          const companySection: LayoutSection = {
+            key: 'company_info',
+            label: 'Company Information',
+            visible: true,
+            order: 0,
+            column: 'left',
+          };
+          if (projectInfoIdx >= 0) {
+            // Shift all orders up by 1 and insert
+            const updated = loadedSections.map((s: LayoutSection) => ({ ...s, order: s.order + 1 }));
+            companySection.order = 1;
+            updated.splice(projectInfoIdx, 0, companySection);
+            setSections(updated);
+          } else {
+            setSections([companySection, ...loadedSections.map((s: LayoutSection) => ({ ...s, order: s.order + 1 }))]);
+          }
+        } else {
+          setSections(loadedSections);
+        }
+      }
+      if (existingTemplate.layout_config?.layout_style) {
+        setLayoutStyle(existingTemplate.layout_config.layout_style as 'standard' | 'magazine');
       }
     }
   }, [existingTemplate]);
@@ -103,6 +132,12 @@ const CaseStudyTemplateForm: React.FC = () => {
     ));
   };
 
+  const handleSectionColumnToggle = (index: number) => {
+    setSections(prev => prev.map((s, i) =>
+      i === index ? { ...s, column: s.column === 'left' ? 'right' : 'left' } : s
+    ));
+  };
+
   const moveSection = (index: number, direction: 'up' | 'down') => {
     const newSections = [...sections];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
@@ -131,6 +166,7 @@ const CaseStudyTemplateForm: React.FC = () => {
     const submitData: Partial<CaseStudyTemplate> = {
       ...formData,
       layout_config: {
+        layout_style: layoutStyle,
         sections,
         page_size: 'letter',
         orientation: 'portrait',
@@ -145,6 +181,9 @@ const CaseStudyTemplateForm: React.FC = () => {
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  // Sections that support column assignment in magazine layout
+  const columnSectionKeys = new Set(['company_info', 'project_info', 'executive_summary', 'challenge', 'solution', 'results', 'services_provided']);
 
   return (
     <div className="container">
@@ -219,11 +258,49 @@ const CaseStudyTemplateForm: React.FC = () => {
           </div>
         </div>
 
+        {/* Layout Style */}
+        <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Layout Style</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div
+              onClick={() => setLayoutStyle('standard')}
+              style={{
+                padding: '1rem',
+                border: `2px solid ${layoutStyle === 'standard' ? 'var(--primary)' : '#e5e7eb'}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                backgroundColor: layoutStyle === 'standard' ? '#f0f9ff' : 'white',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Standard</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--secondary)' }}>
+                Sequential sections with header, configurable section order. Best for detailed multi-page case studies.
+              </div>
+            </div>
+            <div
+              onClick={() => setLayoutStyle('magazine')}
+              style={{
+                padding: '1rem',
+                border: `2px solid ${layoutStyle === 'magazine' ? 'var(--primary)' : '#e5e7eb'}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                backgroundColor: layoutStyle === 'magazine' ? '#f0f9ff' : 'white',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Magazine / One-Pager</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--secondary)' }}>
+                Hero banner with two-column layout. Assign sections to left or right columns. Best for marketing materials.
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Layout Sections */}
         <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
           <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Layout Sections</h3>
           <p style={{ color: 'var(--secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
             Toggle sections on/off and reorder them to control the case study layout.
+            {layoutStyle === 'magazine' && ' Use the L/R toggle to assign sections to the left or right column.'}
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -278,9 +355,33 @@ const CaseStudyTemplateForm: React.FC = () => {
                 />
 
                 {/* Section key */}
-                <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', flexShrink: 0, width: '120px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', flexShrink: 0, width: '110px' }}>
                   {section.key}
                 </span>
+
+                {/* Column toggle (magazine layout only) */}
+                {layoutStyle === 'magazine' && columnSectionKeys.has(section.key) && (
+                  <button
+                    type="button"
+                    onClick={() => handleSectionColumnToggle(index)}
+                    style={{
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      minWidth: '28px',
+                      textAlign: 'center',
+                      backgroundColor: section.column === 'left' ? '#dbeafe' : '#fef3c7',
+                      color: section.column === 'left' ? '#1d4ed8' : '#92400e',
+                    }}
+                    title={`Column: ${section.column || 'left'}. Click to toggle.`}
+                  >
+                    {(section.column || 'left') === 'left' ? 'L' : 'R'}
+                  </button>
+                )}
 
                 {/* Move buttons */}
                 <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>

@@ -38,7 +38,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   minHeight = '200px',
 }) => {
   return (
-    <div style={{ minHeight }}>
+    <div style={{ paddingBottom: '2.5rem' }}>
       <ReactQuill
         value={value}
         onChange={onChange}

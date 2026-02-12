@@ -1,8 +1,8 @@
 const puppeteer = require('puppeteer');
 const { generateCaseStudyPdfHtml } = require('./caseStudyPdfGenerator');
 
-async function generateCaseStudyPdfBuffer(caseStudy, template, images, logoBase64) {
-  const html = generateCaseStudyPdfHtml(caseStudy, template, images, logoBase64);
+async function generateCaseStudyPdfBuffer(caseStudy, template, images, logoBase64, customerLogoUrl) {
+  const html = generateCaseStudyPdfHtml(caseStudy, template, images, logoBase64, customerLogoUrl);
   let browser = null;
 
   try {

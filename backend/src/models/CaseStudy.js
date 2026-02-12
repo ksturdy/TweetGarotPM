@@ -23,6 +23,7 @@ const CaseStudy = {
       project_size,
       services_provided,
       template_id,
+      customer_logo_url,
       created_by
     } = data;
 
@@ -31,15 +32,16 @@ const CaseStudy = {
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics, market, construction_type, project_size, services_provided,
-        template_id, created_by, tenant_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        template_id, customer_logo_url, created_by, tenant_id, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size,
-        services_provided, template_id || null, created_by, tenantId, 'draft'
+        services_provided, template_id || null, customer_logo_url || null,
+        created_by, tenantId, 'draft'
       ]
     );
     return result.rows[0];
@@ -172,6 +174,7 @@ const CaseStudy = {
       project_size,
       services_provided,
       template_id,
+      customer_logo_url,
       featured,
       display_order
     } = data;
@@ -195,18 +198,35 @@ const CaseStudy = {
         project_size = COALESCE($15, project_size),
         services_provided = COALESCE($16, services_provided),
         template_id = $17,
-        featured = COALESCE($18, featured),
-        display_order = COALESCE($19, display_order),
+        customer_logo_url = COALESCE($18, customer_logo_url),
+        featured = COALESCE($19, featured),
+        display_order = COALESCE($20, display_order),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $20 AND tenant_id = $21
+       WHERE id = $21 AND tenant_id = $22
        RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size, services_provided,
-        template_id || null, featured, display_order, id, tenantId
+        template_id || null, customer_logo_url !== undefined ? (customer_logo_url || null) : undefined,
+        featured, display_order, id, tenantId
       ]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Update customer logo URL (set or clear)
+   */
+  async updateCustomerLogo(id, logoUrl, tenantId) {
+    const result = await db.query(
+      `UPDATE case_studies SET
+        customer_logo_url = $1,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING *`,
+      [logoUrl, id, tenantId]
     );
     return result.rows[0];
   },

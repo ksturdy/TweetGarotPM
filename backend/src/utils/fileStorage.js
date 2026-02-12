@@ -114,14 +114,24 @@ async function getFileUrl(filePath) {
     // Otherwise, generate a presigned URL (valid for 1 hour)
     return await getPresignedUrl(filePath);
   } else {
-    // Local file path (served via static middleware or download endpoint)
-    // Normalize absolute Windows paths (e.g. C:\...\uploads\case-studies\img.jpg)
+    // Check if file exists locally first
     const normalized = filePath.replace(/\\/g, '/');
     const idx = normalized.indexOf('uploads/');
-    if (idx !== -1) {
-      return '/' + normalized.substring(idx);
+    const relativePath = idx !== -1 ? normalized.substring(idx) : filePath;
+    const localPath = path.join(__dirname, '../../', relativePath);
+
+    if (fs.existsSync(localPath)) {
+      return '/' + relativePath;
     }
-    return `/${filePath}`;
+
+    // File not on disk — fall back to R2 public URL if configured
+    // (handles local dev pointing at Render DB with R2-uploaded files)
+    if (config.r2.publicUrl) {
+      return `${config.r2.publicUrl}/${filePath}`;
+    }
+
+    // Last resort: return local path (may 404)
+    return '/' + relativePath;
   }
 }
 

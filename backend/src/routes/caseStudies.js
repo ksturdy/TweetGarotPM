@@ -106,7 +106,13 @@ router.get('/:id', async (req, res) => {
       }))
     );
 
-    res.json({ ...caseStudy, images: imagesWithUrls });
+    // Resolve customer logo URL if present
+    let customerLogoUrl = null;
+    if (caseStudy.customer_logo_url) {
+      customerLogoUrl = await getFileUrl(caseStudy.customer_logo_url);
+    }
+
+    res.json({ ...caseStudy, customer_logo_resolved_url: customerLogoUrl, images: imagesWithUrls });
   } catch (error) {
     console.error('Error fetching case study:', error);
     res.status(500).json({ error: 'Failed to fetch case study' });
@@ -270,7 +276,13 @@ router.get('/:id/pdf', async (req, res) => {
     }
     const logoBase64 = await fetchLogoBase64(req.tenantId);
 
-    const html = generateCaseStudyPdfHtml(caseStudy, template, images, logoBase64);
+    // Resolve customer logo URL for PDF
+    let customerLogoUrl = null;
+    if (caseStudy.customer_logo_url) {
+      customerLogoUrl = await getFileUrl(caseStudy.customer_logo_url);
+    }
+
+    const html = generateCaseStudyPdfHtml(caseStudy, template, images, logoBase64, customerLogoUrl);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error) {
@@ -300,7 +312,13 @@ router.get('/:id/pdf-download', async (req, res) => {
     }
     const logoBase64 = await fetchLogoBase64(req.tenantId);
 
-    const pdfBuffer = await generateCaseStudyPdfBuffer(caseStudy, template, images, logoBase64);
+    // Resolve customer logo URL for PDF
+    let customerLogoUrl = null;
+    if (caseStudy.customer_logo_url) {
+      customerLogoUrl = await getFileUrl(caseStudy.customer_logo_url);
+    }
+
+    const pdfBuffer = await generateCaseStudyPdfBuffer(caseStudy, template, images, logoBase64, customerLogoUrl);
     const filename = `Case-Study-${caseStudy.title.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -387,6 +405,62 @@ router.post('/:id/images', caseStudyImageUpload.single('file'), async (req, res)
     }
 
     res.status(500).json({ error: 'Failed to upload image' });
+  }
+});
+
+/**
+ * POST /api/case-studies/:id/customer-logo
+ * Upload customer logo for a case study
+ */
+router.post('/:id/customer-logo', caseStudyImageUpload.single('file'), async (req, res) => {
+  try {
+    const caseStudy = await CaseStudy.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!caseStudy) {
+      return res.status(404).json({ error: 'Case study not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileInfo = getFileInfo(req.file);
+    const fileUrl = await getFileUrl(fileInfo.filePath);
+
+    // Update case study with the customer logo URL
+    await CaseStudy.updateCustomerLogo(req.params.id, fileInfo.filePath, req.tenantId);
+
+    res.json({ customer_logo_url: fileUrl, file_path: fileInfo.filePath });
+  } catch (error) {
+    console.error('Error uploading customer logo:', error);
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      try { await deleteFile(fileInfo.filePath); } catch (e) { /* cleanup */ }
+    }
+    res.status(500).json({ error: 'Failed to upload customer logo' });
+  }
+});
+
+/**
+ * DELETE /api/case-studies/:id/customer-logo
+ * Remove customer logo from a case study
+ */
+router.delete('/:id/customer-logo', async (req, res) => {
+  try {
+    const caseStudy = await CaseStudy.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!caseStudy) {
+      return res.status(404).json({ error: 'Case study not found' });
+    }
+
+    if (caseStudy.customer_logo_url) {
+      try { await deleteFile(caseStudy.customer_logo_url); } catch (e) { /* file may not exist */ }
+    }
+
+    await CaseStudy.updateCustomerLogo(req.params.id, null, req.tenantId);
+
+    res.json({ message: 'Customer logo removed' });
+  } catch (error) {
+    console.error('Error removing customer logo:', error);
+    res.status(500).json({ error: 'Failed to remove customer logo' });
   }
 });
 

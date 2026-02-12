@@ -5,12 +5,14 @@ export interface LayoutSection {
   label: string;
   visible: boolean;
   order: number;
+  column?: 'left' | 'right';
 }
 
 export interface LayoutConfig {
   sections: LayoutSection[];
   page_size?: string;
   orientation?: string;
+  layout_style?: 'standard' | 'magazine';
 }
 
 export interface CaseStudyTemplate {

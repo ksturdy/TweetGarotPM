@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
@@ -34,6 +34,9 @@ const CaseStudyForm: React.FC = () => {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [customerLogoUrl, setCustomerLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Load existing case study if editing
   const { data: caseStudy } = useQuery({
@@ -79,6 +82,9 @@ const CaseStudyForm: React.FC = () => {
         services_provided: caseStudy.services_provided || [],
         template_id: caseStudy.template_id?.toString() || '',
       });
+      if (caseStudy.customer_logo_resolved_url) {
+        setCustomerLogoUrl(caseStudy.customer_logo_resolved_url);
+      }
     }
   }, [caseStudy]);
 
@@ -160,6 +166,36 @@ const CaseStudyForm: React.FC = () => {
         ? prev.services_provided.filter(s => s !== service)
         : [...prev.services_provided, service],
     }));
+  };
+
+  const handleCustomerLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+
+    setLogoUploading(true);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      const res = await caseStudiesApi.uploadCustomerLogo(parseInt(id), formDataUpload);
+      setCustomerLogoUrl(res.data.customer_logo_url);
+      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+    } catch (err) {
+      console.error('Failed to upload customer logo:', err);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveCustomerLogo = async () => {
+    if (!id) return;
+    try {
+      await caseStudiesApi.deleteCustomerLogo(parseInt(id));
+      setCustomerLogoUrl(null);
+      queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+    } catch (err) {
+      console.error('Failed to remove customer logo:', err);
+    }
   };
 
   const services = ['HVAC', 'Plumbing', 'Sheet Metal', 'Controls', 'Service'];
@@ -501,6 +537,77 @@ const CaseStudyForm: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Customer Logo */}
+        {isEditMode && (
+          <div
+            className="card"
+            style={{
+              marginBottom: '1.5rem',
+              padding: '1.5rem',
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>
+              Customer Logo
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginBottom: '1rem', marginTop: 0 }}>
+              Upload the customer's logo to display in the case study hero banner (magazine layout)
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {customerLogoUrl ? (
+                <div style={{
+                  width: '80px', height: '80px', border: '1px solid #e5e7eb', borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                  backgroundColor: '#f9fafb',
+                }}>
+                  <img src={customerLogoUrl} alt="Customer Logo"
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+              ) : (
+                <div style={{
+                  width: '80px', height: '80px', border: '2px dashed #d1d5db', borderRadius: '8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#9ca3af', fontSize: '0.75rem', textAlign: 'center',
+                }}>
+                  No logo
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleCustomerLogoUpload}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoUploading}
+                >
+                  {logoUploading ? 'Uploading...' : customerLogoUrl ? 'Replace Logo' : 'Upload Logo'}
+                </button>
+                {customerLogoUrl && (
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none', border: 'none', color: 'var(--danger)',
+                      cursor: 'pointer', fontSize: '0.8rem', padding: '0.2rem 0',
+                      textAlign: 'left',
+                    }}
+                    onClick={handleRemoveCustomerLogo}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Form Actions */}
         <div className="form-actions" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
