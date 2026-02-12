@@ -197,7 +197,7 @@ const CaseStudyDetail: React.FC = () => {
                 Project Value
               </div>
               <div style={{ fontWeight: 600 }}>
-                ${Number(caseStudy.project_value).toLocaleString()}
+                ${Math.round(Number(caseStudy.project_value)).toLocaleString()}
               </div>
             </div>
           )}

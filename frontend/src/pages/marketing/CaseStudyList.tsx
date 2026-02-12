@@ -261,9 +261,7 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--success)',
                           }}
                         >
-                          ${Number(caseStudy.project_value) >= 1000000
-                            ? (Number(caseStudy.project_value) / 1000000).toFixed(1) + 'M'
-                            : (Number(caseStudy.project_value) / 1000).toFixed(0) + 'K'}
+                          ${Math.round(Number(caseStudy.project_value)).toLocaleString()}
                         </div>
                         <div
                           style={{
