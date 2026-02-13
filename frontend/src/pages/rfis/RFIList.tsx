@@ -152,19 +152,15 @@ const RFIList: React.FC = () => {
 
   return (
     <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem' }}>
-          &larr; Back to {project?.name || 'Project'}
-        </Link>
-      </div>
-
-      {/* Page Header */}
       <div className="sales-page-header">
         <div className="sales-page-title">
-          <h1>RFI Log</h1>
-          <span className="sales-subtitle">
-            Showing {filteredRFIs?.length || 0} RFI{filteredRFIs?.length !== 1 ? 's' : ''}
-          </span>
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>📬 RFIs</h1>
+            <div className="sales-subtitle">{project?.name || 'Project'} - Requests for Information</div>
+          </div>
         </div>
         <div className="sales-header-actions">
           <button onClick={handleGenerateReport} className="sales-btn sales-btn-secondary">

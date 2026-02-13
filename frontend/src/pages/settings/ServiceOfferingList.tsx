@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceOfferingsApi, ServiceOffering } from '../../services/serviceOfferings';
 import './ServiceOfferingList.css';
+import '../../styles/SalesPipeline.css';
 
 const ServiceOfferingList: React.FC = () => {
   const queryClient = useQueryClient();
@@ -139,14 +141,21 @@ const ServiceOfferingList: React.FC = () => {
 
   return (
     <div className="service-offering-list">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Service Offerings</h1>
-          <p className="page-subtitle">Manage your service catalog</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>🔧 Service Offerings</h1>
+            <div className="sales-subtitle">Manage service catalog and capabilities</div>
+          </div>
         </div>
-        <button className="btn" onClick={() => openModal()}>
-          + New Service
-        </button>
+        <div className="sales-header-actions">
+          <button className="btn" onClick={() => openModal()}>
+            + New Service
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

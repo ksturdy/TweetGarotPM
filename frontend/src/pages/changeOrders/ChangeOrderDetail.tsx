@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { changeOrdersApi, ChangeOrder } from '../../services/changeOrders';
 import { projectsApi } from '../../services/projects';
 import { useAuth } from '../../context/AuthContext';
+import '../../styles/SalesPipeline.css';
 
 const ChangeOrderDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
@@ -174,15 +175,17 @@ const ChangeOrderDetail: React.FC = () => {
 
   return (
     <div>
-      {/* Back Link */}
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/change-orders`}>&larr; Back to Change Orders</Link>
-      </div>
-
-      {/* Header */}
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>CO-{changeOrder.number}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/change-orders`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Change Orders
+            </Link>
+            <h1>📝 Change Order #{changeOrder.number}</h1>
+            <div className="sales-subtitle">{changeOrder.title}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
           {!isEditing && changeOrder.status === 'draft' && (
             <>
               <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>

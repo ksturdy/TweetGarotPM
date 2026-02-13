@@ -1,4 +1,6 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+import '../../styles/SalesPipeline.css';
 import './SafetyDashboard.css';
 
 const SafetyDashboard: React.FC = () => {
@@ -26,23 +28,27 @@ const SafetyDashboard: React.FC = () => {
 
   return (
     <div className="safety-dashboard">
-      <div className="safety-header">
-        <div className="safety-header-content">
-          <div className="safety-icon-large">🦺</div>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
           <div>
-            <h1>Safety Management</h1>
-            <p>Keeping our team safe, every day</p>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>&#129466; Safety</h1>
+            <div className="sales-subtitle">Safety management and compliance</div>
           </div>
         </div>
-        <button className="btn-sharepoint" onClick={handleOpenSharePoint}>
-          <span className="sharepoint-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-            </svg>
-          </span>
-          Open Safety SharePoint Portal
-          <span className="external-icon">↗</span>
-        </button>
+        <div className="sales-header-actions">
+          <button className="btn-sharepoint" onClick={handleOpenSharePoint}>
+            <span className="sharepoint-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+              </svg>
+            </span>
+            Open Safety SharePoint Portal
+            <span className="external-icon">&#8599;</span>
+          </button>
+        </div>
       </div>
 
       <div className="safety-alert">

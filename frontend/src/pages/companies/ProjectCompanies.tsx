@@ -6,6 +6,7 @@ import { contactsApi, Contact } from '../../services/contacts';
 import { projectsApi } from '../../services/projects';
 import CompanyForm from './CompanyForm';
 import ContactForm from './ContactForm';
+import '../../styles/SalesPipeline.css';
 
 const ProjectCompanies: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -84,21 +85,27 @@ const ProjectCompanies: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}`}>&larr; Back to {project?.name || 'Project'}</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Project Companies & Contacts</h1>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditingCompany(null);
-            setShowCompanyForm(true);
-          }}
-        >
-          Add Company
-        </button>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>🏢 Project Companies</h1>
+            <div className="sales-subtitle">Companies involved in this project</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setEditingCompany(null);
+              setShowCompanyForm(true);
+            }}
+          >
+            Add Company
+          </button>
+        </div>
       </div>
 
       {companies && companies.length === 0 ? (

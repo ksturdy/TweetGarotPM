@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
@@ -387,8 +387,11 @@ const ProjectList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>📊 Projects</h1>
-            <div className="sales-subtitle">Manage construction projects and tracking</div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>📁 Projects</h1>
+            <div className="sales-subtitle">Manage construction projects</div>
           </div>
         </div>
         <div className="sales-header-actions">

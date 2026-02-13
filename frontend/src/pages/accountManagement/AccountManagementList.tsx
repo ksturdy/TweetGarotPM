@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './AccountManagementList.css';
+import '../../styles/SalesPipeline.css';
 
 const AccountManagementList: React.FC = () => {
   const modules = [
@@ -52,11 +53,17 @@ const AccountManagementList: React.FC = () => {
 
   return (
     <div className="account-management-page">
-      <div className="page-header">
-        <div>
-          <Link to="/" className="breadcrumb-link">&larr; Back to Dashboard</Link>
-          <h1 className="page-title">Account Management</h1>
-          <p className="page-subtitle">Manage customer relationships and sales activities</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>🏢 Account Management</h1>
+            <div className="sales-subtitle">Manage customers, teams, and vendors</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
         </div>
       </div>
 

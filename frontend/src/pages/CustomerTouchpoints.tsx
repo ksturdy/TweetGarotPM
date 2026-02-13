@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCustomer, getCustomerTouchpoints } from '../services/customers';
 import './CustomerDetail.css';
+import '../styles/SalesPipeline.css';
 
 const CustomerTouchpoints: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,15 +33,17 @@ const CustomerTouchpoints: React.FC = () => {
 
   return (
     <div className="customer-detail-page">
-      <div className="customer-header">
-        <Link to={`/customers/${id}`} className="back-button">
-          ← Back to Customer
-        </Link>
-        <div className="customer-header-content">
-          <div className="customer-info">
-            <h1>{customer.customer_facility} - Touchpoints</h1>
-            <div className="customer-subtitle">{customer.customer_owner}</div>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/customers/${id}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Customer
+            </Link>
+            <h1>📞 Touchpoints</h1>
+            <div className="sales-subtitle">{customer.customer_facility || customer.customer_owner}</div>
           </div>
+        </div>
+        <div className="sales-header-actions">
         </div>
       </div>
 

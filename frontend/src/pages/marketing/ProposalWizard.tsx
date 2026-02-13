@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { proposalsApi } from '../../services/proposals';
 import { proposalTemplatesApi } from '../../services/proposalTemplates';
 import { customersApi } from '../../services/customers';
@@ -8,6 +8,7 @@ import { caseStudiesApi } from '../../services/caseStudies';
 import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
 import './ProposalWizard.css';
+import '../../styles/SalesPipeline.css';
 
 const STEPS = [
   { label: 'Template', key: 'template' },
@@ -755,12 +756,16 @@ const ProposalWizard: React.FC = () => {
   return (
     <div className="wizard-container">
       {/* Header */}
-      <div className="wizard-header">
-        <button className="breadcrumb-link" onClick={() => navigate('/proposals')}>
-          ← Back to Proposals
-        </button>
-        <h1 className="page-title">Create New Proposal</h1>
-        <p className="page-subtitle">Follow the steps below to build your proposal</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/proposals" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Proposals
+            </Link>
+            <h1>📝 Create New Proposal</h1>
+            <div className="sales-subtitle">Follow the steps below to build your proposal</div>
+          </div>
+        </div>
       </div>
 
       {/* Step Indicator */}

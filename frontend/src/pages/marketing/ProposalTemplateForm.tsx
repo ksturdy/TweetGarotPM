@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { proposalTemplatesApi, ProposalTemplateSection, TemplateVariable } from '../../services/proposalTemplates';
 import './ProposalTemplateForm.css';
+import '../../styles/SalesPipeline.css';
 
 const ProposalTemplateForm: React.FC = () => {
   const queryClient = useQueryClient();
@@ -153,16 +154,23 @@ const ProposalTemplateForm: React.FC = () => {
 
   return (
     <div className="proposal-template-form">
-      <div className="form-header">
-        <div>
-          <h1 className="page-title">{isEditing ? 'Edit' : 'Create'} Proposal Template</h1>
-          <p className="page-subtitle">
-            {isEditing ? 'Update template information' : 'Create a reusable proposal template'}
-          </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/proposal-templates" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Proposal Templates
+            </Link>
+            <h1>📄 {isEditing ? 'Edit' : 'Create'} Proposal Template</h1>
+            <div className="sales-subtitle">
+              {isEditing ? 'Update template information' : 'Create a reusable proposal template'}
+            </div>
+          </div>
         </div>
-        <button className="btnSecondary" onClick={() => navigate('/proposal-templates')}>
-          Cancel
-        </button>
+        <div className="sales-header-actions">
+          <button className="btnSecondary" onClick={() => navigate('/proposal-templates')}>
+            Cancel
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="form-container">

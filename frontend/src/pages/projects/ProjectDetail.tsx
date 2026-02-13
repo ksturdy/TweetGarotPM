@@ -5,6 +5,7 @@ import { projectsApi } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../../components/SearchableSelect';
 import { format } from 'date-fns';
+import '../../styles/SalesPipeline.css';
 
 // Market icons - matching opportunities
 const MARKET_OPTIONS = [
@@ -129,12 +130,18 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/projects">&larr; Back to Projects</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>{project.name}</h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/projects" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Projects
+            </Link>
+            <h1>📁 {project.name}</h1>
+            <div className="sales-subtitle">{project.number} &middot; {project.status} &middot; {project.client || 'No client'}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       {/* Two-column layout: Vista (left) and Titan (right) */}

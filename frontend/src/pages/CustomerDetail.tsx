@@ -17,6 +17,7 @@ import {
 } from '../services/customers';
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import './CustomerDetail.css';
+import '../styles/SalesPipeline.css';
 
 interface Facility extends Customer {
   estimate_count: number;
@@ -251,50 +252,41 @@ const CustomerDetail: React.FC = () => {
     <div className="customer-detail-page">
       {/* Header */}
       <div className="cd-header">
-        <div className="cd-header-top">
-          <Link to="/account-management/customers" className="cd-back-link">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Back to Customers
-          </Link>
-        </div>
-
-        <div className="cd-header-main">
-          <div className="cd-company-info">
-            <div className="cd-avatar" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
-              {getInitials(displayName)}
-            </div>
-            <div className="cd-company-details">
-              <h1>{displayName}</h1>
-              {selectedFacility ? (
-                <div className="cd-facility-badge">
-                  <span className="cd-facility-icon">📍</span>
-                  Viewing: {selectedFacility.customer_facility}
-                  <button onClick={() => setSelectedFacilityId(null)} className="cd-clear-filter">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <div className="cd-subtitle">
-                  {facilities.length > 1 ? `${facilities.length} locations` : customer.city && customer.state ? `${customer.city}, ${customer.state}` : 'No location'}
-                </div>
-              )}
+        <div className="sales-page-header">
+          <div className="sales-page-title">
+            <div>
+              <Link to="/account-management/customers" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+                &larr; Back to Customers
+              </Link>
+              <h1>👥 {displayName}</h1>
+              <div className="sales-subtitle">
+                {selectedFacility ? (
+                  <>
+                    📍 Viewing: {selectedFacility.customer_facility}
+                    <button onClick={() => setSelectedFacilityId(null)} className="cd-clear-filter" style={{ marginLeft: '0.5rem' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </>
+                ) : (
+                  facilities.length > 1 ? `${facilities.length} locations` : customer.city && customer.state ? `${customer.city}, ${customer.state}` : 'No location'
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="cd-quick-tags">
-            {customer.market && (
-              <span className="cd-tag"><span className="cd-tag-icon">🏢</span>{customer.market}</span>
-            )}
-            {customer.account_manager && (
-              <span className="cd-tag"><span className="cd-tag-icon">👤</span>{customer.account_manager}</span>
-            )}
-            {customer.active_customer && (
-              <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>
-            )}
+          <div className="sales-header-actions">
+            <div className="cd-quick-tags">
+              {customer.market && (
+                <span className="cd-tag"><span className="cd-tag-icon">🏢</span>{customer.market}</span>
+              )}
+              {customer.account_manager && (
+                <span className="cd-tag"><span className="cd-tag-icon">👤</span>{customer.account_manager}</span>
+              )}
+              {customer.active_customer && (
+                <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>
+              )}
+            </div>
           </div>
         </div>
 

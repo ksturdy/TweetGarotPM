@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../../components/SearchableSelect';
+import '../../styles/SalesPipeline.css';
 
 const ProjectForm: React.FC = () => {
   const navigate = useNavigate();
@@ -56,8 +57,18 @@ const ProjectForm: React.FC = () => {
 
   return (
     <div>
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>New Project</h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/projects" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Projects
+            </Link>
+            <h1>📁 New Project</h1>
+            <div className="sales-subtitle">Create a new construction project</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <div className="card">

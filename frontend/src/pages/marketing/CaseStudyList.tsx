@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
+import '../../styles/SalesPipeline.css';
 
 const getImageUrl = (filePath: string) => {
   if (!filePath) return '';
@@ -55,19 +56,24 @@ const CaseStudyList: React.FC = () => {
 
   return (
     <div className="container">
-      <div className="section-header" style={{ marginBottom: '2rem' }}>
-        <div>
-          <h1 className="page-title">Case Studies</h1>
-          <p style={{ color: 'var(--secondary)', marginTop: '0.5rem' }}>
-            {caseStudies?.length || 0} case studies
-          </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>📊 Case Studies</h1>
+            <div className="sales-subtitle">{caseStudies?.length || 0} case studies</div>
+          </div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => navigate('/case-studies/create')}
-        >
-          + Create Case Study
-        </button>
+        <div className="sales-header-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate('/case-studies/create')}
+          >
+            + Create Case Study
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

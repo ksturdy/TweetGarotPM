@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './MarketingList.css';
+import '../../styles/SalesPipeline.css';
 
 const MarketingList: React.FC = () => {
   const categories = [
@@ -168,11 +169,15 @@ const MarketingList: React.FC = () => {
 
   return (
     <div className="marketing-page">
-      <div className="page-header">
-        <div>
-          <Link to="/" className="breadcrumb-link">&larr; Back to Dashboard</Link>
-          <h1 className="page-title">Marketing</h1>
-          <p className="page-subtitle">Manage all your marketing initiatives and content</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>📣 Marketing</h1>
+            <div className="sales-subtitle">Manage all your marketing initiatives and content</div>
+          </div>
         </div>
       </div>
 

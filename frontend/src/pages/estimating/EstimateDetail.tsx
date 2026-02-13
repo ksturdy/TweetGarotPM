@@ -7,6 +7,7 @@ import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
+import '../../styles/SalesPipeline.css';
 
 const EstimateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -449,75 +450,71 @@ const EstimateDetail: React.FC = () => {
 
   return (
     <div className="estimate-new">
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        <Link to="/estimating" className="back-link">&larr; All Estimates</Link>
-        {estimate.customer_id && (
-          <>
-            <span style={{ color: '#6b7280' }}>|</span>
-            <Link to={`/customers/${estimate.customer_id}/estimates`}>
-              {estimate.customer_name} Estimates
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating/estimates" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Estimates
             </Link>
-            <span style={{ color: '#6b7280' }}>|</span>
-            <Link to={`/customers/${estimate.customer_id}`}>
-              {estimate.customer_name} Details
-            </Link>
-          </>
-        )}
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <div>
-          <h1 className="page-title">
-            Edit Estimate: {estimate.estimate_number}
-          </h1>
-          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span className={getStatusBadge(estimate.status || 'in progress')} style={{ fontSize: '0.875rem', textTransform: 'capitalize' }}>
-              {estimate.status}
-            </span>
-            <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary)' }}>
-              ${Math.round(totals.total || 0).toLocaleString('en-US')}
-            </span>
-          </div>
-          {/* Gross Margin Display */}
-          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Bid Form)</span>
-              <span style={{ fontWeight: 600 }}>
-                ${Math.round(Number(estimate.gross_margin_dollars || 0)).toLocaleString('en-US')}
+            <h1>📋 {estimate.estimate_number} - {estimate.project_name}</h1>
+            <div className="sales-subtitle">
+              <span className={getStatusBadge(estimate.status || 'in progress')} style={{ fontSize: '0.875rem', textTransform: 'capitalize' }}>
+                {estimate.status}
               </span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary)', marginLeft: '1rem' }}>
+                ${Math.round(totals.total || 0).toLocaleString('en-US')}
+              </span>
+              {estimate.customer_id && (
+                <span style={{ marginLeft: '1rem' }}>
+                  <Link to={`/customers/${estimate.customer_id}/estimates`}>
+                    {estimate.customer_name} Estimates
+                  </Link>
+                  <span style={{ color: '#6b7280', margin: '0 0.5rem' }}>|</span>
+                  <Link to={`/customers/${estimate.customer_id}`}>
+                    {estimate.customer_name} Details
+                  </Link>
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM % (Bid Form)</span>
-              <span style={{ fontWeight: 600 }}>
-                {Number(estimate.gross_margin_percentage || 0).toFixed(1)}%
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Cost Summary)</span>
-              <span style={{ fontWeight: 600 }}>
-                ${Math.round(totals.overhead + totals.profit).toLocaleString('en-US')}
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>Total GM %</span>
-              <span style={{ fontWeight: 600, color: 'var(--success)' }}>
-                {(() => {
-                  const costSummaryGM = totals.overhead + totals.profit;
-                  // If no Cost Summary markup, just use the Bid Form GM%
-                  if (costSummaryGM === 0) {
-                    return Number(estimate.gross_margin_percentage || 0).toFixed(1);
-                  }
-                  // Otherwise calculate combined GM%
-                  if (totals.total > 0) {
-                    return ((Number(estimate.gross_margin_dollars || 0) + costSummaryGM) / totals.total * 100).toFixed(1);
-                  }
-                  return '0.0';
-                })()}%
-              </span>
+            {/* Gross Margin Display */}
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Bid Form)</span>
+                <span style={{ fontWeight: 600 }}>
+                  ${Math.round(Number(estimate.gross_margin_dollars || 0)).toLocaleString('en-US')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM % (Bid Form)</span>
+                <span style={{ fontWeight: 600 }}>
+                  {Number(estimate.gross_margin_percentage || 0).toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>GM $ (Cost Summary)</span>
+                <span style={{ fontWeight: 600 }}>
+                  ${Math.round(totals.overhead + totals.profit).toLocaleString('en-US')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ color: 'var(--secondary)', fontSize: '0.75rem' }}>Total GM %</span>
+                <span style={{ fontWeight: 600, color: 'var(--success)' }}>
+                  {(() => {
+                    const costSummaryGM = totals.overhead + totals.profit;
+                    if (costSummaryGM === 0) {
+                      return Number(estimate.gross_margin_percentage || 0).toFixed(1);
+                    }
+                    if (totals.total > 0) {
+                      return ((Number(estimate.gross_margin_dollars || 0) + costSummaryGM) / totals.total * 100).toFixed(1);
+                    }
+                    return '0.0';
+                  })()}%
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="sales-header-actions">
           <button
             className="btn btn-primary"
             onClick={() => setIsPreviewOpen(true)}

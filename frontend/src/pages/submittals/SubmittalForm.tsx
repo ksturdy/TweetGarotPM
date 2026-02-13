@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { submittalsApi } from '../../services/submittals';
+import '../../styles/SalesPipeline.css';
 
 const SubmittalForm: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -43,12 +44,18 @@ const SubmittalForm: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/submittals`}>&larr; Back to Submittals</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>New Submittal</h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/submittals`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Submittals
+            </Link>
+            <h1>📎 New Submittal</h1>
+            <div className="sales-subtitle">Create a new submittal</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <div className="card">

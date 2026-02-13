@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { proposalTemplatesApi, ProposalTemplate } from '../../services/proposalTemplates';
 import './ProposalTemplateList.css';
+import '../../styles/SalesPipeline.css';
 
 const ProposalTemplateList: React.FC = () => {
   const queryClient = useQueryClient();
@@ -55,14 +56,21 @@ const ProposalTemplateList: React.FC = () => {
 
   return (
     <div className="proposal-template-list">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Proposal Templates</h1>
-          <p className="page-subtitle">Manage reusable proposal templates with variable placeholders</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>📄 Proposal Templates</h1>
+            <div className="sales-subtitle">Manage reusable proposal templates with variable placeholders</div>
+          </div>
         </div>
-        <button className="btn" onClick={() => navigate('/proposal-templates/create')}>
-          + New Template
-        </button>
+        <div className="sales-header-actions">
+          <button className="btn" onClick={() => navigate('/proposal-templates/create')}>
+            + New Template
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

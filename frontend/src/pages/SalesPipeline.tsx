@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -687,7 +687,10 @@ const SalesPipeline: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>📊 Sales Pipeline</h1>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>💼 Sales Pipeline</h1>
             <div className="sales-subtitle">Track opportunities from lead to close</div>
           </div>
         </div>

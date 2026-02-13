@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { contractReviewsApi } from '../../services/contractReviews';
+import '../../styles/SalesPipeline.css';
 import './RiskManagementDashboard.css';
 
 const RiskManagementDashboard: React.FC = () => {
@@ -29,9 +30,18 @@ const RiskManagementDashboard: React.FC = () => {
 
   return (
     <div className="risk-dashboard">
-      <div className="page-header">
-        <h1>Risk Management</h1>
-        <p>Contract review and risk analysis</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>&#9888;&#65039; Risk Management</h1>
+            <div className="sales-subtitle">Monitor and manage project risks</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       {/* Quick Stats */}

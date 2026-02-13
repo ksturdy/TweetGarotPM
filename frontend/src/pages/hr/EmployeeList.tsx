@@ -74,11 +74,11 @@ const EmployeeList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/hr" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
-              &larr; Back to HR Dashboard
+            <Link to="/hr" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to HR
             </Link>
-            <h1>Employees</h1>
-            <div className="sales-subtitle">View employee records</div>
+            <h1>👤 Employees</h1>
+            <div className="sales-subtitle">Manage employee records</div>
           </div>
         </div>
         <div className="sales-header-actions">

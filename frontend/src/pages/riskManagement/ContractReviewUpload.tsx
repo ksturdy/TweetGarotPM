@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractReviewsApi, ContractReview } from '../../services/contractReviews';
+import '../../styles/SalesPipeline.css';
 import './ContractReviewUpload.css';
 
 // Risk categories for mechanical contracting
@@ -389,9 +390,18 @@ const ContractReviewUpload: React.FC = () => {
 
   return (
     <div className="contract-upload">
-      <div className="page-header">
-        <h1>Upload Contract for Analysis</h1>
-        <p>AI-powered risk analysis for mechanical contracting agreements</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/risk-management/contract-reviews" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Contract Reviews
+            </Link>
+            <h1>&#128209; Upload Contract</h1>
+            <div className="sales-subtitle">Upload a contract for AI review</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <div className="upload-container">

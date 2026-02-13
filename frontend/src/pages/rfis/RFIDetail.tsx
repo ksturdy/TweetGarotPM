@@ -6,6 +6,7 @@ import { projectsApi } from '../../services/projects';
 import { usersApi } from '../../services/users';
 import { format } from 'date-fns';
 import RFIPreviewModal from '../../components/rfis/RFIPreviewModal';
+import '../../styles/SalesPipeline.css';
 
 const RFIDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
@@ -110,13 +111,17 @@ const RFIDetail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/rfis`}>&larr; Back to RFIs</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>RFI #{rfi.number}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/rfis`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to RFIs
+            </Link>
+            <h1>📬 RFI #{rfi.number}</h1>
+            <div className="sales-subtitle">{rfi.subject}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
           {!isEditing && (
             <>
               <button className="btn btn-primary" onClick={() => setIsPreviewOpen(true)}>

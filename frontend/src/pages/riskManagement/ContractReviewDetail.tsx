@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractReviewsApi, ContractRiskFinding, ContractAnnotation } from '../../services/contractReviews';
 import ContractViewerNew from '../../components/contractReview/ContractViewerNew';
 import api from '../../services/api';
+import '../../styles/SalesPipeline.css';
 import './ContractReviewDetail.css';
 
 const ContractReviewDetail: React.FC = () => {
@@ -120,18 +121,19 @@ const ContractReviewDetail: React.FC = () => {
 
   return (
     <div className={`contract-detail ${showViewer ? 'split-view' : ''}`}>
-      <div className="detail-header">
-        <div>
-          <div className="breadcrumb">
-            <Link to="/risk-management">Risk Management</Link>
-            <span>/</span>
-            <Link to="/risk-management/contract-reviews">Contract Reviews</Link>
-            <span>/</span>
-            <span>{review.file_name}</span>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/risk-management/contract-reviews" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Contract Reviews
+            </Link>
+            <h1>&#128209; {review.file_name}</h1>
+            <div className="sales-subtitle">
+              {review.project_name || 'Contract Review'} {review.general_contractor ? `- ${review.general_contractor}` : ''}
+            </div>
           </div>
-          <h1>{review.file_name}</h1>
         </div>
-        <div className="header-actions">
+        <div className="sales-header-actions">
           <button
             onClick={() => setShowViewer(!showViewer)}
             className="btn btn-secondary"

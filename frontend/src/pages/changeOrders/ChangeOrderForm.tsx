@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { changeOrdersApi, ChangeOrder } from '../../services/changeOrders';
+import '../../styles/SalesPipeline.css';
 
 const ChangeOrderForm: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id?: string }>();
@@ -133,11 +134,18 @@ const ChangeOrderForm: React.FC = () => {
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <Link to={`/projects/${projectId}/change-orders`} className="back-link">
-          &larr; Back to Change Orders
-        </Link>
-        <h1>{isEditMode ? 'Edit Change Order' : 'New Change Order'}</h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/change-orders`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Change Orders
+            </Link>
+            <h1>📝 {isEditMode ? 'Edit Change Order' : 'New Change Order'}</h1>
+            <div className="sales-subtitle">{isEditMode ? 'Update change order details' : 'Create a new change order'}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="form-container" style={{ maxWidth: '800px' }}>

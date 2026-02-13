@@ -213,7 +213,7 @@ const VendorList: React.FC = () => {
             <Link to="/account-management" className="breadcrumb-link" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
               &larr; Back to Account Management
             </Link>
-            <h1>Vendors & Subcontractors</h1>
+            <h1>🏗️ Vendors & Subcontractors</h1>
             <div className="sales-subtitle">Accounts Payable</div>
           </div>
         </div>

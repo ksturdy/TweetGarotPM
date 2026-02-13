@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi } from '../../services/caseStudies';
 import { caseStudyTemplatesApi } from '../../services/caseStudyTemplates';
 import CaseStudyForm from './CaseStudyForm';
 import CaseStudyPreviewModal from '../../components/caseStudies/CaseStudyPreviewModal';
+import '../../styles/SalesPipeline.css';
 
 const getImageUrl = (filePath: string) => {
   if (!filePath) return '';
@@ -142,33 +143,24 @@ const CaseStudyDetail: React.FC = () => {
   return (
     <div className="container">
       {/* Header */}
-      <div className="section-header" style={{ marginBottom: '2rem' }}>
-        <div>
-          {caseStudy.featured && (
-            <div style={{ marginBottom: '0.5rem' }}>
-              <span
-                className="badge"
-                style={{
-                  backgroundColor: '#fbbf24',
-                  color: '#78350f',
-                }}
-              >
-                Featured
-              </span>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/case-studies" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Case Studies
+            </Link>
+            <h1>📊 {caseStudy.title}</h1>
+            <div className="sales-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {caseStudy.subtitle && <span>{caseStudy.subtitle}</span>}
+              {caseStudy.featured && (
+                <span className="badge" style={{ backgroundColor: '#fbbf24', color: '#78350f' }}>Featured</span>
+              )}
+              <span className={getStatusBadge(caseStudy.status)}>{formatStatus(caseStudy.status)}</span>
             </div>
-          )}
-          <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>
-            {caseStudy.title}
-          </h1>
-          {caseStudy.subtitle && (
-            <p style={{ color: 'var(--secondary)', fontSize: '1.125rem' }}>
-              {caseStudy.subtitle}
-            </p>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-            <span className={getStatusBadge(caseStudy.status)}>
-              {formatStatus(caseStudy.status)}
-            </span>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             {caseStudy.status === 'draft' && (
               <>
                 <button
@@ -209,31 +201,9 @@ const CaseStudyDetail: React.FC = () => {
                 {unarchiveMutation.isPending ? 'Un-archiving...' : 'Un-archive'}
               </button>
             )}
+            <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>Edit</button>
+            <button className="btn btn-primary" onClick={() => setShowPreview(true)}>Preview / PDF</button>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => navigate('/case-studies')}
-          >
-            Back
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => setIsEditing(true)}
-          >
-            Edit
-          </button>
-
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowPreview(true)}
-          >
-            Preview / PDF
-          </button>
-
         </div>
       </div>
 

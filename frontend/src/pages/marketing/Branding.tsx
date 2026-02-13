@@ -1,14 +1,21 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import './Branding.css';
+import '../../styles/SalesPipeline.css';
 
 const Branding: React.FC = () => {
   return (
     <div className="branding-page">
-      <div className="branding-header">
-        <h1>Tweet Garot Brand Guidelines</h1>
-        <p className="branding-subtitle">
-          Official brand identity standards for Tweet Garot Mechanical
-        </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>🎨 Brand Guidelines</h1>
+            <div className="sales-subtitle">Official brand identity standards for Tweet Garot Mechanical</div>
+          </div>
+        </div>
       </div>
 
       {/* Logo Guidelines Section */}

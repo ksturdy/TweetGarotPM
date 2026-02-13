@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { historicalProjectsService } from '../../services/historicalProjects';
 import './CostDatabase.css';
+import '../../styles/SalesPipeline.css';
 
 const CostDatabase: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -258,14 +259,17 @@ const CostDatabase: React.FC = () => {
 
   return (
     <div className="cost-database">
-      <Link to="/estimating" className="back-link">&larr; Back to Estimating</Link>
-
-      <div className="page-header">
-        <div className="page-header-content">
-          <h1>Cost Database</h1>
-          <p>Manage your HVAC historical project data library</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Estimating
+            </Link>
+            <h1>💲 Cost Database</h1>
+            <div className="sales-subtitle">Manage cost items and pricing</div>
+          </div>
         </div>
-        <div className="page-header-actions">
+        <div className="sales-header-actions">
           <button
             className="btn btn-secondary"
             onClick={() => setShowImportModal(true)}

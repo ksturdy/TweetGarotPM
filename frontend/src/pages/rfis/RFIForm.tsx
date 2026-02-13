@@ -5,6 +5,7 @@ import { rfisApi } from '../../services/rfis';
 import { usersApi } from '../../services/users';
 import { companiesApi } from '../../services/companies';
 import { contactsApi } from '../../services/contacts';
+import '../../styles/SalesPipeline.css';
 
 const RFIForm: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -112,12 +113,18 @@ const RFIForm: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/rfis`}>&larr; Back to RFIs</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>New RFI</h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/rfis`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to RFIs
+            </Link>
+            <h1>📬 New RFI</h1>
+            <div className="sales-subtitle">Create a new request for information</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <div className="card">

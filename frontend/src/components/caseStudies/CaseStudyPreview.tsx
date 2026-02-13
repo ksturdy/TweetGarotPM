@@ -535,7 +535,7 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
     }}>
 
       {/* ===== HERO BANNER ===== */}
-      <div style={{
+      <div className="case-study-hero" style={{
         position: 'relative',
         width: '100%',
         height: heroSrc ? '160px' : '110px',

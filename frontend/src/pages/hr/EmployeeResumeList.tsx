@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { employeeResumesApi, EmployeeResume } from '../../services/employeeResumes';
+import '../../styles/SalesPipeline.css';
 import './EmployeeResumeList.css';
 
 const EmployeeResumeList: React.FC = () => {
@@ -67,14 +68,21 @@ const EmployeeResumeList: React.FC = () => {
 
   return (
     <div className="employee-resume-list">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Employee Resumes</h1>
-          <p className="page-subtitle">Manage employee profiles for proposals</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/hr" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to HR
+            </Link>
+            <h1>📄 Employee Resumes</h1>
+            <div className="sales-subtitle">Manage employee resume profiles</div>
+          </div>
         </div>
-        <button className="btn" onClick={() => navigate('/employee-resumes/create')}>
-          + New Resume
-        </button>
+        <div className="sales-header-actions">
+          <button className="btn" onClick={() => navigate('/employee-resumes/create')}>
+            + New Resume
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

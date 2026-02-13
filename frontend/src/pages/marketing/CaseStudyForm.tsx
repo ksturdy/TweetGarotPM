@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
 import { projectsApi, Project } from '../../services/projects';
@@ -7,6 +7,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
 import SearchableSelect from '../../components/SearchableSelect';
+import '../../styles/SalesPipeline.css';
 
 const CaseStudyForm: React.FC = () => {
   const navigate = useNavigate();
@@ -219,10 +220,16 @@ const CaseStudyForm: React.FC = () => {
 
   return (
     <div className="container">
-      <div className="section-header" style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">
-          {isEditMode ? 'Edit Case Study' : 'Create Case Study'}
-        </h1>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/case-studies" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Case Studies
+            </Link>
+            <h1>📊 {isEditMode ? 'Edit Case Study' : 'Create Case Study'}</h1>
+            <div className="sales-subtitle">{isEditMode ? 'Update case study details' : 'Add a new success story'}</div>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

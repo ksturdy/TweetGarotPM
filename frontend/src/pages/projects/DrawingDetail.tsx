@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { drawingsApi } from '../../services/drawings';
+import '../../styles/SalesPipeline.css';
 
 const DrawingDetail: React.FC = () => {
   const { id: projectId, drawingId } = useParams<{ id: string; drawingId: string }>();
@@ -26,24 +27,25 @@ const DrawingDetail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/drawings`}>&larr; Back to Drawings</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <div>
-          <h1 className="page-title" style={{ margin: 0 }}>
-            {drawing.drawing_number} - {drawing.title}
-          </h1>
-          <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.5rem' }}>
-            Version {drawing.version_number}
-            {drawing.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}
-            {drawing.is_original_bid && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Original Bid</span>}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>📐 {drawing.drawing_number} - {drawing.title}</h1>
+            <div className="sales-subtitle">
+              Version {drawing.version_number}
+              {drawing.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}
+              {drawing.is_original_bid && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Original Bid</span>}
+            </div>
           </div>
         </div>
-        <button onClick={() => navigate(`/projects/${projectId}/drawings`)} className="btn btn-secondary">
-          Close
-        </button>
+        <div className="sales-header-actions">
+          <button onClick={() => navigate(`/projects/${projectId}/drawings`)} className="btn btn-secondary">
+            Close
+          </button>
+        </div>
       </div>
 
       {/* Drawing Details */}

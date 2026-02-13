@@ -198,16 +198,18 @@ const EstimatesList: React.FC = () => {
 
   return (
     <div className="estimates-page">
-      {/* Back Link */}
-      <Link to="/" className="back-link">&larr; Back to Dashboard</Link>
-
       {/* Page Header */}
-      <div className="page-header">
-        <div className="page-header-content">
-          <h1>Estimates</h1>
-          <p>Manage estimates, budgets and proposals</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Estimating
+            </Link>
+            <h1>📋 Estimates</h1>
+            <div className="sales-subtitle">Track and manage project estimates</div>
+          </div>
         </div>
-        <div className="page-header-actions">
+        <div className="sales-header-actions">
           <Link to="/estimating/budgets" className="btn btn-secondary">
             New Budget
           </Link>

@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { CaseStudy, CaseStudyImage, caseStudiesApi } from '../../services/caseStudies';
 import { CaseStudyTemplate } from '../../services/caseStudyTemplates';
 import CaseStudyPreview from './CaseStudyPreview';
@@ -19,7 +20,54 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    window.print();
+    const printRoot = document.querySelector('.print-root');
+    if (!printRoot) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.top = '-10000px';
+    iframe.style.left = '-10000px';
+    iframe.style.width = '900px';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><title>Case Study - Print</title>
+      <style>
+        @page { margin: 0.3in; }
+        body { margin: 0; padding: 0; }
+        .no-print { display: none !important; }
+        img { max-width: 100%; }
+        .case-study-hero {
+          height: auto !important;
+          min-height: 160px;
+          overflow: visible !important;
+        }
+      </style>
+      </head><body>${printRoot.innerHTML}</body></html>`);
+    doc.close();
+    // Wait for images to load before printing
+    const images = doc.querySelectorAll('img');
+    let loaded = 0;
+    const total = images.length;
+    const triggerPrint = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    };
+    if (total === 0) {
+      triggerPrint();
+    } else {
+      const onLoad = () => {
+        loaded++;
+        if (loaded >= total) triggerPrint();
+      };
+      images.forEach(img => {
+        if (img.complete) { onLoad(); }
+        else { img.onload = onLoad; img.onerror = onLoad; }
+      });
+      // Fallback timeout in case images stall
+      setTimeout(triggerPrint, 3000);
+    }
   };
 
   const handleDownloadPdf = async () => {
@@ -40,8 +88,9 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
     }
   };
 
-  return (
+  return ReactDOM.createPortal(
     <div
+      className="print-overlay"
       style={{
         position: 'fixed',
         top: 0,
@@ -58,7 +107,17 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
         @media print {
           .no-print { display: none !important; }
           body { margin: 0; padding: 0; }
-          body > *:not(.print-root) { display: none !important; }
+          body > *:not(.print-overlay) { display: none !important; }
+          .print-overlay {
+            position: static !important;
+            overflow: visible !important;
+            background: transparent !important;
+          }
+          .print-root {
+            margin: 0 !important;
+            max-width: none !important;
+            box-shadow: none !important;
+          }
         }
       `}</style>
 
@@ -141,7 +200,8 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
         {/* Preview Content */}
         <CaseStudyPreview caseStudy={caseStudy} template={template} />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

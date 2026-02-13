@@ -15,6 +15,7 @@ import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject 
 import { budgetsApi, Budget } from '../../services/budgets';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
 import './BudgetGenerator.css';
+import '../../styles/SalesPipeline.css';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
@@ -620,10 +621,6 @@ const BudgetGenerator: React.FC = () => {
   return (
     <>
     <div className="budget-generator" ref={reportRef}>
-      <Link to={isEditing ? '/estimating/budgets' : '/estimating'} className="back-link no-print">
-        &larr; {isEditing ? 'Back to Budgets' : 'Back to Estimating'}
-      </Link>
-
       {loadingExisting && (
         <div className="card loading-card">
           <div className="loading-state">
@@ -633,41 +630,48 @@ const BudgetGenerator: React.FC = () => {
         </div>
       )}
 
-      <div className="page-header">
-        <div className="page-header-content">
-          <h1>{isEditing ? 'Edit Budget' : 'Budget Generator'}</h1>
-          <p>{isEditing ? 'Modify and update the budget details' : 'Generate AI-powered HVAC budget estimates from historical project data'}</p>
-        </div>
-        {currentBudget && (
-          <div className="header-actions no-print">
-            <button
-              className={`btn ${isEditMode ? 'btn-warning' : 'btn-secondary'}`}
-              onClick={handleEditModeToggle}
-            >
-              {isEditMode ? 'Exit Edit Mode' : 'Edit Budget'}
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={handleExportReport}
-            >
-              Export Report
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => handleSaveBudget('draft')}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : (isEditing ? 'Update Draft' : 'Save Draft')}
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => handleSaveBudget('final')}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Finalize Budget'}
-            </button>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating/budgets" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Budgets
+            </Link>
+            <h1>💵 Budget Generator</h1>
+            <div className="sales-subtitle">Generate a new project budget</div>
           </div>
-        )}
+        </div>
+        <div className="sales-header-actions">
+          {currentBudget && (
+            <div className="no-print" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                className={`btn ${isEditMode ? 'btn-warning' : 'btn-secondary'}`}
+                onClick={handleEditModeToggle}
+              >
+                {isEditMode ? 'Exit Edit Mode' : 'Edit Budget'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleExportReport}
+              >
+                Export Report
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handleSaveBudget('draft')}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : (isEditing ? 'Update Draft' : 'Save Draft')}
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleSaveBudget('final')}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Finalize Budget'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {successMessage && (

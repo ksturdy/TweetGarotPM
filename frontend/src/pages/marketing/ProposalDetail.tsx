@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { proposalsApi } from '../../services/proposals';
 import { caseStudiesApi } from '../../services/caseStudies';
 import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
 import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
 import './ProposalDetail.css';
+import '../../styles/SalesPipeline.css';
 
 const ProposalDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -177,20 +178,22 @@ const ProposalDetail: React.FC = () => {
 
   return (
     <div className="proposal-detail">
-      <div className="page-header">
-        <div>
-          <button className="breadcrumb-link" onClick={() => navigate('/proposals')}>
-            ← Back to Proposals
-          </button>
-          <div className="title-row">
-            <h1 className="page-title">{proposal.proposal_number}</h1>
-            <span className={`status-badge status-${proposal.status}`}>
-              {proposal.status.replace('_', ' ').toUpperCase()}
-            </span>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/proposals" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Proposals
+            </Link>
+            <h1>📝 {proposal.proposal_number}</h1>
+            <div className="sales-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span>{proposal.title}</span>
+              <span className={`status-badge status-${proposal.status}`}>
+                {proposal.status.replace('_', ' ').toUpperCase()}
+              </span>
+            </div>
           </div>
-          <p className="page-subtitle">{proposal.title}</p>
         </div>
-        <div className="header-actions">
+        <div className="sales-header-actions">
           <button
             className="btn"
             onClick={() => setShowPreview(true)}

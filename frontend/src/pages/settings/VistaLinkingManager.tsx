@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { vistaDataService, VPContract, VPWorkOrder, VPEmployee, VPCustomer, VPVendor, LinkData, EmployeeDuplicate, CustomerDuplicate, ContractDuplicate, DepartmentDuplicate, VendorDuplicate, ImportToTitanResult, LinkDepartmentCodeResult, AutoLinkDepartmentsResult, AutoLinkCustomersResult, AutoLinkVendorsResult, VPStats, TitanOnlyProject, TitanOnlyEmployee, TitanOnlyCustomer, TitanOnlyVendor, TitanDuplicate } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
@@ -1911,9 +1911,14 @@ const VistaLinkingManager: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>Vista Data Linking</h1>
-            <div className="sales-subtitle">Link Vista ERP records to Titan entities</div>
+            <Link to="/administration" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Administration
+            </Link>
+            <h1>🔗 Vista Linking Manager</h1>
+            <div className="sales-subtitle">Link Vista data to application records</div>
           </div>
+        </div>
+        <div className="sales-header-actions">
           <button className="sales-btn" onClick={() => navigate('/settings/vista-data')}>
             Back to Vista Settings
           </button>

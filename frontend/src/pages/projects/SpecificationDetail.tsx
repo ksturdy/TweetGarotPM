@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { specificationsApi } from '../../services/specifications';
+import '../../styles/SalesPipeline.css';
 
 const SpecificationDetail: React.FC = () => {
   const { id: projectId, specId } = useParams<{ id: string; specId: string }>();
@@ -66,22 +67,25 @@ const SpecificationDetail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/specifications`}>&larr; Back to Specifications</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <div>
-          <h1 className="page-title" style={{ margin: 0 }}>{specification.title}</h1>
-          <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.5rem' }}>
-            Version {specification.version_number}
-            {specification.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}
-            {specification.is_original_bid && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Original Bid</span>}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>📋 {specification.title}</h1>
+            <div className="sales-subtitle">
+              Version {specification.version_number}
+              {specification.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}
+              {specification.is_original_bid && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Original Bid</span>}
+            </div>
           </div>
         </div>
-        <button onClick={() => navigate(`/projects/${projectId}/specifications`)} className="btn btn-secondary">
-          Close
-        </button>
+        <div className="sales-header-actions">
+          <button onClick={() => navigate(`/projects/${projectId}/specifications`)} className="btn btn-secondary">
+            Close
+          </button>
+        </div>
       </div>
 
       {/* Specification Details */}

@@ -6,6 +6,7 @@ import api from '../services/api';
 import ContactModal from '../components/modals/ContactModal';
 import TouchpointModal from '../components/modals/TouchpointModal';
 import './CustomerDetail.css';
+import '../styles/SalesPipeline.css';
 
 interface CustomerContact {
   id: number;
@@ -114,15 +115,17 @@ const CustomerContacts: React.FC = () => {
   return (
     <div className="customer-detail-page">
       {/* Header */}
-      <div className="customer-header">
-        <Link to={`/account-management/customers/${id}`} className="back-button">
-          ← Back to Customer
-        </Link>
-        <div className="customer-header-content">
-          <div className="customer-info">
-            <h1>{customer.customer_facility} - Contacts & Touchpoints</h1>
-            <div className="customer-subtitle">{customer.customer_owner}</div>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/customers/${id}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Customer
+            </Link>
+            <h1>📇 Contacts</h1>
+            <div className="sales-subtitle">{customer.customer_facility || customer.customer_owner}</div>
           </div>
+        </div>
+        <div className="sales-header-actions">
         </div>
       </div>
 

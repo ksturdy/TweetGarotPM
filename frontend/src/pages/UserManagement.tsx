@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
 import securityApi from '../services/security';
@@ -228,9 +229,14 @@ const UserManagement: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>User Management</h1>
-            <div className="sales-subtitle">Manage system users, roles, and permissions</div>
+            <Link to="/administration" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Administration
+            </Link>
+            <h1>👤 User Management</h1>
+            <div className="sales-subtitle">Manage user accounts and permissions</div>
           </div>
+        </div>
+        <div className="sales-header-actions">
         </div>
       </div>
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { employeeResumesApi, Certification } from '../../services/employeeResumes';
+import '../../styles/SalesPipeline.css';
 import './EmployeeResumeForm.css';
 
 const EmployeeResumeForm: React.FC = () => {
@@ -143,16 +144,21 @@ const EmployeeResumeForm: React.FC = () => {
 
   return (
     <div className="employee-resume-form">
-      <div className="form-header">
-        <div>
-          <h1 className="page-title">{isEditing ? 'Edit' : 'Create'} Employee Resume</h1>
-          <p className="page-subtitle">
-            {isEditing ? 'Update employee information' : 'Add a new employee profile'}
-          </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/hr/resumes" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Employee Resumes
+            </Link>
+            <h1>📄 {isEditing ? 'Edit' : 'Create'} Employee Resume</h1>
+            <div className="sales-subtitle">Build a resume profile for proposals</div>
+          </div>
         </div>
-        <button className="btnSecondary" onClick={() => navigate('/employee-resumes')}>
-          Cancel
-        </button>
+        <div className="sales-header-actions">
+          <button className="btnSecondary" onClick={() => navigate('/employee-resumes')}>
+            Cancel
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="form-container">

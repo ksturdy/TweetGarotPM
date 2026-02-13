@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './AdministrationDashboard.css';
+import '../../styles/SalesPipeline.css';
 
 const AdministrationDashboard: React.FC = () => {
   const submodules = [
@@ -36,11 +37,18 @@ const AdministrationDashboard: React.FC = () => {
 
   return (
     <div className="administration-dashboard">
-      <div className="administration-header">
-        <h1>Administration</h1>
-        <p className="administration-subtitle">
-          Manage accounting, financial operations, risk management, and payment processing
-        </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>⚙️ Administration</h1>
+            <div className="sales-subtitle">System settings and configuration</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       <div className="administration-modules">

@@ -161,10 +161,10 @@ const EmployeeDetail: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/hr/employees" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
+            <Link to="/hr/employees" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Employees
             </Link>
-            <h1>{employee.first_name} {employee.last_name}</h1>
+            <h1>👤 {employee.first_name} {employee.last_name}</h1>
             <div className="sales-subtitle">{employee.job_title || 'No job title'}</div>
           </div>
         </div>

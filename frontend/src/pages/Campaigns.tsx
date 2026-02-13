@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { getCampaigns, Campaign } from '../services/campaigns';
 import { format } from 'date-fns';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
@@ -169,7 +169,10 @@ const Campaigns: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>🎯 Sales Campaigns</h1>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>📣 Campaigns</h1>
             <div className="sales-subtitle">Manage and track your sales campaigns and outreach efforts</div>
           </div>
         </div>

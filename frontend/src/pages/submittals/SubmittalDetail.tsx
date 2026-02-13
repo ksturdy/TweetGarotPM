@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { submittalsApi } from '../../services/submittals';
 import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
+import '../../styles/SalesPipeline.css';
 
 const SubmittalDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
@@ -89,17 +90,23 @@ const SubmittalDetail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/submittals`}>&larr; Back to Submittals</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Submittal #{submittal.number}</h1>
-        {!isEditing && (
-          <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
-            Edit
-          </button>
-        )}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/submittals`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Submittals
+            </Link>
+            <h1>📎 Submittal #{submittal.number}</h1>
+            <div className="sales-subtitle">{submittal.description}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          {!isEditing && (
+            <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
+              Edit
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card">

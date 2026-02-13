@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { scheduleApi } from '../../services/schedule';
 import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
+import '../../styles/SalesPipeline.css';
 
 const ScheduleView: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -29,13 +30,19 @@ const ScheduleView: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}`}>&larr; Back to {project?.name || 'Project'}</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Schedule</h1>
-        <button className="btn btn-primary">Add Task</button>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>📅 Schedule</h1>
+            <div className="sales-subtitle">{project?.name || 'Project'} - Schedule</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          <button className="btn btn-primary">Add Task</button>
+        </div>
       </div>
 
       {progress && (

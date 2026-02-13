@@ -5,6 +5,7 @@ import { rfisApi } from '../../services/rfis';
 import { usersApi } from '../../services/users';
 import { companiesApi } from '../../services/companies';
 import { contactsApi } from '../../services/contacts';
+import '../../styles/SalesPipeline.css';
 
 const RFIEdit: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
@@ -193,11 +194,19 @@ const RFIEdit: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}/rfis/${id}`}>&larr; Back to RFI #{rfi.number}</Link>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}/rfis/${id}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to RFI
+            </Link>
+            <h1>📬 Edit RFI</h1>
+            <div className="sales-subtitle">Update RFI details</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
-
-      <h1 className="page-title">Edit RFI #{rfi.number}</h1>
 
       <div className="card">
         <form onSubmit={handleSubmit}>

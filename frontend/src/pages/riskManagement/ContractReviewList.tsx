@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { contractReviewsApi } from '../../services/contractReviews';
+import '../../styles/SalesPipeline.css';
 import './ContractReviewList.css';
 
 const ContractReviewList: React.FC = () => {
@@ -26,17 +27,21 @@ const ContractReviewList: React.FC = () => {
 
   return (
     <div className="contract-review-list">
-      <div className="breadcrumb" style={{ marginBottom: '1rem' }}>
-        <Link to="/risk-management">← Back to Risk Management</Link>
-      </div>
-      <div className="page-header">
-        <div>
-          <h1>Contract Reviews</h1>
-          <p>AI-powered contract risk analysis and legal review queue</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/risk-management" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Risk Management
+            </Link>
+            <h1>&#128209; Contract Reviews</h1>
+            <div className="sales-subtitle">Review and analyze contracts</div>
+          </div>
         </div>
-        <Link to="/risk-management/contract-reviews/upload" className="btn btn-primary">
-          Upload Contract
-        </Link>
+        <div className="sales-header-actions">
+          <Link to="/risk-management/contract-reviews/upload" className="btn btn-primary">
+            Upload Contract
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}

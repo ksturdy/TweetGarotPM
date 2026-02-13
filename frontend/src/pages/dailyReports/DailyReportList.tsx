@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dailyReportsApi } from '../../services/dailyReports';
 import { projectsApi } from '../../services/projects';
 import { format } from 'date-fns';
+import '../../styles/SalesPipeline.css';
 
 const DailyReportList: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,13 +25,19 @@ const DailyReportList: React.FC = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to={`/projects/${projectId}`}>&larr; Back to {project?.name || 'Project'}</Link>
-      </div>
-
-      <div className="section-header" style={{ marginBottom: '1rem' }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Daily Reports</h1>
-        <button className="btn btn-primary">New Report</button>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Project
+            </Link>
+            <h1>📋 Daily Reports</h1>
+            <div className="sales-subtitle">{project?.name || 'Project'} - Daily Reports</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          <button className="btn btn-primary">New Report</button>
+        </div>
       </div>
 
       <div className="card">

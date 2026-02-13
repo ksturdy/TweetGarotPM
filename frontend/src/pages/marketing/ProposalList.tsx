@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { proposalsApi, Proposal } from '../../services/proposals';
 import './ProposalList.css';
+import '../../styles/SalesPipeline.css';
 
 const ProposalList: React.FC = () => {
   const queryClient = useQueryClient();
@@ -85,14 +86,21 @@ const ProposalList: React.FC = () => {
 
   return (
     <div className="proposal-list">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Proposals</h1>
-          <p className="page-subtitle">Create and manage sales proposals</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>📝 Proposals</h1>
+            <div className="sales-subtitle">Create and manage sales proposals</div>
+          </div>
         </div>
-        <button className="btn" onClick={() => navigate('/proposals/create')}>
-          + New Proposal
-        </button>
+        <div className="sales-header-actions">
+          <button className="btn" onClick={() => navigate('/proposals/create')}>
+            + New Proposal
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}

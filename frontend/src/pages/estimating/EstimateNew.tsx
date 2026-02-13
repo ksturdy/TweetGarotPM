@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
+import '../../styles/SalesPipeline.css';
 
 type BuildStep = 'info' | 'build-method' | 'manual' | 'excel';
 
@@ -669,11 +670,22 @@ const EstimateNew: React.FC = () => {
 
   return (
     <div className="estimate-new">
-      <Link to="/estimating" className="back-link">&larr; Back to Estimates</Link>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating/estimates" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Estimates
+            </Link>
+            <h1>📋 New Estimate</h1>
+            <div className="sales-subtitle">Create a new project estimate</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
+      </div>
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
         <div>
-          <h1 className="page-title">Create New Estimate</h1>
           {savedData && (
             <p style={{ fontSize: '0.875rem', color: 'var(--success)', marginTop: '0.5rem' }}>
               📝 Draft restored from {new Date(savedData.lastSaved).toLocaleString()}

@@ -143,16 +143,22 @@ const BudgetsList: React.FC = () => {
 
   return (
     <div className="budgets-page">
-      {/* Top Bar */}
-      <div className="budgets-top-bar">
-        <div className="budgets-breadcrumb">
-          <Link to="/estimating" className="breadcrumb-link">Estimating</Link>
-          <span className="breadcrumb-sep">/</span>
-          <span className="breadcrumb-current">Budgets</span>
+      {/* Page Header */}
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Estimating
+            </Link>
+            <h1>💵 Budgets</h1>
+            <div className="sales-subtitle">Manage project budgets</div>
+          </div>
         </div>
-        <Link to="/estimating/budget-generator" className="btn btn-primary">
-          + New Budget
-        </Link>
+        <div className="sales-header-actions">
+          <Link to="/estimating/budget-generator" className="btn btn-primary">
+            + New Budget
+          </Link>
+        </div>
       </div>
 
       {/* Summary Cards */}

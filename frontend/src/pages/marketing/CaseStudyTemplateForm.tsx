@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudyTemplatesApi, CaseStudyTemplate, LayoutSection } from '../../services/caseStudyTemplates';
+import '../../styles/SalesPipeline.css';
 
 const DEFAULT_SECTIONS: LayoutSection[] = [
   { key: 'company_info', label: 'Company Information', visible: true, order: 1, column: 'left' },
@@ -187,16 +188,24 @@ const CaseStudyTemplateForm: React.FC = () => {
 
   return (
     <div className="container">
-      <div className="section-header" style={{ marginBottom: '2rem' }}>
-        <h1 className="page-title">
-          {isEditing ? 'Edit Template' : 'Create Case Study Template'}
-        </h1>
-        <button
-          className="btn btn-secondary"
-          onClick={() => navigate('/case-study-templates')}
-        >
-          Cancel
-        </button>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/case-study-templates" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Case Study Templates
+            </Link>
+            <h1>📋 {isEditing ? 'Edit Template' : 'Create Case Study Template'}</h1>
+            <div className="sales-subtitle">{isEditing ? 'Update template layout and settings' : 'Design a reusable case study layout'}</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate('/case-study-templates')}
+          >
+            Cancel
+          </button>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit}>

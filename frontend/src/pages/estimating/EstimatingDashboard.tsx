@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './EstimatingDashboard.css';
+import '../../styles/SalesPipeline.css';
 
 const EstimatingDashboard: React.FC = () => {
   const modules = [
@@ -24,10 +25,18 @@ const EstimatingDashboard: React.FC = () => {
 
   return (
     <div className="estimating-dashboard">
-      <div className="page-header">
-        <Link to="/" className="back-link">&larr; Back to Dashboard</Link>
-        <h1 className="page-title">Estimating</h1>
-        <p className="page-subtitle">Budget generation and cost management tools</p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Dashboard
+            </Link>
+            <h1>💰 Estimating</h1>
+            <div className="sales-subtitle">Budget generation and cost management tools</div>
+          </div>
+        </div>
+        <div className="sales-header-actions">
+        </div>
       </div>
 
       {/* Mechanical Design Phases Timeline */}

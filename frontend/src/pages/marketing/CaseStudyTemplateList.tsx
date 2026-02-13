@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
+import '../../styles/SalesPipeline.css';
 
 const CaseStudyTemplateList: React.FC = () => {
   const queryClient = useQueryClient();
@@ -45,19 +46,24 @@ const CaseStudyTemplateList: React.FC = () => {
 
   return (
     <div className="container">
-      <div className="section-header" style={{ marginBottom: '2rem' }}>
-        <div>
-          <h1 className="page-title">Case Study Templates</h1>
-          <p style={{ color: 'var(--secondary)', marginTop: '0.5rem' }}>
-            {templates?.length || 0} templates
-          </p>
+      <div className="sales-page-header">
+        <div className="sales-page-title">
+          <div>
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
+            </Link>
+            <h1>📋 Case Study Templates</h1>
+            <div className="sales-subtitle">{templates?.length || 0} templates</div>
+          </div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => navigate('/case-study-templates/create')}
-        >
-          + Create Template
-        </button>
+        <div className="sales-header-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate('/case-study-templates/create')}
+          >
+            + Create Template
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

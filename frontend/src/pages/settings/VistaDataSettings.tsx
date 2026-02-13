@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { vistaDataService, VPStats, VPImportBatch } from '../../services/vistaData';
 import '../../styles/SalesPipeline.css';
@@ -176,24 +176,27 @@ const VistaDataSettings: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <h1>Vista Data Integration</h1>
-            <div className="sales-subtitle">Import and link data from Vista ERP (Viewpoint)</div>
+            <Link to="/administration" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Administration
+            </Link>
+            <h1>🔗 Vista Data Settings</h1>
+            <div className="sales-subtitle">Configure Vista ERP integration</div>
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              className="sales-btn"
-              onClick={() => navigate('/settings/vista-data/linking')}
-            >
-              Manage Links
-            </button>
-            <button
-              className="sales-btn-primary"
-              onClick={() => autoMatchMutation.mutate()}
-              disabled={autoMatchMutation.isPending}
-            >
-              {autoMatchMutation.isPending ? 'Matching...' : 'Run Auto-Match'}
-            </button>
-          </div>
+        </div>
+        <div className="sales-header-actions">
+          <button
+            className="sales-btn"
+            onClick={() => navigate('/settings/vista-data/linking')}
+          >
+            Manage Links
+          </button>
+          <button
+            className="sales-btn-primary"
+            onClick={() => autoMatchMutation.mutate()}
+            disabled={autoMatchMutation.isPending}
+          >
+            {autoMatchMutation.isPending ? 'Matching...' : 'Run Auto-Match'}
+          </button>
         </div>
       </div>
 
