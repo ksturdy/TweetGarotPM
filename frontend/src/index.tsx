@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -28,3 +29,17 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// Register service worker for PWA functionality and auto-updates
+serviceWorkerRegistration.register({
+  onUpdate: (registration) => {
+    console.log('New version available! Reloading...');
+    // Automatically reload when update is available
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+  },
+  onSuccess: (registration) => {
+    console.log('Service Worker registered successfully');
+  },
+});
