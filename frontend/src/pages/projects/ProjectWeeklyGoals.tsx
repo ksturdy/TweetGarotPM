@@ -189,11 +189,56 @@ const ProjectWeeklyGoals: React.FC = () => {
       return;
     }
 
+    // Calculate planned and actual workers/hours across all trades
+    let totalPlannedWorkers = 0;
+    let totalActualWorkers = 0;
+    let totalPlannedHours = 0;
+    let totalActualHours = 0;
+
+    (['plumbing', 'piping', 'sheet_metal'] as const).forEach(trade => {
+      const plannedCrew = currentPlan?.[`${trade}_crew_size` as keyof WeeklyGoalPlan] as number || 0;
+      const hoursPerDay = currentPlan?.[`${trade}_hours_per_day` as keyof WeeklyGoalPlan] as number || 0;
+      totalPlannedWorkers += plannedCrew;
+      totalPlannedHours += plannedCrew * hoursPerDay;
+
+      const dailyActual = getDailyActual(date, trade);
+      if (dailyActual) {
+        totalActualWorkers += dailyActual.actual_crew_size;
+        // actual_hours_worked is now hrs/shift per worker, so multiply by crew size for total
+        totalActualHours += dailyActual.actual_crew_size * dailyActual.actual_hours_worked;
+      }
+    });
+
     // Generate report summary
     let reportText = `═══════════════════════════════════════════════════\n`;
     reportText += `DAILY REPORT - ${project.name}\n`;
     reportText += `Date: ${dateInfo.weekday}, ${dateInfo.monthDay}\n`;
     reportText += `═══════════════════════════════════════════════════\n\n`;
+
+    // Workforce Summary
+    const avgPlannedHoursPerWorker = totalPlannedWorkers > 0 ? (totalPlannedHours / totalPlannedWorkers).toFixed(1) : 0;
+    // For actual, we already store hrs/shift, so just use that value
+    const avgActualHoursPerWorker = 0; // Will be set from first trade with data
+
+    // Get average hrs/shift from daily actuals (should be same across all trades for the day)
+    let actualHrsPerShift = 0;
+    (['plumbing', 'piping', 'sheet_metal'] as const).forEach(trade => {
+      const dailyActual = getDailyActual(date, trade);
+      if (dailyActual && dailyActual.actual_crew_size > 0 && actualHrsPerShift === 0) {
+        actualHrsPerShift = Number(dailyActual.actual_hours_worked) || 0;
+      }
+    });
+
+    reportText += `TOTAL JOB WORKFORCE SUMMARY:\n`;
+    reportText += `Planned: ${totalPlannedWorkers} Workers | ${avgPlannedHoursPerWorker} Hrs/Shift | ${totalPlannedHours} Hours\n`;
+    reportText += `Actual:  ${totalActualWorkers} Workers | ${actualHrsPerShift.toFixed(1)} Hrs/Shift | ${totalActualHours.toFixed(1)} Hours\n`;
+
+    if (totalPlannedWorkers > 0 || totalPlannedHours > 0) {
+      const workerVariance = totalActualWorkers - totalPlannedWorkers;
+      const hourVariance = totalActualHours - totalPlannedHours;
+      reportText += `Variance: ${workerVariance >= 0 ? '+' : ''}${workerVariance} Workers | ${hourVariance >= 0 ? '+' : ''}${hourVariance.toFixed(1)} Hours\n`;
+    }
+    reportText += `\n`;
 
     (['plumbing', 'piping', 'sheet_metal'] as const).forEach(trade => {
       const config = tradeConfig[trade];
@@ -206,14 +251,32 @@ const ProjectWeeklyGoals: React.FC = () => {
       const dailyActual = getDailyActual(date, trade);
 
       reportText += `━━━ ${config.name.toUpperCase()} (${config.abbr}) ━━━\n`;
-      reportText += `Foreman: ${currentPlan?.[`${trade}_foreman` as keyof WeeklyGoalPlan] || 'Not assigned'}\n`;
+      reportText += `Foreman: ${currentPlan?.[`${trade}_foreman` as keyof WeeklyGoalPlan] || 'Not assigned'}\n\n`;
+
+      // Trade-specific workforce summary
+      const plannedCrew = Number(currentPlan?.[`${trade}_crew_size` as keyof WeeklyGoalPlan]) || 0;
+      const plannedHoursPerDay = Number(currentPlan?.[`${trade}_hours_per_day` as keyof WeeklyGoalPlan]) || 0;
+      const plannedTotalHours = plannedCrew * plannedHoursPerDay;
+
+      reportText += `Workforce Summary:\n`;
+      reportText += `  Planned: ${plannedCrew} Workers | ${plannedHoursPerDay.toFixed(1)} Hrs/Shift | ${plannedTotalHours.toFixed(1)} Hours\n`;
 
       if (dailyActual) {
-        reportText += `Crew Size: ${dailyActual.actual_crew_size} workers\n`;
-        reportText += `Hours Worked: ${dailyActual.actual_hours_worked}h\n`;
+        const actualCrew = dailyActual.actual_crew_size;
+        const actualHoursPerShift = Number(dailyActual.actual_hours_worked) || 0;
+        const actualTotalHours = actualCrew * actualHoursPerShift;
+        reportText += `  Actual:  ${actualCrew} Workers | ${actualHoursPerShift.toFixed(1)} Hrs/Shift | ${actualTotalHours.toFixed(1)} Hours\n`;
+
+        if (plannedCrew > 0 || plannedTotalHours > 0) {
+          const crewVariance = actualCrew - plannedCrew;
+          const hoursVariance = actualTotalHours - plannedTotalHours;
+          reportText += `  Variance: ${crewVariance >= 0 ? '+' : ''}${crewVariance} Workers | ${hoursVariance >= 0 ? '+' : ''}${hoursVariance.toFixed(1)} Hours\n`;
+        }
+      } else {
+        reportText += `  Actual:  No data entered\n`;
       }
 
-      reportText += `Tasks: ${completed} completed, ${incomplete} incomplete (${tradeTasks.length} total)\n`;
+      reportText += `\nTasks: ${completed} completed, ${incomplete} incomplete (${tradeTasks.length} total)\n`;
       reportText += `Task Hours: ${totalHours}h\n\n`;
 
       // Completed Tasks
@@ -710,7 +773,7 @@ const ProjectWeeklyGoals: React.FC = () => {
 
                                 <div>
                                   <label style={{ display: 'block', fontSize: '9px', color: '#64748b', marginBottom: '2px' }}>
-                                    Actual Hours
+                                    Actual Hrs/Shift
                                   </label>
                                   <input
                                     type="number"

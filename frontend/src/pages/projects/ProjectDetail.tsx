@@ -113,6 +113,7 @@ const ProjectDetail: React.FC = () => {
     { path: 'change-orders', label: 'Change Orders', description: 'Contract modifications' },
     { path: 'daily-reports', label: 'Daily Reports', description: 'Field activity logs' },
     { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
+    { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
   ];
 
   const getStatusColor = (status: string): string => {
@@ -199,6 +200,22 @@ const ProjectDetail: React.FC = () => {
             <div style={{ gridColumn: '1 / -1' }}>
               <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Address</div>
               <div>{project.address || '-'}</div>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Ship Address</div>
+              <div>{project.ship_address || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Ship City</div>
+              <div>{project.ship_city || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Ship State</div>
+              <div>{project.ship_state || '-'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Ship Zip</div>
+              <div>{project.ship_zip || '-'}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Market</div>

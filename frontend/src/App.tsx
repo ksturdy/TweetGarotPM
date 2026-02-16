@@ -26,6 +26,7 @@ import ChangeOrderForm from './pages/changeOrders/ChangeOrderForm';
 import ChangeOrderDetail from './pages/changeOrders/ChangeOrderDetail';
 import DailyReportList from './pages/dailyReports/DailyReportList';
 import ScheduleView from './pages/schedule/ScheduleView';
+import ProjectWeeklyGoals from './pages/projects/ProjectWeeklyGoals';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
 import CaseStudyList from './pages/marketing/CaseStudyList';
@@ -264,6 +265,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/change-orders/:id/edit" element={<ChangeOrderForm />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
                 <Route path="/projects/:id/financials" element={<ProjectFinancials />} />
                 <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
                 <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />
