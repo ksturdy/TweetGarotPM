@@ -23,7 +23,12 @@ export interface Project {
   customer_name?: string;
   owner_customer_id?: number;
   owner_name?: string;
+  ship_address?: string;
+  ship_city?: string;
+  ship_state?: string;
+  ship_zip?: string;
   favorite?: boolean;
+  email_distribution_list?: string;
   created_at: string;
 }
 
