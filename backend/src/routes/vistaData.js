@@ -246,6 +246,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             // Customer and location
             customer_number: (row['Customer'] ?? row[' Customer ']) ? String(row['Customer'] ?? row[' Customer ']) : null,
             customer_name: row['Customer Name'] ?? row[' Customer Name '] ?? '',
+            ship_address: row['Ship Address'] ?? row[' Ship Address '] ?? row['Address'] ?? '',
             ship_city: row['Ship City'] ?? row[' Ship City '] ?? row['City'] ?? '',
             ship_state: row['Ship State'] ?? row[' Ship State '] ?? row['State'] ?? '',
             ship_zip: row['Ship Zip'] ?? row[' Ship Zip '] ?? row['Zip'] ?? '',

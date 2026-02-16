@@ -84,6 +84,7 @@ const VistaData = {
           original_estimated_margin = $58, original_estimated_margin_pct = $59,
           actual_labor_rate = $60, estimated_labor_rate = $61, current_est_labor_cost = $62,
           ttl_labor_projected = $63, start_month = $64, month_closed = $65,
+          ship_address = $66,
           imported_at = CURRENT_TIMESTAMP
         WHERE id = $32
         RETURNING *`,
@@ -108,7 +109,8 @@ const VistaData = {
           data.pending_change_orders, data.approved_changes, data.change_order_count,
           data.original_estimated_margin, data.original_estimated_margin_pct,
           data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
-          data.ttl_labor_projected, data.start_month, data.month_closed
+          data.ttl_labor_projected, data.start_month, data.month_closed,
+          data.ship_address
         ]
       );
       return { record: result.rows[0], isNew: false };
@@ -121,7 +123,7 @@ const VistaData = {
           billed_amount, received_amount, backlog, projected_revenue, gross_profit_percent,
           earned_revenue, actual_cost, projected_cost, pf_hours_estimate, pf_hours_jtd,
           sm_hours_estimate, sm_hours_jtd, total_hours_estimate, total_hours_jtd,
-          customer_number, customer_name, ship_city, ship_state, ship_zip,
+          customer_number, customer_name, ship_address, ship_city, ship_state, ship_zip,
           primary_market, negotiated_work, delivery_method, raw_data, import_batch_id,
           material_jtd, material_estimate, material_projected,
           subcontracts_jtd, subcontracts_estimate, subcontracts_projected,
@@ -134,7 +136,7 @@ const VistaData = {
           original_estimated_margin, original_estimated_margin_pct,
           actual_labor_rate, estimated_labor_rate, current_est_labor_cost,
           ttl_labor_projected, start_month, month_closed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67)
         RETURNING *`,
         [
           tenantId, data.contract_number, data.description, data.status, data.employee_number,
@@ -142,7 +144,7 @@ const VistaData = {
           data.billed_amount, data.received_amount, data.backlog, data.projected_revenue, data.gross_profit_percent,
           data.earned_revenue, data.actual_cost, data.projected_cost, data.pf_hours_estimate, data.pf_hours_jtd,
           data.sm_hours_estimate, data.sm_hours_jtd, data.total_hours_estimate, data.total_hours_jtd,
-          data.customer_number, data.customer_name, data.ship_city, data.ship_state, data.ship_zip,
+          data.customer_number, data.customer_name, data.ship_address, data.ship_city, data.ship_state, data.ship_zip,
           data.primary_market, data.negotiated_work, data.delivery_method, data.raw_data, batchId,
           data.material_jtd, data.material_estimate, data.material_projected,
           data.subcontracts_jtd, data.subcontracts_estimate, data.subcontracts_projected,
