@@ -25,7 +25,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="header-content">
           <div className="header-left">
             <Link to="/" className="logo-default">
-              <div className="logo-shield">🛡️</div>
+              <div className="logo-shield">
+                <svg width="32" height="36" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35C23.8 32.8 30 24.8 30 16V8L16 2Z" fill="url(#shield-gradient)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                  <defs>
+                    <linearGradient id="shield-gradient" x1="2" y1="2" x2="30" y2="35" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stopColor="#4A90E2"/>
+                      <stop offset="50%" stopColor="#5CA3F5"/>
+                      <stop offset="100%" stopColor="#4A90E2"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
               <div className="logo-text">
                 <div className="logo-titan">TITAN</div>
               </div>
