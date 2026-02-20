@@ -92,6 +92,7 @@ import SafetyDashboard from './pages/safety/SafetyDashboard';
 import TenantSettings from './pages/TenantSettings';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
+import BuildQuestionnaire from './pages/BuildQuestionnaire';
 // Platform Admin pages
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantList from './pages/platform/TenantList';
@@ -147,6 +148,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/build-questionnaire" element={<BuildQuestionnaire />} />
 
         {/* Platform Admin routes */}
         <Route

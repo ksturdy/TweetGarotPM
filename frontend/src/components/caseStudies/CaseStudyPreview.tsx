@@ -467,7 +467,7 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
     services_provided: (label) => {
       if (services.length === 0) return null;
       return (
-        <div key="services_provided" style={{ marginTop: '14px' }}>
+        <div key="services_provided" style={{ marginTop: '14px', marginBottom: '18px' }}>
           <div style={sectionHeaderStyle}>{label}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '6px' }}>
             {services.map((s, i) => (
@@ -532,6 +532,7 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
       maxWidth: '8.5in',
       margin: '0 auto',
       backgroundColor: 'white',
+      position: 'relative',
     }}>
 
       {/* ===== HERO BANNER ===== */}
@@ -631,16 +632,26 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
         </div>
       )}
 
-      {/* ===== LOGO (always bottom-right) ===== */}
+      {/* ===== LOGO (absolute positioned bottom-right) ===== */}
       {showLogo && logoUrl && (
-        <div style={{ padding: '0 40px 12px 40px', textAlign: 'right' as const }}>
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          right: '40px',
+          zIndex: 10
+        }}>
           <img src={logoUrl} alt="Company Logo"
             style={{ width: '140px', height: 'auto', maxHeight: '60px', objectFit: 'contain' as const }} />
         </div>
       )}
 
       {/* ===== FOOTER ===== */}
-      <div style={{ padding: '8px 40px', fontSize: '7pt', color: '#bbb', textAlign: 'center' as const, borderTop: '1px solid #eee' }}>
+      <div style={{
+        padding: '8px 40px',
+        fontSize: '7pt',
+        color: '#bbb',
+        borderTop: '1px solid #eee'
+      }}>
         Generated on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
       </div>
     </div>

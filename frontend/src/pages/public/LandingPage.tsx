@@ -235,6 +235,43 @@ const LandingPage: React.FC = () => {
         </Container>
       </Box>
 
+      {/* Build Questionnaire Section */}
+      <Box sx={{ py: 8, textAlign: 'center', bgcolor: 'background.default' }}>
+        <Container maxWidth="md">
+          <Typography variant="h4" sx={{ mb: 2, fontWeight: 700 }}>
+            Need a Custom Solution?
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+            Tell us about your project requirements and we'll build the perfect system for you.
+          </Typography>
+          <Button
+            variant="outlined"
+            size="large"
+            component={Link}
+            to="/build-questionnaire"
+            sx={{
+              py: 1.5,
+              px: 6,
+              borderWidth: 2,
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              borderColor: 'transparent',
+              color: 'white',
+              fontWeight: 600,
+              '&:hover': {
+                borderWidth: 2,
+                borderColor: 'transparent',
+                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 6px 16px rgba(59, 130, 246, 0.4)',
+              },
+              transition: 'all 0.2s',
+            }}
+          >
+            Build Questionnaire
+          </Button>
+        </Container>
+      </Box>
+
       {/* Footer */}
       <Box sx={{ bgcolor: 'grey.900', color: 'grey.300', py: 4 }}>
         <Container maxWidth="lg">

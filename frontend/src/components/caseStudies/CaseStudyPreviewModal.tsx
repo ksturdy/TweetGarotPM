@@ -49,10 +49,17 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
     const images = doc.querySelectorAll('img');
     let loaded = 0;
     const total = images.length;
+    let hasTriggered = false;
     const triggerPrint = () => {
+      if (hasTriggered) return;
+      hasTriggered = true;
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
     };
     if (total === 0) {
       triggerPrint();
