@@ -85,6 +85,7 @@ import ContractReviewUpload from './pages/riskManagement/ContractReviewUpload';
 import ContractReviewDetail from './pages/riskManagement/ContractReviewDetail';
 import SalesPipeline from './pages/SalesPipeline';
 import MobileSales from './pages/MobileSales';
+import OpportunitySearch from './pages/OpportunitySearch';
 import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
@@ -201,6 +202,7 @@ const App: React.FC = () => {
                   <Route path="/" element={<Dashboard />} />
                 <Route path="/sales" element={<SalesPipeline />} />
                 <Route path="/sales/mobile" element={<MobileSales />} />
+                <Route path="/sales/opportunity-search" element={<OpportunitySearch />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />

@@ -568,6 +568,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     <option value="email">Email Campaign</option>
                     <option value="social_media">Social Media</option>
                     <option value="repeat_customer">Repeat Customer</option>
+                    <option value="ai_search">AI Opportunity Search</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
