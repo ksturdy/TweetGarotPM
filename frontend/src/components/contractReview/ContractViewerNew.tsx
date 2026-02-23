@@ -36,7 +36,7 @@ const ContractViewerNew: React.FC<ContractViewerProps> = ({
         console.log('[ContractViewer] Fetching PDF from:', fileUrl);
 
         // Use axios (api instance) to get the file with proper auth headers
-        const response = await api.get(fileUrl.replace(api.defaults.baseURL || '', ''), {
+        const response = await api.get(fileUrl, {
           responseType: 'arraybuffer'
         });
 

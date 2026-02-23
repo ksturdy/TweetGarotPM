@@ -161,6 +161,6 @@ export const contractReviewsApi = {
   deleteAnnotation: (reviewId: number, annotationId: number) =>
     api.delete(`/contract-reviews/${reviewId}/annotations/${annotationId}`),
 
-  // Get contract file URL
-  getFileUrl: (reviewId: number) => `/api/contract-reviews/${reviewId}/file`,
+  // Get contract file URL (relative to api baseURL, no /api prefix)
+  getFileUrl: (reviewId: number) => `/contract-reviews/${reviewId}/file`,
 };
