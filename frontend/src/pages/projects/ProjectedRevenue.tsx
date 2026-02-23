@@ -233,6 +233,28 @@ const ProjectedRevenue: React.FC = () => {
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<'project' | 'backlog' | 'completion'>('backlog');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Handle column header click for sorting
+  const handleSort = (column: 'project' | 'backlog' | 'completion') => {
+    if (sortColumn === column) {
+      // Toggle direction if clicking same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column: default to descending for numeric, ascending for text
+      setSortColumn(column);
+      setSortDirection(column === 'project' ? 'asc' : 'desc');
+    }
+  };
+
+  // Sort indicator component
+  const SortIndicator: React.FC<{ column: 'project' | 'backlog' | 'completion' }> = ({ column }) => {
+    if (sortColumn !== column) return <span style={{ opacity: 0.3, marginLeft: '4px' }}>⇅</span>;
+    return <span style={{ marginLeft: '4px' }}>{sortDirection === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   // Get duration based on contract value using rules
   const getDurationForValue = (contractValue: number): number => {
     for (const rule of durationRules) {
@@ -462,11 +484,29 @@ const ProjectedRevenue: React.FC = () => {
       });
     }
 
-    // Sort by projected revenue descending
-    results.sort((a, b) => parseNum(b.contract.projected_revenue) - parseNum(a.contract.projected_revenue));
+    // Sort based on selected column and direction
+    results.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'project':
+          const nameA = a.contract.contract_number?.toLowerCase() || '';
+          const nameB = b.contract.contract_number?.toLowerCase() || '';
+          comparison = nameA.localeCompare(nameB);
+          break;
+        case 'backlog':
+          comparison = parseNum(a.contract.backlog) - parseNum(b.contract.backlog);
+          break;
+        case 'completion':
+          comparison = a.pctComplete - b.pctComplete;
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
 
   // Calculate column totals
   const columnTotals = useMemo(() => {
@@ -754,9 +794,48 @@ const ProjectedRevenue: React.FC = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', left: 0, background: '#f8fafc', minWidth: '200px' }}>Project</th>
-              <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '70px' }}>Backlog</th>
-              <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>% Comp</th>
+              <th
+                onClick={() => handleSort('project')}
+                style={{
+                  padding: '0.5rem',
+                  textAlign: 'left',
+                  borderBottom: '2px solid #e2e8f0',
+                  position: 'sticky',
+                  left: 0,
+                  background: '#f8fafc',
+                  minWidth: '200px',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                Project<SortIndicator column="project" />
+              </th>
+              <th
+                onClick={() => handleSort('backlog')}
+                style={{
+                  padding: '0.5rem',
+                  textAlign: 'right',
+                  borderBottom: '2px solid #e2e8f0',
+                  minWidth: '70px',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                Backlog<SortIndicator column="backlog" />
+              </th>
+              <th
+                onClick={() => handleSort('completion')}
+                style={{
+                  padding: '0.5rem',
+                  textAlign: 'right',
+                  borderBottom: '2px solid #e2e8f0',
+                  minWidth: '60px',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                % Comp<SortIndicator column="completion" />
+              </th>
               <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>End</th>
               <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Contour</th>
               {columns.map(col => (

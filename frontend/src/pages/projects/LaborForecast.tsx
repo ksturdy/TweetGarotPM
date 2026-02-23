@@ -183,6 +183,26 @@ const LaborForecast: React.FC = () => {
   const [viewMode, setViewMode] = useState<'table' | 'graph'>('table');
   const [dataView, setDataView] = useState<'project' | 'trade'>('trade');
 
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<'project' | 'hours' | 'completion'>('hours');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Handle column header click for sorting
+  const handleSort = (column: 'project' | 'hours' | 'completion') => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection(column === 'project' ? 'asc' : 'desc');
+    }
+  };
+
+  // Sort indicator component
+  const SortIndicator: React.FC<{ column: 'project' | 'hours' | 'completion' }> = ({ column }) => {
+    if (sortColumn !== column) return <span style={{ opacity: 0.3, marginLeft: '4px' }}>⇅</span>;
+    return <span style={{ marginLeft: '4px' }}>{sortDirection === 'asc' ? '↑' : '↓'}</span>;
+  };
+
   // Settings
   const [hoursPerPersonPerMonth, setHoursPerPersonPerMonth] = useState<number>(173);
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
@@ -402,9 +422,29 @@ const LaborForecast: React.FC = () => {
       });
     }
 
-    results.sort((a, b) => b.totalRemainingHours - a.totalRemainingHours);
+    // Sort based on selected column and direction
+    results.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'project':
+          const nameA = a.contract.contract_number?.toLowerCase() || '';
+          const nameB = b.contract.contract_number?.toLowerCase() || '';
+          comparison = nameA.localeCompare(nameB);
+          break;
+        case 'hours':
+          comparison = a.totalRemainingHours - b.totalRemainingHours;
+          break;
+        case 'completion':
+          comparison = a.pctComplete - b.pctComplete;
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -723,10 +763,49 @@ const LaborForecast: React.FC = () => {
                 <tr style={{ background: '#f8fafc' }}>
                   {dataView === 'project' ? (
                     <>
-                      <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', left: 0, background: '#f8fafc', minWidth: '200px' }}>Project</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Rem. Hours</th>
+                      <th
+                        onClick={() => handleSort('project')}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'left',
+                          borderBottom: '2px solid #e2e8f0',
+                          position: 'sticky',
+                          left: 0,
+                          background: '#f8fafc',
+                          minWidth: '200px',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                      >
+                        Project<SortIndicator column="project" />
+                      </th>
+                      <th
+                        onClick={() => handleSort('hours')}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'right',
+                          borderBottom: '2px solid #e2e8f0',
+                          minWidth: '80px',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                      >
+                        Rem. Hours<SortIndicator column="hours" />
+                      </th>
                       <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '110px' }}>PF / SM / PL</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '50px' }}>% Comp</th>
+                      <th
+                        onClick={() => handleSort('completion')}
+                        style={{
+                          padding: '0.5rem',
+                          textAlign: 'right',
+                          borderBottom: '2px solid #e2e8f0',
+                          minWidth: '50px',
+                          cursor: 'pointer',
+                          userSelect: 'none'
+                        }}
+                      >
+                        % Comp<SortIndicator column="completion" />
+                      </th>
                       <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>End</th>
                       <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Contour</th>
                     </>
