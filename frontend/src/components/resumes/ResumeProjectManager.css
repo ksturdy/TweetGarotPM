@@ -1,0 +1,175 @@
+.resume-project-manager {
+  width: 100%;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  background: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  border-color: #1e3a5f;
+  background: #f8fafc;
+}
+
+.mode-btn.active {
+  border-color: #1e3a5f;
+  background: #1e3a5f;
+  color: white;
+}
+
+.database-projects {
+  margin-top: 1rem;
+}
+
+.no-projects {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.project-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.db-project-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.2s;
+}
+
+.db-project-card:hover {
+  border-color: #1e3a5f;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.db-project-card .project-info h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: #1e3a5f;
+}
+
+.db-project-card .project-info p {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.custom-project-form {
+  padding: 1.5rem;
+  border: 2px solid #1e3a5f;
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 1.5rem;
+}
+
+.custom-project-form h4 {
+  margin: 0 0 1rem 0;
+  color: #1e3a5f;
+}
+
+.current-projects {
+  margin-top: 2rem;
+}
+
+.current-projects h4 {
+  margin-bottom: 1rem;
+  color: #1e3a5f;
+}
+
+.projects-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.project-card {
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+}
+
+.project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.project-header h5 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: #1e3a5f;
+}
+
+.project-role {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #1e3a5f;
+  font-weight: 600;
+}
+
+.project-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.icon-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #1e3a5f;
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.icon-btn.delete:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.project-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.project-description {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #374151;
+}

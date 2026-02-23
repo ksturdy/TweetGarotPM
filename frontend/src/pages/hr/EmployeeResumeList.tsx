@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
-import { employeeResumesApi, EmployeeResume } from '../../services/employeeResumes';
+import { employeeResumesApi, EmployeeResume, ResumeProject } from '../../services/employeeResumes';
+import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
 import '../../styles/SalesPipeline.css';
 import './EmployeeResumeList.css';
 
@@ -10,6 +11,7 @@ const EmployeeResumeList: React.FC = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [previewResumeId, setPreviewResumeId] = useState<number | null>(null);
 
   // Fetch employee resumes
   const { data: resumes = [], isLoading } = useQuery({
@@ -33,6 +35,28 @@ const EmployeeResumeList: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employeeResumes'] });
     },
+  });
+
+  // Fetch full resume data for preview
+  const { data: previewResume } = useQuery({
+    queryKey: ['employeeResume', previewResumeId],
+    queryFn: async () => {
+      if (!previewResumeId) return null;
+      const response = await employeeResumesApi.getById(previewResumeId);
+      return response.data;
+    },
+    enabled: previewResumeId !== null,
+  });
+
+  // Fetch projects for preview
+  const { data: previewProjects = [] } = useQuery<ResumeProject[]>({
+    queryKey: ['resumeProjects', previewResumeId],
+    queryFn: async () => {
+      if (!previewResumeId) return [];
+      const response = await employeeResumesApi.getProjects(previewResumeId);
+      return response.data;
+    },
+    enabled: previewResumeId !== null,
   });
 
   // Download mutation
@@ -71,8 +95,8 @@ const EmployeeResumeList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/hr" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to HR
+            <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Marketing
             </Link>
             <h1>📄 Employee Resumes</h1>
             <div className="sales-subtitle">Manage employee resume profiles</div>
@@ -111,6 +135,7 @@ const EmployeeResumeList: React.FC = () => {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: '60px' }}>Photo</th>
               <th>Employee</th>
               <th>Job Title</th>
               <th>Experience</th>
@@ -124,13 +149,42 @@ const EmployeeResumeList: React.FC = () => {
           <tbody>
             {resumes.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
                   No employee resumes found. Create one to get started.
                 </td>
               </tr>
             ) : (
               resumes.map((resume: EmployeeResume) => (
                 <tr key={resume.id}>
+                  <td>
+                    {resume.employee_photo_path ? (
+                      <img
+                        src={`/api${resume.employee_photo_path}`}
+                        alt={resume.employee_name}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          backgroundColor: '#e5e7eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '18px',
+                        }}
+                      >
+                        👤
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <strong>{resume.employee_name}</strong>
                   </td>
@@ -166,6 +220,13 @@ const EmployeeResumeList: React.FC = () => {
                     <div className="action-buttons">
                       <button
                         className="btn-icon"
+                        onClick={() => setPreviewResumeId(resume.id)}
+                        title="Preview"
+                      >
+                        👁️
+                      </button>
+                      <button
+                        className="btn-icon"
                         onClick={() => navigate(`/employee-resumes/${resume.id}`)}
                         title="Edit"
                       >
@@ -186,6 +247,16 @@ const EmployeeResumeList: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Preview Modal */}
+      {previewResume && (
+        <ResumePreviewModal
+          resume={previewResume}
+          projects={previewProjects}
+          isOpen={previewResumeId !== null}
+          onClose={() => setPreviewResumeId(null)}
+        />
+      )}
     </div>
   );
 };

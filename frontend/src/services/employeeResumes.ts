@@ -15,6 +15,13 @@ export interface EmployeeResume {
   resume_file_path?: string;
   resume_file_size?: number;
   resume_file_type?: string;
+  employee_photo_path?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  languages?: Language[];
+  hobbies?: string[];
+  references?: Reference[];
   is_active: boolean;
   version_number: number;
   last_updated_by?: number;
@@ -26,6 +33,41 @@ export interface Certification {
   name: string;
   issuer?: string;
   year?: number;
+}
+
+export interface Language {
+  language: string;
+  proficiency: string; // e.g., "Native", "Fluent", "Conversational"
+}
+
+export interface Reference {
+  name: string;
+  title?: string;
+  company?: string;
+  phone?: string;
+}
+
+export interface ResumeProject {
+  id: number;
+  resume_id: number;
+  tenant_id: number;
+  project_id?: number;
+  project_name: string;
+  project_role: string;
+  customer_name?: string;
+  project_value?: number;
+  start_date?: string;
+  end_date?: string;
+  description?: string;
+  square_footage?: number;
+  location?: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  // Fields from JOIN with projects table
+  db_project_name?: string;
+  project_number?: string;
+  db_customer_name?: string;
 }
 
 export const employeeResumesApi = {
@@ -48,4 +90,33 @@ export const employeeResumesApi = {
 
   download: (id: number) =>
     api.get(`/employee-resumes/${id}/download`, { responseType: 'blob' }),
+
+  // Photo management
+  uploadPhoto: (id: number, formData: FormData) =>
+    api.post(`/employee-resumes/${id}/photo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+
+  deletePhoto: (id: number) => api.delete(`/employee-resumes/${id}/photo`),
+
+  // Project management
+  getProjects: (id: number) => api.get(`/employee-resumes/${id}/projects`),
+
+  addProject: (id: number, data: Partial<ResumeProject>) =>
+    api.post(`/employee-resumes/${id}/projects`, data),
+
+  updateProject: (resumeId: number, projectId: number, data: Partial<ResumeProject>) =>
+    api.put(`/employee-resumes/${resumeId}/projects/${projectId}`, data),
+
+  deleteProject: (resumeId: number, projectId: number) =>
+    api.delete(`/employee-resumes/${resumeId}/projects/${projectId}`),
+
+  reorderProjects: (id: number, projectIds: number[]) =>
+    api.post(`/employee-resumes/${id}/projects/reorder`, { project_ids: projectIds }),
+
+  // PDF generation
+  getPreviewHtml: (id: number) => api.get(`/employee-resumes/${id}/preview-html`),
+
+  downloadPdf: (id: number) =>
+    api.get(`/employee-resumes/${id}/pdf`, { responseType: 'blob' }),
 };

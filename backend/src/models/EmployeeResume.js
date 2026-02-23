@@ -18,6 +18,13 @@ const EmployeeResume = {
       resume_file_path,
       resume_file_size,
       resume_file_type,
+      employee_photo_path,
+      phone,
+      email,
+      address,
+      languages,
+      hobbies,
+      references,
       is_active = true
     } = data;
 
@@ -26,14 +33,17 @@ const EmployeeResume = {
         tenant_id, employee_id, employee_name, job_title, years_experience,
         summary, certifications, skills, education,
         resume_file_name, resume_file_path, resume_file_size, resume_file_type,
+        employee_photo_path, phone, email, address, languages, hobbies, references,
         is_active, version_number, last_updated_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING *`,
       [
         tenantId, employee_id, employee_name, job_title, years_experience,
         summary, JSON.stringify(certifications || []), skills || [],
         education, resume_file_name, resume_file_path, resume_file_size,
-        resume_file_type, is_active, 1, userId
+        resume_file_type, employee_photo_path, phone, email, address,
+        JSON.stringify(languages || []), hobbies || [], JSON.stringify(references || []),
+        is_active, 1, userId
       ]
     );
     return result.rows[0];
@@ -116,6 +126,13 @@ const EmployeeResume = {
       resume_file_path,
       resume_file_size,
       resume_file_type,
+      employee_photo_path,
+      phone,
+      email,
+      address,
+      languages,
+      hobbies,
+      references,
       is_active
     } = data;
 
@@ -136,18 +153,28 @@ const EmployeeResume = {
         resume_file_path = COALESCE($10, resume_file_path),
         resume_file_size = COALESCE($11, resume_file_size),
         resume_file_type = COALESCE($12, resume_file_type),
-        is_active = COALESCE($13, is_active),
-        version_number = $14,
-        last_updated_by = $15,
+        employee_photo_path = COALESCE($13, employee_photo_path),
+        phone = COALESCE($14, phone),
+        email = COALESCE($15, email),
+        address = COALESCE($16, address),
+        languages = COALESCE($17, languages),
+        hobbies = COALESCE($18, hobbies),
+        "references" = COALESCE($19, "references"),
+        is_active = COALESCE($20, is_active),
+        version_number = $21,
+        last_updated_by = $22,
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $16 AND tenant_id = $17
+       WHERE id = $23 AND tenant_id = $24
        RETURNING *`,
       [
         employee_id, employee_name, job_title, years_experience,
         summary, certifications ? JSON.stringify(certifications) : null,
-        skills, education, resume_file_name, resume_file_path,
-        resume_file_size, resume_file_type, is_active, newVersion,
-        userId, id, tenantId
+        skills || null, education, resume_file_name, resume_file_path,
+        resume_file_size, resume_file_type, employee_photo_path,
+        phone, email, address,
+        languages ? JSON.stringify(languages) : null,
+        hobbies || null, references ? JSON.stringify(references) : null,
+        is_active, newVersion, userId, id, tenantId
       ]
     );
     return result.rows[0];
