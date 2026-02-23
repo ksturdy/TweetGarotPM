@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { customersApi, Customer } from '../../services/customers';
+import { favoritesService } from '../../services/favorites';
 import CustomerFormModal from '../../components/modals/CustomerFormModal';
 import '../../styles/SalesPipeline.css';
 
@@ -102,6 +103,24 @@ const CustomerList: React.FC = () => {
     queryFn: customersApi.getAll,
   });
 
+  // Fetch favorite status for all customers
+  useEffect(() => {
+    if (customers.length > 0) {
+      const customerIds = customers.map(c => c.id);
+      favoritesService.checkMultiple('customer', customerIds).then(favoriteStatus => {
+        // Update the query data with favorite status
+        queryClient.setQueryData<Customer[]>(['customers'], (old) =>
+          old?.map(customer => ({
+            ...customer,
+            isFavorited: favoriteStatus[customer.id] || false
+          })) || []
+        );
+      }).catch(error => {
+        console.error('Failed to load favorite status:', error);
+      });
+    }
+  }, [customers.length]); // Only re-run when customer count changes
+
   // Fetch stats
   const { data: stats } = useQuery({
     queryKey: ['customers', 'stats'],
@@ -159,14 +178,14 @@ const CustomerList: React.FC = () => {
     },
   });
 
-  // Toggle favorite mutation with optimistic updates
+  // Toggle isFavorited mutation with optimistic updates
   const toggleFavoriteMutation = useMutation({
     mutationFn: (id: number) => customersApi.toggleFavorite(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['customers'] });
       const previousCustomers = queryClient.getQueryData<Customer[]>(['customers']);
       queryClient.setQueryData<Customer[]>(['customers'], (old) =>
-        old?.map(c => c.id === id ? { ...c, favorite: !c.favorite } : c) || []
+        old?.map(c => c.id === id ? { ...c, isFavorited: !c.isFavorited } : c) || []
       );
       return { previousCustomers };
     },
@@ -254,12 +273,12 @@ const CustomerList: React.FC = () => {
     return matchesSearch && matchesState && matchesManager;
   });
 
-  // Sort customers - favorites at top on initial load only
+  // Sort customers - isFavoriteds at top on initial load only
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
-    // On initial load (before user sorts), put favorites at top
+    // On initial load (before user sorts), put isFavoriteds at top
     if (!hasUserSorted) {
-      const aFav = a.favorite ? 1 : 0;
-      const bFav = b.favorite ? 1 : 0;
+      const aFav = a.isFavorited ? 1 : 0;
+      const bFav = b.isFavorited ? 1 : 0;
       if (aFav !== bFav) return bFav - aFav; // Favorites first
     }
 
@@ -267,9 +286,9 @@ const CustomerList: React.FC = () => {
     let bValue: any;
 
     switch (sortColumn) {
-      case 'favorite':
-        aValue = a.favorite ? 1 : 0;
-        bValue = b.favorite ? 1 : 0;
+      case 'isFavorited':
+        aValue = a.isFavorited ? 1 : 0;
+        bValue = b.isFavorited ? 1 : 0;
         break;
       case 'customer_owner':
         aValue = (a.customer_owner || '').toLowerCase();
@@ -314,13 +333,13 @@ const CustomerList: React.FC = () => {
 
   // Handle sort column click
   const handleSort = (column: string) => {
-    setHasUserSorted(true); // User has explicitly sorted, disable favorites-first default
+    setHasUserSorted(true); // User has explicitly sorted, disable isFavoriteds-first default
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      // Default to 'desc' for favorite so favorites appear first
-      setSortDirection(column === 'favorite' ? 'desc' : 'asc');
+      // Default to 'desc' for isFavorited so isFavoriteds appear first
+      setSortDirection(column === 'isFavorited' ? 'desc' : 'asc');
     }
   };
 
@@ -476,8 +495,8 @@ const CustomerList: React.FC = () => {
         <table className="sales-table">
           <thead>
             <tr>
-              <th className="sales-sortable" onClick={() => handleSort('favorite')} style={{ width: '50px', textAlign: 'center' }}>
-                <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('isFavorited')} style={{ width: '50px', textAlign: 'center' }}>
+                <span className="sales-sort-icon">{sortColumn === 'isFavorited' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('customer_owner')}>
                 Company <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -523,19 +542,19 @@ const CustomerList: React.FC = () => {
                     <span
                       style={{
                         fontSize: '1.25rem',
-                        color: customer.favorite ? '#f59e0b' : '#d1d5db',
+                        color: customer.isFavorited ? '#f59e0b' : '#d1d5db',
                         transition: 'color 0.2s, transform 0.2s',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.2)';
-                        if (!customer.favorite) e.currentTarget.style.color = '#fbbf24';
+                        if (!customer.isFavorited) e.currentTarget.style.color = '#fbbf24';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'scale(1)';
-                        if (!customer.favorite) e.currentTarget.style.color = '#d1d5db';
+                        if (!customer.isFavorited) e.currentTarget.style.color = '#d1d5db';
                       }}
                     >
-                      {customer.favorite ? '★' : '☆'}
+                      {customer.isFavorited ? '★' : '☆'}
                     </span>
                   </td>
                   <td>

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
+import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
 import '../../styles/SalesPipeline.css';
 
@@ -28,19 +29,37 @@ const ProjectList: React.FC = () => {
     queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
 
+  // Fetch favorite status for all projects
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      const projectIds = projects.map(p => p.id);
+      favoritesService.checkMultiple('project', projectIds).then(favoriteStatus => {
+        // Update the query data with favorite status
+        queryClient.setQueryData<Project[]>(['projects'], (old) =>
+          old?.map(project => ({
+            ...project,
+            isFavorited: favoriteStatus[project.id] || false
+          })) || []
+        );
+      }).catch(error => {
+        console.error('Failed to load favorite status:', error);
+      });
+    }
+  }, [projects?.length]); // Only re-run when project count changes
+
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
   });
 
-  // Toggle favorite mutation with optimistic updates
+  // Toggle isFavorited mutation with optimistic updates
   const toggleFavoriteMutation = useMutation({
     mutationFn: (id: number) => projectsApi.toggleFavorite(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['projects'] });
       const previousProjects = queryClient.getQueryData<Project[]>(['projects']);
       queryClient.setQueryData<Project[]>(['projects'], (old) =>
-        old?.map(p => p.id === id ? { ...p, favorite: !p.favorite } : p) || []
+        old?.map(p => p.id === id ? { ...p, isFavorited: !p.isFavorited } : p) || []
       );
       return { previousProjects };
     },
@@ -234,12 +253,12 @@ const ProjectList: React.FC = () => {
     );
   });
 
-  // Sort projects - favorites at top on initial load
+  // Sort projects - isFavoriteds at top on initial load
   const sortedProjects = [...filteredProjects].sort((a, b) => {
-    // On initial load (before user sorts), put favorites at top
+    // On initial load (before user sorts), put isFavoriteds at top
     if (!hasUserSorted) {
-      const aFav = a.favorite ? 1 : 0;
-      const bFav = b.favorite ? 1 : 0;
+      const aFav = a.isFavorited ? 1 : 0;
+      const bFav = b.isFavorited ? 1 : 0;
       if (aFav !== bFav) return bFav - aFav;
     }
 
@@ -247,9 +266,9 @@ const ProjectList: React.FC = () => {
     let bValue: any;
 
     switch (sortColumn) {
-      case 'favorite':
-        aValue = a.favorite ? 1 : 0;
-        bValue = b.favorite ? 1 : 0;
+      case 'isFavorited':
+        aValue = a.isFavorited ? 1 : 0;
+        bValue = b.isFavorited ? 1 : 0;
         break;
       case 'number':
         aValue = a.number.toLowerCase();
@@ -303,7 +322,7 @@ const ProjectList: React.FC = () => {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      setSortDirection(column === 'favorite' ? 'desc' : 'asc');
+      setSortDirection(column === 'isFavorited' ? 'desc' : 'asc');
     }
   };
 
@@ -641,8 +660,8 @@ const ProjectList: React.FC = () => {
                   style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                 />
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('favorite')} style={{ width: '50px', textAlign: 'center' }}>
-                <span className="sales-sort-icon">{sortColumn === 'favorite' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('isFavorited')} style={{ width: '50px', textAlign: 'center' }}>
+                <span className="sales-sort-icon">{sortColumn === 'isFavorited' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
               </th>
               <th className="sales-sortable" onClick={() => handleSort('number')}>
                 Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -703,19 +722,19 @@ const ProjectList: React.FC = () => {
                     <span
                       style={{
                         fontSize: '1.25rem',
-                        color: project.favorite ? '#f59e0b' : '#d1d5db',
+                        color: project.isFavorited ? '#f59e0b' : '#d1d5db',
                         transition: 'color 0.2s, transform 0.2s',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.2)';
-                        if (!project.favorite) e.currentTarget.style.color = '#fbbf24';
+                        if (!project.isFavorited) e.currentTarget.style.color = '#fbbf24';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'scale(1)';
-                        if (!project.favorite) e.currentTarget.style.color = '#d1d5db';
+                        if (!project.isFavorited) e.currentTarget.style.color = '#d1d5db';
                       }}
                     >
-                      {project.favorite ? '\u2605' : '\u2606'}
+                      {project.isFavorited ? '\u2605' : '\u2606'}
                     </span>
                   </td>
                   <td>{project.number}</td>
