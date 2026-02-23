@@ -46,7 +46,13 @@ const ContractViewerNew: React.FC<ContractViewerProps> = ({
         setLoading(false);
       } catch (err: any) {
         console.error('[ContractViewer] Error fetching PDF:', err);
-        setError(err.response?.data?.error || err.message || 'Failed to load PDF');
+
+        // Handle 404 specifically with a friendlier message
+        if (err.response?.status === 404) {
+          setError('FILE_NOT_FOUND');
+        } else {
+          setError(err.response?.data?.error || err.message || 'Failed to load PDF');
+        }
         setLoading(false);
       }
     };
@@ -257,9 +263,22 @@ const ContractViewerNew: React.FC<ContractViewerProps> = ({
     return (
       <div className="contract-viewer-new">
         <div className="viewer-error">
-          <div className="error-icon">⚠️</div>
-          <h3>Failed to Load PDF</h3>
-          <p>{error}</p>
+          {error === 'FILE_NOT_FOUND' ? (
+            <>
+              <div className="error-icon">📄</div>
+              <h3>No Contract File Available</h3>
+              <p>This contract review was created via questionnaire and does not have an associated PDF file.</p>
+              <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                Future uploads will display the PDF viewer here.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="error-icon">⚠️</div>
+              <h3>Failed to Load PDF</h3>
+              <p>{error}</p>
+            </>
+          )}
         </div>
       </div>
     );

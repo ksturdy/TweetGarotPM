@@ -116,7 +116,7 @@ const ContractReviewDetail: React.FC = () => {
   };
 
   // Pass the relative path to ContractViewerNew (it will use the api instance with auth + baseURL)
-  const fileUrl = contractReviewsApi.getFileUrl(Number(id));
+  const fileUrl = review?.file_path ? contractReviewsApi.getFileUrl(Number(id)) : null;
 
   return (
     <div className={`contract-detail ${showViewer ? 'split-view' : ''}`}>
@@ -148,65 +148,73 @@ const ContractReviewDetail: React.FC = () => {
       <div className="detail-content">
         {/* Summary Card */}
         <div className="summary-card card">
-          <div className="card-header">
-            <h2>Summary</h2>
-            <div className="summary-badges">
-              {review.overall_risk && (
-                <span className={`badge risk-${review.overall_risk.toLowerCase()}`}>
-                  {review.overall_risk} RISK
+          <div className="card-body" style={{ padding: '1.5rem' }}>
+            <div className="summary-header-inline">
+              <h3 className="summary-title">Summary</h3>
+              <div className="summary-badges-inline">
+                {review.overall_risk && (
+                  <span className={`badge badge-pill risk-${review.overall_risk.toLowerCase()}`}>
+                    {review.overall_risk} RISK
+                  </span>
+                )}
+                <span className={`badge badge-pill status-${review.status}`}>
+                  {review.status.replace('_', ' ')}
                 </span>
-              )}
-              <span className={`badge status-${review.status}`}>
-                {review.status.replace('_', ' ')}
-              </span>
+              </div>
             </div>
-          </div>
-          <div className="card-body">
-            <div className="summary-grid">
-              <div className="summary-item">
-                <span className="label">Project Name</span>
-                <span className="value">{review.project_name || '—'}</span>
+
+            <div className="summary-grid-compact">
+              <div className="summary-item-compact">
+                <div className="summary-label">PROJECT NAME</div>
+                <div className="summary-value">{review.project_name || '—'}</div>
               </div>
-              <div className="summary-item">
-                <span className="label">General Contractor</span>
-                <span className="value">{review.general_contractor || '—'}</span>
+
+              <div className="summary-item-compact">
+                <div className="summary-label">GENERAL CONTRACTOR</div>
+                <div className="summary-value">{review.general_contractor || '—'}</div>
               </div>
-              <div className="summary-item">
-                <span className="label">Contract Value</span>
-                <span className="value">
+
+              <div className="summary-item-compact">
+                <div className="summary-label">CONTRACT VALUE</div>
+                <div className="summary-value">
                   {review.contract_value
                     ? `$${review.contract_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                     : '—'}
-                </span>
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="label">File Size</span>
-                <span className="value">
+
+              <div className="summary-item-compact">
+                <div className="summary-label">FILE SIZE</div>
+                <div className="summary-value">
                   {review.file_size ? `${(review.file_size / 1024 / 1024).toFixed(2)} MB` : '—'}
-                </span>
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="label">Uploaded By</span>
-                <span className="value">{review.uploaded_by_name || '—'}</span>
+
+              <div className="summary-item-compact">
+                <div className="summary-label">UPLOADED BY</div>
+                <div className="summary-value">{review.uploaded_by_name || '—'}</div>
               </div>
-              <div className="summary-item">
-                <span className="label">Upload Date</span>
-                <span className="value">
+
+              <div className="summary-item-compact">
+                <div className="summary-label">UPLOAD DATE</div>
+                <div className="summary-value">
                   {new Date(review.created_at!).toLocaleDateString()}
-                </span>
+                </div>
               </div>
-              <div className="summary-item">
-                <span className="label">Reviewed By</span>
-                <span className="value">{review.reviewed_by_name || '—'}</span>
+
+              <div className="summary-item-compact">
+                <div className="summary-label">REVIEWED BY</div>
+                <div className="summary-value">{review.reviewed_by_name || '—'}</div>
               </div>
-              <div className="summary-item">
-                <span className="label">Approved By</span>
-                <span className="value">{review.approved_by_name || '—'}</span>
+
+              <div className="summary-item-compact">
+                <div className="summary-label">APPROVED BY</div>
+                <div className="summary-value">{review.approved_by_name || '—'}</div>
               </div>
             </div>
 
             {review.needs_legal_review && (
-              <div className="legal-notice">
+              <div className="legal-notice" style={{ marginTop: '1.5rem' }}>
                 <span className="legal-icon">⚠️</span>
                 <div>
                   <strong>Legal Review Required</strong>
@@ -399,15 +407,15 @@ const ContractReviewDetail: React.FC = () => {
         <div className="viewer-panel">
           {review.file_path ? (
             <ContractViewerNew
-              fileUrl={fileUrl}
+              fileUrl={contractReviewsApi.getFileUrl(Number(id))}
               selectedFinding={selectedFinding}
             />
           ) : (
             <div className="no-file-message">
               <div className="no-file-icon">📄</div>
               <h3>No Contract File Available</h3>
-              <p>This contract review does not have an associated PDF file.</p>
-              <p className="hint">Upload a contract file to view and annotate it here.</p>
+              <p>This contract review was created via questionnaire and does not have an associated PDF file.</p>
+              <p className="hint">Future uploads will display the PDF viewer here.</p>
             </div>
           )}
         </div>
