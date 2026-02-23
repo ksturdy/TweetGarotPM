@@ -68,6 +68,7 @@ const proposalTemplateRoutes = require('./routes/proposalTemplates');
 const proposalRoutes = require('./routes/proposals');
 const weeklyGoalPlanRoutes = require('./routes/weeklyGoalPlans');
 const questionnaireRoutes = require('./routes/questionnaire');
+const favoritesRoutes = require('./routes/favorites');
 
 const app = express();
 
@@ -169,6 +170,7 @@ app.use('/api/proposal-templates', proposalTemplateRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/weekly-goal-plans', weeklyGoalPlanRoutes);
 app.use('/api/questionnaire', questionnaireRoutes);
+app.use('/api/favorites', favoritesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

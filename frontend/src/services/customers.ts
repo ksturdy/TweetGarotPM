@@ -1,4 +1,5 @@
 import api from './api';
+import { favoritesService } from './favorites';
 
 export interface Customer {
   id: number;
@@ -16,10 +17,11 @@ export interface Customer {
   market?: string;
   customer_score?: number;
   active_customer: boolean;
-  favorite?: boolean;
   notes?: string;
   created_at: string;
   updated_at: string;
+  // Note: favorite is now managed per-user via favoritesService
+  isFavorited?: boolean; // Runtime property added by UI
 }
 
 export interface CustomerStats {
@@ -69,8 +71,8 @@ export const customersApi = {
   },
 
   async toggleFavorite(id: number) {
-    const response = await api.patch<Customer>(`/customers/${id}/favorite`);
-    return response.data;
+    // Use the new per-user favorites system
+    return favoritesService.toggle('customer', id);
   },
 
   async deleteAll() {

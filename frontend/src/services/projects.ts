@@ -1,4 +1,5 @@
 import api from './api';
+import { favoritesService } from './favorites';
 
 export interface Project {
   id: number;
@@ -27,9 +28,10 @@ export interface Project {
   ship_city?: string;
   ship_state?: string;
   ship_zip?: string;
-  favorite?: boolean;
   email_distribution_list?: string;
   created_at: string;
+  // Note: favorite is now managed per-user via favoritesService
+  isFavorited?: boolean; // Runtime property added by UI
 }
 
 export const projectsApi = {
@@ -44,5 +46,6 @@ export const projectsApi = {
 
   delete: (id: number) => api.delete(`/projects/${id}`),
 
-  toggleFavorite: (id: number) => api.patch<Project>(`/projects/${id}/favorite`),
+  // Use the new per-user favorites system
+  toggleFavorite: (id: number) => favoritesService.toggle('project', id),
 };
