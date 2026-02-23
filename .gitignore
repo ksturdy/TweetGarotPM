@@ -53,3 +53,9 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Claude Code internals
+.claude/worktrees/
+
+# Windows null device artifact
+nul

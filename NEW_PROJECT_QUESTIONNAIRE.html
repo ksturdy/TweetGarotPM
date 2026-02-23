@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>New Project Build Questionnaire</title>
+    <style>
+        body {
+            font-family: 'Calibri', 'Arial', sans-serif;
+            line-height: 1.6;
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 1in;
+            font-size: 11pt;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            font-size: 24pt;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 30px;
+            font-size: 18pt;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 5px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 20px;
+            font-size: 14pt;
+        }
+        .checkbox {
+            font-family: 'Segoe UI Symbol', Arial;
+        }
+        .blank-line {
+            border-bottom: 1px solid #bdc3c7;
+            display: inline-block;
+            min-width: 200px;
+            margin: 0 5px;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .section {
+            page-break-inside: avoid;
+            margin-bottom: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .text-area {
+            border: 1px solid #bdc3c7;
+            min-height: 100px;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #fafafa;
+        }
+        @media print {
+            body { margin: 0.5in; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>New Project Build Questionnaire</h1>
+
+<div class="section">
+<h2>Project Overview</h2>
+
+<h3>Business Information</h3>
+<ul>
+    <li><strong>Company Name:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Industry/Domain:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Primary Business Activity:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Number of Users (Estimated):</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Number of Locations:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Project Timeline:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Budget Range:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>Project Purpose</h3>
+<p><strong>What problem are we solving?</strong></p>
+<div class="text-area">&nbsp;</div>
+
+<p><strong>What are the top 3 business goals?</strong></p>
+<ol>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ol>
+
+<p><strong>Who are the primary users?</strong> (roles/departments)</p>
+<div class="text-area">&nbsp;</div>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Core Global Entities</h2>
+
+<h3>1. Users & Authentication</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need user accounts?</li>
+    <li><strong>Authentication method:</strong>
+        <ul>
+            <li><span class="checkbox">☐</span> Username/Password</li>
+            <li><span class="checkbox">☐</span> Email/Password</li>
+            <li><span class="checkbox">☐</span> SSO (Single Sign-On)</li>
+            <li><span class="checkbox">☐</span> Multi-factor authentication</li>
+            <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        </ul>
+    </li>
+</ul>
+
+<p><strong>User Roles Needed:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Admin</li>
+    <li><span class="checkbox">☐</span> Manager</li>
+    <li><span class="checkbox">☐</span> Standard User</li>
+    <li><span class="checkbox">☐</span> Read-only/Guest</li>
+    <li><span class="checkbox">☐</span> Custom roles: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<p><strong>User Profile Information:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Name (First, Last)</li>
+    <li><span class="checkbox">☐</span> Email</li>
+    <li><span class="checkbox">☐</span> Phone</li>
+    <li><span class="checkbox">☐</span> Title/Position</li>
+    <li><span class="checkbox">☐</span> Department</li>
+    <li><span class="checkbox">☐</span> Profile Photo</li>
+    <li><span class="checkbox">☐</span> Other fields: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>2. Employees</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need a separate employee database (vs users)?</li>
+    <li>If yes, what's the difference between users and employees? <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<p><strong>Employee Information Needed:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Basic Info (Name, Email, Phone)</li>
+    <li><span class="checkbox">☐</span> Job Title</li>
+    <li><span class="checkbox">☐</span> Department</li>
+    <li><span class="checkbox">☐</span> Hire Date</li>
+    <li><span class="checkbox">☐</span> Employment Status (Active, Inactive, On Leave)</li>
+    <li><span class="checkbox">☐</span> Skills/Certifications</li>
+    <li><span class="checkbox">☐</span> Pay Rate/Salary (if applicable)</li>
+    <li><span class="checkbox">☐</span> Emergency Contact</li>
+    <li><span class="checkbox">☐</span> Manager/Supervisor</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>3. Customers</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need a customer database?</li>
+</ul>
+
+<p><strong>Customer Type:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> B2B (Business customers)</li>
+    <li><span class="checkbox">☐</span> B2C (Individual consumers)</li>
+    <li><span class="checkbox">☐</span> Both</li>
+</ul>
+
+<p><strong>Customer Information Needed:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Company Name</li>
+    <li><span class="checkbox">☐</span> Contact Person(s)</li>
+    <li><span class="checkbox">☐</span> Email</li>
+    <li><span class="checkbox">☐</span> Phone</li>
+    <li><span class="checkbox">☐</span> Address (Billing)</li>
+    <li><span class="checkbox">☐</span> Address (Shipping/Service)</li>
+    <li><span class="checkbox">☐</span> Website</li>
+    <li><span class="checkbox">☐</span> Tax ID / Business License</li>
+    <li><span class="checkbox">☐</span> Credit Terms</li>
+    <li><span class="checkbox">☐</span> Notes/History</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>4. Vendors/Suppliers</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need a vendor/supplier database?</li>
+</ul>
+
+<p><strong>Vendor Information Needed:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Company Name</li>
+    <li><span class="checkbox">☐</span> Contact Person(s)</li>
+    <li><span class="checkbox">☐</span> Email/Phone</li>
+    <li><span class="checkbox">☐</span> Address</li>
+    <li><span class="checkbox">☐</span> Products/Services Provided</li>
+    <li><span class="checkbox">☐</span> Payment Terms</li>
+    <li><span class="checkbox">☐</span> Account Numbers</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>5. Departments/Teams</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need to track departments/teams?</li>
+</ul>
+
+<p><strong>Department Structure:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Simple list of departments</li>
+    <li><span class="checkbox">☐</span> Hierarchical (departments have sub-departments)</li>
+    <li><span class="checkbox">☐</span> Matrix (employees can belong to multiple teams)</li>
+</ul>
+
+<p><strong>Department Information:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Department Name</li>
+    <li><span class="checkbox">☐</span> Department Manager</li>
+    <li><span class="checkbox">☐</span> Budget/Cost Center</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>6. Locations/Facilities</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need to track multiple locations?</li>
+</ul>
+
+<p><strong>Location Information:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Name</li>
+    <li><span class="checkbox">☐</span> Address</li>
+    <li><span class="checkbox">☐</span> Type (Office, Warehouse, Job Site, etc.)</li>
+    <li><span class="checkbox">☐</span> Manager</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>7. Products/Services</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Do you need a product catalog?</li>
+    <li><span class="checkbox">☐</span> Do you need a service catalog?</li>
+</ul>
+
+<p><strong>Product/Service Information:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Name/Description</li>
+    <li><span class="checkbox">☐</span> SKU/Part Number</li>
+    <li><span class="checkbox">☐</span> Category</li>
+    <li><span class="checkbox">☐</span> Price/Rate</li>
+    <li><span class="checkbox">☐</span> Unit of Measure</li>
+    <li><span class="checkbox">☐</span> Images</li>
+    <li><span class="checkbox">☐</span> Specifications</li>
+    <li><span class="checkbox">☐</span> Inventory Tracking</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Feature Modules</h2>
+
+<h3>Project Management</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Projects tracking</li>
+    <li><span class="checkbox">☐</span> Tasks/To-dos</li>
+    <li><span class="checkbox">☐</span> Milestones</li>
+    <li><span class="checkbox">☐</span> Timeline/Gantt charts</li>
+    <li><span class="checkbox">☐</span> Project budgets</li>
+    <li><span class="checkbox">☐</span> Time tracking</li>
+    <li><span class="checkbox">☐</span> Resource allocation</li>
+</ul>
+
+<p><strong>Project Information Needed:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Project Name</li>
+    <li><span class="checkbox">☐</span> Customer</li>
+    <li><span class="checkbox">☐</span> Start/End Dates</li>
+    <li><span class="checkbox">☐</span> Budget</li>
+    <li><span class="checkbox">☐</span> Status</li>
+    <li><span class="checkbox">☐</span> Project Manager</li>
+    <li><span class="checkbox">☐</span> Team Members</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>Document Management</h3>
+<ul>
+    <li><span class="checkbox">☐</span> File uploads/attachments</li>
+    <li><span class="checkbox">☐</span> Document categorization</li>
+    <li><span class="checkbox">☐</span> Version control</li>
+    <li><span class="checkbox">☐</span> Document approval workflow</li>
+</ul>
+
+<p><strong>Document Types:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+
+<h3>Financial Management</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Estimates/Quotes</li>
+    <li><span class="checkbox">☐</span> Proposals</li>
+    <li><span class="checkbox">☐</span> Invoicing</li>
+    <li><span class="checkbox">☐</span> Expense tracking</li>
+    <li><span class="checkbox">☐</span> Purchase Orders</li>
+    <li><span class="checkbox">☐</span> Payment tracking</li>
+    <li><span class="checkbox">☐</span> Financial reporting</li>
+</ul>
+
+<p><strong>Financial Features Needed:</strong></p>
+<div class="text-area">&nbsp;</div>
+
+<h3>Inventory Management</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Inventory tracking</li>
+    <li><span class="checkbox">☐</span> Stock levels/alerts</li>
+    <li><span class="checkbox">☐</span> Purchase orders</li>
+    <li><span class="checkbox">☐</span> Receiving</li>
+    <li><span class="checkbox">☐</span> Asset tracking</li>
+</ul>
+
+<h3>Communication & Collaboration</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Internal messaging</li>
+    <li><span class="checkbox">☐</span> Email notifications</li>
+    <li><span class="checkbox">☐</span> Comments/Notes on records</li>
+    <li><span class="checkbox">☐</span> Activity logs/audit trails</li>
+    <li><span class="checkbox">☐</span> Client portal</li>
+</ul>
+
+<h3>Workflow & Approvals</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Approval workflows</li>
+    <li><span class="checkbox">☐</span> Status tracking</li>
+    <li><span class="checkbox">☐</span> Automated notifications</li>
+    <li><span class="checkbox">☐</span> Task assignments</li>
+</ul>
+
+<p><strong>Approval Processes Needed:</strong></p>
+<div class="text-area">&nbsp;</div>
+
+<h3>Reporting & Analytics</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Dashboard</li>
+    <li><span class="checkbox">☐</span> Standard reports (list them):</li>
+</ul>
+<div class="text-area">&nbsp;</div>
+
+<ul>
+    <li><span class="checkbox">☐</span> Custom report builder</li>
+    <li><span class="checkbox">☐</span> Data export (Excel, PDF, CSV)</li>
+</ul>
+
+<h3>Scheduling & Calendar</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Calendar/scheduling</li>
+    <li><span class="checkbox">☐</span> Resource booking</li>
+    <li><span class="checkbox">☐</span> Appointments</li>
+    <li><span class="checkbox">☐</span> Recurring events</li>
+</ul>
+
+<h3>Forms & Data Collection</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Custom forms</li>
+    <li><span class="checkbox">☐</span> Mobile data collection</li>
+    <li><span class="checkbox">☐</span> Photo capture</li>
+    <li><span class="checkbox">☐</span> Signature capture</li>
+    <li><span class="checkbox">☐</span> QR code scanning</li>
+</ul>
+
+<h3>Integration Requirements</h3>
+<ul>
+    <li><span class="checkbox">☐</span> QuickBooks</li>
+    <li><span class="checkbox">☐</span> Accounting software: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Email (Gmail, Outlook)</li>
+    <li><span class="checkbox">☐</span> Calendar sync</li>
+    <li><span class="checkbox">☐</span> Payment processing</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Industry-Specific Modules</h2>
+
+<h3>Construction (Like Titan)</h3>
+<ul>
+    <li><span class="checkbox">☐</span> RFIs (Requests for Information)</li>
+    <li><span class="checkbox">☐</span> Submittals</li>
+    <li><span class="checkbox">☐</span> Change Orders</li>
+    <li><span class="checkbox">☐</span> Daily Reports</li>
+    <li><span class="checkbox">☐</span> Schedule of Values</li>
+    <li><span class="checkbox">☐</span> Punch Lists</li>
+    <li><span class="checkbox">☐</span> Equipment tracking</li>
+    <li><span class="checkbox">☐</span> Safety/Inspections</li>
+    <li><span class="checkbox">☐</span> Trade/Crew tracking</li>
+</ul>
+
+<h3>Service Business</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Work Orders</li>
+    <li><span class="checkbox">☐</span> Service Tickets</li>
+    <li><span class="checkbox">☐</span> Dispatch</li>
+    <li><span class="checkbox">☐</span> Service Agreements</li>
+    <li><span class="checkbox">☐</span> Recurring maintenance</li>
+    <li><span class="checkbox">☐</span> Equipment/Asset history</li>
+</ul>
+
+<h3>Sales/CRM</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Lead tracking</li>
+    <li><span class="checkbox">☐</span> Opportunities/Pipeline</li>
+    <li><span class="checkbox">☐</span> Sales campaigns</li>
+    <li><span class="checkbox">☐</span> Contact management</li>
+    <li><span class="checkbox">☐</span> Email campaigns</li>
+    <li><span class="checkbox">☐</span> Quote generation</li>
+</ul>
+
+<p><strong>Other Industry Needs:</strong></p>
+<div class="text-area">&nbsp;</div>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Workflows & Business Rules</h2>
+
+<h3>Key Workflows to Map Out</h3>
+
+<div class="info-box">
+<p><strong>Workflow 1:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+<ul>
+    <li><strong>Trigger:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Steps:</strong>
+        <ol>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        </ol>
+    </li>
+    <li><strong>Who is involved:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Approval requirements:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div class="info-box">
+<p><strong>Workflow 2:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+<ul>
+    <li><strong>Trigger:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Steps:</strong>
+        <ol>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        </ol>
+    </li>
+    <li><strong>Who is involved:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Approval requirements:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div class="info-box">
+<p><strong>Workflow 3:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+<ul>
+    <li><strong>Trigger:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Steps:</strong>
+        <ol>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+            <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        </ol>
+    </li>
+    <li><strong>Who is involved:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><strong>Approval requirements:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<h3>Numbering/Naming Conventions</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Auto-incrementing numbers (e.g., INV-2026-0001)</li>
+    <li><span class="checkbox">☐</span> Custom prefixes by type</li>
+    <li><span class="checkbox">☐</span> Numbering per customer/project</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<p><strong>Numbering Examples Needed:</strong></p>
+<div class="text-area">&nbsp;</div>
+
+<h3>Status Values</h3>
+<p>What are the status values for each entity?</p>
+
+<table>
+    <tr>
+        <th>Entity</th>
+        <th>Status Values</th>
+    </tr>
+    <tr>
+        <td>Projects</td>
+        <td>Draft, Active, On Hold, Completed, Cancelled</td>
+    </tr>
+    <tr>
+        <td>Tasks</td>
+        <td>&nbsp;</td>
+    </tr>
+    <tr>
+        <td>Documents</td>
+        <td>&nbsp;</td>
+    </tr>
+    <tr>
+        <td>Orders</td>
+        <td>&nbsp;</td>
+    </tr>
+    <tr>
+        <td>Other</td>
+        <td>&nbsp;</td>
+    </tr>
+</table>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Technical Requirements</h2>
+
+<h3>Access & Permissions</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Multi-tenant (each customer has isolated data)</li>
+    <li><span class="checkbox">☐</span> Single tenant (one company only)</li>
+    <li><span class="checkbox">☐</span> Role-based permissions (who can see/edit what)</li>
+    <li><span class="checkbox">☐</span> Field-level security</li>
+    <li><span class="checkbox">☐</span> Record-level security</li>
+</ul>
+
+<p><strong>Permission Examples:</strong></p>
+<div class="text-area">
+<p>• Managers can approve expenses > $1000</p>
+<p>• Users can only see their own projects</p>
+<p>• Other:</p>
+</div>
+
+<h3>Mobile Requirements</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Mobile-friendly web app</li>
+    <li><span class="checkbox">☐</span> Native mobile app (iOS/Android)</li>
+    <li><span class="checkbox">☐</span> Offline capability</li>
+    <li><span class="checkbox">☐</span> GPS/location tracking</li>
+    <li><span class="checkbox">☐</span> Photo capture</li>
+    <li><span class="checkbox">☐</span> Barcode/QR scanning</li>
+</ul>
+
+<h3>Data & Storage</h3>
+<ul>
+    <li><span class="checkbox">☐</span> File uploads (estimates for volume): <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Image storage (estimates): <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Video storage: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Data retention policies: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Backup requirements: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>Email & Notifications</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Email notifications</li>
+    <li><span class="checkbox">☐</span> SMS notifications</li>
+    <li><span class="checkbox">☐</span> In-app notifications</li>
+    <li><span class="checkbox">☐</span> Scheduled/automated emails</li>
+</ul>
+
+<p><strong>Email Templates Needed:</strong></p>
+<div class="text-area">&nbsp;</div>
+
+<h3>Customization Needs</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Custom fields per module</li>
+    <li><span class="checkbox">☐</span> Custom branding (logo, colors)</li>
+    <li><span class="checkbox">☐</span> Custom email templates</li>
+    <li><span class="checkbox">☐</span> Configurable workflows</li>
+    <li><span class="checkbox">☐</span> Custom reports</li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Deployment & Hosting</h2>
+
+<h3>Hosting Preference</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Cloud-hosted (we host it)</li>
+    <li><span class="checkbox">☐</span> Customer's cloud account</li>
+    <li><span class="checkbox">☐</span> On-premise server</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>Domain & URLs</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Subdomain (e.g., customerName.yourdomain.com)</li>
+    <li><span class="checkbox">☐</span> Custom domain (e.g., app.customerdomain.com)</li>
+    <li><span class="checkbox">☐</span> White-label completely</li>
+</ul>
+
+<h3>Security & Compliance</h3>
+<ul>
+    <li><span class="checkbox">☐</span> SSL/HTTPS</li>
+    <li><span class="checkbox">☐</span> Data encryption</li>
+    <li><span class="checkbox">☐</span> Compliance requirements (HIPAA, SOC2, GDPR, etc.): <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> Regular backups</li>
+    <li><span class="checkbox">☐</span> Disaster recovery plan</li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Data Migration</h2>
+
+<h3>Existing Data to Import</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Customer list</li>
+    <li><span class="checkbox">☐</span> Employee list</li>
+    <li><span class="checkbox">☐</span> Products/Services</li>
+    <li><span class="checkbox">☐</span> Projects/Jobs</li>
+    <li><span class="checkbox">☐</span> Financial history</li>
+    <li><span class="checkbox">☐</span> Documents/Files</li>
+    <li><span class="checkbox">☐</span> Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<p><strong>Source System:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+
+<p><strong>Data Format:</strong></p>
+<ul>
+    <li><span class="checkbox">☐</span> Excel/CSV</li>
+    <li><span class="checkbox">☐</span> Database export</li>
+    <li><span class="checkbox">☐</span> API</li>
+    <li><span class="checkbox">☐</span> Manual entry acceptable</li>
+</ul>
+
+<p><strong>Estimated Records:</strong></p>
+<ul>
+    <li>Customers: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li>Employees: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li>Products: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li>Other: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Training & Support</h2>
+
+<h3>Training Needs</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Admin training</li>
+    <li><span class="checkbox">☐</span> End-user training</li>
+    <li><span class="checkbox">☐</span> Video tutorials</li>
+    <li><span class="checkbox">☐</span> Written documentation</li>
+    <li><span class="checkbox">☐</span> Live training sessions</li>
+</ul>
+
+<p><strong>Number of users needing training:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+
+<h3>Ongoing Support</h3>
+<ul>
+    <li><span class="checkbox">☐</span> Email support</li>
+    <li><span class="checkbox">☐</span> Phone support</li>
+    <li><span class="checkbox">☐</span> Ticketing system</li>
+    <li><span class="checkbox">☐</span> Dedicated support contact</li>
+    <li><span class="checkbox">☐</span> SLA requirements: <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Success Metrics</h2>
+
+<h3>How will we measure success?</h3>
+<ol>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ol>
+
+<h3>Launch Criteria</h3>
+<p>What needs to be working for Day 1 launch?</p>
+<ul>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+
+<h3>Phase 2+ Features</h3>
+<p>What can wait for later phases?</p>
+<ul>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+    <li><span class="checkbox">☐</span> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+</ul>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Notes & Additional Requirements</h2>
+
+<h3>Special Considerations:</h3>
+<div class="text-area" style="min-height: 150px;">&nbsp;</div>
+
+<h3>Known Challenges:</h3>
+<div class="text-area" style="min-height: 150px;">&nbsp;</div>
+
+<h3>Reference Systems:</h3>
+<p>(Any systems they like or want to emulate)</p>
+<div class="text-area" style="min-height: 100px;">&nbsp;</div>
+
+<h3>Deal Breakers:</h3>
+<p>(What absolutely must work or must not happen)</p>
+<div class="text-area" style="min-height: 100px;">&nbsp;</div>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<div class="section">
+<h2>Next Steps</h2>
+
+<table style="width: 100%; border: 2px solid #2c3e50;">
+    <tr>
+        <td style="padding: 20px; background-color: #ecf0f1;">
+            <p><strong>Completed by:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+            <p><strong>Date:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+            <p><strong>Follow-up meeting:</strong> <span class="blank-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+        </td>
+    </tr>
+</table>
+
+<div style="margin-top: 40px; padding: 20px; background-color: #e8f4f8; border: 2px solid #3498db; border-radius: 5px;">
+    <h3 style="margin-top: 0; color: #2c3e50;">Thank you for completing this questionnaire!</h3>
+    <p>This information will help us build a system that meets your exact needs and ensures we start on the right foot. We'll review your responses and schedule a follow-up meeting to discuss the proposed solution and timeline.</p>
+</div>
+</div>
+
+</body>
+</html>

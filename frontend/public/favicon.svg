@@ -1,3 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <text y="0.9em" font-size="90">🛡️</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 36">
+  <!-- Dark half (left) -->
+  <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35V2Z" fill="#3B7DD8"/>
+  <!-- Light half (right) -->
+  <path d="M16 2L30 8V16C30 24.8 23.8 32.8 16 35V2Z" fill="#7CB8F2"/>
 </svg>

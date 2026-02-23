@@ -27,14 +27,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Link to="/" className="logo-default">
               <div className="logo-shield">
                 <svg width="32" height="36" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35C23.8 32.8 30 24.8 30 16V8L16 2Z" fill="url(#shield-gradient)" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
-                  <defs>
-                    <linearGradient id="shield-gradient" x1="2" y1="2" x2="30" y2="35" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#4A90E2"/>
-                      <stop offset="50%" stopColor="#5CA3F5"/>
-                      <stop offset="100%" stopColor="#4A90E2"/>
-                    </linearGradient>
-                  </defs>
+                  {/* Dark half (left) */}
+                  <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35V2Z" fill="#3B7DD8"/>
+                  {/* Light half (right) */}
+                  <path d="M16 2L30 8V16C30 24.8 23.8 32.8 16 35V2Z" fill="#7CB8F2"/>
+                  {/* Subtle outline */}
+                  <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35C23.8 32.8 30 24.8 30 16V8L16 2Z" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
                 </svg>
               </div>
               <div className="logo-text">
