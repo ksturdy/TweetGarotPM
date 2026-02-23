@@ -1,6 +1,10 @@
 /* Titan Chat Container */
 .titan-chat {
-  position: relative;
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
   display: flex;
   align-items: center;
 }
@@ -16,7 +20,6 @@
   border-radius: 2rem;
   color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -50,19 +53,22 @@
 
 /* Chat Panel */
 .titan-chat-panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
+  position: fixed !important;
+  top: 60px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
   width: 380px;
   max-height: 500px;
-  background: #ffffff;
+  background: #ffffff !important;
   border-radius: 0.75rem;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   overflow: hidden;
-  z-index: 1000;
-  animation: titanChatSlideIn 0.2s ease;
+  z-index: 99999 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Resize Handle */
@@ -376,6 +382,24 @@
 
 .titan-chat-messages::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Force message visibility - prevent flashing */
+.titan-message,
+.titan-message-content,
+.titan-message-avatar,
+.titan-message-bubble,
+.titan-message-bubble p {
+  opacity: 1 !important;
+  visibility: visible !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+.titan-message-time {
+  visibility: visible !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 /* Responsive */

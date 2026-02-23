@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { chatService } from '../../services/chat';
 import SendIcon from '@mui/icons-material/Send';
 import CloseIcon from '@mui/icons-material/Close';
@@ -13,7 +13,8 @@ interface Message {
 
 const TitanChat: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const hasToken = !!localStorage.getItem('token');
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -24,66 +25,34 @@ const TitanChat: React.FC = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [panelSize, setPanelSize] = useState({ width: 380, height: 500 });
-  const [isResizing, setIsResizing] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Keep open if there's an active conversation (more than the initial message)
-  const hasActiveConversation = messages.length > 1;
+  // Debug: log every render with message count
+  console.log(`🔥 Render - isOpen: ${isOpen}, hasToken: ${hasToken}, messages: ${messages.length}`, messages);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // DOM mutation observer to detect external manipulation
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (!isOpen || !messagesContainerRef.current) return;
 
-  // Handle click outside to close
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (chatRef.current && !chatRef.current.contains(event.target as Node)) {
-        if (!hasActiveConversation) {
-          setIsOpen(false);
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        console.log('🔍 DOM Mutation detected:', mutation.type, mutation);
+        if (mutation.type === 'attributes') {
+          console.log('  Attribute changed:', mutation.attributeName,
+            'on element:', mutation.target);
         }
-      }
-    };
+      });
+    });
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    observer.observe(messagesContainerRef.current, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeOldValue: true,
+    });
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen, hasActiveConversation]);
-
-  const handleMouseEnter = () => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
-    setIsHovered(true);
-    setIsOpen(true);
-  };
-
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    // Only auto-close if no active conversation
-    if (!hasActiveConversation && !isTyping) {
-      closeTimeoutRef.current = setTimeout(() => {
-        setIsOpen(false);
-      }, 300);
-    }
-  };
-
-  const handleClose = () => {
-    setIsOpen(false);
-  };
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,84 +97,26 @@ const TitanChat: React.FC = () => {
     }
   };
 
-  const handleClearChat = () => {
-    setMessages([
-      {
-        id: '1',
-        text: "Hello! I'm Titan, your AI assistant. I can help you with project insights, customer data, scheduling, and answer questions about your business. How can I assist you today?",
-        sender: 'titan',
-        timestamp: new Date(),
-      },
-    ]);
-  };
-
-  // Resize handlers
-  const handleResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    resizeStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      width: panelSize.width,
-      height: panelSize.height,
-    };
-  };
-
-  useEffect(() => {
-    const handleResizeMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const deltaX = e.clientX - resizeStartRef.current.x;
-      const deltaY = e.clientY - resizeStartRef.current.y;
-
-      const newWidth = Math.max(320, Math.min(600, resizeStartRef.current.width + deltaX));
-      const newHeight = Math.max(300, Math.min(700, resizeStartRef.current.height + deltaY));
-
-      setPanelSize({ width: newWidth, height: newHeight });
-    };
-
-    const handleResizeEnd = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleResizeMove);
-      document.addEventListener('mouseup', handleResizeEnd);
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleResizeMove);
-      document.removeEventListener('mouseup', handleResizeEnd);
-    };
-  }, [isResizing]);
+  // Don't render if not authenticated
+  if (!hasToken) {
+    return null;
+  }
 
   return (
-    <div
-      ref={chatRef}
-      className={`titan-chat ${isOpen ? 'open' : ''}`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <button className="titan-chat-trigger" onClick={() => setIsOpen(!isOpen)}>
+    <div className="titan-chat">
+      <button
+        className="titan-chat-trigger"
+        onClick={() => {
+          console.log(`🖱️ Toggle button clicked: ${isOpen} → ${!isOpen}`);
+          setIsOpen(!isOpen);
+        }}
+      >
         <span className="titan-chat-icon">🛡️</span>
         <span className="titan-chat-label">Ask Titan</span>
-        {hasActiveConversation && <span className="titan-chat-badge" />}
       </button>
 
       {isOpen && (
-        <div
-          ref={panelRef}
-          className="titan-chat-panel"
-          style={{
-            width: `${panelSize.width}px`,
-            maxHeight: `${panelSize.height}px`
-          }}
-        >
-          <div
-            className="titan-chat-resize-handle"
-            onMouseDown={handleResizeStart}
-            title="Drag to resize"
-          />
+        <div className="titan-chat-panel">
           <div className="titan-chat-header">
             <div className="titan-chat-header-info">
               <span className="titan-chat-avatar">🛡️</span>
@@ -215,18 +126,9 @@ const TitanChat: React.FC = () => {
               </div>
             </div>
             <div className="titan-chat-header-actions">
-              {hasActiveConversation && (
-                <button
-                  className="titan-chat-clear"
-                  onClick={handleClearChat}
-                  title="Clear conversation"
-                >
-                  Clear
-                </button>
-              )}
               <button
                 className="titan-chat-close"
-                onClick={handleClose}
+                onClick={() => setIsOpen(false)}
                 title="Close"
               >
                 <CloseIcon fontSize="small" />
@@ -234,7 +136,7 @@ const TitanChat: React.FC = () => {
             </div>
           </div>
 
-          <div className="titan-chat-messages">
+          <div className="titan-chat-messages" ref={messagesContainerRef}>
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -268,7 +170,6 @@ const TitanChat: React.FC = () => {
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           <form className="titan-chat-input-form" onSubmit={handleSendMessage}>
@@ -278,7 +179,6 @@ const TitanChat: React.FC = () => {
               placeholder="Ask Titan anything..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              autoFocus
             />
             <button
               type="submit"

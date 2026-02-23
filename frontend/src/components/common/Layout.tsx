@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
-import TitanChat from './TitanChat';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import './Layout.css';
 
@@ -45,7 +44,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Link>
           </div>
           <div className="header-center">
-            <TitanChat />
           </div>
           <div className="header-right">
             <div className="user-menu">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/common/Layout';
@@ -128,13 +128,28 @@ const PlatformAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children 
 const App: React.FC = () => {
   const { user } = useAuth();
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Initialize based on token existence
+    return !!localStorage.getItem('token');
+  });
+  const prevAuthState = useRef<boolean>(!!localStorage.getItem('token'));
 
   useEffect(() => {
+    console.log(`🏠 App effect running, user changed`);
+
     // Check if user needs to change password
     if (user && (user as any).forcePasswordChange) {
       setShowPasswordChangeModal(true);
     } else {
       setShowPasswordChangeModal(false);
+    }
+
+    // Only update authentication state when it actually changes
+    const currentAuthState = !!user;
+    if (currentAuthState !== prevAuthState.current) {
+      console.log(`🔐 Auth state changing: ${prevAuthState.current} → ${currentAuthState}`);
+      prevAuthState.current = currentAuthState;
+      setIsAuthenticated(currentAuthState);
     }
   }, [user]);
 
