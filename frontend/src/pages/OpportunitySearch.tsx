@@ -33,8 +33,7 @@ function mapLeadToOpportunity(lead: GeneratedLead) {
     `Email: ${lead.contact_email} | Phone: ${lead.contact_phone}`,
     `AI Confidence: ${lead.confidence.charAt(0).toUpperCase() + lead.confidence.slice(1)} | Timeline: ${lead.timeline}`,
     `Reasoning: ${lead.reasoning}`,
-    lead.info_url ? `More Info: ${lead.info_url}` : '',
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 
   return {
     title: lead.project_name,
@@ -424,18 +423,18 @@ const OpportunitySearch: React.FC = () => {
 
                   <div className="opp-search-lead-reasoning">{lead.reasoning}</div>
 
-                  {lead.info_url && (
-                    <div className="opp-search-lead-link">
-                      <a href={lead.info_url} target="_blank" rel="noopener noreferrer">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                          <polyline points="15 3 21 3 21 9"/>
-                          <line x1="10" y1="14" x2="21" y2="3"/>
-                        </svg>
-                        More Information
-                      </a>
-                    </div>
-                  )}
+                  <div className="opp-search-lead-link">
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(`${lead.company_name} ${lead.location} ${lead.construction_type} construction`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                      Search Google
+                    </a>
+                  </div>
                 </div>
               </div>
             ))}

@@ -55,7 +55,6 @@ Return ONLY a valid JSON object with this exact structure (no additional text be
       "construction_type": "string - New Construction | Renovation | Tenant Improvement | Addition | Retrofit | Service/Maintenance",
       "market_sector": "string - Healthcare | Education | Commercial | Industrial | Retail | Government | Hospitality | Data Center",
       "general_contractor": "string - the GC or CM firm managing the project, if applicable (leave empty string if owner-direct or unknown)",
-      "info_url": "string - a Google search URL to find more info about this lead. Format: https://www.google.com/search?q= followed by URL-encoded search terms combining company name, location, and project type. Example: https://www.google.com/search?q=Banner+Health+Mesa+AZ+hospital+expansion+construction",
       "estimated_start_date": "string - ISO date (YYYY-MM-DD) for projected start, use first day of the quarter (e.g. 2026-07-01 for Q3 2026, 2026-10-01 for Q4 2026, 2027-01-01 for Q1 2027)",
       "reasoning": "string - 1-2 sentences on why this is a good lead for a mechanical contractor",
       "confidence": "high | medium | low",

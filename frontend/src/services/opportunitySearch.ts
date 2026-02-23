@@ -24,7 +24,6 @@ export interface GeneratedLead {
   construction_type: string;
   market_sector: string;
   general_contractor: string;
-  info_url: string;
   estimated_start_date: string;
   reasoning: string;
   confidence: 'high' | 'medium' | 'low';
