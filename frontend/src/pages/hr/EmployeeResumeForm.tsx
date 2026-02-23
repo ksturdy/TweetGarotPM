@@ -113,8 +113,8 @@ const EmployeeResumeForm: React.FC = () => {
     let photoPath = existingResume?.employee_photo_path;
     if (photoPreview) {
       // If photoPreview is a data URL (starts with 'data:'), we'll handle it specially in the preview
-      // If it's an API path, use it directly
-      photoPath = photoPreview.startsWith('data:') ? undefined : photoPreview.replace('/api', '');
+      // If it's a server path (starts with '/'), strip the leading slash to get the relative path
+      photoPath = photoPreview.startsWith('data:') ? undefined : photoPreview.replace(/^\//, '');
     }
 
     return {

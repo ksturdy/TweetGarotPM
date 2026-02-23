@@ -159,7 +159,7 @@ const EmployeeResumeList: React.FC = () => {
                   <td>
                     {resume.employee_photo_path ? (
                       <img
-                        src={`/api${resume.employee_photo_path}`}
+                        src={`/${resume.employee_photo_path}`}
                         alt={resume.employee_name}
                         style={{
                           width: '40px',
