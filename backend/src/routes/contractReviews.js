@@ -7,7 +7,7 @@ const ContractReview = require('../models/ContractReview');
 const ContractRiskFinding = require('../models/ContractRiskFinding');
 const ContractAnnotation = require('../models/ContractAnnotation');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
-const { deleteFile, getFileUrl, getFileInfo } = require('../utils/fileStorage');
+const { deleteFile, getFileUrl, getFileInfo, getFileStream } = require('../utils/fileStorage');
 const { isR2Enabled } = require('../config/r2Client');
 
 const router = express.Router();
@@ -568,10 +568,17 @@ router.get('/:id/file', async (req, res, next) => {
       return res.status(404).json({ error: 'Contract file not found' });
     }
 
-    // If using R2, redirect to presigned URL
+    // If using R2, stream the file through the backend.
+    // We cannot redirect to a presigned/public R2 URL because axios (used by the
+    // frontend PDF viewer) follows redirects while keeping the Authorization header,
+    // which causes R2 to reject the request (conflicting auth on presigned URLs).
     if (isR2Enabled()) {
-      const url = await getFileUrl(review.file_path);
-      return res.redirect(url);
+      const { stream, contentType, contentLength } = await getFileStream(review.file_path);
+      res.setHeader('Content-Type', contentType || 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${review.file_name}"`);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      stream.pipe(res);
+      return;
     }
 
     // For local storage, serve the file directly
