@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
@@ -112,47 +112,36 @@ const ProjectList: React.FC = () => {
     queryFn: () => projectsApi.getAll().then((res) => res.data),
   });
 
-  // Fetch favorite status for all projects
-  useEffect(() => {
-    if (projects && projects.length > 0) {
-      const projectIds = projects.map(p => p.id);
-      favoritesService.checkMultiple('project', projectIds).then(favoriteStatus => {
-        // Update the query data with favorite status
-        queryClient.setQueryData<Project[]>(['projects'], (old) =>
-          old?.map(project => ({
-            ...project,
-            isFavorited: favoriteStatus[project.id] || false
-          })) || []
-        );
-      }).catch(error => {
-        console.error('Failed to load favorite status:', error);
-      });
-    }
-  }, [projects?.length]); // Only re-run when project count changes
+  // Fetch favorited project IDs as a separate query so it survives project data refetches
+  const { data: favoritedProjectIds = [] } = useQuery({
+    queryKey: ['favorites', 'project'],
+    queryFn: () => favoritesService.getFavoritedIds('project'),
+  });
+  const favoritedProjectSet = useMemo(() => new Set(favoritedProjectIds), [favoritedProjectIds]);
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
   });
 
-  // Toggle isFavorited mutation with optimistic updates
+  // Toggle favorite mutation with optimistic updates on the favorites query
   const toggleFavoriteMutation = useMutation({
     mutationFn: (id: number) => projectsApi.toggleFavorite(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: ['projects'] });
-      const previousProjects = queryClient.getQueryData<Project[]>(['projects']);
-      queryClient.setQueryData<Project[]>(['projects'], (old) =>
-        old?.map(p => p.id === id ? { ...p, isFavorited: !p.isFavorited } : p) || []
+      await queryClient.cancelQueries({ queryKey: ['favorites', 'project'] });
+      const previousIds = queryClient.getQueryData<number[]>(['favorites', 'project']);
+      queryClient.setQueryData<number[]>(['favorites', 'project'], (old = []) =>
+        old.includes(id) ? old.filter(fId => fId !== id) : [...old, id]
       );
-      return { previousProjects };
+      return { previousIds };
     },
     onError: (_err, _variables, context) => {
-      if (context?.previousProjects) {
-        queryClient.setQueryData(['projects'], context.previousProjects);
+      if (context?.previousIds) {
+        queryClient.setQueryData(['favorites', 'project'], context.previousIds);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'project'] });
     },
   });
 
@@ -340,8 +329,8 @@ const ProjectList: React.FC = () => {
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     // On initial load (before user sorts), put isFavoriteds at top
     if (!hasUserSorted) {
-      const aFav = a.isFavorited ? 1 : 0;
-      const bFav = b.isFavorited ? 1 : 0;
+      const aFav = favoritedProjectSet.has(a.id) ? 1 : 0;
+      const bFav = favoritedProjectSet.has(b.id) ? 1 : 0;
       if (aFav !== bFav) return bFav - aFav;
     }
 
@@ -350,8 +339,8 @@ const ProjectList: React.FC = () => {
 
     switch (sortColumn) {
       case 'isFavorited':
-        aValue = a.isFavorited ? 1 : 0;
-        bValue = b.isFavorited ? 1 : 0;
+        aValue = favoritedProjectSet.has(a.id) ? 1 : 0;
+        bValue = favoritedProjectSet.has(b.id) ? 1 : 0;
         break;
       case 'number':
         aValue = a.number.toLowerCase();
@@ -839,19 +828,19 @@ const ProjectList: React.FC = () => {
                     <span
                       style={{
                         fontSize: '1.25rem',
-                        color: project.isFavorited ? '#f59e0b' : '#d1d5db',
+                        color: favoritedProjectSet.has(project.id) ? '#f59e0b' : '#d1d5db',
                         transition: 'color 0.2s, transform 0.2s',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.2)';
-                        if (!project.isFavorited) e.currentTarget.style.color = '#fbbf24';
+                        if (!favoritedProjectSet.has(project.id)) e.currentTarget.style.color = '#fbbf24';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'scale(1)';
-                        if (!project.isFavorited) e.currentTarget.style.color = '#d1d5db';
+                        if (!favoritedProjectSet.has(project.id)) e.currentTarget.style.color = '#d1d5db';
                       }}
                     >
-                      {project.isFavorited ? '\u2605' : '\u2606'}
+                      {favoritedProjectSet.has(project.id) ? '\u2605' : '\u2606'}
                     </span>
                   </td>
                   <td>{project.number}</td>

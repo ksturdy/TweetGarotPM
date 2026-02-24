@@ -9,7 +9,7 @@ const UserFavorite = {
    * @returns {Promise<{isFavorited: boolean}>} - New favorite status
    */
   async toggle(userId, entityType, entityId) {
-    const client = await pool.connect();
+    const client = await pool.getClient();
     try {
       // Check if already favorited
       const checkResult = await client.query(

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -103,23 +103,12 @@ const CustomerList: React.FC = () => {
     queryFn: customersApi.getAll,
   });
 
-  // Fetch favorite status for all customers
-  useEffect(() => {
-    if (customers.length > 0) {
-      const customerIds = customers.map(c => c.id);
-      favoritesService.checkMultiple('customer', customerIds).then(favoriteStatus => {
-        // Update the query data with favorite status
-        queryClient.setQueryData<Customer[]>(['customers'], (old) =>
-          old?.map(customer => ({
-            ...customer,
-            isFavorited: favoriteStatus[customer.id] || false
-          })) || []
-        );
-      }).catch(error => {
-        console.error('Failed to load favorite status:', error);
-      });
-    }
-  }, [customers.length]); // Only re-run when customer count changes
+  // Fetch favorited customer IDs as a separate query so it survives customer data refetches
+  const { data: favoritedCustomerIds = [] } = useQuery({
+    queryKey: ['favorites', 'customer'],
+    queryFn: () => favoritesService.getFavoritedIds('customer'),
+  });
+  const favoritedCustomerSet = useMemo(() => new Set(favoritedCustomerIds), [favoritedCustomerIds]);
 
   // Fetch stats
   const { data: stats } = useQuery({
@@ -178,24 +167,24 @@ const CustomerList: React.FC = () => {
     },
   });
 
-  // Toggle isFavorited mutation with optimistic updates
+  // Toggle favorite mutation with optimistic updates on the favorites query
   const toggleFavoriteMutation = useMutation({
     mutationFn: (id: number) => customersApi.toggleFavorite(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: ['customers'] });
-      const previousCustomers = queryClient.getQueryData<Customer[]>(['customers']);
-      queryClient.setQueryData<Customer[]>(['customers'], (old) =>
-        old?.map(c => c.id === id ? { ...c, isFavorited: !c.isFavorited } : c) || []
+      await queryClient.cancelQueries({ queryKey: ['favorites', 'customer'] });
+      const previousIds = queryClient.getQueryData<number[]>(['favorites', 'customer']);
+      queryClient.setQueryData<number[]>(['favorites', 'customer'], (old = []) =>
+        old.includes(id) ? old.filter(fId => fId !== id) : [...old, id]
       );
-      return { previousCustomers };
+      return { previousIds };
     },
     onError: (_err, _variables, context) => {
-      if (context?.previousCustomers) {
-        queryClient.setQueryData(['customers'], context.previousCustomers);
+      if (context?.previousIds) {
+        queryClient.setQueryData(['favorites', 'customer'], context.previousIds);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['favorites', 'customer'] });
     },
   });
 
@@ -277,8 +266,8 @@ const CustomerList: React.FC = () => {
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
     // On initial load (before user sorts), put isFavoriteds at top
     if (!hasUserSorted) {
-      const aFav = a.isFavorited ? 1 : 0;
-      const bFav = b.isFavorited ? 1 : 0;
+      const aFav = favoritedCustomerSet.has(a.id) ? 1 : 0;
+      const bFav = favoritedCustomerSet.has(b.id) ? 1 : 0;
       if (aFav !== bFav) return bFav - aFav; // Favorites first
     }
 
@@ -287,8 +276,8 @@ const CustomerList: React.FC = () => {
 
     switch (sortColumn) {
       case 'isFavorited':
-        aValue = a.isFavorited ? 1 : 0;
-        bValue = b.isFavorited ? 1 : 0;
+        aValue = favoritedCustomerSet.has(a.id) ? 1 : 0;
+        bValue = favoritedCustomerSet.has(b.id) ? 1 : 0;
         break;
       case 'customer_owner':
         aValue = (a.customer_owner || '').toLowerCase();
@@ -542,19 +531,19 @@ const CustomerList: React.FC = () => {
                     <span
                       style={{
                         fontSize: '1.25rem',
-                        color: customer.isFavorited ? '#f59e0b' : '#d1d5db',
+                        color: favoritedCustomerSet.has(customer.id) ? '#f59e0b' : '#d1d5db',
                         transition: 'color 0.2s, transform 0.2s',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.2)';
-                        if (!customer.isFavorited) e.currentTarget.style.color = '#fbbf24';
+                        if (!favoritedCustomerSet.has(customer.id)) e.currentTarget.style.color = '#fbbf24';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'scale(1)';
-                        if (!customer.isFavorited) e.currentTarget.style.color = '#d1d5db';
+                        if (!favoritedCustomerSet.has(customer.id)) e.currentTarget.style.color = '#d1d5db';
                       }}
                     >
-                      {customer.isFavorited ? '★' : '☆'}
+                      {favoritedCustomerSet.has(customer.id) ? '★' : '☆'}
                     </span>
                   </td>
                   <td>
