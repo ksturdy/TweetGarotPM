@@ -16,18 +16,27 @@ export interface GeneratedLead {
   project_name: string;
   project_description: string;
   estimated_value: number;
-  contact_name: string;
+  estimated_total_project_value: number;
+  value_is_estimated: boolean;
+  contact_name: string | null;
   contact_title: string;
-  contact_email: string;
-  contact_phone: string;
+  contact_email: string | null;
+  contact_phone: string | null;
   location: string;
   construction_type: string;
   market_sector: string;
   general_contractor: string;
   estimated_start_date: string;
-  reasoning: string;
+  mechanical_scope: string;
+  square_footage: string;
+  intelligence_source: string;
+  next_steps: string;
+  source_url: string | null;
   confidence: 'high' | 'medium' | 'low';
+  confidence_explanation: string;
   timeline: string;
+  verification_status: 'verifiable' | 'unverified' | 'suspect';
+  verification_flags: string[];
 }
 
 export interface SearchSummary {

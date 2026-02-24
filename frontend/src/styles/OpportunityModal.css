@@ -24,7 +24,7 @@
 .opportunity-modal {
   background: white;
   border-radius: 16px;
-  max-width: 1200px;
+  max-width: 1600px;
   width: 100%;
   max-height: 95vh;
   display: flex;
@@ -132,6 +132,33 @@
   border-radius: 0;
   border: none;
   box-shadow: none;
+}
+
+/* Two-column layout: fields left, description right */
+.opportunity-modal .opportunity-form-columns {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  min-height: 0;
+}
+
+.opportunity-modal .opportunity-form-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.opportunity-modal .opportunity-form-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid #e5e7eb;
+  padding-left: 1.5rem;
+}
+
+.opportunity-modal .opportunity-form-right textarea {
+  min-height: 200px;
 }
 
 /* Form Styles - scoped to .opportunity-modal to override Modal.css & index.css */
@@ -303,6 +330,17 @@
 
   .modal-content {
     padding: 1rem;
+  }
+
+  .opportunity-modal .opportunity-form-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .opportunity-modal .opportunity-form-right {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 0.75rem;
   }
 
   .opportunity-modal .form-row,

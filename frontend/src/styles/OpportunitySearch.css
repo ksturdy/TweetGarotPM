@@ -335,10 +335,33 @@
   flex-shrink: 0;
 }
 
+.opp-search-lead-values {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .opp-search-lead-value {
   font-size: 18px;
   font-weight: 700;
   color: var(--accent-emerald);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.opp-search-lead-value-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.opp-search-lead-total-value {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .opp-search-confidence-badge {
@@ -420,12 +443,11 @@
 
 .opp-search-lead-contact {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
   padding: 12px 16px;
   background: #f8f9fa;
   border-radius: 10px;
-  margin-bottom: 12px;
 }
 
 .opp-search-contact-item {
@@ -440,33 +462,165 @@
   color: var(--text-primary);
 }
 
-.opp-search-lead-reasoning {
-  font-size: 13px;
+/* Sections (Mechanical Scope, Intelligence Source) */
+.opp-search-lead-section {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.opp-search-lead-section.source {
+  background: #eff6ff;
+  border-left: 3px solid var(--accent-blue);
+}
+
+.opp-search-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--text-muted);
-  font-style: italic;
-  line-height: 1.5;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opp-search-section-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.opp-search-lead-confidence-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
   padding-left: 12px;
   border-left: 3px solid var(--border);
 }
 
-.opp-search-lead-link {
-  margin-top: 10px;
+.opp-search-lead-confidence-detail strong {
+  color: var(--text-secondary);
 }
 
-.opp-search-lead-link a {
+/* Bottom row: Contact + Next Steps */
+.opp-search-lead-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.opp-search-lead-next-steps {
+  padding: 12px 16px;
+  background: #ecfdf5;
+  border-radius: 10px;
+  border-left: 3px solid var(--accent-emerald);
+}
+
+.opp-search-tag.sqft {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+/* Verification warning banner */
+.opp-search-verification-banner {
+  display: flex;
+  gap: 14px;
+  padding: 16px 20px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  align-items: flex-start;
+}
+
+.opp-search-verification-banner svg {
+  flex-shrink: 0;
+  color: #d97706;
+  margin-top: 2px;
+}
+
+.opp-search-verification-banner strong {
+  display: block;
+  font-size: 14px;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.opp-search-verification-banner p {
+  font-size: 13px;
+  color: #a16207;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Verification badges on cards */
+.opp-search-verification-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.opp-search-verification-badge.verifiable {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.opp-search-verification-badge.unverified {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.opp-search-verification-badge.suspect {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Estimated value marker */
+.opp-search-est-marker {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-left: 2px;
+  cursor: help;
+}
+
+/* Source link */
+.opp-search-source-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--accent-blue);
   text-decoration: none;
+  margin-top: 8px;
   transition: color 0.2s;
 }
 
-.opp-search-lead-link a:hover {
+.opp-search-source-link:hover {
   color: var(--accent-purple);
   text-decoration: underline;
+}
+
+/* Contact needs research */
+.opp-search-needs-research {
+  font-size: 12px;
+  color: var(--accent-amber);
+  font-style: italic;
+}
+
+.opp-search-contact-unknown {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* Converting overlay */
@@ -528,5 +682,9 @@
   .opp-search-lead-contact {
     flex-direction: column;
     gap: 8px;
+  }
+
+  .opp-search-lead-bottom {
+    grid-template-columns: 1fr;
   }
 }

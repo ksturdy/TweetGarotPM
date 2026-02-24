@@ -37,6 +37,7 @@ ChartJS.register(
 interface SalesOpportunity {
   id: number;
   date: string;
+  lastActivityAt: string;
   name: string;
   description: string;
   value: number;
@@ -62,7 +63,7 @@ const SalesPipeline: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
-  const [sortColumn, setSortColumn] = useState<string>('date');
+  const [sortColumn, setSortColumn] = useState<string>('activity');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('all');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
@@ -169,6 +170,7 @@ const SalesPipeline: React.FC = () => {
     return {
       id: opp.id,
       date: new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      lastActivityAt: opp.last_activity_at || opp.updated_at || opp.created_at,
       name: opp.title,
       description: opp.description || '',
       value: Number(opp.estimated_value) || 0,
@@ -260,6 +262,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 1,
       date: 'Jan 15, 2026',
+      lastActivityAt: '2026-01-15T00:00:00Z',
       name: 'Phoenix Sky Harbor Terminal 4',
       description: 'HVAC & Plumbing - New Construction',
       value: 2100000,
@@ -276,6 +279,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 2,
       date: 'Jan 12, 2026',
+      lastActivityAt: '2026-01-12T00:00:00Z',
       name: 'Banner Health Data Center',
       description: 'Process Piping - Tenant Improvement',
       value: 1850000,
@@ -292,6 +296,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 3,
       date: 'Jan 10, 2026',
+      lastActivityAt: '2026-01-10T00:00:00Z',
       name: 'Chandler Unified School District',
       description: 'HVAC Retrofit - K-12 Education',
       value: 1450000,
@@ -308,6 +313,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 4,
       date: 'Jan 8, 2026',
+      lastActivityAt: '2026-01-08T00:00:00Z',
       name: 'ASU Research Building',
       description: 'Full MEP - Higher Education',
       value: 1200000,
@@ -324,6 +330,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 5,
       date: 'Jan 5, 2026',
+      lastActivityAt: '2026-01-05T00:00:00Z',
       name: 'Tempe Marketplace Phase 2',
       description: 'Plumbing - Retail Development',
       value: 890000,
@@ -340,6 +347,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 6,
       date: 'Jan 3, 2026',
+      lastActivityAt: '2026-01-03T00:00:00Z',
       name: 'Scottsdale Quarter Expansion',
       description: 'HVAC - Mixed Use Development',
       value: 780000,
@@ -356,6 +364,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 7,
       date: 'Dec 28, 2025',
+      lastActivityAt: '2025-12-28T00:00:00Z',
       name: 'Dignity Health Clinic - Gilbert',
       description: 'Medical Gas & Plumbing - Healthcare',
       value: 520000,
@@ -372,6 +381,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 8,
       date: 'Dec 22, 2025',
+      lastActivityAt: '2025-12-22T00:00:00Z',
       name: 'Mesa Community College - Science',
       description: 'Lab Piping - Higher Education',
       value: 420000,
@@ -388,6 +398,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 9,
       date: 'Dec 18, 2025',
+      lastActivityAt: '2025-12-18T00:00:00Z',
       name: 'Intel Ocotillo Campus - Bldg 4',
       description: 'Process Piping - Industrial',
       value: 3200000,
@@ -404,6 +415,7 @@ const SalesPipeline: React.FC = () => {
     {
       id: 10,
       date: 'Dec 15, 2025',
+      lastActivityAt: '2025-12-15T00:00:00Z',
       name: 'Mesa School District - HVAC',
       description: 'HVAC Replacement - K-12',
       value: 340000,
@@ -611,6 +623,10 @@ const SalesPipeline: React.FC = () => {
     let bValue: any;
 
     switch (sortColumn) {
+      case 'activity':
+        aValue = new Date(a.lastActivityAt).getTime();
+        bValue = new Date(b.lastActivityAt).getTime();
+        break;
       case 'date':
         aValue = new Date(a.date).getTime();
         bValue = new Date(b.date).getTime();
@@ -683,16 +699,10 @@ const SalesPipeline: React.FC = () => {
 
   return (
     <div className="sales-container">
-      {/* Header */}
+      {/* Compact Header */}
       <div className="sales-page-header">
         <div className="sales-page-title">
-          <div>
-            <Link to="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Dashboard
-            </Link>
-            <h1>💼 Sales Pipeline</h1>
-            <div className="sales-subtitle">Track opportunities from lead to close</div>
-          </div>
+          <h1>Sales Pipeline</h1>
         </div>
         <div className="sales-header-actions">
           <div className="sales-view-toggle">
@@ -700,94 +710,50 @@ const SalesPipeline: React.FC = () => {
               className={view === 'table' ? 'active' : ''}
               onClick={() => setView('table')}
             >
-              📋 Table
+              Table
             </button>
             <button
               className={view === 'board' ? 'active' : ''}
               onClick={() => setView('board')}
             >
-              📌 Board
+              Board
             </button>
           </div>
           <button className="sales-btn sales-btn-secondary" onClick={() => navigate('/campaigns')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
             Campaigns
           </button>
           <button className="sales-btn sales-btn-secondary" onClick={() => navigate('/sales/opportunity-search')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              <path d="M8 11h6M11 8v6"/>
-            </svg>
-            Opportunity Search
+            Opp Search
           </button>
           <button className="sales-btn sales-btn-secondary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
             Export
           </button>
           <button className="sales-btn sales-btn-primary" onClick={() => {
             setSelectedOpportunity(null);
             setIsModalOpen(true);
           }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            New Opportunity
+            + New
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Compact KPI Strip */}
       <div className="sales-kpi-grid">
         <div className="sales-kpi-card blue">
-          <div className="sales-kpi-label">Total Pipeline Value</div>
+          <div className="sales-kpi-label">Pipeline Value</div>
           <div className="sales-kpi-value">{formatCurrency(totalPipeline)}</div>
-          <div className="sales-kpi-trend up">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-            </svg>
-            +12.5% from last month
-          </div>
         </div>
         <div className="sales-kpi-card green">
-          <div className="sales-kpi-label">Weighted Pipeline</div>
+          <div className="sales-kpi-label">Weighted</div>
           <div className="sales-kpi-value">{formatCurrency(weightedPipeline)}</div>
-          <div className="sales-kpi-trend up">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-            </svg>
-            +8.3% from last month
-          </div>
         </div>
         <div className="sales-kpi-card amber">
-          <div className="sales-kpi-label">Active Opportunities</div>
+          <div className="sales-kpi-label">Active</div>
           <div className="sales-kpi-value">{activeOpportunities}</div>
-          <div className="sales-kpi-trend up">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-            </svg>
-            +5 new this week
-          </div>
         </div>
         <div className="sales-kpi-card purple">
           <div className="sales-kpi-label">Win Rate (YTD)</div>
           <div className="sales-kpi-value">{winRate.toFixed(0)}%</div>
-          <div className="sales-kpi-trend down">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/>
-            </svg>
-            -2.1% from last quarter
-          </div>
         </div>
       </div>
 
@@ -902,12 +868,11 @@ const SalesPipeline: React.FC = () => {
                 value={selectedOfficeLocation}
                 onChange={(e) => setSelectedOfficeLocation(e.target.value)}
                 style={{
-                  padding: '8px 12px',
+                  padding: '5px 8px',
                   borderRadius: '6px',
                   border: '1px solid #e5e7eb',
-                  fontSize: '14px',
-                  minWidth: '150px',
-                  marginRight: '8px'
+                  fontSize: '12px',
+                  minWidth: '120px'
                 }}
               >
                 <option value="all">All Offices</option>
@@ -919,12 +884,11 @@ const SalesPipeline: React.FC = () => {
                 value={selectedSalesperson}
                 onChange={(e) => setSelectedSalesperson(e.target.value)}
                 style={{
-                  padding: '8px 12px',
+                  padding: '5px 8px',
                   borderRadius: '6px',
                   border: '1px solid #e5e7eb',
-                  fontSize: '14px',
-                  minWidth: '150px',
-                  marginRight: '8px'
+                  fontSize: '12px',
+                  minWidth: '120px'
                 }}
               >
                 <option value="all">All Salespeople</option>
@@ -933,13 +897,13 @@ const SalesPipeline: React.FC = () => {
                 ))}
               </select>
               <div className="sales-search-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
                   <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search opportunities..."
+                  placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -949,17 +913,14 @@ const SalesPipeline: React.FC = () => {
           <table className="sales-table">
             <thead>
               <tr>
-                <th className="sales-sortable" onClick={() => handleSort('date')}>
-                  Date <span className="sales-sort-icon">{sortColumn === 'date' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <th className="sales-sortable" onClick={() => handleSort('activity')}>
+                  Activity <span className="sales-sort-icon">{sortColumn === 'activity' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('name')}>
-                  Project / Opportunity <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  Opportunity <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('company')}>
                   Company <span className="sales-sort-icon">{sortColumn === 'company' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
-                </th>
-                <th className="sales-sortable" onClick={() => handleSort('facilityLocationName')}>
-                  Facility/Location Name <span className="sales-sort-icon">{sortColumn === 'facilityLocationName' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('value')}>
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -967,7 +928,6 @@ const SalesPipeline: React.FC = () => {
                 <th className="sales-sortable" onClick={() => handleSort('stage')}>
                   Stage <span className="sales-sort-icon">{sortColumn === 'stage' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
-                <th>Probability</th>
                 <th className="sales-sortable" onClick={() => handleSort('salesperson')}>
                   Salesperson <span className="sales-sort-icon">{sortColumn === 'salesperson' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
@@ -987,7 +947,7 @@ const SalesPipeline: React.FC = () => {
                   }}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>{opp.date}</td>
+                  <td className="sales-date-cell">{new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: opp.iconGradient }}>
@@ -995,31 +955,16 @@ const SalesPipeline: React.FC = () => {
                       </div>
                       <div className="sales-project-info">
                         <h4>{opp.name}</h4>
-                        <span>{opp.description}</span>
                       </div>
                     </div>
                   </td>
                   <td>{opp.company || '-'}</td>
-                  <td>{opp.facilityLocationName || '-'}</td>
                   <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
                   <td>
                     <span className={`sales-stage-badge ${opp.stage}`}>
                       <span className="sales-stage-dot"></span>
                       {opp.stageName}
                     </span>
-                  </td>
-                  <td>
-                    {opp.probability ? (
-                      <span className={`sales-probability-badge ${typeof opp.probability === 'string' ? opp.probability.toLowerCase() : ''}`}>
-                        <span className="sales-probability-dot"></span>
-                        {typeof opp.probability === 'string'
-                          ? `${opp.probability} (${getProbabilityPercent(opp.probability)}%)`
-                          : `${opp.probability}%`
-                        }
-                      </span>
-                    ) : (
-                      <span>-</span>
-                    )}
                   </td>
                   <td>
                     <div className="sales-salesperson-cell">

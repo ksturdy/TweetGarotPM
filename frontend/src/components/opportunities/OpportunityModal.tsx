@@ -277,353 +277,360 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
         <div className="modal-content">
           {activeTab === 'details' ? (
             <form onSubmit={handleSubmit} className="opportunity-form">
-              {/* Row 1: Title */}
-              <div className="form-group">
-                <label htmlFor="title">Opportunity Title *</label>
-                <input
-                  type="text"
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleChange}
-                  required
-                  placeholder="e.g., HVAC Installation - Downtown Office"
-                />
-              </div>
-
-              {/* Row 2: Value, Priority, Stage, Probability */}
-              <div className="form-row-4">
-                <div className="form-group">
-                  <label htmlFor="estimated_value">Estimated Value</label>
-                  <input
-                    type="text"
-                    id="estimated_value"
-                    name="estimated_value"
-                    value={formatNumberWithCommas(formData.estimated_value)}
-                    onChange={handleChange}
-                    placeholder="$"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="priority">Priority</label>
-                  <select
-                    id="priority"
-                    name="priority"
-                    value={formData.priority}
-                    onChange={handleChange}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="stage_id">Stage</label>
-                  <select
-                    id="stage_id"
-                    name="stage_id"
-                    value={formData.stage_id}
-                    onChange={handleChange}
-                  >
-                    {stages.map((stage) => (
-                      <option key={stage.id} value={stage.id}>
-                        {stage.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="probability">Win Probability</label>
-                  <select
-                    id="probability"
-                    name="probability"
-                    value={formData.probability}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select probability</option>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Row 3: Company + GC side by side */}
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="owner">Company</label>
-                  <input
-                    type="text"
-                    id="owner"
-                    name="owner"
-                    value={formData.owner}
-                    onChange={handleChange}
-                    placeholder="Company name"
-                  />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
+              <div className="opportunity-form-columns">
+                {/* Left column: form fields */}
+                <div className="opportunity-form-left">
+                  {/* Row 1: Title */}
+                  <div className="form-group">
+                    <label htmlFor="title">Opportunity Title *</label>
                     <input
-                      type="checkbox"
-                      checked={linkToExistingOwner}
-                      onChange={(e) => {
-                        setLinkToExistingOwner(e.target.checked);
-                        if (!e.target.checked) {
-                          setFormData(prev => ({ ...prev, customer_id: '' }));
-                        }
-                      }}
-                      style={{ width: '14px', height: '14px' }}
+                      type="text"
+                      id="title"
+                      name="title"
+                      value={formData.title}
+                      onChange={handleChange}
+                      required
+                      placeholder="e.g., HVAC Installation - Downtown Office"
                     />
-                    Link to Existing
-                  </label>
-                  {linkToExistingOwner && (
-                    <SearchableSelect
-                      options={uniqueCompanies.map((customer: Customer) => ({
-                        value: customer.id,
-                        label: customer.customer_owner || customer.customer_facility || ''
-                      }))}
-                      value={formData.customer_id?.toString() || ''}
-                      onChange={(val) => setFormData(prev => ({ ...prev, customer_id: val }))}
-                      placeholder="Select company..."
+                  </div>
+
+                  {/* Row 2: Value, Priority, Stage, Probability */}
+                  <div className="form-row-4">
+                    <div className="form-group">
+                      <label htmlFor="estimated_value">Estimated Value</label>
+                      <input
+                        type="text"
+                        id="estimated_value"
+                        name="estimated_value"
+                        value={formatNumberWithCommas(formData.estimated_value)}
+                        onChange={handleChange}
+                        placeholder="$"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="priority">Priority</label>
+                      <select
+                        id="priority"
+                        name="priority"
+                        value={formData.priority}
+                        onChange={handleChange}
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="stage_id">Stage</label>
+                      <select
+                        id="stage_id"
+                        name="stage_id"
+                        value={formData.stage_id}
+                        onChange={handleChange}
+                      >
+                        {stages.map((stage) => (
+                          <option key={stage.id} value={stage.id}>
+                            {stage.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="probability">Win Probability</label>
+                      <select
+                        id="probability"
+                        name="probability"
+                        value={formData.probability}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select probability</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Company + GC side by side */}
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="owner">Company</label>
+                      <input
+                        type="text"
+                        id="owner"
+                        name="owner"
+                        value={formData.owner}
+                        onChange={handleChange}
+                        placeholder="Company name"
+                      />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingOwner}
+                          onChange={(e) => {
+                            setLinkToExistingOwner(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '14px', height: '14px' }}
+                        />
+                        Link to Existing
+                      </label>
+                      {linkToExistingOwner && (
+                        <SearchableSelect
+                          options={uniqueCompanies.map((customer: Customer) => ({
+                            value: customer.id,
+                            label: customer.customer_owner || customer.customer_facility || ''
+                          }))}
+                          value={formData.customer_id?.toString() || ''}
+                          onChange={(val) => setFormData(prev => ({ ...prev, customer_id: val }))}
+                          placeholder="Select company..."
+                        />
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="general_contractor">General Contractor</label>
+                      <input
+                        type="text"
+                        id="general_contractor"
+                        name="general_contractor"
+                        value={formData.general_contractor}
+                        onChange={handleChange}
+                        placeholder="GC company name"
+                      />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingGC}
+                          onChange={(e) => {
+                            setLinkToExistingGC(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, gc_customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '14px', height: '14px' }}
+                        />
+                        Link to Existing
+                      </label>
+                      {linkToExistingGC && (
+                        <SearchableSelect
+                          options={customers.map((customer: Customer) => ({
+                            value: customer.id,
+                            label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
+                          }))}
+                          value={formData.gc_customer_id?.toString() || ''}
+                          onChange={(val) => setFormData(prev => ({ ...prev, gc_customer_id: val }))}
+                          placeholder="Select customer..."
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 4: Facility + Architect + Engineer */}
+                  <div className="form-row-3">
+                    <div className="form-group">
+                      <label htmlFor="facility_name">Facility/Location</label>
+                      <input
+                        type="text"
+                        id="facility_name"
+                        name="facility_name"
+                        value={formData.facility_name}
+                        onChange={handleChange}
+                        placeholder="Facility or location name"
+                      />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
+                        <input
+                          type="checkbox"
+                          checked={linkToExistingFacility}
+                          onChange={(e) => {
+                            setLinkToExistingFacility(e.target.checked);
+                            if (!e.target.checked) {
+                              setFormData(prev => ({ ...prev, facility_customer_id: '' }));
+                            }
+                          }}
+                          style={{ width: '14px', height: '14px' }}
+                        />
+                        Link to Existing
+                      </label>
+                      {linkToExistingFacility && (
+                        <SearchableSelect
+                          options={customers.map((customer: Customer) => ({
+                            value: customer.id,
+                            label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
+                          }))}
+                          value={formData.facility_customer_id?.toString() || ''}
+                          onChange={(val) => setFormData(prev => ({ ...prev, facility_customer_id: val }))}
+                          placeholder="Select facility..."
+                        />
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="architect">Architect</label>
+                      <input
+                        type="text"
+                        id="architect"
+                        name="architect"
+                        value={formData.architect}
+                        onChange={handleChange}
+                        placeholder="Architect firm"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="engineer">Engineer</label>
+                      <input
+                        type="text"
+                        id="engineer"
+                        name="engineer"
+                        value={formData.engineer}
+                        onChange={handleChange}
+                        placeholder="Engineering firm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 5: Construction Type, Market, Location, Source */}
+                  <div className="form-row-4">
+                    <div className="form-group">
+                      <label htmlFor="construction_type">Construction Type</label>
+                      <select
+                        id="construction_type"
+                        name="construction_type"
+                        value={formData.construction_type}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select type</option>
+                        <option value="New Construction">New Construction</option>
+                        <option value="Addition">Addition</option>
+                        <option value="Renovation">Renovation</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="market">Market</label>
+                      <select
+                        id="market"
+                        name="market"
+                        value={formData.market}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select market</option>
+                        <option value="Healthcare">Healthcare</option>
+                        <option value="Education">Education</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Industrial">Industrial</option>
+                        <option value="Retail">Retail</option>
+                        <option value="Government">Government</option>
+                        <option value="Hospitality">Hospitality</option>
+                        <option value="Data Center">Data Center</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="location">Location</label>
+                      <input
+                        type="text"
+                        id="location"
+                        name="location"
+                        value={formData.location}
+                        onChange={handleChange}
+                        placeholder="City, State"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="source">Lead Source</label>
+                      <select
+                        id="source"
+                        name="source"
+                        value={formData.source}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select source</option>
+                        <option value="referral">Referral</option>
+                        <option value="website">Website</option>
+                        <option value="cold_call">Cold Call</option>
+                        <option value="trade_show">Trade Show</option>
+                        <option value="email">Email Campaign</option>
+                        <option value="social_media">Social Media</option>
+                        <option value="repeat_customer">Repeat Customer</option>
+                        <option value="ai_search">AI Opportunity Search</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 6: Start Date, Duration, Assign To, Campaign */}
+                  <div className="form-row-4">
+                    <div className="form-group">
+                      <label htmlFor="estimated_start_date">Est. Start Date</label>
+                      <input
+                        type="date"
+                        id="estimated_start_date"
+                        name="estimated_start_date"
+                        value={formData.estimated_start_date}
+                        onChange={handleChange}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="estimated_duration_days">Duration (months)</label>
+                      <input
+                        type="number"
+                        id="estimated_duration_days"
+                        name="estimated_duration_days"
+                        value={formData.estimated_duration_days}
+                        onChange={handleChange}
+                        placeholder="3"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="assigned_to">Assign To</label>
+                      <SearchableSelect
+                        options={employeeOptions}
+                        value={formData.assigned_to?.toString() || ''}
+                        onChange={(val) => setFormData(prev => ({ ...prev, assigned_to: val }))}
+                        placeholder="Unassigned"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="campaign_id">Sales Campaign</label>
+                      <select
+                        id="campaign_id"
+                        name="campaign_id"
+                        value={formData.campaign_id}
+                        onChange={handleChange}
+                      >
+                        <option value="">None</option>
+                        {campaigns.map((campaign: any) => (
+                          <option key={campaign.id} value={campaign.id}>
+                            {campaign.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right column: Description */}
+                <div className="opportunity-form-right">
+                  <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <label htmlFor="description">Description / Details</label>
+                    <textarea
+                      id="description"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleChange}
+                      placeholder="Describe the project scope, requirements, etc."
+                      style={{ flex: 1 }}
                     />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="general_contractor">General Contractor</label>
-                  <input
-                    type="text"
-                    id="general_contractor"
-                    name="general_contractor"
-                    value={formData.general_contractor}
-                    onChange={handleChange}
-                    placeholder="GC company name"
-                  />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
-                    <input
-                      type="checkbox"
-                      checked={linkToExistingGC}
-                      onChange={(e) => {
-                        setLinkToExistingGC(e.target.checked);
-                        if (!e.target.checked) {
-                          setFormData(prev => ({ ...prev, gc_customer_id: '' }));
-                        }
-                      }}
-                      style={{ width: '14px', height: '14px' }}
-                    />
-                    Link to Existing
-                  </label>
-                  {linkToExistingGC && (
-                    <SearchableSelect
-                      options={customers.map((customer: Customer) => ({
-                        value: customer.id,
-                        label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
-                      }))}
-                      value={formData.gc_customer_id?.toString() || ''}
-                      onChange={(val) => setFormData(prev => ({ ...prev, gc_customer_id: val }))}
-                      placeholder="Select customer..."
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Row 4: Facility + Architect + Engineer */}
-              <div className="form-row-3">
-                <div className="form-group">
-                  <label htmlFor="facility_name">Facility/Location</label>
-                  <input
-                    type="text"
-                    id="facility_name"
-                    name="facility_name"
-                    value={formData.facility_name}
-                    onChange={handleChange}
-                    placeholder="Facility or location name"
-                  />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', cursor: 'pointer', marginTop: '2px' }}>
-                    <input
-                      type="checkbox"
-                      checked={linkToExistingFacility}
-                      onChange={(e) => {
-                        setLinkToExistingFacility(e.target.checked);
-                        if (!e.target.checked) {
-                          setFormData(prev => ({ ...prev, facility_customer_id: '' }));
-                        }
-                      }}
-                      style={{ width: '14px', height: '14px' }}
-                    />
-                    Link to Existing
-                  </label>
-                  {linkToExistingFacility && (
-                    <SearchableSelect
-                      options={customers.map((customer: Customer) => ({
-                        value: customer.id,
-                        label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
-                      }))}
-                      value={formData.facility_customer_id?.toString() || ''}
-                      onChange={(val) => setFormData(prev => ({ ...prev, facility_customer_id: val }))}
-                      placeholder="Select facility..."
-                    />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="architect">Architect</label>
-                  <input
-                    type="text"
-                    id="architect"
-                    name="architect"
-                    value={formData.architect}
-                    onChange={handleChange}
-                    placeholder="Architect firm"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="engineer">Engineer</label>
-                  <input
-                    type="text"
-                    id="engineer"
-                    name="engineer"
-                    value={formData.engineer}
-                    onChange={handleChange}
-                    placeholder="Engineering firm"
-                  />
-                </div>
-              </div>
-
-              {/* Row 5: Description */}
-              <div className="form-group">
-                <label htmlFor="description">Description</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows={1}
-                  placeholder="Describe the project scope, requirements, etc."
-                />
-              </div>
-
-              {/* Row 6: Construction Type, Market, Location, Source */}
-              <div className="form-row-4">
-                <div className="form-group">
-                  <label htmlFor="construction_type">Construction Type</label>
-                  <select
-                    id="construction_type"
-                    name="construction_type"
-                    value={formData.construction_type}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select type</option>
-                    <option value="New Construction">New Construction</option>
-                    <option value="Addition">Addition</option>
-                    <option value="Renovation">Renovation</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="market">Market</label>
-                  <select
-                    id="market"
-                    name="market"
-                    value={formData.market}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select market</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Education">Education</option>
-                    <option value="Commercial">Commercial</option>
-                    <option value="Industrial">Industrial</option>
-                    <option value="Retail">Retail</option>
-                    <option value="Government">Government</option>
-                    <option value="Hospitality">Hospitality</option>
-                    <option value="Data Center">Data Center</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="location">Location</label>
-                  <input
-                    type="text"
-                    id="location"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    placeholder="City, State"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="source">Lead Source</label>
-                  <select
-                    id="source"
-                    name="source"
-                    value={formData.source}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select source</option>
-                    <option value="referral">Referral</option>
-                    <option value="website">Website</option>
-                    <option value="cold_call">Cold Call</option>
-                    <option value="trade_show">Trade Show</option>
-                    <option value="email">Email Campaign</option>
-                    <option value="social_media">Social Media</option>
-                    <option value="repeat_customer">Repeat Customer</option>
-                    <option value="ai_search">AI Opportunity Search</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Row 7: Start Date, Duration, Assign To, Campaign */}
-              <div className="form-row-4">
-                <div className="form-group">
-                  <label htmlFor="estimated_start_date">Est. Start Date</label>
-                  <input
-                    type="date"
-                    id="estimated_start_date"
-                    name="estimated_start_date"
-                    value={formData.estimated_start_date}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="estimated_duration_days">Duration (months)</label>
-                  <input
-                    type="number"
-                    id="estimated_duration_days"
-                    name="estimated_duration_days"
-                    value={formData.estimated_duration_days}
-                    onChange={handleChange}
-                    placeholder="3"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="assigned_to">Assign To</label>
-                  <SearchableSelect
-                    options={employeeOptions}
-                    value={formData.assigned_to?.toString() || ''}
-                    onChange={(val) => setFormData(prev => ({ ...prev, assigned_to: val }))}
-                    placeholder="Unassigned"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="campaign_id">Sales Campaign</label>
-                  <select
-                    id="campaign_id"
-                    name="campaign_id"
-                    value={formData.campaign_id}
-                    onChange={handleChange}
-                  >
-                    <option value="">None</option>
-                    {campaigns.map((campaign: any) => (
-                      <option key={campaign.id} value={campaign.id}>
-                        {campaign.name}
-                      </option>
-                    ))}
-                  </select>
+                  </div>
                 </div>
               </div>
 

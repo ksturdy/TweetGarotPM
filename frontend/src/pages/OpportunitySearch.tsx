@@ -25,19 +25,48 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+function formatNumberWithCommas(value: string | number | undefined): string {
+  if (value === undefined || value === '') return '';
+  const num = typeof value === 'string' ? value.replace(/[^0-9]/g, '') : String(value);
+  if (!num) return '';
+  return Number(num).toLocaleString('en-US');
+}
+
+function parseFormattedNumber(formatted: string): number | undefined {
+  const digits = formatted.replace(/[^0-9]/g, '');
+  if (!digits) return undefined;
+  return Number(digits);
+}
+
 function mapLeadToOpportunity(lead: GeneratedLead) {
-  const contactBlock = [
+  const contactLine = lead.contact_name
+    ? `Contact: ${lead.contact_name}, ${lead.contact_title}`
+    : `Look for: ${lead.contact_title} (needs research)`;
+  const emailPhone = [
+    lead.contact_email ? `Email: ${lead.contact_email}` : null,
+    lead.contact_phone ? `Phone: ${lead.contact_phone}` : null,
+  ].filter(Boolean).join(' | ');
+
+  const details = [
     '',
     '---',
-    `Contact: ${lead.contact_name}, ${lead.contact_title}`,
-    `Email: ${lead.contact_email} | Phone: ${lead.contact_phone}`,
-    `AI Confidence: ${lead.confidence.charAt(0).toUpperCase() + lead.confidence.slice(1)} | Timeline: ${lead.timeline}`,
-    `Reasoning: ${lead.reasoning}`,
-  ].join('\n');
+    lead.mechanical_scope ? `Mechanical Scope: ${lead.mechanical_scope}` : '',
+    lead.square_footage && lead.square_footage !== 'N/A' ? `Square Footage: ${lead.square_footage}` : '',
+    '',
+    contactLine,
+    emailPhone || 'Contact details need research',
+    '',
+    `AI Confidence: ${lead.confidence} - ${lead.confidence_explanation || ''}`,
+    `Verification: ${lead.verification_status}`,
+    `Timeline: ${lead.timeline}`,
+    lead.intelligence_source ? `Source: ${lead.intelligence_source}` : '',
+    lead.source_url ? `Source URL: ${lead.source_url}` : '',
+    lead.next_steps ? `Next Steps: ${lead.next_steps}` : '',
+  ].filter(Boolean).join('\n');
 
   return {
     title: lead.project_name,
-    description: (lead.project_description + contactBlock),
+    description: (lead.project_description + details),
     estimated_value: lead.estimated_value,
     construction_type: lead.construction_type,
     market: lead.market_sector,
@@ -89,7 +118,11 @@ const OpportunitySearch: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'min_value' || name === 'max_value') {
+      setFormData(prev => ({ ...prev, [name]: parseFormattedNumber(value) }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -226,29 +259,29 @@ const OpportunitySearch: React.FC = () => {
             />
           </div>
           <div className="opp-search-form-group">
-            <label htmlFor="min_value">Min Project Value</label>
+            <label htmlFor="min_value">Min Mechanical Value</label>
             <div className="input-prefix">
               <span>$</span>
               <input
-                type="number"
+                type="text"
                 id="min_value"
                 name="min_value"
-                placeholder="e.g., 500000"
-                value={formData.min_value || ''}
+                placeholder="e.g., 500,000"
+                value={formatNumberWithCommas(formData.min_value)}
                 onChange={handleChange}
               />
             </div>
           </div>
           <div className="opp-search-form-group">
-            <label htmlFor="max_value">Max Project Value</label>
+            <label htmlFor="max_value">Max Mechanical Value</label>
             <div className="input-prefix">
               <span>$</span>
               <input
-                type="number"
+                type="text"
                 id="max_value"
                 name="max_value"
-                placeholder="e.g., 5000000"
-                value={formData.max_value || ''}
+                placeholder="e.g., 5,000,000"
+                value={formatNumberWithCommas(formData.max_value)}
                 onChange={handleChange}
               />
             </div>
@@ -327,14 +360,37 @@ const OpportunitySearch: React.FC = () => {
       {searchMutation.isPending && (
         <div className="opp-search-loading">
           <div className="opp-search-spinner" />
-          <h3>Searching for opportunities...</h3>
-          <p>AI is analyzing market data and generating leads. This may take 15-30 seconds.</p>
+          <h3>Searching the web for real projects...</h3>
+          <p>AI is searching news articles, press releases, permit filings, and bid postings. This may take 30-60 seconds.</p>
+        </div>
+      )}
+
+      {/* No Results */}
+      {!searchMutation.isPending && searchMutation.isSuccess && leads.length === 0 && (
+        <div className="opp-search-error" style={{ borderLeftColor: '#f59e0b', background: '#fffbeb' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          No projects found matching your criteria. Try broadening your search — use a wider location, different market sector, or fewer filters.
         </div>
       )}
 
       {/* Results */}
       {!searchMutation.isPending && leads.length > 0 && (
         <div>
+          {/* Verification warning banner */}
+          <div className="opp-search-verification-banner">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div>
+              <strong>Web-Sourced Projects — Verify Before Acting</strong>
+              <p>These projects were found via web search of news articles, press releases, and public filings. Source links are provided where available. Contact information, project values, and timelines should still be independently verified before outreach.</p>
+            </div>
+          </div>
+
           <div className="opp-search-results-header">
             <div className="opp-search-results-summary">
               <h2>Results</h2>
@@ -385,11 +441,28 @@ const OpportunitySearch: React.FC = () => {
                 <div className="opp-search-lead-content">
                   <div className="opp-search-lead-header">
                     <div className="opp-search-lead-title-group">
-                      <div className="opp-search-lead-company">{lead.company_name}</div>
+                      <div className="opp-search-lead-company">
+                        {lead.company_name}
+                        <span className={`opp-search-verification-badge ${lead.verification_status}`}>
+                          {lead.verification_status === 'verifiable' ? 'Verifiable' :
+                           lead.verification_status === 'suspect' ? 'Suspect' : 'Unverified'}
+                        </span>
+                      </div>
                       <h3 className="opp-search-lead-project">{lead.project_name}</h3>
                     </div>
                     <div className="opp-search-lead-meta">
-                      <span className="opp-search-lead-value">{formatCurrency(lead.estimated_value)}</span>
+                      <div className="opp-search-lead-values">
+                        <span className="opp-search-lead-value">
+                          {formatCurrency(lead.estimated_value)}
+                          {lead.value_is_estimated && <span className="opp-search-est-marker" title="AI estimate — not from published source">~</span>}
+                          <span className="opp-search-lead-value-label">Est. Mechanical Value</span>
+                        </span>
+                        {lead.estimated_total_project_value && (
+                          <span className="opp-search-lead-total-value">
+                            Total Project: {formatCurrency(lead.estimated_total_project_value)}
+                          </span>
+                        )}
+                      </div>
                       <span className={`opp-search-confidence-badge ${lead.confidence}`}>
                         {lead.confidence}
                       </span>
@@ -398,6 +471,7 @@ const OpportunitySearch: React.FC = () => {
 
                   <div className="opp-search-lead-description">{lead.project_description}</div>
 
+                  {/* Tags row */}
                   <div className="opp-search-lead-tags">
                     <span className="opp-search-tag market">{lead.market_sector}</span>
                     <span className="opp-search-tag construction">{lead.construction_type}</span>
@@ -408,32 +482,83 @@ const OpportunitySearch: React.FC = () => {
                         Start: {new Date(lead.estimated_start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                     )}
+                    {lead.square_footage && lead.square_footage !== 'N/A' && (
+                      <span className="opp-search-tag sqft">{lead.square_footage}</span>
+                    )}
                     {lead.general_contractor && (
                       <span className="opp-search-tag gc">GC: {lead.general_contractor}</span>
                     )}
                   </div>
 
-                  <div className="opp-search-lead-contact">
-                    <div className="opp-search-contact-item">
-                      <strong>{lead.contact_name}</strong> &middot; {lead.contact_title}
+                  {/* Mechanical Scope */}
+                  {lead.mechanical_scope && (
+                    <div className="opp-search-lead-section">
+                      <div className="opp-search-section-label">Mechanical Scope</div>
+                      <div className="opp-search-section-text">{lead.mechanical_scope}</div>
                     </div>
-                    <div className="opp-search-contact-item">{lead.contact_email}</div>
-                    <div className="opp-search-contact-item">{lead.contact_phone}</div>
-                  </div>
+                  )}
 
-                  <div className="opp-search-lead-reasoning">{lead.reasoning}</div>
+                  {/* Intelligence Source */}
+                  {lead.intelligence_source && (
+                    <div className="opp-search-lead-section source">
+                      <div className="opp-search-section-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        Intelligence Source
+                      </div>
+                      <div className="opp-search-section-text">{lead.intelligence_source}</div>
+                      {lead.source_url && (
+                        <a className="opp-search-source-link" href={lead.source_url} target="_blank" rel="noopener noreferrer">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                          View Source
+                        </a>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="opp-search-lead-link">
-                    <a
-                      href={`https://www.google.com/search?q=${encodeURIComponent(`${lead.company_name} ${lead.location} ${lead.construction_type} construction`)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                      </svg>
-                      Search Google
-                    </a>
+                  {/* Confidence explanation */}
+                  {lead.confidence_explanation && (
+                    <div className="opp-search-lead-confidence-detail">
+                      <strong>Confidence ({lead.confidence}):</strong> {lead.confidence_explanation}
+                    </div>
+                  )}
+
+                  {/* Contact & Next Steps row */}
+                  <div className="opp-search-lead-bottom">
+                    <div className="opp-search-lead-contact">
+                      <div className="opp-search-section-label">Contact</div>
+                      {lead.contact_name ? (
+                        <div className="opp-search-contact-item">
+                          <strong>{lead.contact_name}</strong> &middot; {lead.contact_title}
+                        </div>
+                      ) : (
+                        <div className="opp-search-contact-item">
+                          Look for: <strong>{lead.contact_title}</strong>
+                          <span className="opp-search-needs-research"> (needs research)</span>
+                        </div>
+                      )}
+                      {lead.contact_email && (
+                        <div className="opp-search-contact-item">{lead.contact_email}</div>
+                      )}
+                      {lead.contact_phone && (
+                        <div className="opp-search-contact-item">{lead.contact_phone}</div>
+                      )}
+                      {!lead.contact_name && !lead.contact_email && !lead.contact_phone && (
+                        <div className="opp-search-contact-item opp-search-contact-unknown">
+                          Contact details not available — research needed
+                        </div>
+                      )}
+                    </div>
+                    {lead.next_steps && (
+                      <div className="opp-search-lead-next-steps">
+                        <div className="opp-search-section-label">Recommended Next Steps</div>
+                        <div className="opp-search-section-text">{lead.next_steps}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
