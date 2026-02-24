@@ -911,6 +911,14 @@ const SalesPipeline: React.FC = () => {
             </div>
           </div>
           <table className="sales-table">
+            <colgroup>
+              <col style={{ width: '70px' }} />
+              <col />
+              <col />
+              <col style={{ width: '80px' }} />
+              <col style={{ width: '110px' }} />
+              <col style={{ width: '140px' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="sales-sortable" onClick={() => handleSort('activity')}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
@@ -23,6 +23,89 @@ const ProjectList: React.FC = () => {
   const [bulkOwnerCustomerId, setBulkOwnerCustomerId] = useState<string>('');
   const [bulkCustomerId, setBulkCustomerId] = useState<string>('');
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
+  // Resizable column widths
+  const STORAGE_KEY = 'projectList_columnWidths';
+  const DEFAULT_WIDTHS: Record<string, number> = {
+    checkbox: 36,
+    favorite: 36,
+    number: 80,
+    startDate: 85,
+    project: 0, // 0 = flexible, takes remaining space
+    contractValue: 110,
+    gm: 55,
+    backlog: 100,
+    status: 70,
+    department: 85,
+    manager: 150,
+  };
+  const COLUMN_KEYS = Object.keys(DEFAULT_WIDTHS);
+  const MIN_COL_WIDTH = 40;
+
+  const loadSavedWidths = (): Record<string, number> => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return { ...DEFAULT_WIDTHS, ...JSON.parse(saved) };
+    } catch {}
+    return { ...DEFAULT_WIDTHS };
+  };
+
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(loadSavedWidths);
+  const resizingCol = useRef<string | null>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const handleResizeStart = useCallback((colKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = colKey;
+    resizeStartX.current = e.clientX;
+    // If column is flex (0), calculate its current rendered width
+    if (columnWidths[colKey] === 0 && tableRef.current) {
+      const colIndex = COLUMN_KEYS.indexOf(colKey);
+      const th = tableRef.current.querySelector(`thead th:nth-child(${colIndex + 1})`) as HTMLElement;
+      resizeStartWidth.current = th ? th.offsetWidth : 200;
+    } else {
+      resizeStartWidth.current = columnWidths[colKey];
+    }
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [columnWidths]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingCol.current) return;
+      const diff = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(MIN_COL_WIDTH, resizeStartWidth.current + diff);
+      setColumnWidths(prev => ({ ...prev, [resizingCol.current!]: newWidth }));
+    };
+
+    const handleMouseUp = () => {
+      if (!resizingCol.current) return;
+      // Save to localStorage
+      setColumnWidths(prev => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(prev));
+        return prev;
+      });
+      resizingCol.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const getColStyle = (key: string): React.CSSProperties => {
+    const w = columnWidths[key];
+    if (w === 0) return {}; // flex column - no explicit width
+    return { width: `${w}px` };
+  };
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
@@ -648,11 +731,35 @@ const ProjectList: React.FC = () => {
               ({filteredProjects.length.toLocaleString()} of {(projects || []).length.toLocaleString()})
             </span>
           </div>
+          {JSON.stringify(columnWidths) !== JSON.stringify(DEFAULT_WIDTHS) && (
+            <button
+              onClick={() => {
+                setColumnWidths({ ...DEFAULT_WIDTHS });
+                localStorage.removeItem(STORAGE_KEY);
+              }}
+              style={{
+                padding: '4px 10px',
+                fontSize: '0.75rem',
+                color: '#6b7280',
+                background: 'transparent',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Reset Columns
+            </button>
+          )}
         </div>
-        <table className="sales-table">
+        <table className="sales-table" ref={tableRef}>
+          <colgroup>
+            {COLUMN_KEYS.map(key => (
+              <col key={key} style={getColStyle(key)} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ width: '40px', textAlign: 'center' }}>
+              <th style={{ textAlign: 'center' }}>
                 <input
                   type="checkbox"
                   checked={sortedProjects.length > 0 && selectedIds.size === sortedProjects.length}
@@ -660,35 +767,45 @@ const ProjectList: React.FC = () => {
                   style={{ cursor: 'pointer', width: '16px', height: '16px' }}
                 />
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('isFavorited')} style={{ width: '50px', textAlign: 'center' }}>
+              <th className="sales-sortable" onClick={() => handleSort('isFavorited')} style={{ textAlign: 'center' }}>
                 <span className="sales-sort-icon">{sortColumn === 'isFavorited' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('favorite', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('number')}>
                 Number <span className="sales-sort-icon">{sortColumn === 'number' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('number', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('start_date')}>
                 Start Date <span className="sales-sort-icon">{sortColumn === 'start_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('startDate', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('name')}>
                 Project <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('project', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('contract_value')}>
                 Contract Value <span className="sales-sort-icon">{sortColumn === 'contract_value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('contractValue', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('gross_margin')}>
                 GM% <span className="sales-sort-icon">{sortColumn === 'gross_margin' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('gm', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('backlog')}>
                 Backlog <span className="sales-sort-icon">{sortColumn === 'backlog' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('backlog', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('status')}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('status', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('department')}>
-                Department <span className="sales-sort-icon">{sortColumn === 'department' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                Dept <span className="sales-sort-icon">{sortColumn === 'department' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('department', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('manager')}>
                 Project Manager <span className="sales-sort-icon">{sortColumn === 'manager' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('manager', e)} />
               </th>
             </tr>
           </thead>
