@@ -22,7 +22,12 @@ const Project = {
     const result = await db.query(
       `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
               COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
-              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
+              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+              CASE
+                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
+                ELSE NULL
+              END as percent_complete
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
        LEFT JOIN departments d ON p.department_id = d.id
@@ -42,7 +47,12 @@ const Project = {
     const result = await db.query(
       `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
               COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
-              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
+              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+              CASE
+                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
+                ELSE NULL
+              END as percent_complete
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
        LEFT JOIN departments d ON p.department_id = d.id
@@ -62,7 +72,12 @@ const Project = {
     let query = `
       SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
-             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
+             vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+             CASE
+               WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
+               ELSE NULL
+             END as percent_complete
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN departments d ON p.department_id = d.id
@@ -96,7 +111,12 @@ const Project = {
     let query = `
       SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
-             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
+             vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+             CASE
+               WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
+               ELSE NULL
+             END as percent_complete
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN departments d ON p.department_id = d.id

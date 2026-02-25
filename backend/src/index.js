@@ -71,6 +71,7 @@ const weeklyGoalPlanRoutes = require('./routes/weeklyGoalPlans');
 const questionnaireRoutes = require('./routes/questionnaire');
 const favoritesRoutes = require('./routes/favorites');
 const opportunitySearchRoutes = require('./routes/opportunitySearch');
+const projectSnapshotRoutes = require('./routes/projectSnapshots');
 
 const app = express();
 
@@ -134,6 +135,7 @@ app.use('/api/tenant', tenantRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects', projectSnapshotRoutes);
 app.use('/api/rfis', rfiRoutes);
 app.use('/api/rfi-actions', rfiActionRoutes);
 app.use('/api/submittals', submittalRoutes);
