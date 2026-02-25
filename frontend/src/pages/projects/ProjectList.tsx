@@ -35,6 +35,8 @@ const ProjectList: React.FC = () => {
     contractValue: 110,
     gm: 55,
     backlog: 100,
+    jtdCost: 100,
+    percentComplete: 90,
     status: 70,
     department: 85,
     manager: 150,
@@ -304,8 +306,12 @@ const ProjectList: React.FC = () => {
     // Format numeric values for searching (matches display format)
     const contractValueStr = project.contract_value ? `$${Number(project.contract_value).toLocaleString()}` : '';
     const backlogStr = project.backlog ? `$${Number(project.backlog).toLocaleString()}` : '';
+    const jtdCostStr = project.actual_cost ? `$${Number(project.actual_cost).toLocaleString()}` : '';
     const gmPercentStr = project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
       ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%`
+      : '';
+    const percentCompleteStr = project.percent_complete !== undefined && project.percent_complete !== null
+      ? `${Math.round(Number(project.percent_complete) * 100)}%`
       : '';
 
     return (
@@ -321,7 +327,9 @@ const ProjectList: React.FC = () => {
       (project.start_date && new Date(project.start_date).toLocaleDateString('en-US').toLowerCase().includes(term)) ||
       contractValueStr.toLowerCase().includes(term) ||
       backlogStr.toLowerCase().includes(term) ||
-      gmPercentStr.toLowerCase().includes(term)
+      jtdCostStr.toLowerCase().includes(term) ||
+      gmPercentStr.toLowerCase().includes(term) ||
+      percentCompleteStr.toLowerCase().includes(term)
     );
   });
 
@@ -365,6 +373,14 @@ const ProjectList: React.FC = () => {
       case 'backlog':
         aValue = Number(a.backlog) || 0;
         bValue = Number(b.backlog) || 0;
+        break;
+      case 'jtd_cost':
+        aValue = Number(a.actual_cost) || 0;
+        bValue = Number(b.actual_cost) || 0;
+        break;
+      case 'percent_complete':
+        aValue = Number(a.percent_complete) || 0;
+        bValue = Number(b.percent_complete) || 0;
         break;
       case 'gross_margin':
         aValue = Number(a.gross_margin_percent) || 0;
@@ -784,6 +800,14 @@ const ProjectList: React.FC = () => {
                 Backlog <span className="sales-sort-icon">{sortColumn === 'backlog' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('backlog', e)} />
               </th>
+              <th className="sales-sortable" onClick={() => handleSort('jtd_cost')}>
+                JTD Cost <span className="sales-sort-icon">{sortColumn === 'jtd_cost' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('jtdCost', e)} />
+              </th>
+              <th className="sales-sortable" onClick={() => handleSort('percent_complete')}>
+                % Complete <span className="sales-sort-icon">{sortColumn === 'percent_complete' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('percentComplete', e)} />
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('status')}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('status', e)} />
@@ -861,6 +885,8 @@ const ProjectList: React.FC = () => {
                     {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null ? `${Math.round(Number(project.gross_margin_percent) * 100)}%` : '-'}
                   </td>
                   <td>{project.backlog ? `$${Math.round(Number(project.backlog)).toLocaleString()}` : '-'}</td>
+                  <td>{project.actual_cost ? `$${Math.round(Number(project.actual_cost)).toLocaleString()}` : '-'}</td>
+                  <td>{project.percent_complete !== undefined && project.percent_complete !== null ? `${Math.round(Number(project.percent_complete) * 100)}%` : '-'}</td>
                   <td>
                     <span className={`sales-stage-badge ${project.status.toLowerCase().replace('-', '_')}`}>
                       <span className="sales-stage-dot" style={{ background: getStatusColor(project.status) }}></span>
@@ -883,7 +909,7 @@ const ProjectList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={13} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       className="mx-auto h-12 w-12 text-gray-400"

@@ -290,39 +290,73 @@ const ProjectDetail: React.FC = () => {
           </div>
 
           {/* Financial Metrics - inline row */}
-          {(project.contract_value || project.gross_margin_percent !== undefined || project.backlog) && (
+          {(project.contract_value || project.gross_margin_percent !== undefined || project.backlog ||
+            project.projected_revenue || project.projected_cost || project.actual_cost) && (
             <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', marginBottom: '0.4rem' }}>
                 <div style={{
-                  flex: 1, textAlign: 'center', padding: '0.4rem',
+                  textAlign: 'center', padding: '0.4rem',
                   background: '#f8fafc', borderRadius: '6px'
                 }}>
                   <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>Contract</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#3b82f6' }}>
-                    {project.contract_value ? `$${(Number(project.contract_value) / 1000).toFixed(0)}K` : '-'}
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.contract_value ? `$${Number(project.contract_value).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
                   </div>
                 </div>
                 <div style={{
-                  flex: 1, textAlign: 'center', padding: '0.4rem',
+                  textAlign: 'center', padding: '0.4rem',
                   background: '#f8fafc', borderRadius: '6px'
                 }}>
                   <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>GM%</div>
                   <div style={{
                     fontSize: '0.95rem', fontWeight: 600,
-                    color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981'
-                      : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : '#64748b'
+                    color: project.gross_margin_percent && project.gross_margin_percent !== 0 ? '#ffffff' : '#3b82f6',
+                    backgroundColor: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981'
+                      : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'transparent',
+                    padding: project.gross_margin_percent && project.gross_margin_percent !== 0 ? '0.15rem 0.5rem' : '0',
+                    borderRadius: project.gross_margin_percent && project.gross_margin_percent !== 0 ? '4px' : '0',
+                    display: 'inline-block'
                   }}>
                     {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
                       ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%` : '-'}
                   </div>
                 </div>
                 <div style={{
-                  flex: 1, textAlign: 'center', padding: '0.4rem',
+                  textAlign: 'center', padding: '0.4rem',
                   background: '#f8fafc', borderRadius: '6px'
                 }}>
                   <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>Backlog</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#8b5cf6' }}>
-                    {project.backlog ? `$${(Number(project.backlog) / 1000).toFixed(0)}K` : '-'}
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.backlog ? `$${Number(project.backlog).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
+                <div style={{
+                  textAlign: 'center', padding: '0.4rem',
+                  background: '#f8fafc', borderRadius: '6px'
+                }}>
+                  <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>Projected Revenue</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.projected_revenue ? `$${Number(project.projected_revenue).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
+                  </div>
+                </div>
+                <div style={{
+                  textAlign: 'center', padding: '0.4rem',
+                  background: '#f8fafc', borderRadius: '6px'
+                }}>
+                  <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>Projected Cost</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.projected_cost ? `$${Number(project.projected_cost).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
+                  </div>
+                </div>
+                <div style={{
+                  textAlign: 'center', padding: '0.4rem',
+                  background: '#f8fafc', borderRadius: '6px'
+                }}>
+                  <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase' }}>JTD Cost</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+                    {project.actual_cost ? `$${Number(project.actual_cost).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
                   </div>
                 </div>
               </div>
