@@ -59,6 +59,7 @@ const teamRoutes = require('./routes/teams');
 const dashboardRoutes = require('./routes/dashboard');
 const budgetGeneratorRoutes = require('./routes/budgetGenerator');
 const budgetRoutes = require('./routes/budgets');
+const vistaAutoUploadRoutes = require('./routes/vistaAutoUpload');
 const vistaDataRoutes = require('./routes/vistaData');
 const caseStudyRoutes = require('./routes/caseStudies');
 const caseStudyTemplateRoutes = require('./routes/caseStudyTemplates');
@@ -102,7 +103,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-API-Key'],
   maxAge: 86400 // Cache preflight for 24 hours
 };
 
@@ -162,6 +163,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/budget-generator', budgetGeneratorRoutes);
 app.use('/api/budgets', budgetRoutes);
+app.use('/api/vista-auto', vistaAutoUploadRoutes);
 app.use('/api/vista', vistaDataRoutes);
 app.use('/api/case-studies', caseStudyRoutes);
 app.use('/api/case-study-templates', caseStudyTemplateRoutes);
