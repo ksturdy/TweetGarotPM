@@ -55,7 +55,7 @@ const apiKeyAuth = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid or missing API key' });
   }
 
-  req.user = { id: 'system', role: 'admin' };
+  req.user = { id: 1, role: 'admin' };  // Use ID 1 (admin user) for automated imports
   req.tenantId = process.env.DEFAULT_TENANT_ID || 1;
   next();
 };
