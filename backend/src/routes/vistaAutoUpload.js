@@ -116,7 +116,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
           file_name: req.file.originalname,
           file_type: 'contracts',
           records_total: data.length,
-          imported_by: req.user.id
+          imported_by: null
         }, req.tenantId);
 
         let newCount = 0;
@@ -228,7 +228,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
           file_name: req.file.originalname,
           file_type: 'work_orders',
           records_total: totalWORows,
-          imported_by: req.user.id
+          imported_by: null
         }, req.tenantId);
 
         let newCount = 0;
@@ -316,7 +316,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
           file_name: req.file.originalname,
           file_type: 'employees',
           records_total: data.length,
-          imported_by: req.user.id
+          imported_by: null
         }, req.tenantId);
 
         let newCount = 0;
@@ -363,7 +363,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
           file_name: req.file.originalname,
           file_type: 'customers',
           records_total: data.length,
-          imported_by: req.user.id
+          imported_by: null
         }, req.tenantId);
 
         let newCount = 0;
@@ -413,7 +413,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
           file_name: req.file.originalname,
           file_type: 'vendors',
           records_total: data.length,
-          imported_by: req.user.id
+          imported_by: null
         }, req.tenantId);
 
         let newCount = 0;
