@@ -55,6 +55,30 @@ export interface OpportunitySearchResponse {
   };
 }
 
+export interface SavedSearch {
+  id: number;
+  name: string;
+  criteria: SearchCriteria;
+  results: GeneratedLead[];
+  summary: SearchSummary;
+  lead_count: number;
+  total_estimated_value: number;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
+
+export interface SavedSearchListItem {
+  id: number;
+  name: string;
+  criteria: SearchCriteria;
+  lead_count: number;
+  total_estimated_value: number;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
+
 const opportunitySearchService = {
   async search(criteria: SearchCriteria): Promise<OpportunitySearchResponse> {
     const response = await api.post<OpportunitySearchResponse>(
@@ -62,7 +86,42 @@ const opportunitySearchService = {
       criteria
     );
     return response.data;
-  }
+  },
+
+  async getSavedSearches(): Promise<SavedSearchListItem[]> {
+    const response = await api.get<SavedSearchListItem[]>(
+      '/opportunity-search/saved'
+    );
+    return response.data;
+  },
+
+  async getSavedSearch(id: number): Promise<SavedSearch> {
+    const response = await api.get<SavedSearch>(
+      `/opportunity-search/saved/${id}`
+    );
+    return response.data;
+  },
+
+  async saveSearch(data: {
+    name: string;
+    criteria: SearchCriteria;
+    results: GeneratedLead[];
+    summary: SearchSummary;
+  }): Promise<SavedSearch> {
+    const response = await api.post<SavedSearch>(
+      '/opportunity-search/saved',
+      data
+    );
+    return response.data;
+  },
+
+  async deleteSavedSearch(id: number): Promise<void> {
+    await api.delete(`/opportunity-search/saved/${id}`);
+  },
+
+  async deleteSavedSearches(ids: number[]): Promise<void> {
+    await api.post('/opportunity-search/saved/bulk-delete', { ids });
+  },
 };
 
 export default opportunitySearchService;

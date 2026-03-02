@@ -658,6 +658,186 @@
   margin: 0;
 }
 
+/* Saved Searches Section */
+.opp-search-saved-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.opp-search-saved-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opp-search-saved-empty,
+.opp-search-saved-loading {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 0;
+}
+
+.opp-search-saved-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.opp-search-saved-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.opp-search-saved-table td {
+  padding: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.opp-search-saved-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.opp-search-saved-table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.opp-search-saved-table tbody tr.active {
+  background: rgba(59, 130, 246, 0.08);
+  border-left: 3px solid var(--accent-blue);
+}
+
+/* Saved searches bulk actions */
+.opp-search-saved-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.opp-search-saved-bulk-actions .opp-saved-delete-btn {
+  padding: 5px 14px;
+  font-size: 13px;
+}
+
+.opp-search-saved-table th input[type="checkbox"],
+.opp-search-saved-table td input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-blue);
+}
+
+.opp-search-saved-table tbody tr.selected {
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.opp-saved-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.opp-saved-view-btn,
+.opp-saved-delete-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-right: 6px;
+  transition: all 0.15s;
+}
+
+.opp-saved-view-btn {
+  color: var(--accent-blue);
+}
+
+.opp-saved-view-btn:hover {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+
+.opp-saved-delete-btn {
+  color: #dc2626;
+}
+
+.opp-saved-delete-btn:hover {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+/* Save Dialog */
+.opp-search-save-dialog {
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 32px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.opp-search-save-dialog h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.opp-search-save-dialog p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 16px 0;
+}
+
+.opp-search-save-dialog input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.opp-search-save-dialog input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.opp-search-save-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .opp-search-form-grid,

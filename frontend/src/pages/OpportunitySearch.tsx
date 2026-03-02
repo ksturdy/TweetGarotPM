@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import opportunitySearchService, { SearchCriteria, GeneratedLead, SearchSummary } from '../services/opportunitySearch';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import opportunitySearchService, { SearchCriteria, GeneratedLead, SearchSummary, SavedSearchListItem } from '../services/opportunitySearch';
 import opportunitiesService from '../services/opportunities';
 import '../styles/SalesPipeline.css';
 import '../styles/OpportunitySearch.css';
@@ -38,7 +38,7 @@ function parseFormattedNumber(formatted: string): number | undefined {
   return Number(digits);
 }
 
-function mapLeadToOpportunity(lead: GeneratedLead) {
+function mapLeadToOpportunity(lead: GeneratedLead, stageId?: number) {
   const contactLine = lead.contact_name
     ? `Contact: ${lead.contact_name}, ${lead.contact_title}`
     : `Look for: ${lead.contact_title} (needs research)`;
@@ -72,12 +72,23 @@ function mapLeadToOpportunity(lead: GeneratedLead) {
     market: lead.market_sector,
     location: lead.location,
     owner: lead.company_name,
-    general_contractor: lead.general_contractor || '',
-    estimated_start_date: lead.estimated_start_date || '',
+    general_contractor: lead.general_contractor || undefined,
+    estimated_start_date: lead.estimated_start_date || undefined,
     source: 'ai_search',
-    stage_id: 1,
+    ...(stageId ? { stage_id: stageId } : {}),
     priority: 'medium' as const,
   };
+}
+
+function generateSearchName(criteria: SearchCriteria): string {
+  const parts: string[] = [];
+  if (criteria.market_sector) parts.push(criteria.market_sector);
+  if (criteria.construction_type) parts.push(criteria.construction_type);
+  if (criteria.location) parts.push(criteria.location);
+  if (criteria.keywords) parts.push(criteria.keywords.split(',')[0].trim());
+  if (parts.length === 0) parts.push('General Search');
+  const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${parts.join(' - ')} (${date})`;
 }
 
 const OpportunitySearch: React.FC = () => {
@@ -100,14 +111,81 @@ const OpportunitySearch: React.FC = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [converting, setConverting] = useState(false);
+  const [viewingSavedId, setViewingSavedId] = useState<number | null>(null);
+  const [lastCriteria, setLastCriteria] = useState<SearchCriteria | null>(null);
+  const [selectedSavedSearches, setSelectedSavedSearches] = useState<Set<number>>(new Set());
+
+  const savedSearchesQuery = useQuery({
+    queryKey: ['saved-opportunity-searches'],
+    queryFn: () => opportunitySearchService.getSavedSearches(),
+  });
+
+  const deleteSavedMutation = useMutation({
+    mutationFn: (id: number) => opportunitySearchService.deleteSavedSearch(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
+      setSuccessMessage('Search deleted.');
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: number[]) => opportunitySearchService.deleteSavedSearches(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
+      setSelectedSavedSearches(new Set());
+      setSuccessMessage('Selected searches removed.');
+    },
+  });
+
+  const handleLoadSaved = async (id: number) => {
+    try {
+      const saved = await opportunitySearchService.getSavedSearch(id);
+      setLeads(saved.results);
+      setSummary(saved.summary);
+      if (saved.criteria) {
+        setFormData({
+          market_sector: saved.criteria.market_sector || '',
+          location: saved.criteria.location || '',
+          construction_type: saved.criteria.construction_type || '',
+          min_value: saved.criteria.min_value,
+          max_value: saved.criteria.max_value,
+          keywords: saved.criteria.keywords || '',
+          additional_criteria: saved.criteria.additional_criteria || '',
+        });
+      }
+      setLastCriteria(saved.criteria);
+      setViewingSavedId(id);
+      setSelectedLeads(new Set());
+      setError('');
+      setSuccessMessage(`Loaded search: "${saved.name}"`);
+    } catch (err) {
+      setError('Failed to load search.');
+    }
+  };
 
   const searchMutation = useMutation({
     mutationFn: (criteria: SearchCriteria) => opportunitySearchService.search(criteria),
-    onSuccess: (data) => {
+    onSuccess: async (data, criteria) => {
       setLeads(data.leads);
       setSummary(data.summary);
       setSelectedLeads(new Set());
       setError('');
+
+      // Auto-save the search
+      if (data.leads.length > 0) {
+        try {
+          const autoName = generateSearchName(criteria);
+          await opportunitySearchService.saveSearch({
+            name: autoName,
+            criteria,
+            results: data.leads,
+            summary: data.summary,
+          });
+          queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
+        } catch (err) {
+          console.error('Failed to auto-save search:', err);
+        }
+      }
     },
     onError: (err: any) => {
       setError(err.response?.data?.error || 'Failed to search for opportunities. Please try again.');
@@ -144,6 +222,8 @@ const OpportunitySearch: React.FC = () => {
       return;
     }
 
+    setLastCriteria(criteria);
+    setViewingSavedId(null);
     searchMutation.mutate(criteria);
   };
 
@@ -191,9 +271,20 @@ const OpportunitySearch: React.FC = () => {
     setConverting(true);
     let successCount = 0;
 
+    // Fetch the first pipeline stage for this tenant
+    let firstStageId: number | undefined;
+    try {
+      const stages = await opportunitiesService.getStages();
+      if (stages.length > 0) {
+        firstStageId = stages[0].id;
+      }
+    } catch (err) {
+      console.error('Failed to fetch pipeline stages:', err);
+    }
+
     for (const lead of selected) {
       try {
-        await opportunitiesService.create(mapLeadToOpportunity(lead));
+        await opportunitiesService.create(mapLeadToOpportunity(lead, firstStageId));
         successCount++;
       } catch (err) {
         console.error('Failed to create opportunity from lead:', lead.project_name, err);
@@ -373,6 +464,143 @@ const OpportunitySearch: React.FC = () => {
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
           No projects found matching your criteria. Try broadening your search — use a wider location, different market sector, or fewer filters.
+        </div>
+      )}
+
+      {/* Recent Searches */}
+      {!searchMutation.isPending && (
+        <div className="opp-search-saved-section">
+          <h3 className="opp-search-saved-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Recent Searches
+          </h3>
+
+          {savedSearchesQuery.isLoading && (
+            <p className="opp-search-saved-loading">Loading recent searches...</p>
+          )}
+
+          {savedSearchesQuery.data && savedSearchesQuery.data.length === 0 && (
+            <p className="opp-search-saved-empty">No recent searches yet. Run a search and it will appear here automatically.</p>
+          )}
+
+          {savedSearchesQuery.data && savedSearchesQuery.data.length > 0 && (
+            <>
+              {selectedSavedSearches.size > 0 && (
+                <div className="opp-search-saved-bulk-actions">
+                  <span>{selectedSavedSearches.size} selected</span>
+                  <button
+                    className="opp-saved-delete-btn"
+                    disabled={bulkDeleteMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Delete ${selectedSavedSearches.size} search${selectedSavedSearches.size > 1 ? 'es' : ''}?`)) {
+                        const ids = Array.from(selectedSavedSearches);
+                        if (viewingSavedId && ids.includes(viewingSavedId)) {
+                          setViewingSavedId(null);
+                          setLeads([]);
+                          setSummary(null);
+                        }
+                        bulkDeleteMutation.mutate(ids);
+                      }
+                    }}
+                  >
+                    {bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete Selected'}
+                  </button>
+                </div>
+              )}
+              <table className="opp-search-saved-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={savedSearchesQuery.data.length > 0 && selectedSavedSearches.size === savedSearchesQuery.data.length}
+                        onChange={() => {
+                          if (selectedSavedSearches.size === savedSearchesQuery.data!.length) {
+                            setSelectedSavedSearches(new Set());
+                          } else {
+                            setSelectedSavedSearches(new Set(savedSearchesQuery.data!.map((s: SavedSearchListItem) => s.id)));
+                          }
+                        }}
+                      />
+                    </th>
+                    <th>Name</th>
+                    <th>Date</th>
+                    <th>Leads</th>
+                    <th>Est. Value</th>
+                    <th>Market</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedSearchesQuery.data.map((item: SavedSearchListItem) => (
+                    <tr
+                      key={item.id}
+                      className={`${viewingSavedId === item.id ? 'active' : ''} ${selectedSavedSearches.has(item.id) ? 'selected' : ''}`}
+                      onClick={() => handleLoadSaved(item.id)}
+                    >
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedSavedSearches.has(item.id)}
+                          onChange={() => {
+                            setSelectedSavedSearches(prev => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) {
+                                next.delete(item.id);
+                              } else {
+                                next.add(item.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                      </td>
+                      <td className="opp-saved-name">{item.name}</td>
+                      <td>{new Date(item.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric'
+                      })}</td>
+                      <td>{item.lead_count}</td>
+                      <td>{formatCurrency(Number(item.total_estimated_value))}</td>
+                      <td>
+                        <span className="opp-search-tag market">
+                          {item.criteria?.market_sector || 'All'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="opp-saved-view-btn"
+                          onClick={(e) => { e.stopPropagation(); handleLoadSaved(item.id); }}
+                          title="View results"
+                        >
+                          View
+                        </button>
+                        <button
+                          className="opp-saved-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('Delete this search?')) {
+                              deleteSavedMutation.mutate(item.id);
+                              if (viewingSavedId === item.id) {
+                                setViewingSavedId(null);
+                                setLeads([]);
+                                setSummary(null);
+                              }
+                            }
+                          }}
+                          title="Delete"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       )}
 
@@ -577,6 +805,7 @@ const OpportunitySearch: React.FC = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

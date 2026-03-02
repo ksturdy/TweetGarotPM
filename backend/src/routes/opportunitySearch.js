@@ -3,6 +3,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 
+const SavedSearches = require('../models/savedSearches');
+
 const router = express.Router();
 
 // Apply middleware
@@ -310,6 +312,96 @@ router.post('/generate', async (req, res, next) => {
     });
   } catch (error) {
     console.error('[Opportunity Search] Error:', error);
+    next(error);
+  }
+});
+
+// GET /api/opportunity-search/saved - List all saved searches (lightweight, no full results)
+router.get('/saved', async (req, res, next) => {
+  try {
+    const searches = await SavedSearches.findAllByTenant(req.tenantId);
+    res.json(searches);
+  } catch (error) {
+    console.error('[Opportunity Search] Error fetching saved searches:', error);
+    next(error);
+  }
+});
+
+// GET /api/opportunity-search/saved/:id - Get a single saved search with full results
+router.get('/saved/:id', async (req, res, next) => {
+  try {
+    const search = await SavedSearches.findById(Number(req.params.id), req.tenantId);
+    if (!search) {
+      return res.status(404).json({ error: 'Saved search not found' });
+    }
+    res.json(search);
+  } catch (error) {
+    console.error('[Opportunity Search] Error fetching saved search:', error);
+    next(error);
+  }
+});
+
+// POST /api/opportunity-search/saved - Save the current search results
+router.post('/saved', async (req, res, next) => {
+  try {
+    const { name, criteria, results, summary } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    if (!results || !Array.isArray(results) || results.length === 0) {
+      return res.status(400).json({ error: 'Results are required' });
+    }
+
+    const totalEstimatedValue = results.reduce(
+      (sum, lead) => sum + (lead.estimated_value || 0), 0
+    );
+
+    const saved = await SavedSearches.create(
+      {
+        name: name.trim(),
+        criteria,
+        results,
+        summary,
+        leadCount: results.length,
+        totalEstimatedValue
+      },
+      req.user.id,
+      req.tenantId
+    );
+
+    res.status(201).json(saved);
+  } catch (error) {
+    console.error('[Opportunity Search] Error saving search:', error);
+    next(error);
+  }
+});
+
+// POST /api/opportunity-search/saved/bulk-delete - Delete multiple saved searches
+router.post('/saved/bulk-delete', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' });
+    }
+    const deleted = await SavedSearches.deleteMany(ids.map(Number), req.tenantId);
+    res.json({ success: true, deleted_count: deleted.length });
+  } catch (error) {
+    console.error('[Opportunity Search] Error bulk deleting saved searches:', error);
+    next(error);
+  }
+});
+
+// DELETE /api/opportunity-search/saved/:id - Delete a saved search
+router.delete('/saved/:id', async (req, res, next) => {
+  try {
+    const deleted = await SavedSearches.delete(Number(req.params.id), req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Saved search not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Opportunity Search] Error deleting saved search:', error);
     next(error);
   }
 });

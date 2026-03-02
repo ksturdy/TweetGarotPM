@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
@@ -67,6 +67,21 @@ const SalesPipeline: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('all');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
+  const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Lost', 'Passed']));
+  const [stageFilterOpen, setStageFilterOpen] = useState(false);
+  const stageFilterRef = useRef<HTMLDivElement>(null);
+
+  // Close stage filter dropdown on outside click
+  useEffect(() => {
+    if (!stageFilterOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (stageFilterRef.current && !stageFilterRef.current.contains(e.target as Node)) {
+        setStageFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [stageFilterOpen]);
 
   // Fetch real opportunities from API
   const { data: apiOpportunities = [], isLoading } = useQuery({
@@ -232,6 +247,11 @@ const SalesPipeline: React.FC = () => {
   // Filter opportunities based on selected filters
   const filteredApiOpportunities = useMemo(() => {
     return apiOpportunities.filter(opp => {
+      // Filter by stage (exclude unchecked stages)
+      if (excludedStages.size > 0 && opp.stage_name && excludedStages.has(opp.stage_name)) {
+        return false;
+      }
+
       // Filter by salesperson
       if (selectedSalesperson !== 'all' && opp.assigned_to_name !== selectedSalesperson) {
         return false;
@@ -255,7 +275,7 @@ const SalesPipeline: React.FC = () => {
 
       return true;
     });
-  }, [apiOpportunities, selectedSalesperson, selectedOfficeLocation, salespersonToOffice]);
+  }, [apiOpportunities, selectedSalesperson, selectedOfficeLocation, salespersonToOffice, excludedStages]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -674,6 +694,18 @@ const SalesPipeline: React.FC = () => {
     }
   };
 
+  const toggleStageFilter = (stageName: string) => {
+    setExcludedStages(prev => {
+      const next = new Set(prev);
+      if (next.has(stageName)) {
+        next.delete(stageName);
+      } else {
+        next.add(stageName);
+      }
+      return next;
+    });
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedOpportunity(null);
@@ -896,6 +928,39 @@ const SalesPipeline: React.FC = () => {
                   <option key={person} value={person}>{person}</option>
                 ))}
               </select>
+              <div className="sales-stage-filter-wrapper" ref={stageFilterRef}>
+                <button
+                  className="sales-stage-filter-btn"
+                  onClick={() => setStageFilterOpen(!stageFilterOpen)}
+                >
+                  Stages {excludedStages.size > 0 ? `(${pipelineStages.length - excludedStages.size}/${pipelineStages.length})` : '(All)'}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                {stageFilterOpen && (
+                  <div className="sales-stage-filter-dropdown">
+                    <div className="sales-stage-filter-actions">
+                      <button onClick={() => setExcludedStages(new Set())}>Select All</button>
+                      <button onClick={() => setExcludedStages(new Set(pipelineStages.map(s => s.name)))}>Clear All</button>
+                    </div>
+                    {pipelineStages.map(stage => (
+                      <label key={stage.id} className="sales-stage-filter-item">
+                        <input
+                          type="checkbox"
+                          checked={!excludedStages.has(stage.name)}
+                          onChange={() => toggleStageFilter(stage.name)}
+                        />
+                        <span
+                          className="sales-stage-filter-dot"
+                          style={{ background: stage.color }}
+                        />
+                        {stage.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="sales-search-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
@@ -910,6 +975,7 @@ const SalesPipeline: React.FC = () => {
               </div>
             </div>
           </div>
+          <div className="sales-table-scroll-wrapper">
           <table className="sales-table">
             <colgroup>
               <col style={{ width: '70px' }} />
@@ -989,6 +1055,7 @@ const SalesPipeline: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
