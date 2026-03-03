@@ -8,12 +8,13 @@ import { assessmentsApi } from '../services/assessments';
 import {
   getCampaign, updateCampaign,
   getCampaignCompanies, getCampaignWeeks, getCampaignTeam, getCampaignActivity,
-  createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction,
+  createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction, updateCampaignCompanyAssignment,
   addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
   CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
 } from '../services/campaigns';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import '../styles/SalesPipeline.css';
 
 const weeks = [
@@ -211,7 +212,8 @@ export default function CampaignDetail() {
     if (dbCompanies.length > 0) {
       return dbCompanies.map((c: CampaignCompany) => ({
         id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
-        assignedTo: c.assigned_to_name || 'Unassigned', address: c.address || '', phone: c.phone || '',
+        assignedTo: c.assigned_to_name || 'Unassigned', assigned_to_id: c.assigned_to_id,
+        address: c.address || '', phone: c.phone || '',
         status: c.status, action: c.next_action, targetWeek: c.target_week
       }));
     }
@@ -245,6 +247,15 @@ export default function CampaignDetail() {
   const actionMutation = useMutation({
     mutationFn: ({ companyId, action }: { companyId: number; action: string }) =>
       updateCampaignCompanyAction(campaignId, companyId, action),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
+    }
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ companyId, assignedToId }: { companyId: number; assignedToId: number }) =>
+      updateCampaignCompanyAssignment(campaignId, companyId, assignedToId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
       queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
@@ -725,13 +736,15 @@ export default function CampaignDetail() {
     if (isLegacyPhoenix) {
       setData((d: any) => d.map((c: any) => c.id === companyId ? {...c, [field]: value} : c));
       const co = data.find((c: any) => c.id === companyId);
-      const label = field === 'status' ? statuses.find(s=>s.key===value)?.label : actions.find(a=>a.key===value)?.label;
-      setLogs((l: any) => [{ id: Date.now(), cid: companyId, text: `${field === 'status' ? 'Status' : 'Action'} → ${label}`, time: new Date().toISOString(), name: co?.name }, ...l]);
+      const label = field === 'assignedTo' ? value : field === 'status' ? statuses.find(s=>s.key===value)?.label : actions.find(a=>a.key===value)?.label;
+      setLogs((l: any) => [{ id: Date.now(), cid: companyId, text: `${field === 'assignedTo' ? 'Reassigned' : field === 'status' ? 'Status' : 'Action'} → ${label}`, time: new Date().toISOString(), name: co?.name }, ...l]);
     } else {
       if (field === 'status') {
         statusMutation.mutate({ companyId, status: value });
       } else if (field === 'action') {
         actionMutation.mutate({ companyId, action: value });
+      } else if (field === 'assignedTo') {
+        assignMutation.mutate({ companyId, assignedToId: parseInt(value) });
       }
     }
   };
@@ -1120,7 +1133,17 @@ export default function CampaignDetail() {
                                 <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span>
                               )}
                             </td>
-                            <td style={{ padding: '12px', color: '#64748b', fontSize: '12px' }}>{c.assignedTo}</td>
+                            <td style={{ padding: '12px', fontSize: '12px' }}>
+                              {isLegacyPhoenix ? (
+                                <select value={c.assignedTo} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                                  {activeTeam.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                              ) : (
+                                <select value={c.assigned_to_id || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                                  {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
+                                </select>
+                              )}
+                            </td>
                             <td style={{ padding: '12px', fontSize: '12px' }}>{activeWeeks.find((w: any)=>w.num===c.targetWeek)?.label}</td>
                           <td style={{ padding: '12px' }}>
                             <select value={c.status} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto' }}>
@@ -1975,27 +1998,17 @@ export default function CampaignDetail() {
                 {isLegacyPhoenix && (
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned Team Members</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                      {editEmployees.map(emp => {
-                        const fullName = `${emp.first_name} ${emp.last_name}`;
-                        const isChecked = ef.assignedTeam?.includes(fullName);
-                        return (
-                          <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: isChecked ? '#dbeafe' : '#f3f4f6', borderRadius: '6px', cursor: 'pointer', border: isChecked ? '1px solid #3b82f6' : '1px solid #e5e7eb' }}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                if (e.target.checked) setEf({ assignedTeam: [...(ef.assignedTeam || []), fullName] });
-                                else setEf({ assignedTeam: (ef.assignedTeam || []).filter((m: string) => m !== fullName) });
-                              }}
-                              style={{ accentColor: '#3b82f6' }}
-                            />
-                            <span style={{ fontSize: '13px', fontWeight: 500 }}>{fullName}</span>
-                            {emp.job_title && <span style={{ fontSize: '11px', color: '#64748b' }}>- {emp.job_title}</span>}
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <SearchableMultiSelect
+                      options={editEmployees.map(emp => ({
+                        value: `${emp.first_name} ${emp.last_name}`,
+                        label: `${emp.first_name} ${emp.last_name}`,
+                        subtitle: emp.job_title || undefined,
+                        searchText: `${emp.first_name} ${emp.last_name} ${emp.job_title || ''} ${emp.department_name || ''} ${emp.email}`,
+                      }))}
+                      values={ef.assignedTeam || []}
+                      onChange={(selected) => setEf({ assignedTeam: selected })}
+                      placeholder="Search team members..."
+                    />
                   </div>
                 )}
 

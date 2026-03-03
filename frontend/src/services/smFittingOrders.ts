@@ -93,7 +93,11 @@ export const smFittingOrdersApi = {
   update: (id: number, data: Partial<SmFittingOrder>) =>
     api.put<SmFittingOrder>(`/sm-fitting-orders/${id}`, data),
 
-  submit: (id: number) => api.post<SmFittingOrder>(`/sm-fitting-orders/${id}/submit`),
+  submit: (id: number) =>
+    api.post<SmFittingOrder>(`/sm-fitting-orders/${id}/submit`),
+
+  downloadPdf: (id: number) =>
+    api.get(`/sm-fitting-orders/${id}/pdf`, { responseType: 'blob' }),
 
   updateStatus: (id: number, data: Partial<SmFittingOrder>) =>
     api.post<SmFittingOrder>(`/sm-fitting-orders/${id}/update-status`, data),

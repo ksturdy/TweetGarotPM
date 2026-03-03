@@ -261,6 +261,11 @@ export const updateCampaignCompanyAction = async (campaignId: number, companyId:
   return response.data;
 };
 
+export const updateCampaignCompanyAssignment = async (campaignId: number, companyId: number, assigned_to_id: number): Promise<CampaignCompany> => {
+  const response = await api.patch(`/campaigns/${campaignId}/companies/${companyId}/assign`, { assigned_to_id });
+  return response.data;
+};
+
 export const addCampaignCompanyToDatabase = async (campaignId: number, companyId: number): Promise<any> => {
   const response = await api.post(`/campaigns/${campaignId}/companies/${companyId}/add-to-database`);
   return response.data;

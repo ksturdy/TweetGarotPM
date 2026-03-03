@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import SendIcon from '@mui/icons-material/Send';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EmailIcon from '@mui/icons-material/Email';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { smFittingOrdersApi, SmFittingOrderItem } from '../../../services/smFittingOrders';
 import { FittingTypeReference } from './FittingTypeDiagrams';
 
@@ -43,6 +45,8 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const { data: order, isLoading } = useQuery({
     queryKey: ['field-sm-fitting-order', id],
     queryFn: async () => {
@@ -57,6 +61,9 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-order', id] });
       queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-orders'] });
+    },
+    onError: () => {
+      window.alert('Failed to submit order. Please try again.');
     },
   });
 
@@ -77,6 +84,65 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   const handleDelete = () => {
     if (window.confirm('Delete this fitting order? This cannot be undone.')) {
       deleteMutation.mutate();
+    }
+  };
+
+  const handleEmailToShop = async () => {
+    if (!order) return;
+    setIsDownloading(true);
+    try {
+      // Download the PDF
+      const res = await smFittingOrdersApi.downloadPdf(Number(id));
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FO-SM-${order.number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      // Open default email client with pre-filled subject and body
+      const subject = encodeURIComponent(
+        `Fitting Order FO-SM-${order.number} - ${order.title || 'Duct Work Fitting Order'}`
+      );
+      const itemCount = (order.items || []).length;
+      const body = encodeURIComponent(
+        `Please find the attached fitting order FO-SM-${order.number}.\n\n` +
+        `Title: ${order.title || 'Duct Work Fitting Order'}\n` +
+        `Material: ${order.material || '-'}\n` +
+        `Priority: ${order.priority || 'normal'}\n` +
+        `Fittings: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
+        `The PDF is attached to this email.\n\n` +
+        `Thank you,\nTweet Garot Mechanical`
+      );
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    } catch {
+      window.alert('Failed to download PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!order) return;
+    setIsDownloading(true);
+    try {
+      const res = await smFittingOrdersApi.downloadPdf(Number(id));
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FO-SM-${order.number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      window.alert('Failed to download PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -304,25 +370,46 @@ const FieldSmFittingOrderDetail: React.FC = () => {
       </div>
 
       {/* Actions */}
-      {isDraft && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
-          <button
-            className="field-btn field-btn-primary"
-            onClick={handleSubmit}
-            disabled={submitMutation.isPending}
-          >
-            <SendIcon style={{ fontSize: 18 }} />
-            {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
-          </button>
-          <button
-            className="field-btn field-btn-secondary"
-            onClick={() =>
-              navigate(`/field/projects/${projectId}/sm-fitting-orders/${id}/edit`)
-            }
-          >
-            <EditIcon style={{ fontSize: 18 }} />
-            Edit Order
-          </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
+        {isDraft && (
+          <>
+            <button
+              className="field-btn field-btn-primary"
+              onClick={handleSubmit}
+              disabled={submitMutation.isPending}
+            >
+              <SendIcon style={{ fontSize: 18 }} />
+              {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
+            </button>
+            <button
+              className="field-btn field-btn-secondary"
+              onClick={() =>
+                navigate(`/field/projects/${projectId}/sm-fitting-orders/${id}/edit`)
+              }
+            >
+              <EditIcon style={{ fontSize: 18 }} />
+              Edit Order
+            </button>
+          </>
+        )}
+        <button
+          className="field-btn field-btn-primary"
+          onClick={handleEmailToShop}
+          disabled={isDownloading}
+          style={{ background: '#2563eb' }}
+        >
+          <EmailIcon style={{ fontSize: 18 }} />
+          {isDownloading ? 'Preparing PDF...' : 'Email to Shop'}
+        </button>
+        <button
+          className="field-btn field-btn-secondary"
+          onClick={handleDownloadPdf}
+          disabled={isDownloading}
+        >
+          <PictureAsPdfIcon style={{ fontSize: 18 }} />
+          {isDownloading ? 'Downloading...' : 'Download PDF'}
+        </button>
+        {isDraft && (
           <button
             className="field-btn field-btn-danger"
             onClick={handleDelete}
@@ -331,8 +418,8 @@ const FieldSmFittingOrderDetail: React.FC = () => {
             <DeleteIcon style={{ fontSize: 18 }} />
             {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -494,6 +494,24 @@ router.patch('/:campaignId/companies/:id/action', async (req, res, next) => {
   }
 });
 
+// UPDATE company assignment (reassign to different team member)
+router.patch('/:campaignId/companies/:id/assign', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const company = await campaignCompanies.updateAssignment(
+      req.params.id,
+      req.body.assigned_to_id,
+      req.user.id
+    );
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ADD company to main database
 router.post('/:campaignId/companies/:id/add-to-database', async (req, res, next) => {
   try {

@@ -217,6 +217,59 @@ const campaignCompanies = {
     }
   },
 
+  // Update assigned team member
+  updateAssignment: async (id, assignedToId, userId) => {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get old assignment name for logging
+      const oldQuery = `
+        SELECT cc.*, CONCAT(e.first_name, ' ', e.last_name) as old_assigned_name
+        FROM campaign_companies cc
+        LEFT JOIN employees e ON cc.assigned_to_id = e.id
+        WHERE cc.id = $1
+      `;
+      const oldResult = await client.query(oldQuery, [id]);
+      const company = oldResult.rows[0];
+
+      const updateQuery = `
+        UPDATE campaign_companies
+        SET assigned_to_id = $1
+        WHERE id = $2
+        RETURNING *
+      `;
+      const updateResult = await client.query(updateQuery, [assignedToId, id]);
+
+      // Get new assignment name for logging
+      const newNameQuery = `SELECT CONCAT(first_name, ' ', last_name) as name FROM employees WHERE id = $1`;
+      const newNameResult = await client.query(newNameQuery, [assignedToId]);
+      const newName = newNameResult.rows[0]?.name || 'Unknown';
+
+      // Log activity
+      const logQuery = `
+        INSERT INTO campaign_activity_logs (
+          campaign_id, campaign_company_id, user_id, activity_type, description
+        )
+        VALUES ($1, $2, $3, 'reassignment', $4)
+      `;
+      await client.query(logQuery, [
+        company.campaign_id,
+        id,
+        userId,
+        `Reassigned from ${company.old_assigned_name || 'Unassigned'} to ${newName}`
+      ]);
+
+      await client.query('COMMIT');
+      return updateResult.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Add to main companies database
   addToDatabase: async (campaignCompanyId, userId) => {
     const client = await db.pool.connect();

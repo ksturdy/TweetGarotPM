@@ -4,6 +4,8 @@ const SmFittingOrder = require('../models/SmFittingOrder');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { fetchLogoBase64 } = require('../utils/logoFetcher');
+const { generateFittingOrderPdfBuffer } = require('../utils/fittingOrderPdfBuffer');
 
 const router = express.Router();
 
@@ -147,10 +149,27 @@ router.put('/:id', verifyOrderOwnership, async (req, res, next) => {
   }
 });
 
+// Download PDF
+router.get('/:id/pdf', verifyOrderOwnership, async (req, res, next) => {
+  try {
+    const order = await SmFittingOrder.findById(req.params.id);
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
+    const pdfBuffer = await generateFittingOrderPdfBuffer(order, logoBase64);
+    const filename = `FO-SM-${order.number}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Submit to shop
 router.post('/:id/submit', verifyOrderOwnership, async (req, res, next) => {
   try {
-    const order = await SmFittingOrder.update(req.params.id, { status: 'submitted' });
+    await SmFittingOrder.update(req.params.id, { status: 'submitted' });
+    const order = await SmFittingOrder.findById(req.params.id);
     res.json(order);
   } catch (error) {
     next(error);

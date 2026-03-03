@@ -166,7 +166,10 @@ const FieldSmFittingOrderForm: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      window.alert('Title is required to save the fitting order.');
+      return;
+    }
     setSaving(true);
     try {
       const orderData: Partial<SmFittingOrder> = {
@@ -263,6 +266,7 @@ const FieldSmFittingOrderForm: React.FC = () => {
       navigate(`/field/projects/${projectId}/sm-fitting-orders`);
     } catch (err) {
       console.error('Failed to save fitting order:', err);
+      window.alert('Failed to save fitting order. Please try again.');
     } finally {
       setSaving(false);
     }
