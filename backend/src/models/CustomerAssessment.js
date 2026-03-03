@@ -82,6 +82,35 @@ const CustomerAssessment = {
     return result.rows;
   },
 
+  // Get assessment for a campaign company
+  async findByCampaignCompanyId(campaignCompanyId) {
+    const result = await db.query(
+      `SELECT ca.*,
+              u.first_name || ' ' || u.last_name as assessed_by_name
+       FROM customer_assessments ca
+       LEFT JOIN users u ON ca.assessed_by = u.id
+       WHERE ca.campaign_company_id = $1
+       ORDER BY ca.assessed_at DESC
+       LIMIT 1`,
+      [campaignCompanyId]
+    );
+    return result.rows[0];
+  },
+
+  // Create assessment for a campaign company
+  async createForCampaignCompany(campaignCompanyId, assessmentData, userId) {
+    const { totalScore, verdict, tier, knockout, knockoutReason, criteria, notes } = assessmentData;
+
+    const result = await db.query(
+      `INSERT INTO customer_assessments
+       (campaign_company_id, total_score, verdict, tier, knockout, knockout_reason, criteria, notes, assessed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [campaignCompanyId, totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId]
+    );
+    return result.rows[0];
+  },
+
   // Get summary statistics (tenant-scoped via customers)
   async getStatsByTenant(tenantId) {
     const result = await db.query(`

@@ -857,4 +857,64 @@ router.post('/:campaignId/companies/:companyId/contact-attempt', async (req, res
   }
 });
 
+// ============ CAMPAIGN COMPANY ASSESSMENTS ============
+
+const CustomerAssessment = require('../models/CustomerAssessment');
+
+// GET assessment for a campaign company
+router.get('/:campaignId/companies/:companyId/assessment', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const assessment = await CustomerAssessment.findByCampaignCompanyId(req.params.companyId);
+    if (!assessment) {
+      return res.status(404).json({ error: 'No assessment found' });
+    }
+    res.json(assessment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE assessment for a campaign company
+router.post('/:campaignId/companies/:companyId/assessment', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const assessment = await CustomerAssessment.createForCampaignCompany(
+      req.params.companyId,
+      req.body,
+      req.user.id
+    );
+    res.status(201).json(assessment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE assessment for a campaign company
+router.put('/:campaignId/companies/:companyId/assessment/:assessmentId', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const assessment = await CustomerAssessment.update(
+      req.params.assessmentId,
+      req.body,
+      req.user.id
+    );
+    if (!assessment) {
+      return res.status(404).json({ error: 'Assessment not found' });
+    }
+    res.json(assessment);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

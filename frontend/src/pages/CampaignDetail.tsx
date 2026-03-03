@@ -11,6 +11,7 @@ import {
   createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction, updateCampaignCompanyAssignment,
   addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
+  getCampaignCompanyAssessment,
   CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
 } from '../services/campaigns';
 import SearchableSelect from '../components/SearchableSelect';
@@ -144,27 +145,6 @@ export default function CampaignDetail() {
     enabled: !!id
   });
 
-  // Fetch assessments for all customers to show TG Cust. Score
-  const { data: assessmentsMap = {} } = useQuery({
-    queryKey: ['campaign-assessments', id],
-    queryFn: async () => {
-      const map: Record<number, number> = {};
-      // Fetch assessment for each customer
-      for (const company of data) {
-        try {
-          const response = await assessmentsApi.getCurrent(company.id);
-          if (response.data) {
-            map[company.id] = response.data.total_score;
-          }
-        } catch (error) {
-          // Customer doesn't have an assessment yet
-        }
-      }
-      return map;
-    },
-    enabled: !!id && data.length > 0,
-    staleTime: 30000, // Cache for 30 seconds
-  });
   // Database queries for non-legacy campaigns
   const campaignId = parseInt(id || '0');
   const queryClient = useQueryClient();
@@ -197,6 +177,29 @@ export default function CampaignDetail() {
     queryKey: ['campaign-activity', campaignId],
     queryFn: () => getCampaignActivity(campaignId, 100),
     enabled: campaignId > 0
+  });
+
+  // Fetch assessments for all campaign companies to show TG Cust. Score
+  const { data: assessmentsMap = {} } = useQuery({
+    queryKey: ['campaign-assessments', id],
+    queryFn: async () => {
+      const map: Record<number, number> = {};
+      const cid = parseInt(id || '0');
+      const companies = cid > 0 ? dbCompanies : data;
+      for (const company of companies) {
+        try {
+          const assessment = await getCampaignCompanyAssessment(cid, company.id);
+          if (assessment) {
+            map[company.id] = assessment.total_score;
+          }
+        } catch (error) {
+          // Company doesn't have an assessment yet
+        }
+      }
+      return map;
+    },
+    enabled: !!id && (data.length > 0 || dbCompanies.length > 0),
+    staleTime: 30000,
   });
 
   // Determine if this is the legacy Phoenix campaign (localStorage-based) or a DB campaign
@@ -1549,11 +1552,146 @@ export default function CampaignDetail() {
         />
       )}
 
+      {/* Prospect Detail Modal */}
+      {detailView && (
+        <div style={modalOverlay} onClick={() => { setDetailView(null); setDetailTab('overview'); }}>
+          <div style={{ ...detailModal, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', margin: 0 }}>{detailView.name}</h2>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '6px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#64748b' }}>{detailView.sector}</span>
+                  <span style={{ background: detailView.tier === 'A' ? '#dcfce7' : '#fef9c3', color: detailView.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{detailView.tier}-{detailView.score}</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Assigned: <strong>{detailView.assignedTo}</strong></span>
+                </div>
+              </div>
+              <button onClick={() => { setDetailView(null); setDetailTab('overview'); }} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}>×</button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+              {['overview', 'contacts', 'activity'].map(t => (
+                <button key={t} onClick={() => setDetailTab(t)} style={{
+                  padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: detailTab === t ? 600 : 400,
+                  color: detailTab === t ? '#ea580c' : '#64748b',
+                  borderBottom: detailTab === t ? '2px solid #ea580c' : '2px solid transparent',
+                }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+              ))}
+            </div>
+
+            <div style={{ padding: '24px', overflow: 'auto', flex: 1 }}>
+              {detailTab === 'overview' && (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Address</div>
+                      <div style={{ fontSize: '13px', color: '#1e293b' }}>{detailView.address || 'N/A'}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Phone</div>
+                      <a href={'tel:' + detailView.phone} style={{ fontSize: '15px', fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>{detailView.phone || 'N/A'}</a>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Status</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{statuses.find(s => s.key === detailView.status)?.label || detailView.status}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Next Action</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{actions.find(a => a.key === detailView.action)?.label || detailView.action}</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Target Week</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{activeWeeks.find((w: any) => w.num === detailView.targetWeek)?.label || `Week ${detailView.targetWeek}`}</div>
+                    </div>
+                  </div>
+                  {assessmentsMap[detailView.id] && (
+                    <div style={{ padding: '16px', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a' }}>
+                      <div style={{ fontSize: '11px', color: '#92400e', textTransform: 'uppercase', marginBottom: '6px' }}>TG Customer Score</div>
+                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>{assessmentsMap[detailView.id]}/100</div>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { setAssessmentCustomer(detailView); setShowAssessment(true); }} style={{ ...btn, fontSize: '13px' }}>Score Prospect</button>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'contacts' && (
+                <div>
+                  {(() => {
+                    const companyContacts = getCompanyContacts(detailView.id);
+                    return companyContacts.length > 0 ? (
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        {companyContacts.map((ct: any) => (
+                          <div key={ct.id} style={{ padding: '12px 16px', background: '#f9fafb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b' }}>{ct.name}</div>
+                              <div style={{ fontSize: '12px', color: '#64748b' }}>{ct.title}</div>
+                            </div>
+                            <div style={{ textAlign: 'right', fontSize: '12px' }}>
+                              {ct.email && <div><a href={'mailto:' + ct.email} style={{ color: '#2563eb' }}>{ct.email}</a></div>}
+                              {ct.phone && <div><a href={'tel:' + ct.phone} style={{ color: '#2563eb' }}>{ct.phone}</a></div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: '13px' }}>
+                        No contacts added yet
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {detailTab === 'activity' && (
+                <div>
+                  {/* Quick note entry */}
+                  <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={note}
+                      onChange={e => setNote(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && note.trim()) { setSelected(detailView); addNote(); } }}
+                      placeholder="Add a note..."
+                      style={{ ...input, flex: 1 }}
+                    />
+                    <button onClick={() => { setSelected(detailView); addNote(); }} disabled={!note.trim()} style={{ ...btn, fontSize: '13px', opacity: note.trim() ? 1 : 0.5 }}>Add</button>
+                  </div>
+                  {(() => {
+                    const companyLogs = getCompanyLogs(detailView.id);
+                    return companyLogs.length > 0 ? (
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        {companyLogs.map((l: any) => (
+                          <div key={l.id} style={{ padding: '10px 14px', background: '#f9fafb', borderRadius: '6px', fontSize: '13px' }}>
+                            <div style={{ color: '#1e293b' }}>{l.text || l.description}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{new Date(l.time || l.created_at).toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: '13px' }}>
+                        No activity yet
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assessment Scoring Modal */}
       {showAssessment && assessmentCustomer && (
         <AssessmentScoring
           customerId={assessmentCustomer.id}
           customerName={assessmentCustomer.name}
+          campaignId={campaignId}
+          campaignCompanyId={assessmentCustomer.id}
           onClose={() => {
             setShowAssessment(false);
             setAssessmentCustomer(null);

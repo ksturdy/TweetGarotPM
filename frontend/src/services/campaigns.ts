@@ -404,3 +404,19 @@ export const downloadCampaignReport = async (campaignId: number, campaignName: s
   document.body.removeChild(a);
   window.URL.revokeObjectURL(url);
 };
+
+// Campaign Company Assessment APIs
+export const getCampaignCompanyAssessment = async (campaignId: number, companyId: number): Promise<any> => {
+  const response = await api.get(`/campaigns/${campaignId}/companies/${companyId}/assessment`);
+  return response.data;
+};
+
+export const createCampaignCompanyAssessment = async (campaignId: number, companyId: number, data: any): Promise<any> => {
+  const response = await api.post(`/campaigns/${campaignId}/companies/${companyId}/assessment`, data);
+  return response.data;
+};
+
+export const updateCampaignCompanyAssessment = async (campaignId: number, companyId: number, assessmentId: number, data: any): Promise<any> => {
+  const response = await api.put(`/campaigns/${campaignId}/companies/${companyId}/assessment/${assessmentId}`, data);
+  return response.data;
+};

@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { assessmentsApi, AssessmentCriteria, CustomerAssessment } from '../../services/assessments';
+import { getCampaignCompanyAssessment, createCampaignCompanyAssessment, updateCampaignCompanyAssessment } from '../../services/campaigns';
 import './AssessmentScoring.css';
 
 interface AssessmentScoringProps {
   customerId: number;
   customerName: string;
   onClose: () => void;
+  campaignId?: number;
+  campaignCompanyId?: number;
 }
 
 interface CriterionConfig {
@@ -73,7 +76,8 @@ const CATEGORIES: CategoryConfig[] = [
   },
 ];
 
-const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, customerName, onClose }) => {
+const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, customerName, onClose, campaignId, campaignCompanyId }) => {
+  const isCampaignAssessment = !!(campaignId && campaignCompanyId);
   const queryClient = useQueryClient();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(CATEGORIES.map(c => c.title)));
   const [notes, setNotes] = useState('');
@@ -94,8 +98,14 @@ const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, custo
 
   // Load existing assessment
   const { data: existingAssessment } = useQuery({
-    queryKey: ['assessment', customerId],
-    queryFn: () => assessmentsApi.getCurrent(customerId),
+    queryKey: isCampaignAssessment ? ['campaign-assessment', campaignCompanyId] : ['assessment', customerId],
+    queryFn: async () => {
+      if (isCampaignAssessment) {
+        const data = await getCampaignCompanyAssessment(campaignId!, campaignCompanyId!);
+        return { data };
+      }
+      return assessmentsApi.getCurrent(customerId);
+    },
     retry: false,
   });
 
@@ -167,6 +177,14 @@ const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, custo
         notes,
       };
 
+      if (isCampaignAssessment) {
+        if (existingAssessment?.data?.id) {
+          return updateCampaignCompanyAssessment(campaignId!, campaignCompanyId!, existingAssessment.data.id, assessmentData);
+        } else {
+          return createCampaignCompanyAssessment(campaignId!, campaignCompanyId!, assessmentData);
+        }
+      }
+
       if (existingAssessment?.data?.id) {
         return assessmentsApi.update(customerId, existingAssessment.data.id, assessmentData);
       } else {
@@ -174,8 +192,13 @@ const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, custo
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assessment', customerId] });
-      queryClient.invalidateQueries({ queryKey: ['campaign-assessments'] });
+      if (isCampaignAssessment) {
+        queryClient.invalidateQueries({ queryKey: ['campaign-assessment', campaignCompanyId] });
+        queryClient.invalidateQueries({ queryKey: ['campaign-assessments'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['assessment', customerId] });
+        queryClient.invalidateQueries({ queryKey: ['campaign-assessments'] });
+      }
       alert('Assessment saved successfully!');
       onClose();
     },
