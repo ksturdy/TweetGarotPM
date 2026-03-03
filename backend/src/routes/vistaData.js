@@ -141,6 +141,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       employees: { total: 0, new: 0, updated: 0, batch_id: null },
       customers: { total: 0, new: 0, updated: 0, batch_id: null },
       vendors: { total: 0, new: 0, updated: 0, batch_id: null },
+      phaseCodes: { total: 0, new: 0, updated: 0, linked: 0, batch_id: null },
       facilities: { total: 0, created: 0, updated: 0, not_found: 0 },
       sheetsFound: [],
       sheetsProcessed: []
@@ -522,6 +523,72 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       }
     }
 
+    // Process Phase Codes sheet
+    const phaseCodesSheetName = 'Phase Codes';
+    if (sheetNames.includes(phaseCodesSheetName)) {
+      console.log(`[Vista Import] Processing ${phaseCodesSheetName}...`);
+      results.sheetsFound.push(phaseCodesSheetName);
+      const data = loadSheet(phaseCodesSheetName);
+      const validRows = data.filter(row => row.Phase);
+      console.log(`[Vista Import] ${phaseCodesSheetName}: ${validRows.length} valid rows (${data.length} total)`);
+
+      if (validRows.length > 0) {
+        if (validRows[0]) {
+          const columns = Object.keys(validRows[0]);
+          console.log(`[Vista Import] ${phaseCodesSheetName} columns: ${columns.join(', ')}`);
+        }
+
+        const batch = await VistaData.createImportBatch({
+          file_name: req.file.originalname,
+          file_type: 'phase_codes',
+          records_total: validRows.length,
+          imported_by: req.user.id
+        }, req.tenantId);
+
+        let newCount = 0;
+        let updatedCount = 0;
+
+        for (const row of validRows) {
+          const phaseData = {
+            contract: String(row['Contract'] || '').trim(),
+            job: String(row['Job'] || '').trim(),
+            job_description: row['Job Description'] || '',
+            cost_type: parseInt(row['CostType']) || 0,
+            phase: String(row['Phase'] || '').trim(),
+            phase_description: String(row['Phase Description'] || '').trim(),
+            est_hours: parseNumber(row['Est Hours'] ?? row[' Est Hours ']),
+            est_cost: parseNumber(row[' Est Cost '] ?? row['Est Cost']),
+            jtd_hours: parseNumber(row[' JTD Hours '] ?? row['JTD Hours']),
+            jtd_cost: parseNumber(row[' JTD Cost '] ?? row['JTD Cost']),
+            committed_cost: parseNumber(row[' Committed Cost '] ?? row['Committed Cost']),
+            projected_cost: parseNumber(row[' Projected At Completion Cost '] ?? row['Projected At Completion Cost']),
+            percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete '])
+          };
+
+          if (!phaseData.job || !phaseData.phase) continue;
+
+          const result = await VistaData.upsertPhaseCode(phaseData, req.tenantId, batch.id);
+          if (result.isNew) {
+            newCount++;
+          } else {
+            updatedCount++;
+          }
+        }
+
+        await VistaData.updateImportBatch(batch.id, {
+          records_new: newCount,
+          records_updated: updatedCount
+        });
+
+        // Auto-link phase codes to projects via contracts
+        const linkedCount = await VistaData.linkPhaseCodesByContract(req.tenantId);
+        console.log(`[Vista Import] Phase codes auto-linked to projects: ${linkedCount}`);
+
+        results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, batch_id: batch.id };
+        results.sheetsProcessed.push(phaseCodesSheetName);
+      }
+    }
+
     // Process Facilities (Customer List) - detect by column names
     // Look for a sheet with Customer_Owner-Facility or Customer_Owner columns
     let facilitiesSheetName = null;
@@ -620,7 +687,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
     // Check if any sheets were processed
     if (results.sheetsProcessed.length === 0) {
       return res.status(400).json({
-        message: 'No valid Vista data sheets found. Expected sheets: TGPBI_PMContractStatus, TGPBI_SMWorkOrderStatus, TGPREmployees, TGARCustomers, TGAPVendors, or a Customer List with Customer_Owner column',
+        message: 'No valid Vista data sheets found. Expected sheets: TGPBI_PMContractStatus, TGPBI_SMWorkOrderStatus, TGPREmployees, TGARCustomers, TGAPVendors, Phase Codes, or a Customer List with Customer_Owner column',
         availableSheets: sheetNames
       });
     }

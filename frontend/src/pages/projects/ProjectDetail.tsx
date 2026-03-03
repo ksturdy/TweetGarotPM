@@ -49,6 +49,7 @@ const MODULE_ICONS: { [key: string]: string } = {
   'change-orders': '📝',
   'daily-reports': '📅',
   schedule: '📆',
+  'phase-schedule': '📊',
   'weekly-goals': '🎯',
 };
 
@@ -126,6 +127,7 @@ const ProjectDetail: React.FC = () => {
     { path: 'change-orders', label: 'Change Orders', description: 'Contract modifications' },
     { path: 'daily-reports', label: 'Daily Reports', description: 'Field activity logs' },
     { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
+    { path: 'phase-schedule', label: 'Phase Schedule', description: 'Schedule phase codes with work contours' },
     { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
   ];
 

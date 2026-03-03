@@ -12,6 +12,8 @@ const UserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [sortField, setSortField] = useState<'name' | 'last_login' | 'created'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UpdateUserData>({
     email: '',
     first_name: '',
@@ -149,13 +151,13 @@ const UserManagement: React.FC = () => {
     if (!dateString) return 'Never';
     const date = new Date(dateString);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = Math.max(0, now.getTime() - date.getTime());
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 60) {
-      return diffMins === 0 ? 'Just now' : `${diffMins}m ago`;
+      return diffMins <= 0 ? 'Just now' : `${diffMins}m ago`;
     } else if (diffHours < 24) {
       return `${diffHours}h ago`;
     } else if (diffDays < 7) {
@@ -193,6 +195,43 @@ const UserManagement: React.FC = () => {
 
     return nameMatch && statusMatch;
   });
+
+  const handleSort = (field: 'name' | 'last_login' | 'created') => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'last_login' ? 'desc' : 'asc');
+    }
+  };
+
+  const sortedUsers = [...filteredUsers].sort((a: User, b: User) => {
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    switch (sortField) {
+      case 'name': {
+        const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+        const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+        return nameA.localeCompare(nameB) * dir;
+      }
+      case 'last_login': {
+        const dateA = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
+        const dateB = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
+      case 'created': {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return (dateA - dateB) * dir;
+      }
+      default:
+        return 0;
+    }
+  });
+
+  const getSortIndicator = (field: 'name' | 'last_login' | 'created') => {
+    if (sortField !== field) return ' ↕';
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  };
 
   const activeUsers = users.filter((u: User) => u.is_active === true || u.is_active === undefined);
   const adminUsers = users.filter((u: User) => u.role === 'admin');
@@ -237,6 +276,9 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <Link to="/roles" className="sales-filter-btn" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+            🔐 Roles & Permissions
+          </Link>
         </div>
       </div>
 
@@ -300,19 +342,19 @@ const UserManagement: React.FC = () => {
           <table className="sales-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Name{getSortIndicator('name')}</th>
                 <th>Email</th>
                 <th>Role</th>
                 <th>HR Access</th>
                 <th>2FA</th>
                 <th>Status</th>
-                <th>Last Login</th>
-                <th>Created</th>
+                <th onClick={() => handleSort('last_login')} style={{ cursor: 'pointer', userSelect: 'none' }}>Last Login{getSortIndicator('last_login')}</th>
+                <th onClick={() => handleSort('created')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created{getSortIndicator('created')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user: User) => (
+              {sortedUsers.map((user: User) => (
                 <tr key={user.id} style={{ opacity: user.is_active ? 1 : 0.6 }}>
                   {editingUser?.id === user.id ? (
                     <>

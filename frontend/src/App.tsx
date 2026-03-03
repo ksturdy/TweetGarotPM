@@ -69,6 +69,7 @@ import EmployeeForm from './pages/hr/EmployeeForm';
 import DepartmentList from './pages/hr/DepartmentList';
 import LocationList from './pages/hr/LocationList';
 import UserManagement from './pages/UserManagement';
+import RolesPermissions from './pages/RolesPermissions';
 import SecuritySettings from './pages/SecuritySettings';
 import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
@@ -78,6 +79,7 @@ import ProjectFinancials from './pages/projects/ProjectFinancials';
 import ProjectPerformance from './pages/projects/ProjectPerformance';
 import ProjectedRevenue from './pages/projects/ProjectedRevenue';
 import LaborForecast from './pages/projects/LaborForecast';
+import PhaseSchedule from './pages/projects/PhaseSchedule';
 import FeedbackPage from './pages/FeedbackPage';
 import AdministrationDashboard from './pages/administration/AdministrationDashboard';
 import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashboard';
@@ -249,6 +251,7 @@ const App: React.FC = () => {
                 <Route path="/hr/locations" element={<LocationList />} />
                 <Route path="/safety" element={<SafetyDashboard />} />
                 <Route path="/users" element={<UserManagement />} />
+                <Route path="/roles" element={<RolesPermissions />} />
                 <Route path="/security" element={<SecuritySettings />} />
                 <Route path="/settings" element={<TenantSettings />} />
                 <Route path="/settings/vista-data" element={<VistaDataSettings />} />
@@ -285,6 +288,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/change-orders/:id/edit" element={<ChangeOrderForm />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:projectId/phase-schedule" element={<PhaseSchedule />} />
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
                 <Route path="/projects/:id/financials" element={<ProjectFinancials />} />
                 <Route path="/projects/:id/performance" element={<ProjectPerformance />} />

@@ -3117,6 +3117,76 @@ const VistaData = {
       [tenantId]
     );
     return result.rows;
+  },
+
+  // ==================== PHASE CODES ====================
+
+  async upsertPhaseCode(data, tenantId, batchId = null) {
+    const existing = await db.query(
+      'SELECT id FROM vp_phase_codes WHERE tenant_id = $1 AND job = $2 AND cost_type = $3 AND phase = $4',
+      [tenantId, data.job, data.cost_type, data.phase]
+    );
+
+    if (existing.rows.length > 0) {
+      const result = await db.query(
+        `UPDATE vp_phase_codes SET
+          contract = $1, job_description = $2, phase_description = $3,
+          est_hours = $4, est_cost = $5, jtd_hours = $6, jtd_cost = $7,
+          committed_cost = $8, projected_cost = $9, percent_complete = $10,
+          import_batch_id = $11, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $12
+        RETURNING *`,
+        [
+          data.contract, data.job_description, data.phase_description,
+          data.est_hours, data.est_cost, data.jtd_hours, data.jtd_cost,
+          data.committed_cost, data.projected_cost, data.percent_complete,
+          batchId, existing.rows[0].id
+        ]
+      );
+      return { row: result.rows[0], isNew: false };
+    } else {
+      const result = await db.query(
+        `INSERT INTO vp_phase_codes (
+          tenant_id, contract, job, job_description, cost_type, phase, phase_description,
+          est_hours, est_cost, jtd_hours, jtd_cost, committed_cost, projected_cost,
+          percent_complete, import_batch_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        RETURNING *`,
+        [
+          tenantId, data.contract, data.job, data.job_description, data.cost_type,
+          data.phase, data.phase_description, data.est_hours, data.est_cost,
+          data.jtd_hours, data.jtd_cost, data.committed_cost, data.projected_cost,
+          data.percent_complete, batchId
+        ]
+      );
+      return { row: result.rows[0], isNew: true };
+    }
+  },
+
+  async linkPhaseCodesByContract(tenantId) {
+    // Auto-link phase codes to projects via vp_contracts
+    const result = await db.query(
+      `UPDATE vp_phase_codes pc
+       SET linked_project_id = vc.linked_project_id
+       FROM vp_contracts vc
+       WHERE pc.tenant_id = $1
+         AND pc.tenant_id = vc.tenant_id
+         AND pc.contract = vc.contract_number
+         AND vc.linked_project_id IS NOT NULL
+         AND pc.linked_project_id IS NULL`,
+      [tenantId]
+    );
+    return result.rowCount;
+  },
+
+  async getPhaseCodesByProject(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT * FROM vp_phase_codes
+       WHERE tenant_id = $1 AND linked_project_id = $2
+       ORDER BY job, cost_type, phase`,
+      [tenantId, projectId]
+    );
+    return result.rows;
   }
 };
 
