@@ -11,6 +11,13 @@ export interface SafetyJsa {
   weather: string;
   temperature: string;
   ppe_required: string[];
+  customer_name: string;
+  department_trade: string;
+  filled_out_by: string;
+  permits_required: string[];
+  equipment_required: string[];
+  additional_comments: string;
+  worker_names: string[];
   status: string;
   notes: string;
   reviewed_by: number | null;
@@ -65,6 +72,9 @@ export const safetyJsaApi = {
 
   addSignature: (jsaId: number, data: { employeeName: string; employeeId?: number; signatureData?: string }) =>
     api.post<SafetyJsaSignature>(`/safety-jsa/${jsaId}/sign`, data),
+
+  updateWorkerNames: (jsaId: number, names: string[]) =>
+    api.post(`/safety-jsa/${jsaId}/worker-sign-in`, { names }),
 
   activate: (id: number) => api.post<SafetyJsa>(`/safety-jsa/${id}/activate`),
 

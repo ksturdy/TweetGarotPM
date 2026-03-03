@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const SafetyJsa = {
-  async create({ projectId, tenantId, number, taskDescription, workLocation, dateOfWork, weather, temperature, ppeRequired, notes, createdBy }) {
+  async create({ projectId, tenantId, number, taskDescription, workLocation, dateOfWork, weather, temperature, ppeRequired, customerName, departmentTrade, filledOutBy, permitsRequired, equipmentRequired, additionalComments, workerNames, notes, createdBy }) {
     const result = await db.query(
-      `INSERT INTO safety_jsa (project_id, tenant_id, number, task_description, work_location, date_of_work, weather, temperature, ppe_required, notes, created_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'draft')
+      `INSERT INTO safety_jsa (project_id, tenant_id, number, task_description, work_location, date_of_work, weather, temperature, ppe_required, customer_name, department_trade, filled_out_by, permits_required, equipment_required, additional_comments, worker_names, notes, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'draft')
        RETURNING *`,
-      [projectId, tenantId, number, taskDescription, workLocation, dateOfWork, weather, temperature, JSON.stringify(ppeRequired || []), notes, createdBy]
+      [projectId, tenantId, number, taskDescription, workLocation, dateOfWork, weather, temperature, JSON.stringify(ppeRequired || []), customerName || null, departmentTrade || null, filledOutBy || null, JSON.stringify(permitsRequired || []), JSON.stringify(equipmentRequired || []), additionalComments || null, JSON.stringify(workerNames || []), notes, createdBy]
     );
     return result.rows[0];
   },
@@ -49,6 +49,7 @@ const SafetyJsa = {
   },
 
   async update(id, updates) {
+    const jsonbFields = ['ppeRequired', 'permitsRequired', 'equipmentRequired', 'workerNames'];
     const fields = [];
     const values = [];
     let paramCount = 1;
@@ -56,8 +57,8 @@ const SafetyJsa = {
     Object.keys(updates).forEach((key) => {
       if (updates[key] !== undefined) {
         const dbField = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-        if (key === 'ppeRequired') {
-          fields.push(`ppe_required = $${paramCount}`);
+        if (jsonbFields.includes(key)) {
+          fields.push(`${dbField} = $${paramCount}`);
           values.push(JSON.stringify(updates[key]));
         } else {
           fields.push(`${dbField} = $${paramCount}`);
@@ -99,6 +100,16 @@ const SafetyJsa = {
        WHERE id = $2
        RETURNING *`,
       [reviewedBy, id]
+    );
+    return result.rows[0];
+  },
+
+  async updateWorkerNames(jsaId, names) {
+    const result = await db.query(
+      `UPDATE safety_jsa SET worker_names = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [jsaId, JSON.stringify(names || [])]
     );
     return result.rows[0];
   },

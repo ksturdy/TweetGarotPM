@@ -47,7 +47,7 @@ const FieldSmFittingOrderList: React.FC = () => {
 
   return (
     <div>
-      <h1 className="field-page-title">SM Fitting Orders</h1>
+      <h1 className="field-page-title">Duct Work Fitting Orders</h1>
       <p className="field-page-subtitle">Sheet metal fabrication orders</p>
 
       <div className="field-filters">
@@ -67,7 +67,7 @@ const FieldSmFittingOrderList: React.FC = () => {
           <AirIcon />
           <div className="field-empty-title">No fitting orders yet</div>
           <div className="field-empty-text">
-            Tap the + button to create your first sheet metal fitting order
+            Tap the + button to create your first duct work fitting order
           </div>
         </div>
       ) : (
@@ -82,16 +82,18 @@ const FieldSmFittingOrderList: React.FC = () => {
             <div className="field-card-header">
               <div>
                 <div className="field-card-number">FO-SM-{order.number}</div>
-                <div className="field-card-title">{order.title}</div>
+                <div className="field-card-title">
+                  {order.requested_by ? `Req: ${order.requested_by}` : order.material || 'Fitting Order'}
+                </div>
               </div>
               <span className={`field-status field-status-${order.status}`}>
                 {order.status?.replace(/_/g, ' ')}
               </span>
             </div>
             <div className="field-card-subtitle">
-              {[order.material_type, order.duct_type, order.dimensions]
+              {[order.material, order.static_pressure_class]
                 .filter(Boolean)
-                .join(' - ')}
+                .join(' - ') || '-'}
             </div>
             <div className="field-card-meta">
               <span>
@@ -100,7 +102,7 @@ const FieldSmFittingOrderList: React.FC = () => {
                 </span>
               </span>
               <span>
-                {order.required_by_date ? `Due ${formatDate(order.required_by_date)}` : ''}
+                {order.date_required ? `Due ${formatDate(order.date_required)}` : ''}
               </span>
             </div>
           </div>

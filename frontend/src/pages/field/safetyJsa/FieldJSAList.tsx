@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PeopleIcon from '@mui/icons-material/People';
 import { safetyJsaApi, SafetyJsa } from '../../../services/safetyJsa';
 
 const formatDate = (dateStr: string): string => {
@@ -95,6 +96,7 @@ const FieldJSAList: React.FC = () => {
             <div className="field-card-subtitle">
               {formatDate(jsa.date_of_work)}
               {jsa.work_location ? ` \u2022 ${jsa.work_location}` : ''}
+              {jsa.department_trade ? ` \u2022 ${jsa.department_trade}` : ''}
             </div>
             <div className="field-card-meta">
               <span>By {jsa.created_by_name}</span>
@@ -102,6 +104,12 @@ const FieldJSAList: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <WarningAmberIcon style={{ fontSize: 14, color: '#f59e0b' }} />
                   {jsa.hazards.length} hazard{jsa.hazards.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              {jsa.worker_names && jsa.worker_names.length > 0 && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <PeopleIcon style={{ fontSize: 14, color: '#6b7280' }} />
+                  {jsa.worker_names.length} worker{jsa.worker_names.length !== 1 ? 's' : ''}
                 </span>
               )}
             </div>

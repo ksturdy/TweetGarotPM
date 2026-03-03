@@ -1,5 +1,26 @@
 import api from './api';
 
+export interface SmFittingOrderItem {
+  id: number;
+  fitting_order_id: number;
+  sort_order: number;
+  quantity: number;
+  fitting_type: number | null;
+  dim_a: string;
+  dim_b: string;
+  dim_c: string;
+  dim_d: string;
+  dim_e: string;
+  dim_f: string;
+  dim_l: string;
+  dim_r: string;
+  dim_x: string;
+  gauge: string;
+  liner: string;
+  connection: string;
+  remarks: string;
+}
+
 export interface SmFittingOrder {
   id: number;
   project_id: number;
@@ -22,6 +43,16 @@ export interface SmFittingOrder {
   liner_required: boolean;
   quantity: number;
   unit: string;
+  // New fields matching actual form
+  requested_by: string;
+  date_required: string | null;
+  material: string;
+  static_pressure_class: string;
+  longitudinal_seam: string;
+  prepared_by: string;
+  labor_phase_code: string;
+  material_phase_code: string;
+  // Status & tracking
   status: string;
   shop_received_date: string | null;
   shop_assigned_to: string;
@@ -35,6 +66,7 @@ export interface SmFittingOrder {
   created_by_name: string;
   created_at: string;
   updated_at: string;
+  items?: SmFittingOrderItem[];
 }
 
 export interface SmFittingOrderStats {
@@ -67,4 +99,14 @@ export const smFittingOrdersApi = {
     api.post<SmFittingOrder>(`/sm-fitting-orders/${id}/update-status`, data),
 
   delete: (id: number) => api.delete(`/sm-fitting-orders/${id}`),
+
+  // Line items
+  addItem: (orderId: number, data: Partial<SmFittingOrderItem>) =>
+    api.post<SmFittingOrderItem>(`/sm-fitting-orders/${orderId}/items`, data),
+
+  updateItem: (orderId: number, itemId: number, data: Partial<SmFittingOrderItem>) =>
+    api.put<SmFittingOrderItem>(`/sm-fitting-orders/${orderId}/items/${itemId}`, data),
+
+  deleteItem: (orderId: number, itemId: number) =>
+    api.delete(`/sm-fitting-orders/${orderId}/items/${itemId}`),
 };

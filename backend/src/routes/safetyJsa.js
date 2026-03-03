@@ -89,6 +89,13 @@ router.post(
         weather: req.body.weather,
         temperature: req.body.temperature,
         ppeRequired: req.body.ppe_required,
+        customerName: req.body.customer_name,
+        departmentTrade: req.body.department_trade,
+        filledOutBy: req.body.filled_out_by,
+        permitsRequired: req.body.permits_required,
+        equipmentRequired: req.body.equipment_required,
+        additionalComments: req.body.additional_comments,
+        workerNames: req.body.worker_names,
         notes: req.body.notes,
         createdBy: req.user.id,
       });
@@ -207,6 +214,29 @@ router.post(
         signatureData: req.body.signature_data || req.body.signatureData,
       });
       res.status(201).json(signature);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Worker sign-in (update worker names)
+router.post(
+  '/:id/worker-sign-in',
+  [body('names').isArray()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const existing = await SafetyJsa.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: 'JSA not found' });
+      }
+      const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'JSA not found' });
+      }
+      const jsa = await SafetyJsa.updateWorkerNames(req.params.id, req.body.names);
+      res.json(jsa);
     } catch (error) {
       next(error);
     }

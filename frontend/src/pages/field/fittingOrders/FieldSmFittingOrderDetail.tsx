@@ -4,7 +4,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import SendIcon from '@mui/icons-material/Send';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { smFittingOrdersApi, SmFittingOrder } from '../../../services/smFittingOrders';
+import { smFittingOrdersApi, SmFittingOrderItem } from '../../../services/smFittingOrders';
+import { FittingTypeReference } from './FittingTypeDiagrams';
+
+const FITTING_TYPES: Record<number, string> = {
+  1: 'St. Joint',
+  2: 'Reducer',
+  3: 'Offset',
+  4: 'Elbow',
+  5: 'Tee',
+  6: 'Wye',
+  7: 'Dbl Branch',
+  8: 'Tap',
+  9: 'Transition',
+  10: 'End Cap',
+};
 
 const formatDate = (dateStr: string | null): string => {
   if (!dateStr) return '-';
@@ -71,126 +85,198 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   }
 
   const isDraft = order.status === 'draft';
+  const items: SmFittingOrderItem[] = order.items || [];
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
           <h1 className="field-page-title">FO-SM-{order.number}</h1>
-          <p className="field-page-subtitle" style={{ marginBottom: 0 }}>{order.title}</p>
+          <p className="field-page-subtitle" style={{ marginBottom: 0 }}>
+            Duct Work Fitting Order
+          </p>
         </div>
         <span className={`field-status field-status-${order.status}`}>
           {order.status?.replace(/_/g, ' ')}
         </span>
       </div>
 
-      {/* Order Details */}
+      {/* Order Header */}
       <div className="field-detail-section">
-        <div className="field-detail-section-title">Order Details</div>
+        <div className="field-detail-section-title">Order Info</div>
+        <div className="field-detail-row">
+          <span className="field-detail-label">Requested By</span>
+          <span className="field-detail-value">{order.requested_by || '-'}</span>
+        </div>
+        <div className="field-detail-row">
+          <span className="field-detail-label">Date Required</span>
+          <span className="field-detail-value">{formatDate(order.date_required)}</span>
+        </div>
+        <div className="field-detail-row">
+          <span className="field-detail-label">Prepared By</span>
+          <span className="field-detail-value">{order.prepared_by || '-'}</span>
+        </div>
         <div className="field-detail-row">
           <span className="field-detail-label">Priority</span>
           <span className={`field-priority field-priority-${order.priority}`}>
             {order.priority}
           </span>
         </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Required By</span>
-          <span className="field-detail-value">{formatDate(order.required_by_date)}</span>
-        </div>
-        {order.description && (
-          <div className="field-detail-row">
-            <span className="field-detail-label">Description</span>
-            <span className="field-detail-value">{order.description}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Drawing Reference */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Drawing Reference</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Drawing Number</span>
-          <span className="field-detail-value">{order.drawing_number || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Revision</span>
-          <span className="field-detail-value">{order.drawing_revision || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Spec Section</span>
-          <span className="field-detail-value">{order.spec_section || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Location on Site</span>
-          <span className="field-detail-value">{order.location_on_site || '-'}</span>
-        </div>
       </div>
 
       {/* Material Specs */}
       <div className="field-detail-section">
-        <div className="field-detail-section-title">Material Specs</div>
+        <div className="field-detail-section-title">Specifications</div>
         <div className="field-detail-row">
-          <span className="field-detail-label">Material Type</span>
-          <span className="field-detail-value">{order.material_type || '-'}</span>
+          <span className="field-detail-label">Material</span>
+          <span className="field-detail-value">{order.material || '-'}</span>
         </div>
         <div className="field-detail-row">
-          <span className="field-detail-label">Material Gauge</span>
-          <span className="field-detail-value">{order.material_gauge || '-'}</span>
+          <span className="field-detail-label">Static Pressure Class</span>
+          <span className="field-detail-value">{order.static_pressure_class || '-'}</span>
         </div>
         <div className="field-detail-row">
-          <span className="field-detail-label">Duct Type</span>
-          <span className="field-detail-value">{order.duct_type || '-'}</span>
+          <span className="field-detail-label">Longitudinal Seam</span>
+          <span className="field-detail-value">{order.longitudinal_seam || '-'}</span>
+        </div>
+      </div>
+
+      {/* Phase Codes */}
+      <div className="field-detail-section">
+        <div className="field-detail-section-title">Phase Codes</div>
+        <div className="field-detail-row">
+          <span className="field-detail-label">Labor Phase Code</span>
+          <span className="field-detail-value">{order.labor_phase_code || '-'}</span>
         </div>
         <div className="field-detail-row">
-          <span className="field-detail-label">Dimensions</span>
-          <span className="field-detail-value">{order.dimensions || '-'}</span>
+          <span className="field-detail-label">Material Phase Code</span>
+          <span className="field-detail-value">{order.material_phase_code || '-'}</span>
         </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Insulation Required</span>
-          <span className="field-detail-value">{order.insulation_required ? 'Yes' : 'No'}</span>
+      </div>
+
+      {/* Fitting Type Reference */}
+      {items.length > 0 && (
+        <div className="field-detail-section">
+          <div className="field-detail-section-title">Fitting Type Reference</div>
+          <FittingTypeReference />
         </div>
-        {order.insulation_required && (
-          <div className="field-detail-row">
-            <span className="field-detail-label">Insulation Spec</span>
-            <span className="field-detail-value">{order.insulation_spec || '-'}</span>
+      )}
+
+      {/* Fitting Items Table */}
+      <div className="field-detail-section">
+        <div className="field-detail-section-title">
+          Fittings ({items.length} item{items.length !== 1 ? 's' : ''})
+        </div>
+        {items.length === 0 ? (
+          <div style={{ fontSize: 13, color: '#6b7280' }}>No fittings added</div>
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -12px', padding: '0 12px' }}>
+            <table style={{ tableLayout: 'fixed', width: 930, borderCollapse: 'collapse', fontSize: 12, border: '1px solid #9ca3af' }}>
+              <colgroup>
+                <col style={{ width: 44 }} />
+                <col style={{ width: 56 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 100 }} />
+                <col style={{ width: 52 }} />
+                <col style={{ width: 52 }} />
+                <col style={{ width: 52 }} />
+                <col style={{ width: 52 }} />
+                <col style={{ width: 52 }} />
+                <col style={{ width: 48 }} />
+                <col style={{ width: 56 }} />
+                <col style={{ width: 64 }} />
+                <col />
+              </colgroup>
+              <thead>
+                <tr>
+                  {['#REQ', 'TYPE', 'A x B', 'C x D', 'E', 'F', 'L', 'R', 'X', 'GA', 'LINER', 'CONN', 'REMARKS'].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '5px 2px',
+                        fontWeight: 700,
+                        color: '#92400e',
+                        textAlign: 'center',
+                        background: '#dbeafe',
+                        borderBottom: '2px solid #60a5fa',
+                        borderRight: h !== 'REMARKS' ? '1px solid #93c5fd' : 'none',
+                        whiteSpace: 'nowrap',
+                        fontSize: 11,
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => {
+                  const cellStyle: React.CSSProperties = {
+                    padding: '6px 4px',
+                    borderBottom: '1px solid #d1d5db',
+                    borderRight: '1px solid #e5e7eb',
+                    textAlign: 'center',
+                    verticalAlign: 'middle',
+                  };
+                  return (
+                    <tr key={item.id || idx} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                      <td style={{ ...cellStyle, fontWeight: 500 }}>{item.quantity}</td>
+                      <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
+                        {item.fitting_type || '-'}
+                      </td>
+                      <td style={cellStyle}>
+                        {(item.dim_a || item.dim_b) ? `${item.dim_a || ''} x ${item.dim_b || ''}` : ''}
+                      </td>
+                      <td style={cellStyle}>
+                        {(item.dim_c || item.dim_d) ? `${item.dim_c || ''} x ${item.dim_d || ''}` : ''}
+                      </td>
+                      <td style={cellStyle}>{item.dim_e || ''}</td>
+                      <td style={cellStyle}>{item.dim_f || ''}</td>
+                      <td style={cellStyle}>{item.dim_l || ''}</td>
+                      <td style={cellStyle}>{item.dim_r || ''}</td>
+                      <td style={cellStyle}>{item.dim_x || ''}</td>
+                      <td style={cellStyle}>{item.gauge || ''}</td>
+                      <td style={cellStyle}>{item.liner || ''}</td>
+                      <td style={cellStyle}>{item.connection || ''}</td>
+                      <td style={{ ...cellStyle, borderRight: 'none', textAlign: 'left', fontStyle: item.remarks ? 'italic' : 'normal' }}>{item.remarks || ''}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-        <div className="field-detail-row">
-          <span className="field-detail-label">Liner Required</span>
-          <span className="field-detail-value">{order.liner_required ? 'Yes' : 'No'}</span>
-        </div>
-      </div>
-
-      {/* Quantities */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Quantities</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Quantity</span>
-          <span className="field-detail-value">{order.quantity} {order.unit}</span>
-        </div>
-      </div>
-
-      {/* Coding */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Coding</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Cost Code</span>
-          <span className="field-detail-value">{order.cost_code || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Phase Code</span>
-          <span className="field-detail-value">{order.phase_code || '-'}</span>
-        </div>
       </div>
 
       {/* Shop Info */}
-      {order.shop_assigned_to && (
+      {(order.shop_assigned_to || order.fabrication_start_date) && (
         <div className="field-detail-section">
           <div className="field-detail-section-title">Shop Info</div>
-          <div className="field-detail-row">
-            <span className="field-detail-label">Assigned To</span>
-            <span className="field-detail-value">{order.shop_assigned_to}</span>
-          </div>
+          {order.shop_assigned_to && (
+            <div className="field-detail-row">
+              <span className="field-detail-label">Assigned To</span>
+              <span className="field-detail-value">{order.shop_assigned_to}</span>
+            </div>
+          )}
+          {order.shop_received_date && (
+            <div className="field-detail-row">
+              <span className="field-detail-label">Received</span>
+              <span className="field-detail-value">{formatDate(order.shop_received_date)}</span>
+            </div>
+          )}
+          {order.fabrication_start_date && (
+            <div className="field-detail-row">
+              <span className="field-detail-label">Fab Started</span>
+              <span className="field-detail-value">{formatDate(order.fabrication_start_date)}</span>
+            </div>
+          )}
+          {order.fabrication_complete_date && (
+            <div className="field-detail-row">
+              <span className="field-detail-label">Fab Complete</span>
+              <span className="field-detail-value">{formatDate(order.fabrication_complete_date)}</span>
+            </div>
+          )}
         </div>
       )}
 

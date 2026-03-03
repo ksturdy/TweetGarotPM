@@ -36,10 +36,12 @@ const formatDateTime = (dateStr: string): string => {
 };
 
 const FieldJSADetail: React.FC = () => {
-  const { projectId, jsaId } = useParams();
+  const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [showWorkerForm, setShowWorkerForm] = useState(false);
+  const [newWorkerName, setNewWorkerName] = useState('');
   const [showSignatureForm, setShowSignatureForm] = useState(false);
   const [signatureName, setSignatureName] = useState('');
 
@@ -47,32 +49,32 @@ const FieldJSADetail: React.FC = () => {
     data: jsa,
     isLoading,
   } = useQuery({
-    queryKey: ['field-safety-jsa', jsaId],
+    queryKey: ['field-safety-jsa', id],
     queryFn: async () => {
-      const res = await safetyJsaApi.getById(Number(jsaId));
+      const res = await safetyJsaApi.getById(Number(id));
       return res.data;
     },
-    enabled: !!jsaId,
+    enabled: !!id,
   });
 
   const activateMutation = useMutation({
-    mutationFn: () => safetyJsaApi.activate(Number(jsaId)),
+    mutationFn: () => safetyJsaApi.activate(Number(id)),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', jsaId] });
+      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', id] });
       queryClient.invalidateQueries({ queryKey: ['field-safety-jsas', projectId] });
     },
   });
 
   const completeMutation = useMutation({
-    mutationFn: () => safetyJsaApi.complete(Number(jsaId)),
+    mutationFn: () => safetyJsaApi.complete(Number(id)),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', jsaId] });
+      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', id] });
       queryClient.invalidateQueries({ queryKey: ['field-safety-jsas', projectId] });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => safetyJsaApi.delete(Number(jsaId)),
+    mutationFn: () => safetyJsaApi.delete(Number(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['field-safety-jsas', projectId] });
       navigate(`/field/projects/${projectId}/safety-jsa`);
@@ -81,11 +83,21 @@ const FieldJSADetail: React.FC = () => {
 
   const signatureMutation = useMutation({
     mutationFn: (name: string) =>
-      safetyJsaApi.addSignature(Number(jsaId), { employeeName: name }),
+      safetyJsaApi.addSignature(Number(id), { employeeName: name }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', jsaId] });
+      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', id] });
       setSignatureName('');
       setShowSignatureForm(false);
+    },
+  });
+
+  const workerNamesMutation = useMutation({
+    mutationFn: (names: string[]) =>
+      safetyJsaApi.updateWorkerNames(Number(id), names),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-safety-jsa', id] });
+      setNewWorkerName('');
+      setShowWorkerForm(false);
     },
   });
 
@@ -98,6 +110,12 @@ const FieldJSADetail: React.FC = () => {
   const handleAddSignature = () => {
     if (!signatureName.trim()) return;
     signatureMutation.mutate(signatureName.trim());
+  };
+
+  const handleAddWorkerName = () => {
+    if (!newWorkerName.trim() || !jsa) return;
+    const currentNames = jsa.worker_names || [];
+    workerNamesMutation.mutate([...currentNames, newWorkerName.trim()]);
   };
 
   if (isLoading) {
@@ -134,14 +152,24 @@ const FieldJSADetail: React.FC = () => {
           <span className="field-detail-label">Location</span>
           <span className="field-detail-value">{jsa.work_location || '-'}</span>
         </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Weather</span>
-          <span className="field-detail-value">{jsa.weather || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Temperature</span>
-          <span className="field-detail-value">{jsa.temperature || '-'}</span>
-        </div>
+        {jsa.customer_name && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Customer / GC</span>
+            <span className="field-detail-value">{jsa.customer_name}</span>
+          </div>
+        )}
+        {jsa.department_trade && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Department / Trade</span>
+            <span className="field-detail-value">{jsa.department_trade}</span>
+          </div>
+        )}
+        {jsa.filled_out_by && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Filled Out By</span>
+            <span className="field-detail-value">{jsa.filled_out_by}</span>
+          </div>
+        )}
         <div className="field-detail-row">
           <span className="field-detail-label">Created By</span>
           <span className="field-detail-value">{jsa.created_by_name}</span>
@@ -156,7 +184,7 @@ const FieldJSADetail: React.FC = () => {
 
       {/* PPE Section */}
       <div className="field-detail-section">
-        <div className="field-detail-section-title">Required PPE</div>
+        <div className="field-detail-section-title">PPE Required</div>
         {jsa.ppe_required && jsa.ppe_required.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {jsa.ppe_required.map((item: string) => (
@@ -183,6 +211,64 @@ const FieldJSADetail: React.FC = () => {
         )}
       </div>
 
+      {/* Permits Section */}
+      <div className="field-detail-section">
+        <div className="field-detail-section-title">Permits Required</div>
+        {jsa.permits_required && jsa.permits_required.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {jsa.permits_required.map((item: string) => (
+              <span
+                key={item}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 12px',
+                  borderRadius: 16,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: '#fff7ed',
+                  color: '#c2410c',
+                  border: '1px solid #fed7aa',
+                }}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#6b7280' }}>No permits specified</div>
+        )}
+      </div>
+
+      {/* Equipment Section */}
+      <div className="field-detail-section">
+        <div className="field-detail-section-title">Equipment</div>
+        {jsa.equipment_required && jsa.equipment_required.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {jsa.equipment_required.map((item: string) => (
+              <span
+                key={item}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 12px',
+                  borderRadius: 16,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: '#f0fdf4',
+                  color: '#15803d',
+                  border: '1px solid #bbf7d0',
+                }}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#6b7280' }}>No equipment specified</div>
+        )}
+      </div>
+
       {/* Hazards Section */}
       <div className="field-detail-section">
         <div className="field-detail-section-title">
@@ -192,22 +278,18 @@ const FieldJSADetail: React.FC = () => {
         {jsa.hazards && jsa.hazards.length > 0 ? (
           jsa.hazards.map((hazard: SafetyJsaHazard) => (
             <div key={hazard.id} className="field-hazard-row">
-              <div className="field-hazard-step">Step {hazard.sort_order}</div>
+              <div className="field-hazard-step">Row {hazard.sort_order}</div>
               <div className="field-detail-row">
-                <span className="field-detail-label">Work Step</span>
+                <span className="field-detail-label">Major Task</span>
                 <span className="field-detail-value">{hazard.step_description || '-'}</span>
               </div>
               <div className="field-detail-row">
-                <span className="field-detail-label">Hazard</span>
+                <span className="field-detail-label">Potential Hazard</span>
                 <span className="field-detail-value">{hazard.hazard || '-'}</span>
               </div>
               <div className="field-detail-row">
-                <span className="field-detail-label">Control Measure</span>
+                <span className="field-detail-label">Control Action</span>
                 <span className="field-detail-value">{hazard.control_measure || '-'}</span>
-              </div>
-              <div className="field-detail-row">
-                <span className="field-detail-label">Responsible</span>
-                <span className="field-detail-value">{hazard.responsible_person || '-'}</span>
               </div>
             </div>
           ))
@@ -216,8 +298,18 @@ const FieldJSADetail: React.FC = () => {
         )}
       </div>
 
-      {/* Notes Section */}
-      {jsa.notes && (
+      {/* Additional Comments Section */}
+      {jsa.additional_comments && (
+        <div className="field-detail-section">
+          <div className="field-detail-section-title">Additional Comments</div>
+          <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+            {jsa.additional_comments}
+          </div>
+        </div>
+      )}
+
+      {/* Legacy Notes Section (keep for backward compat) */}
+      {jsa.notes && !jsa.additional_comments && (
         <div className="field-detail-section">
           <div className="field-detail-section-title">Notes</div>
           <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
@@ -225,6 +317,107 @@ const FieldJSADetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Worker Sign-In Section */}
+      <div className="field-detail-section">
+        <div className="field-detail-section-title">Worker Sign-In</div>
+        <div
+          style={{
+            padding: '6px 10px',
+            borderRadius: 6,
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            fontSize: 11,
+            color: '#1e40af',
+            marginBottom: 10,
+            lineHeight: 1.3,
+            fontStyle: 'italic',
+          }}
+        >
+          By printing my name, I acknowledge my participation in the JSA and commit to work safely
+        </div>
+
+        {jsa.worker_names && jsa.worker_names.length > 0 ? (
+          <div style={{ marginBottom: 8 }}>
+            {jsa.worker_names.map((name: string, index: number) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '6px 12px',
+                  background: '#f9fafb',
+                  borderRadius: 6,
+                  marginBottom: 3,
+                  border: '1px solid #e5e7eb',
+                  fontSize: 14,
+                  color: '#374151',
+                }}
+              >
+                {index + 1}. {name}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+            No workers signed in yet
+          </div>
+        )}
+
+        {jsa.status === 'active' && !showWorkerForm && (
+          <button
+            className="field-btn field-btn-primary field-btn-sm"
+            onClick={() => setShowWorkerForm(true)}
+            type="button"
+            style={{ marginTop: 4 }}
+          >
+            <PersonAddIcon style={{ fontSize: 16 }} />
+            Add Worker
+          </button>
+        )}
+
+        {jsa.status === 'active' && showWorkerForm && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                className="field-form-input"
+                value={newWorkerName}
+                onChange={(e) => setNewWorkerName(e.target.value)}
+                placeholder="Print worker name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddWorkerName();
+                  }
+                }}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="field-btn field-btn-success field-btn-sm"
+                onClick={handleAddWorkerName}
+                disabled={!newWorkerName.trim() || workerNamesMutation.isPending}
+                type="button"
+                style={{ opacity: !newWorkerName.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}
+              >
+                {workerNamesMutation.isPending ? 'Saving...' : 'Add'}
+              </button>
+            </div>
+            <button
+              className="field-btn field-btn-secondary field-btn-sm"
+              onClick={() => {
+                setShowWorkerForm(false);
+                setNewWorkerName('');
+              }}
+              type="button"
+              style={{ marginTop: 6 }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Signatures Section */}
       <div className="field-detail-section">
@@ -307,7 +500,7 @@ const FieldJSADetail: React.FC = () => {
           <button
             className="field-btn field-btn-primary"
             onClick={() =>
-              navigate(`/field/projects/${projectId}/safety-jsa/${jsaId}/edit`)
+              navigate(`/field/projects/${projectId}/safety-jsa/${id}/edit`)
             }
             type="button"
           >
