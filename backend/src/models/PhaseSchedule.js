@@ -13,11 +13,36 @@ const PhaseSchedule = {
 
   async getScheduleItems(projectId, tenantId) {
     const result = await db.query(
-      `SELECT psi.*, u.first_name || ' ' || u.last_name as created_by_name,
+      `SELECT psi.id, psi.project_id, psi.tenant_id, psi.name, psi.phase_code_ids, psi.cost_types,
+         psi.start_date, psi.end_date, psi.contour_type,
+         psi.use_manual_values, psi.manual_monthly_values,
+         COALESCE(pc_agg.sum_est_cost, 0) as total_est_cost,
+         COALESCE(pc_agg.sum_est_hours, 0) as total_est_hours,
+         COALESCE(pc_agg.sum_jtd_cost, 0) as total_jtd_cost,
+         COALESCE(pc_agg.sum_jtd_hours, 0) as total_jtd_hours,
+         COALESCE(pc_agg.sum_projected_cost, 0) as total_projected_cost,
+         COALESCE(pc_agg.weighted_pct, 0) as percent_complete,
+         psi.quantity, psi.quantity_uom, psi.quantity_installed,
+         psi.use_manual_qty_values, psi.manual_monthly_qty,
+         psi.sort_order, psi.created_by, psi.created_at, psi.updated_at,
+         u.first_name || ' ' || u.last_name as created_by_name,
          (SELECT string_agg(DISTINCT rtrim(trim(pc.phase), '- '), ', ' ORDER BY rtrim(trim(pc.phase), '- '))
           FROM vp_phase_codes pc WHERE pc.id = ANY(psi.phase_code_ids)) as phase_code_display
        FROM phase_schedule_items psi
        LEFT JOIN users u ON psi.created_by = u.id
+       LEFT JOIN LATERAL (
+         SELECT
+           SUM(pc.est_cost) as sum_est_cost,
+           SUM(pc.est_hours) as sum_est_hours,
+           SUM(pc.jtd_cost) as sum_jtd_cost,
+           SUM(pc.jtd_hours) as sum_jtd_hours,
+           SUM(pc.projected_cost) as sum_projected_cost,
+           CASE WHEN SUM(pc.est_cost) > 0
+             THEN SUM(pc.est_cost * pc.percent_complete) / SUM(pc.est_cost)
+             ELSE 0 END as weighted_pct
+         FROM vp_phase_codes pc
+         WHERE pc.id = ANY(psi.phase_code_ids)
+       ) pc_agg ON true
        WHERE psi.project_id = $1 AND psi.tenant_id = $2
        ORDER BY psi.sort_order, psi.id`,
       [projectId, tenantId]
