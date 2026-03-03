@@ -1,5 +1,5 @@
 /* Field Module - Mobile-First CSS */
-/* Following MobileSales.css patterns for iOS optimization */
+/* Optimized for iPhone Safari and iOS devices */
 
 /* CSS Variables for Field Module */
 :root {
@@ -18,6 +18,21 @@
   --field-info: #3b82f6;
 }
 
+/* iOS Global Fixes */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+.field-container input,
+.field-container select,
+.field-container textarea {
+  font-size: 16px !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* iOS-specific viewport fixes */
 .field-container {
   min-height: 100vh;
@@ -25,8 +40,11 @@
   background: var(--field-bg);
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
   display: flex;
   flex-direction: column;
+  /* Prevent overscroll bounce on the container */
+  overscroll-behavior-y: none;
 }
 
 /* Header */
@@ -127,9 +145,13 @@
 .field-content {
   flex: 1;
   padding: 12px;
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
   padding-bottom: calc(var(--field-bottom-nav-height) + 12px + env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* Prevent horizontal overflow from wide tables */
+  overflow-x: hidden;
 }
 
 /* Bottom Navigation */
@@ -146,6 +168,8 @@
   align-items: center;
   height: var(--field-bottom-nav-height);
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
@@ -301,12 +325,14 @@
   padding: 0 12px;
   border: 1.5px solid var(--field-border);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--field-text);
   background: white;
   -webkit-appearance: none;
   appearance: none;
   box-sizing: border-box;
+  /* iOS: prevent rounded corners and shadows */
+  -webkit-border-radius: 10px;
 }
 
 .field-form-input:focus {
@@ -315,13 +341,18 @@
   box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
 }
 
+/* Ensure date inputs render properly on iOS */
+.field-form-input[type="date"] {
+  line-height: 44px;
+}
+
 .field-form-textarea {
   width: 100%;
   min-height: 88px;
   padding: 10px 12px;
   border: 1.5px solid var(--field-border);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--field-text);
   background: white;
   resize: vertical;
@@ -342,7 +373,7 @@
   padding: 0 12px;
   border: 1.5px solid var(--field-border);
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--field-text);
   background: white;
   -webkit-appearance: none;
@@ -717,12 +748,16 @@
   display: flex;
   gap: 10px;
   padding: 12px;
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
   background: white;
   position: sticky;
   bottom: calc(var(--field-bottom-nav-height) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--field-border);
   z-index: 50;
   margin: 0 -12px;
+  margin-left: calc(-12px - env(safe-area-inset-left));
+  margin-right: calc(-12px - env(safe-area-inset-right));
 }
 
 /* Page Title */
@@ -751,7 +786,7 @@
   padding: 0 12px 0 36px;
   border: 1.5px solid var(--field-border);
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 16px;
   background: white;
   -webkit-appearance: none;
   box-sizing: border-box;
@@ -764,4 +799,189 @@
   transform: translateY(-50%);
   color: var(--field-text-secondary);
   font-size: 18px;
+}
+
+/* ============================
+   iPhone-Specific Improvements
+   ============================ */
+
+/* Smooth momentum scrolling for horizontal table scroll */
+.field-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  /* Provide padding so content isn't cut off at edges */
+  margin: 0 -12px;
+  padding: 0 12px;
+}
+
+/* Prevent body bounce when scrolling content areas */
+.field-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* iPhone SE / small screens (375px and below) */
+@media (max-width: 375px) {
+  .field-header-title {
+    max-width: 140px;
+    font-size: 14px;
+  }
+
+  .field-content {
+    padding: 8px;
+    padding-bottom: calc(var(--field-bottom-nav-height) + 8px + env(safe-area-inset-bottom));
+  }
+
+  .field-card {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .field-form-section {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .field-detail-section {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .field-nav-item {
+    padding: 6px 8px;
+    font-size: 9px;
+    min-width: 48px;
+  }
+
+  .field-nav-item svg {
+    font-size: 20px;
+  }
+
+  .field-page-title {
+    font-size: 18px;
+  }
+
+  .field-tiles {
+    gap: 8px;
+  }
+
+  .field-tile {
+    padding: 16px 10px;
+  }
+}
+
+/* Landscape mode on phones */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --field-header-height: 44px;
+    --field-bottom-nav-height: 48px;
+  }
+
+  .field-header {
+    height: var(--field-header-height);
+  }
+
+  .field-bottom-nav {
+    height: var(--field-bottom-nav-height);
+  }
+
+  .field-nav-item {
+    flex-direction: row;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .field-nav-item svg {
+    font-size: 18px;
+  }
+
+  .field-content {
+    padding: 8px;
+    padding-left: calc(8px + env(safe-area-inset-left));
+    padding-right: calc(8px + env(safe-area-inset-right));
+    padding-bottom: calc(var(--field-bottom-nav-height) + 8px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Tablet/iPad (768px+) */
+@media (min-width: 768px) {
+  .field-content {
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: calc(var(--field-bottom-nav-height) + 16px + env(safe-area-inset-bottom));
+  }
+
+  .field-tiles {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .field-form-row {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .field-ppe-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --field-bg: #111827;
+    --field-card-bg: #1f2937;
+    --field-text: #f9fafb;
+    --field-text-secondary: #9ca3af;
+    --field-border: #374151;
+  }
+
+  .field-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  }
+
+  .field-bottom-nav {
+    background: #1f2937;
+    border-top-color: #374151;
+  }
+
+  .field-form-input,
+  .field-form-textarea,
+  .field-form-select,
+  .field-search-input {
+    background: #374151;
+    color: #f9fafb;
+    border-color: #4b5563;
+  }
+
+  .field-actions-bar {
+    background: #1f2937;
+    border-top-color: #374151;
+  }
+}
+
+/* Pull-to-refresh indicator space (iOS) */
+.field-content::before {
+  content: '';
+  display: block;
+  height: 0;
+  transition: height 0.2s;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .field-btn:active {
+    transform: none;
+  }
+
+  .field-fab:active {
+    transform: none;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }
