@@ -188,6 +188,9 @@ const ProjectPerformance: React.FC = () => {
         labels: {
           font: { size: 11 },
           padding: 10,
+          usePointStyle: true,
+          pointStyle: 'line',
+          boxHeight: 0,
         },
       },
       tooltip: {

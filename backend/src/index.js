@@ -73,6 +73,11 @@ const questionnaireRoutes = require('./routes/questionnaire');
 const favoritesRoutes = require('./routes/favorites');
 const opportunitySearchRoutes = require('./routes/opportunitySearch');
 const projectSnapshotRoutes = require('./routes/projectSnapshots');
+const fieldPurchaseOrderRoutes = require('./routes/fieldPurchaseOrders');
+const smFittingOrderRoutes = require('./routes/smFittingOrders');
+const pipingFittingOrderRoutes = require('./routes/pipingFittingOrders');
+const plumbingFittingOrderRoutes = require('./routes/plumbingFittingOrders');
+const safetyJsaRoutes = require('./routes/safetyJsa');
 
 const app = express();
 
@@ -179,6 +184,11 @@ app.use('/api/weekly-goal-plans', weeklyGoalPlanRoutes);
 app.use('/api/questionnaire', questionnaireRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/opportunity-search', opportunitySearchRoutes);
+app.use('/api/field-purchase-orders', fieldPurchaseOrderRoutes);
+app.use('/api/sm-fitting-orders', smFittingOrderRoutes);
+app.use('/api/piping-fitting-orders', pipingFittingOrderRoutes);
+app.use('/api/plumbing-fitting-orders', plumbingFittingOrderRoutes);
+app.use('/api/safety-jsa', safetyJsaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

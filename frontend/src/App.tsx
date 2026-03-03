@@ -94,6 +94,28 @@ import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
 import TenantSettings from './pages/TenantSettings';
+// Field module
+import FieldLayout from './components/field/FieldLayout';
+import FieldDashboard from './pages/field/FieldDashboard';
+import FieldProjectHome from './pages/field/FieldProjectHome';
+import FieldDailyReportList from './pages/field/dailyReports/FieldDailyReportList';
+import FieldDailyReportForm from './pages/field/dailyReports/FieldDailyReportForm';
+import FieldDailyReportDetail from './pages/field/dailyReports/FieldDailyReportDetail';
+import FieldPOList from './pages/field/purchaseOrders/FieldPOList';
+import FieldPOForm from './pages/field/purchaseOrders/FieldPOForm';
+import FieldPODetail from './pages/field/purchaseOrders/FieldPODetail';
+import FieldSmFittingOrderList from './pages/field/fittingOrders/FieldSmFittingOrderList';
+import FieldSmFittingOrderForm from './pages/field/fittingOrders/FieldSmFittingOrderForm';
+import FieldSmFittingOrderDetail from './pages/field/fittingOrders/FieldSmFittingOrderDetail';
+import FieldPipingFittingOrderList from './pages/field/fittingOrders/FieldPipingFittingOrderList';
+import FieldPipingFittingOrderForm from './pages/field/fittingOrders/FieldPipingFittingOrderForm';
+import FieldPipingFittingOrderDetail from './pages/field/fittingOrders/FieldPipingFittingOrderDetail';
+import FieldPlumbingFittingOrderList from './pages/field/fittingOrders/FieldPlumbingFittingOrderList';
+import FieldPlumbingFittingOrderForm from './pages/field/fittingOrders/FieldPlumbingFittingOrderForm';
+import FieldPlumbingFittingOrderDetail from './pages/field/fittingOrders/FieldPlumbingFittingOrderDetail';
+import FieldJSAList from './pages/field/safetyJsa/FieldJSAList';
+import FieldJSAForm from './pages/field/safetyJsa/FieldJSAForm';
+import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
@@ -194,6 +216,43 @@ const App: React.FC = () => {
             </PlatformAdminRoute>
           }
         />
+
+        {/* Field module - separate mobile layout */}
+        <Route
+          path="/field"
+          element={
+            <PrivateRoute>
+              <FieldLayout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<FieldDashboard />} />
+          <Route path="projects/:projectId" element={<FieldProjectHome />} />
+          <Route path="projects/:projectId/daily-reports" element={<FieldDailyReportList />} />
+          <Route path="projects/:projectId/daily-reports/new" element={<FieldDailyReportForm />} />
+          <Route path="projects/:projectId/daily-reports/:id" element={<FieldDailyReportDetail />} />
+          <Route path="projects/:projectId/daily-reports/:id/edit" element={<FieldDailyReportForm />} />
+          <Route path="projects/:projectId/purchase-orders" element={<FieldPOList />} />
+          <Route path="projects/:projectId/purchase-orders/new" element={<FieldPOForm />} />
+          <Route path="projects/:projectId/purchase-orders/:id" element={<FieldPODetail />} />
+          <Route path="projects/:projectId/purchase-orders/:id/edit" element={<FieldPOForm />} />
+          <Route path="projects/:projectId/sm-fitting-orders" element={<FieldSmFittingOrderList />} />
+          <Route path="projects/:projectId/sm-fitting-orders/new" element={<FieldSmFittingOrderForm />} />
+          <Route path="projects/:projectId/sm-fitting-orders/:id" element={<FieldSmFittingOrderDetail />} />
+          <Route path="projects/:projectId/sm-fitting-orders/:id/edit" element={<FieldSmFittingOrderForm />} />
+          <Route path="projects/:projectId/piping-fitting-orders" element={<FieldPipingFittingOrderList />} />
+          <Route path="projects/:projectId/piping-fitting-orders/new" element={<FieldPipingFittingOrderForm />} />
+          <Route path="projects/:projectId/piping-fitting-orders/:id" element={<FieldPipingFittingOrderDetail />} />
+          <Route path="projects/:projectId/piping-fitting-orders/:id/edit" element={<FieldPipingFittingOrderForm />} />
+          <Route path="projects/:projectId/plumbing-fitting-orders" element={<FieldPlumbingFittingOrderList />} />
+          <Route path="projects/:projectId/plumbing-fitting-orders/new" element={<FieldPlumbingFittingOrderForm />} />
+          <Route path="projects/:projectId/plumbing-fitting-orders/:id" element={<FieldPlumbingFittingOrderDetail />} />
+          <Route path="projects/:projectId/plumbing-fitting-orders/:id/edit" element={<FieldPlumbingFittingOrderForm />} />
+          <Route path="projects/:projectId/safety-jsa" element={<FieldJSAList />} />
+          <Route path="projects/:projectId/safety-jsa/new" element={<FieldJSAForm />} />
+          <Route path="projects/:projectId/safety-jsa/:id" element={<FieldJSADetail />} />
+          <Route path="projects/:projectId/safety-jsa/:id/edit" element={<FieldJSAForm />} />
+        </Route>
 
         {/* Protected app routes */}
         <Route

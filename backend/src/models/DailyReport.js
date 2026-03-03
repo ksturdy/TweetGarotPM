@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const DailyReport = {
-  async create({ projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, createdBy }) {
+  async create({ projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours, delayReason, safetyIncidents, safetyNotes, createdBy }) {
     const result = await db.query(
-      `INSERT INTO daily_reports (project_id, report_date, weather, temperature, work_performed, materials, equipment, visitors, issues, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO daily_reports (project_id, report_date, weather, temperature, work_performed, materials, equipment, visitors, issues, delay_hours, delay_reason, safety_incidents, safety_notes, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')
        RETURNING *`,
-      [projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, createdBy]
+      [projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours || 0, delayReason, safetyIncidents || 0, safetyNotes, createdBy]
     );
     return result.rows[0];
   },
@@ -87,6 +87,75 @@ const DailyReport = {
 
   async delete(id) {
     await db.query('DELETE FROM daily_reports WHERE id = $1', [id]);
+  },
+
+  async submit(id, { submittedBy }) {
+    const result = await db.query(
+      `UPDATE daily_reports SET status = 'submitted', submitted_by = $1, submitted_at = NOW(), updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [submittedBy, id]
+    );
+    return result.rows[0];
+  },
+
+  async approve(id, { approvedBy }) {
+    const result = await db.query(
+      `UPDATE daily_reports SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [approvedBy, id]
+    );
+    return result.rows[0];
+  },
+
+  // Crew tracking
+  async addCrew(dailyReportId, { trade, foreman, crewSize, hoursWorked, workDescription }) {
+    const result = await db.query(
+      `INSERT INTO daily_report_crews (daily_report_id, trade, foreman, crew_size, hours_worked, work_description)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [dailyReportId, trade, foreman, crewSize || 0, hoursWorked || 0, workDescription]
+    );
+    return result.rows[0];
+  },
+
+  async updateCrew(crewId, updates) {
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] !== undefined) {
+        const dbField = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+        fields.push(`${dbField} = $${paramCount}`);
+        values.push(updates[key]);
+        paramCount++;
+      }
+    });
+
+    if (fields.length === 0) return null;
+
+    values.push(crewId);
+    const result = await db.query(
+      `UPDATE daily_report_crews SET ${fields.join(', ')}
+       WHERE id = $${paramCount}
+       RETURNING *`,
+      values
+    );
+    return result.rows[0];
+  },
+
+  async deleteCrew(crewId) {
+    await db.query('DELETE FROM daily_report_crews WHERE id = $1', [crewId]);
+  },
+
+  async getCrews(dailyReportId) {
+    const result = await db.query(
+      'SELECT * FROM daily_report_crews WHERE daily_report_id = $1 ORDER BY trade, id',
+      [dailyReportId]
+    );
+    return result.rows;
   },
 };
 

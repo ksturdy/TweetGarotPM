@@ -22,6 +22,7 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import SyncIcon from '@mui/icons-material/Sync';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ConstructionIcon from '@mui/icons-material/Construction';
 import './Sidebar.css';
 
 interface NavItem {
@@ -102,6 +103,11 @@ const Sidebar: React.FC = () => {
       label: 'Projects',
       path: '/projects',
       icon: <FolderIcon />,
+    },
+    {
+      label: 'Field',
+      path: '/field',
+      icon: <ConstructionIcon />,
     },
     {
       label: 'Safety',
