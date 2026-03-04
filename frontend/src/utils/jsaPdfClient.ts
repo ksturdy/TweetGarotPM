@@ -376,13 +376,16 @@ const JSA_STYLES = `
 export async function generateJsaPdf(jsa: JsaData): Promise<Blob> {
   const htmlContent = buildJsaHtml(jsa);
 
-  // Create a temporary container
+  // Container must be visible for html2canvas to render on iOS Safari
   const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
-  // Landscape letter dimensions in px at 96 DPI
+  container.style.position = 'fixed';
+  container.style.left = '0';
+  container.style.top = '0';
   container.style.width = '1056px';
+  container.style.zIndex = '-9999';
+  container.style.opacity = '0';
+  container.style.pointerEvents = 'none';
+  container.style.overflow = 'hidden';
 
   const style = document.createElement('style');
   style.textContent = JSA_STYLES;
@@ -394,6 +397,9 @@ export async function generateJsaPdf(jsa: JsaData): Promise<Blob> {
 
   document.body.appendChild(container);
 
+  // Give iOS Safari time to layout the DOM
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   try {
     const blob: Blob = await html2pdf()
       .set({
@@ -404,6 +410,9 @@ export async function generateJsaPdf(jsa: JsaData): Promise<Blob> {
           useCORS: true,
           letterRendering: true,
           width: 1056,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 1056,
         },
         jsPDF: {
           unit: 'in',

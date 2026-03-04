@@ -318,11 +318,16 @@ const FO_STYLES = `
 export async function generateFittingOrderPdf(order: FittingOrderData): Promise<Blob> {
   const htmlContent = buildFittingOrderHtml(order);
 
+  // Container must be visible for html2canvas to render on iOS Safari
   const container = document.createElement('div');
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '-9999px';
+  container.style.position = 'fixed';
+  container.style.left = '0';
+  container.style.top = '0';
   container.style.width = '816px';
+  container.style.zIndex = '-9999';
+  container.style.opacity = '0';
+  container.style.pointerEvents = 'none';
+  container.style.overflow = 'hidden';
 
   const style = document.createElement('style');
   style.textContent = FO_STYLES;
@@ -334,6 +339,9 @@ export async function generateFittingOrderPdf(order: FittingOrderData): Promise<
 
   document.body.appendChild(container);
 
+  // Give iOS Safari time to layout the DOM
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   try {
     const blob: Blob = await html2pdf()
       .set({
@@ -344,6 +352,9 @@ export async function generateFittingOrderPdf(order: FittingOrderData): Promise<
           useCORS: true,
           letterRendering: true,
           width: 816,
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 816,
         },
         jsPDF: {
           unit: 'in',
