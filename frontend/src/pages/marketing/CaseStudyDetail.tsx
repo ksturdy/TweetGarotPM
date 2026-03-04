@@ -208,7 +208,16 @@ const CaseStudyDetail: React.FC = () => {
       </div>
 
       {/* Customer & Project Info */}
-      {(caseStudy.customer_name || caseStudy.project_name) && (
+      {(caseStudy.customer_name || caseStudy.project_name) && (() => {
+        const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
+        const effectiveSqft = caseStudy.override_square_footage ?? caseStudy.project_square_footage;
+        const effectiveStart = caseStudy.override_start_date || caseStudy.project_start_date;
+        const effectiveEnd = caseStudy.override_end_date || caseStudy.project_end_date;
+        const effectiveAccountMgr = caseStudy.override_account_manager || caseStudy.customer_account_manager;
+        const effectiveContact = caseStudy.override_contact_name || caseStudy.primary_contact_name;
+        const effectiveContactEmail = caseStudy.override_contact_email || caseStudy.primary_contact_email;
+        const effectiveContactPhone = caseStudy.override_contact_phone || caseStudy.primary_contact_phone;
+        return (
         <div
           className="card"
           style={{
@@ -243,40 +252,61 @@ const CaseStudyDetail: React.FC = () => {
               <div style={{ fontWeight: 600 }}>{caseStudy.market}</div>
             </div>
           )}
-          {caseStudy.project_value && (
+          {effectiveValue != null && (
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
                 Project Value
               </div>
               <div style={{ fontWeight: 600 }}>
-                ${Math.round(Number(caseStudy.project_value)).toLocaleString()}
+                ${Math.round(Number(effectiveValue)).toLocaleString()}
               </div>
             </div>
           )}
-          {caseStudy.project_square_footage && (
+          {effectiveSqft != null && (
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
                 Square Footage
               </div>
               <div style={{ fontWeight: 600 }}>
-                {Number(caseStudy.project_square_footage).toLocaleString()} SF
+                {Number(effectiveSqft).toLocaleString()} SF
               </div>
             </div>
           )}
-          {(caseStudy.project_start_date || caseStudy.project_end_date) && (
+          {(effectiveStart || effectiveEnd) && (
             <div>
               <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
                 Project Dates
               </div>
               <div style={{ fontWeight: 600 }}>
-                {caseStudy.project_start_date && new Date(caseStudy.project_start_date).toLocaleDateString()}
-                {caseStudy.project_start_date && caseStudy.project_end_date && ' – '}
-                {caseStudy.project_end_date && new Date(caseStudy.project_end_date).toLocaleDateString()}
+                {effectiveStart && new Date(effectiveStart).toLocaleDateString()}
+                {effectiveStart && effectiveEnd && ' – '}
+                {effectiveEnd && new Date(effectiveEnd).toLocaleDateString()}
+              </div>
+            </div>
+          )}
+          {effectiveAccountMgr && (
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                Account Manager
+              </div>
+              <div style={{ fontWeight: 600 }}>{effectiveAccountMgr}</div>
+            </div>
+          )}
+          {effectiveContact && (
+            <div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>
+                Primary Contact
+              </div>
+              <div style={{ fontWeight: 600 }}>
+                {effectiveContact}
+                {effectiveContactEmail && <span style={{ fontWeight: 400, color: 'var(--secondary)', marginLeft: '0.5rem' }}>{effectiveContactEmail}</span>}
+                {effectiveContactPhone && <span style={{ fontWeight: 400, color: 'var(--secondary)', marginLeft: '0.5rem' }}>{effectiveContactPhone}</span>}
               </div>
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Metrics */}
       {(caseStudy.cost_savings ||
@@ -361,7 +391,12 @@ const CaseStudyDetail: React.FC = () => {
             marginBottom: '1rem',
           }}
         >
-          <h3 style={{ margin: 0 }}>Images</h3>
+          <div>
+            <h3 style={{ margin: 0 }}>Images</h3>
+            <div style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: '0.25rem' }}>
+              Upload 3–4 images for best results (1 hero + 2–3 supporting photos)
+            </div>
+          </div>
           <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
             {uploadingImage ? 'Uploading...' : '+ Upload Image'}
             <input

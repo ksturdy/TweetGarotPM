@@ -108,16 +108,20 @@ function generateStandardHtml(caseStudy, template, images, logoBase64) {
         if (caseStudy.project_name) fields.push(`<div class="info-item"><span class="info-label">Project</span><span class="info-value">${escapeHtml(caseStudy.project_name)}</span></div>`);
       }
       if (caseStudy.market) fields.push(`<div class="info-item"><span class="info-label">Market</span><span class="info-value">${escapeHtml(caseStudy.market)}</span></div>`);
-      if (caseStudy.project_value) fields.push(`<div class="info-item"><span class="info-label">Project Value</span><span class="info-value">${formatCurrency(caseStudy.project_value)}</span></div>`);
-      if (caseStudy.project_square_footage) fields.push(`<div class="info-item"><span class="info-label">Square Footage</span><span class="info-value">${formatNumber(caseStudy.project_square_footage)} SF</span></div>`);
-      if (caseStudy.project_start_date || caseStudy.project_end_date) {
+      const effValue = caseStudy.override_contract_value != null ? caseStudy.override_contract_value : caseStudy.project_value;
+      const effSqft = caseStudy.override_square_footage != null ? caseStudy.override_square_footage : caseStudy.project_square_footage;
+      const effStart = caseStudy.override_start_date || caseStudy.project_start_date;
+      const effEnd = caseStudy.override_end_date || caseStudy.project_end_date;
+      if (effValue) fields.push(`<div class="info-item"><span class="info-label">Project Value</span><span class="info-value">${formatCurrency(effValue)}</span></div>`);
+      if (effSqft) fields.push(`<div class="info-item"><span class="info-label">Square Footage</span><span class="info-value">${formatNumber(effSqft)} SF</span></div>`);
+      if (effStart || effEnd) {
         let dateStr = '';
-        if (caseStudy.project_start_date) dateStr += formatDate(caseStudy.project_start_date);
-        if (caseStudy.project_start_date && caseStudy.project_end_date) dateStr += ' – ';
-        if (caseStudy.project_end_date) dateStr += formatDate(caseStudy.project_end_date);
+        if (effStart) dateStr += formatDate(effStart);
+        if (effStart && effEnd) dateStr += ' – ';
+        if (effEnd) dateStr += formatDate(effEnd);
         fields.push(`<div class="info-item"><span class="info-label">Project Dates</span><span class="info-value">${dateStr}</span></div>`);
       }
-      if (caseStudy.construction_type) fields.push(`<div class="info-item"><span class="info-label">Construction Type</span><span class="info-value">${escapeHtml(caseStudy.construction_type)}</span></div>`);
+      if (caseStudy.construction_type && caseStudy.construction_type.length) fields.push(`<div class="info-item"><span class="info-label">Construction Type</span><span class="info-value">${escapeHtml(Array.isArray(caseStudy.construction_type) ? caseStudy.construction_type.join(', ') : caseStudy.construction_type)}</span></div>`);
       if (caseStudy.project_size) fields.push(`<div class="info-item"><span class="info-label">Project Size</span><span class="info-value">${escapeHtml(caseStudy.project_size)}</span></div>`);
       if (fields.length === 0) return '';
       return `
@@ -384,17 +388,23 @@ function generateMagazineHtml(caseStudy, template, images, logoBase64, customerL
   const otherImages = images.filter(img => !img.is_hero_image).slice(0, 3);
   const heroSrc = heroImage ? getImageSrc(heroImage) : '';
 
+  // Resolve effective values (override takes precedence)
+  const effValue = caseStudy.override_contract_value != null ? caseStudy.override_contract_value : caseStudy.project_value;
+  const effSqft = caseStudy.override_square_footage != null ? caseStudy.override_square_footage : caseStudy.project_square_footage;
+  const effStart = caseStudy.override_start_date || caseStudy.project_start_date;
+  const effEnd = caseStudy.override_end_date || caseStudy.project_end_date;
+
   // Build info items (no company/project name - those go in company_info)
   const infoItems = [];
   if (caseStudy.market) infoItems.push({ label: 'Market', value: caseStudy.market });
-  if (caseStudy.construction_type) infoItems.push({ label: 'Construction Type', value: caseStudy.construction_type });
+  if (caseStudy.construction_type && caseStudy.construction_type.length) infoItems.push({ label: 'Construction Type', value: Array.isArray(caseStudy.construction_type) ? caseStudy.construction_type.join(', ') : caseStudy.construction_type });
   if (caseStudy.project_size) infoItems.push({ label: 'Project Size', value: caseStudy.project_size });
-  if (caseStudy.project_value) infoItems.push({ label: 'Project Value', value: formatCurrency(caseStudy.project_value) });
-  if (caseStudy.project_square_footage) infoItems.push({ label: 'Square Footage', value: formatNumber(caseStudy.project_square_footage) + ' SF' });
+  if (effValue) infoItems.push({ label: 'Project Value', value: formatCurrency(effValue) });
+  if (effSqft) infoItems.push({ label: 'Square Footage', value: formatNumber(effSqft) + ' SF' });
   let dateStr = '';
-  if (caseStudy.project_start_date) dateStr += formatDate(caseStudy.project_start_date);
-  if (caseStudy.project_start_date && caseStudy.project_end_date) dateStr += ' – ';
-  if (caseStudy.project_end_date) dateStr += formatDate(caseStudy.project_end_date);
+  if (effStart) dateStr += formatDate(effStart);
+  if (effStart && effEnd) dateStr += ' – ';
+  if (effEnd) dateStr += formatDate(effEnd);
   if (dateStr) infoItems.push({ label: 'Project Dates', value: dateStr });
 
   const services = caseStudy.services_provided || [];

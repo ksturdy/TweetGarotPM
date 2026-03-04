@@ -6,10 +6,7 @@ import opportunitiesService from '../services/opportunities';
 import '../styles/SalesPipeline.css';
 import '../styles/OpportunitySearch.css';
 
-const MARKET_OPTIONS = [
-  'Healthcare', 'Education', 'Commercial', 'Industrial',
-  'Retail', 'Government', 'Hospitality', 'Data Center'
-];
+import { MARKET_VALUES as MARKET_OPTIONS } from '../constants/markets';
 
 const CONSTRUCTION_TYPE_OPTIONS = [
   'New Construction', 'Renovation', 'Tenant Improvement',

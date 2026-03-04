@@ -6,16 +6,7 @@ import { PlacesSearch } from '../PlacesSearch';
 import { Place } from '../../services/places';
 import './Modal.css';
 
-const MARKET_OPTIONS = [
-  { value: 'Healthcare', icon: '🏥', label: 'Healthcare' },
-  { value: 'Education', icon: '🏫', label: 'Education' },
-  { value: 'Commercial', icon: '🏢', label: 'Commercial' },
-  { value: 'Industrial', icon: '🏭', label: 'Industrial' },
-  { value: 'Retail', icon: '🏬', label: 'Retail' },
-  { value: 'Government', icon: '🏛️', label: 'Government' },
-  { value: 'Hospitality', icon: '🏨', label: 'Hospitality' },
-  { value: 'Data Center', icon: '💾', label: 'Data Center' }
-];
+import { MARKETS as MARKET_OPTIONS } from '../../constants/markets';
 
 interface CustomerFormModalProps {
   customer?: Customer | null;

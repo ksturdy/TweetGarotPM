@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
+import { MARKETS } from '../../constants/markets';
 import './Modal.css';
 
 interface EstimateModalProps {
@@ -125,15 +126,9 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
                   value={formData.building_type}
                   onChange={handleChange}
                 >
-                  <option value="Commercial">Commercial</option>
-                  <option value="Industrial">Industrial</option>
-                  <option value="Healthcare">Healthcare</option>
-                  <option value="Education">Education</option>
-                  <option value="Hospitality">Hospitality</option>
-                  <option value="Retail">Retail</option>
-                  <option value="Multi-Family">Multi-Family</option>
-                  <option value="Government">Government</option>
-                  <option value="Other">Other</option>
+                  {MARKETS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
                 </select>
               </div>
 

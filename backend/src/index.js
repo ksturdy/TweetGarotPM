@@ -19,9 +19,11 @@ process.on('unhandledRejection', (reason, promise) => {
   // Log but don't exit - let the app continue
 });
 
+const cron = require('node-cron');
 const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 const { isR2Enabled } = require('./config/r2Client');
+const { captureAllSnapshots } = require('./jobs/weeklySnapshots');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -278,7 +280,16 @@ app.listen(config.port, () => {
   console.log(`  ${errors.length === 0 ? '✅' : '❌'} Configuration: ${errors.length} errors, ${warnings.length} warnings`);
   console.log(`  ${process.env.DATABASE_URL || process.env.DB_PASSWORD ? '✅' : '❌'} Database configured`);
   console.log(`  ${process.env.ANTHROPIC_API_KEY ? '✅' : '⚠️'} Anthropic API (AI features)`);
-  console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)\n`);
+  console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)`);
+
+  // Weekly financial snapshots - every Wednesday at 6:00 PM ET
+  cron.schedule('0 18 * * 3', () => {
+    console.log('[Cron] Running weekly financial snapshots...');
+    captureAllSnapshots().catch(err => {
+      console.error('[Cron] Weekly snapshot job failed:', err);
+    });
+  }, { timezone: 'America/New_York' });
+  console.log(`  ✅ Weekly snapshot cron scheduled (Wednesdays 6:00 PM ET)\n`);
 });
 
 

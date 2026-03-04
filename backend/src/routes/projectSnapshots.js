@@ -4,6 +4,7 @@ const ProjectSnapshot = require('../models/ProjectSnapshot');
 const VistaData = require('../models/VistaData');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { captureAllSnapshots } = require('../jobs/weeklySnapshots');
 
 // Apply authentication and tenant context to all routes
 router.use(authenticate);
@@ -165,6 +166,27 @@ router.get('/:projectId/snapshots/latest', async (req, res) => {
   } catch (error) {
     console.error('Error fetching latest snapshot:', error);
     res.status(500).json({ error: 'Failed to fetch latest snapshot' });
+  }
+});
+
+/**
+ * POST /api/projects/snapshots/capture-all
+ * Manually trigger bulk snapshot capture for all active/open projects (admin only)
+ */
+router.post('/snapshots/capture-all', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const result = await captureAllSnapshots();
+    res.json({
+      message: 'Bulk snapshot capture complete',
+      ...result
+    });
+  } catch (error) {
+    console.error('Error during bulk snapshot capture:', error);
+    res.status(500).json({ error: 'Failed to capture snapshots' });
   }
 });
 

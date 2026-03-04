@@ -7,6 +7,7 @@ import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
+import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
 
 const EstimateDetail: React.FC = () => {
@@ -660,15 +661,9 @@ const EstimateDetail: React.FC = () => {
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type</label>
               <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange} style={{ padding: '0.5rem' }}>
-                <option value="Commercial">Commercial</option>
-                <option value="Industrial">Industrial</option>
-                <option value="Healthcare">Healthcare</option>
-                <option value="Education">Education</option>
-                <option value="Hospitality">Hospitality</option>
-                <option value="Retail">Retail</option>
-                <option value="Multi-Family">Multi-Family</option>
-                <option value="Government">Government</option>
-                <option value="Other">Other</option>
+                {MARKETS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
 

@@ -6,6 +6,7 @@ import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../SearchableSelect';
 import ActivityTimeline from './ActivityTimeline';
+import { MARKETS } from '../../constants/markets';
 import '../../styles/OpportunityModal.css';
 
 interface OpportunityModalProps {
@@ -519,14 +520,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         onChange={handleChange}
                       >
                         <option value="">Select market</option>
-                        <option value="Healthcare">Healthcare</option>
-                        <option value="Education">Education</option>
-                        <option value="Commercial">Commercial</option>
-                        <option value="Industrial">Industrial</option>
-                        <option value="Retail">Retail</option>
-                        <option value="Government">Government</option>
-                        <option value="Hospitality">Hospitality</option>
-                        <option value="Data Center">Data Center</option>
+                        {MARKETS.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
                       </select>
                     </div>
 

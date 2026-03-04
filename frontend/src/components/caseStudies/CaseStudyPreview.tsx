@@ -41,6 +41,22 @@ interface CaseStudyPreviewProps {
   template?: CaseStudyTemplate | null;
 }
 
+const richContentStyles = `
+  .cs-preview-content ul, .cs-preview-content ol {
+    padding-left: 20px;
+    margin: 8px 0;
+  }
+  .cs-preview-content ul { list-style-type: disc; }
+  .cs-preview-content ol { list-style-type: decimal; }
+  .cs-preview-content li {
+    margin-bottom: 4px;
+    padding-left: 4px;
+  }
+  .cs-preview-content p {
+    margin-bottom: 8px;
+  }
+`;
+
 const CaseStudyPreview: React.FC<CaseStudyPreviewProps> = ({ caseStudy, template }) => {
   const { tenant } = useAuth();
   const logoUrl = tenant?.settings?.branding?.logo_url || null;
@@ -82,6 +98,12 @@ const StandardLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
   const formatCurrency = (value: number) => '$' + Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Resolve effective values (override takes precedence)
+  const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
+  const effectiveSqft = caseStudy.override_square_footage ?? caseStudy.project_square_footage;
+  const effectiveStart = caseStudy.override_start_date || caseStudy.project_start_date;
+  const effectiveEnd = caseStudy.override_end_date || caseStudy.project_end_date;
 
   const images = caseStudy.images || [];
   const heroImage = images.find((img: any) => img.is_hero_image);
@@ -127,16 +149,16 @@ const StandardLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
         if (caseStudy.project_name) fields.push({ label: 'Project', value: caseStudy.project_name });
       }
       if (caseStudy.market) fields.push({ label: 'Market', value: caseStudy.market });
-      if (caseStudy.project_value) fields.push({ label: 'Project Value', value: formatCurrency(caseStudy.project_value) });
-      if (caseStudy.project_square_footage) fields.push({ label: 'Square Footage', value: Number(caseStudy.project_square_footage).toLocaleString() + ' SF' });
-      if (caseStudy.project_start_date || caseStudy.project_end_date) {
+      if (effectiveValue) fields.push({ label: 'Project Value', value: formatCurrency(effectiveValue) });
+      if (effectiveSqft) fields.push({ label: 'Square Footage', value: Number(effectiveSqft).toLocaleString() + ' SF' });
+      if (effectiveStart || effectiveEnd) {
         let dateStr = '';
-        if (caseStudy.project_start_date) dateStr += formatDate(caseStudy.project_start_date);
-        if (caseStudy.project_start_date && caseStudy.project_end_date) dateStr += ' – ';
-        if (caseStudy.project_end_date) dateStr += formatDate(caseStudy.project_end_date);
+        if (effectiveStart) dateStr += formatDate(effectiveStart);
+        if (effectiveStart && effectiveEnd) dateStr += ' – ';
+        if (effectiveEnd) dateStr += formatDate(effectiveEnd);
         fields.push({ label: 'Project Dates', value: dateStr });
       }
-      if (caseStudy.construction_type) fields.push({ label: 'Construction Type', value: caseStudy.construction_type });
+      if (caseStudy.construction_type?.length) fields.push({ label: 'Construction Type', value: caseStudy.construction_type.join(', ') });
       if (caseStudy.project_size) fields.push({ label: 'Project Size', value: caseStudy.project_size });
       if (fields.length === 0) return null;
       return (
@@ -265,16 +287,17 @@ const StandardLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
   };
 
   return (
-    <div style={{
+    <div className="cs-preview-content" style={{
       fontFamily: 'Arial, Helvetica, sans-serif',
       color: '#1a1a1a',
       lineHeight: 1.5,
       fontSize: '10pt',
-      maxWidth: '8.5in',
       margin: '0 auto',
       padding: '0.5in',
       backgroundColor: 'white',
+      minHeight: '11in',
     }}>
+      <style>{richContentStyles}</style>
       {/* Header */}
       <div style={{
         display: 'flex',
@@ -315,17 +338,17 @@ const StandardLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
         return renderer(section.label);
       })}
 
-      {/* Footer */}
-      <div style={{
-        marginTop: '30px',
-        paddingTop: '10px',
-        borderTop: '1px solid #ddd',
-        fontSize: '8pt',
-        color: '#999',
-        textAlign: 'center' as const,
-      }}>
-        Generated on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-      </div>
+      {/* Footer with logo */}
+      {showLogo && logoUrl && (
+        <div style={{
+          marginTop: '30px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}>
+          <img src={logoUrl} alt="Company Logo"
+            style={{ width: '140px', height: 'auto', maxHeight: '60px', objectFit: 'contain' as const }} />
+        </div>
+      )}
     </div>
   );
 };
@@ -359,6 +382,12 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
   const formatDate = (ds: string) =>
     new Date(ds).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
+  // Resolve effective values (override takes precedence)
+  const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
+  const effectiveSqft = caseStudy.override_square_footage ?? caseStudy.project_square_footage;
+  const effectiveStart = caseStudy.override_start_date || caseStudy.project_start_date;
+  const effectiveEnd = caseStudy.override_end_date || caseStudy.project_end_date;
+
   const images = caseStudy.images || [];
   const heroImage = images.find((img: any) => img.is_hero_image);
   const otherImages = images.filter((img: any) => !img.is_hero_image).slice(0, 6);
@@ -369,14 +398,14 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
   // Build project info items (no company/project name - those go in company_info)
   const infoItems: { label: string; value: string }[] = [];
   if (caseStudy.market) infoItems.push({ label: 'Market', value: caseStudy.market });
-  if (caseStudy.construction_type) infoItems.push({ label: 'Construction Type', value: caseStudy.construction_type });
+  if (caseStudy.construction_type?.length) infoItems.push({ label: 'Construction Type', value: caseStudy.construction_type.join(', ') });
   if (caseStudy.project_size) infoItems.push({ label: 'Project Size', value: caseStudy.project_size });
-  if (caseStudy.project_value) infoItems.push({ label: 'Project Value', value: formatCurrency(caseStudy.project_value) });
-  if (caseStudy.project_square_footage) infoItems.push({ label: 'Square Footage', value: Number(caseStudy.project_square_footage).toLocaleString() + ' SF' });
+  if (effectiveValue) infoItems.push({ label: 'Project Value', value: formatCurrency(effectiveValue) });
+  if (effectiveSqft) infoItems.push({ label: 'Square Footage', value: Number(effectiveSqft).toLocaleString() + ' SF' });
   let dateStr = '';
-  if (caseStudy.project_start_date) dateStr += formatDate(caseStudy.project_start_date);
-  if (caseStudy.project_start_date && caseStudy.project_end_date) dateStr += ' – ';
-  if (caseStudy.project_end_date) dateStr += formatDate(caseStudy.project_end_date);
+  if (effectiveStart) dateStr += formatDate(effectiveStart);
+  if (effectiveStart && effectiveEnd) dateStr += ' – ';
+  if (effectiveEnd) dateStr += formatDate(effectiveEnd);
   if (dateStr) infoItems.push({ label: 'Project Dates', value: dateStr });
 
   // Build metrics
@@ -524,16 +553,15 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
   };
 
   return (
-    <div style={{
+    <div className="cs-preview-content" style={{
       fontFamily: 'Arial, Helvetica, sans-serif',
       color: '#1a1a1a',
       lineHeight: 1.5,
       fontSize: '10pt',
-      maxWidth: '8.5in',
       margin: '0 auto',
       backgroundColor: 'white',
-      position: 'relative',
     }}>
+      <style>{richContentStyles}</style>
 
       {/* ===== HERO BANNER ===== */}
       <div className="case-study-hero" style={{
@@ -632,28 +660,17 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
         </div>
       )}
 
-      {/* ===== LOGO (absolute positioned bottom-right) ===== */}
+      {/* ===== FOOTER with logo ===== */}
       {showLogo && logoUrl && (
-        <div style={{
+        <div className="cs-footer-logo" style={{
           position: 'absolute',
-          bottom: '20px',
+          bottom: '16px',
           right: '40px',
-          zIndex: 10
         }}>
           <img src={logoUrl} alt="Company Logo"
             style={{ width: '140px', height: 'auto', maxHeight: '60px', objectFit: 'contain' as const }} />
         </div>
       )}
-
-      {/* ===== FOOTER ===== */}
-      <div style={{
-        padding: '8px 40px',
-        fontSize: '7pt',
-        color: '#bbb',
-        borderTop: '1px solid #eee'
-      }}>
-        Generated on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-      </div>
     </div>
   );
 };

@@ -7,37 +7,7 @@ import SearchableSelect from '../../components/SearchableSelect';
 import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 
-// Market icons - matching opportunities
-const MARKET_OPTIONS = [
-  { value: 'Healthcare', icon: '🏥', label: 'Healthcare' },
-  { value: 'Education', icon: '🏫', label: 'Education' },
-  { value: 'Commercial', icon: '🏢', label: 'Commercial' },
-  { value: 'Industrial', icon: '🏭', label: 'Industrial' },
-  { value: 'Retail', icon: '🏬', label: 'Retail' },
-  { value: 'Government', icon: '🏛️', label: 'Government' },
-  { value: 'Hospitality', icon: '🏨', label: 'Hospitality' },
-  { value: 'Data Center', icon: '💾', label: 'Data Center' },
-  // VP Markets
-  { value: 'MFG-Food', icon: '🍔', label: 'MFG-Food' },
-  { value: 'Health Care', icon: '🏥', label: 'Health Care' },
-  { value: 'MFG-Other', icon: '🏭', label: 'MFG-Other' },
-  { value: 'MFG-Paper', icon: '📄', label: 'MFG-Paper' },
-  { value: 'Amusement/Recreation', icon: '🎢', label: 'Amusement/Recreation' },
-  { value: 'Educational', icon: '🏫', label: 'Educational' },
-  { value: 'Manufacturing', icon: '🏭', label: 'Manufacturing' },
-  { value: 'Office', icon: '🏢', label: 'Office' },
-  { value: 'Power', icon: '⚡', label: 'Power' },
-  { value: 'Lodging', icon: '🏨', label: 'Lodging' },
-  { value: 'Religious', icon: '⛪', label: 'Religious' },
-  { value: 'Public Safety', icon: '🚔', label: 'Public Safety' },
-  { value: 'Transportation', icon: '🚚', label: 'Transportation' },
-  { value: 'Communication', icon: '📡', label: 'Communication' },
-  { value: 'Conservation/Development', icon: '🌲', label: 'Conservation/Development' },
-  { value: 'Sewage/Waste Disposal', icon: '♻️', label: 'Sewage/Waste Disposal' },
-  { value: 'Highway/Street', icon: '🛣️', label: 'Highway/Street' },
-  { value: 'Water Supply', icon: '💧', label: 'Water Supply' },
-  { value: 'Residential', icon: '🏠', label: 'Residential' },
-];
+import { MARKETS as MARKET_OPTIONS } from '../../constants/markets';
 
 const MODULE_ICONS: { [key: string]: string } = {
   financials: '💰',

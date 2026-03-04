@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import './EstimateNew.css';
+import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
 
 type BuildStep = 'info' | 'build-method' | 'manual' | 'excel';
@@ -745,15 +746,9 @@ const EstimateNew: React.FC = () => {
             <div className="form-group">
               <label className="form-label">Building Type</label>
               <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange}>
-                <option value="Commercial">Commercial</option>
-                <option value="Industrial">Industrial</option>
-                <option value="Healthcare">Healthcare</option>
-                <option value="Education">Education</option>
-                <option value="Hospitality">Hospitality</option>
-                <option value="Retail">Retail</option>
-                <option value="Multi-Family">Multi-Family</option>
-                <option value="Government">Government</option>
-                <option value="Other">Other</option>
+                {MARKETS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
 

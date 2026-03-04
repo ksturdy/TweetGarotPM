@@ -1,13 +1,114 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
 import { projectsApi, Project } from '../../services/projects';
-import { customersApi, Customer } from '../../services/customers';
+import { customersApi, Customer, getCustomerContacts } from '../../services/customers';
 import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
 import SearchableSelect from '../../components/SearchableSelect';
+import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
+
+interface OverrideFields {
+  override_contact_name: string;
+  override_contact_title: string;
+  override_contact_email: string;
+  override_contact_phone: string;
+  override_account_manager: string;
+  override_start_date: string;
+  override_end_date: string;
+  override_contract_value: string;
+  override_square_footage: string;
+}
+
+interface InheritedValues {
+  contact_name: string;
+  contact_title: string;
+  contact_email: string;
+  contact_phone: string;
+  account_manager: string;
+  start_date: string;
+  end_date: string;
+  contract_value: string;
+  square_footage: string;
+}
+
+const emptyOverrides: OverrideFields = {
+  override_contact_name: '',
+  override_contact_title: '',
+  override_contact_email: '',
+  override_contact_phone: '',
+  override_account_manager: '',
+  override_start_date: '',
+  override_end_date: '',
+  override_contract_value: '',
+  override_square_footage: '',
+};
+
+const emptyInherited: InheritedValues = {
+  contact_name: '',
+  contact_title: '',
+  contact_email: '',
+  contact_phone: '',
+  account_manager: '',
+  start_date: '',
+  end_date: '',
+  contract_value: '',
+  square_footage: '',
+};
+
+type OverrideKey = keyof OverrideFields;
+type InheritedKey = keyof InheritedValues;
+
+const overrideFieldMap: { key: OverrideKey; inheritedKey: InheritedKey; label: string; type: string; group: 'contact' | 'project' }[] = [
+  { key: 'override_account_manager', inheritedKey: 'account_manager', label: 'Account Manager', type: 'text', group: 'contact' },
+  { key: 'override_contact_name', inheritedKey: 'contact_name', label: 'Primary Contact', type: 'text', group: 'contact' },
+  { key: 'override_contact_title', inheritedKey: 'contact_title', label: 'Contact Title', type: 'text', group: 'contact' },
+  { key: 'override_contact_email', inheritedKey: 'contact_email', label: 'Contact Email', type: 'email', group: 'contact' },
+  { key: 'override_contact_phone', inheritedKey: 'contact_phone', label: 'Contact Phone', type: 'tel', group: 'contact' },
+  { key: 'override_start_date', inheritedKey: 'start_date', label: 'Start Date', type: 'date', group: 'project' },
+  { key: 'override_end_date', inheritedKey: 'end_date', label: 'End Date', type: 'date', group: 'project' },
+  { key: 'override_contract_value', inheritedKey: 'contract_value', label: 'Contract Value ($)', type: 'number', group: 'project' },
+  { key: 'override_square_footage', inheritedKey: 'square_footage', label: 'Square Footage', type: 'number', group: 'project' },
+];
+
+const formatDate = (val: string) => {
+  if (!val) return '';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return val;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatCurrency = (val: string) => {
+  if (!val) return '';
+  const n = parseFloat(val);
+  if (isNaN(n)) return val;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+};
+
+const formatNumber = (val: string) => {
+  if (!val) return '';
+  const raw = val.replace(/,/g, '');
+  const n = parseFloat(raw);
+  if (isNaN(n)) return val;
+  return n.toLocaleString();
+};
+
+const formatInherited = (key: InheritedKey, val: string) => {
+  if (!val) return '—';
+  if (key === 'start_date' || key === 'end_date') return formatDate(val);
+  if (key === 'contract_value') return formatCurrency(val);
+  if (key === 'square_footage') return formatNumber(val) + ' sq ft';
+  return val;
+};
+
+const toDateInputValue = (val: string) => {
+  if (!val) return '';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return val;
+  return d.toISOString().split('T')[0];
+};
 
 const CaseStudyForm: React.FC = () => {
   const navigate = useNavigate();
@@ -28,11 +129,25 @@ const CaseStudyForm: React.FC = () => {
     timeline_improvement_days: '',
     quality_score: '',
     market: '',
-    construction_type: '',
+    construction_type: [] as string[],
     project_size: '',
     services_provided: [] as string[],
     template_id: '',
   });
+
+  const [overrides, setOverrides] = useState<OverrideFields>({ ...emptyOverrides });
+  const [overrideEnabled, setOverrideEnabled] = useState<Record<OverrideKey, boolean>>({
+    override_contact_name: false,
+    override_contact_title: false,
+    override_contact_email: false,
+    override_contact_phone: false,
+    override_account_manager: false,
+    override_start_date: false,
+    override_end_date: false,
+    override_contract_value: false,
+    override_square_footage: false,
+  });
+  const [inherited, setInherited] = useState<InheritedValues>({ ...emptyInherited });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerLogoUrl, setCustomerLogoUrl] = useState<string | null>(null);
@@ -63,6 +178,66 @@ const CaseStudyForm: React.FC = () => {
     queryFn: () => caseStudyTemplatesApi.getAll({ is_active: true }).then(res => res.data),
   });
 
+  // Fetch contacts for selected customer
+  const { data: customerContacts } = useQuery({
+    queryKey: ['customerContacts', formData.customer_id],
+    queryFn: () => getCustomerContacts(formData.customer_id),
+    enabled: !!formData.customer_id,
+  });
+
+  // Update inherited contact values when customer/contacts change
+  useEffect(() => {
+    if (!formData.customer_id) {
+      setInherited(prev => ({
+        ...prev,
+        contact_name: '',
+        contact_title: '',
+        contact_email: '',
+        contact_phone: '',
+        account_manager: '',
+      }));
+      return;
+    }
+
+    const customer = customers?.find((c: Customer) => c.id === parseInt(formData.customer_id));
+    const primaryContact = customerContacts?.find((c: any) => c.is_primary) || customerContacts?.[0];
+
+    setInherited(prev => ({
+      ...prev,
+      account_manager: customer?.account_manager || '',
+      contact_name: primaryContact ? `${primaryContact.first_name} ${primaryContact.last_name}`.trim() : '',
+      contact_title: primaryContact?.title || '',
+      contact_email: primaryContact?.email || '',
+      contact_phone: primaryContact?.phone || primaryContact?.mobile || '',
+    }));
+  }, [formData.customer_id, customers, customerContacts]);
+
+  // Update inherited project values when project changes
+  useEffect(() => {
+    if (!formData.project_id) {
+      setInherited(prev => ({
+        ...prev,
+        start_date: '',
+        end_date: '',
+        contract_value: '',
+        square_footage: '',
+      }));
+      return;
+    }
+
+    const project = projects?.find((p: Project) => p.id === parseInt(formData.project_id));
+    if (project) {
+      setInherited(prev => ({
+        ...prev,
+        start_date: project.start_date || '',
+        end_date: project.end_date || '',
+        contract_value: project.contract_value?.toString() || '',
+        square_footage: (project as any).square_footage?.toString() || '',
+      }));
+    }
+  }, [formData.project_id, projects]);
+
+  // Populate form from existing case study
   useEffect(() => {
     if (caseStudy) {
       setFormData({
@@ -78,11 +253,42 @@ const CaseStudyForm: React.FC = () => {
         timeline_improvement_days: caseStudy.timeline_improvement_days?.toString() || '',
         quality_score: caseStudy.quality_score?.toString() || '',
         market: caseStudy.market || '',
-        construction_type: caseStudy.construction_type || '',
+        construction_type: caseStudy.construction_type || [],
         project_size: caseStudy.project_size || '',
         services_provided: caseStudy.services_provided || [],
         template_id: caseStudy.template_id?.toString() || '',
       });
+
+      // Set inherited values from the case study response
+      setInherited({
+        account_manager: caseStudy.customer_account_manager || '',
+        contact_name: caseStudy.primary_contact_name || '',
+        contact_title: caseStudy.primary_contact_title || '',
+        contact_email: caseStudy.primary_contact_email || '',
+        contact_phone: caseStudy.primary_contact_phone || '',
+        start_date: caseStudy.project_start_date || '',
+        end_date: caseStudy.project_end_date || '',
+        contract_value: caseStudy.project_value?.toString() || '',
+        square_footage: caseStudy.project_square_footage?.toString() || '',
+      });
+
+      // Set override values and enable toggles for any that are set
+      const newOverrides = { ...emptyOverrides };
+      const newEnabled: Record<OverrideKey, boolean> = {} as any;
+
+      for (const field of overrideFieldMap) {
+        const val = (caseStudy as any)[field.key];
+        if (val != null && val !== '') {
+          newOverrides[field.key] = val.toString();
+          newEnabled[field.key] = true;
+        } else {
+          newEnabled[field.key] = false;
+        }
+      }
+
+      setOverrides(newOverrides);
+      setOverrideEnabled(prev => ({ ...prev, ...newEnabled }));
+
       if (caseStudy.customer_logo_resolved_url) {
         setCustomerLogoUrl(caseStudy.customer_logo_resolved_url);
       }
@@ -145,6 +351,19 @@ const CaseStudyForm: React.FC = () => {
       quality_score: formData.quality_score ? parseInt(formData.quality_score) : null,
     };
 
+    // Add override fields - send null when override is disabled to clear any previous value
+    for (const field of overrideFieldMap) {
+      if (overrideEnabled[field.key] && overrides[field.key]) {
+        if (field.type === 'number') {
+          submitData[field.key] = parseFloat(overrides[field.key]);
+        } else {
+          submitData[field.key] = overrides[field.key];
+        }
+      } else {
+        submitData[field.key] = null;
+      }
+    }
+
     if (isEditMode) {
       updateMutation.mutate(submitData);
     } else {
@@ -168,6 +387,33 @@ const CaseStudyForm: React.FC = () => {
         : [...prev.services_provided, service],
     }));
   };
+
+  const handleConstructionTypeToggle = (type: string) => {
+    setFormData(prev => ({
+      ...prev,
+      construction_type: prev.construction_type.includes(type)
+        ? prev.construction_type.filter(t => t !== type)
+        : [...prev.construction_type, type],
+    }));
+  };
+
+  const handleOverrideToggle = useCallback((key: OverrideKey, inheritedKey: InheritedKey) => {
+    setOverrideEnabled(prev => {
+      const enabling = !prev[key];
+      if (enabling) {
+        // Pre-fill override with inherited value
+        setOverrides(o => ({
+          ...o,
+          [key]: o[key] || inherited[inheritedKey] || '',
+        }));
+      }
+      return { ...prev, [key]: enabling };
+    });
+  }, [inherited]);
+
+  const handleOverrideChange = useCallback((key: OverrideKey, value: string) => {
+    setOverrides(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   const handleCustomerLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,7 +445,21 @@ const CaseStudyForm: React.FC = () => {
     }
   };
 
-  const services = ['HVAC', 'Plumbing', 'Sheet Metal', 'Controls', 'Service'];
+  const services = [
+    'HVAC',
+    'Plumbing',
+    'Industrial Piping',
+    'Process Piping',
+    'Industrial Sheet Metal',
+    'Industrial Ventilation',
+    'Custom Equipment Design',
+    'Engineering',
+    'Building Automation Systems',
+    'Air Purification',
+    'BIM',
+    'Medical Gas',
+    'Dust Collection',
+  ];
 
   const customerOptions = useMemo(
     () => (customers || []).map((c: Customer) => ({
@@ -218,6 +478,77 @@ const CaseStudyForm: React.FC = () => {
     [projects]
   );
 
+  const hasCustomerOrProject = !!formData.customer_id || !!formData.project_id;
+  const contactFields = overrideFieldMap.filter(f => f.group === 'contact');
+  const projectFields = overrideFieldMap.filter(f => f.group === 'project');
+
+  const renderOverrideRow = (field: typeof overrideFieldMap[0]) => {
+    const isEnabled = overrideEnabled[field.key];
+    const inheritedVal = inherited[field.inheritedKey];
+    const overrideVal = overrides[field.key];
+
+    return (
+      <div key={field.key} style={{
+        display: 'grid',
+        gridTemplateColumns: '160px 1fr auto',
+        gap: '0.75rem',
+        alignItems: 'center',
+        padding: '0.5rem 0',
+        borderBottom: '1px solid #f3f4f6',
+      }}>
+        <label style={{ fontSize: '0.85rem', color: '#374151', fontWeight: 500 }}>
+          {field.label}
+        </label>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: '36px' }}>
+          {isEnabled ? (
+            <input
+              type={field.type === 'number' ? 'text' : field.type}
+              className="form-input"
+              value={field.type === 'date' ? toDateInputValue(overrideVal) : field.type === 'number' ? formatNumber(overrideVal) : overrideVal}
+              onChange={(e) => {
+                if (field.type === 'number') {
+                  const raw = e.target.value.replace(/[^0-9.]/g, '');
+                  handleOverrideChange(field.key, raw);
+                } else {
+                  handleOverrideChange(field.key, e.target.value);
+                }
+              }}
+              placeholder={inheritedVal ? `Inherited: ${formatInherited(field.inheritedKey, inheritedVal)}` : `Enter ${field.label.toLowerCase()}...`}
+              style={{ flex: 1, fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+            />
+          ) : (
+            <span style={{
+              fontSize: '0.85rem',
+              color: inheritedVal ? '#374151' : '#9ca3af',
+              fontStyle: inheritedVal ? 'normal' : 'italic',
+            }}>
+              {formatInherited(field.inheritedKey, inheritedVal)}
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleOverrideToggle(field.key, field.inheritedKey)}
+          style={{
+            background: isEnabled ? '#fef3c7' : 'none',
+            border: isEnabled ? '1px solid #f59e0b' : '1px solid #d1d5db',
+            borderRadius: '4px',
+            padding: '0.25rem 0.5rem',
+            fontSize: '0.75rem',
+            color: isEnabled ? '#92400e' : '#6b7280',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+          title={isEnabled ? 'Click to use inherited value' : 'Click to override this value'}
+        >
+          {isEnabled ? 'Overridden' : 'Override'}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="container">
       <div className="sales-page-header">
@@ -226,7 +557,7 @@ const CaseStudyForm: React.FC = () => {
             <Link to="/case-studies" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Case Studies
             </Link>
-            <h1>📊 {isEditMode ? 'Edit Case Study' : 'Create Case Study'}</h1>
+            <h1>{isEditMode ? 'Edit Case Study' : 'Create Case Study'}</h1>
             <div className="sales-subtitle">{isEditMode ? 'Update case study details' : 'Add a new success story'}</div>
           </div>
         </div>
@@ -326,6 +657,58 @@ const CaseStudyForm: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Contact & Project Details */}
+        {hasCustomerOrProject && (
+          <div
+            className="card"
+            style={{
+              marginBottom: '1.5rem',
+              padding: '1.5rem',
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: '0.25rem', fontSize: '1rem', fontWeight: 600 }}>
+              Contact & Project Details
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: 0, marginBottom: '1rem' }}>
+              Values are inherited from the selected customer/project. Click "Override" to customize for this case study.
+            </p>
+
+            {formData.customer_id && (
+              <>
+                <div style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '0.5rem',
+                  marginTop: '0.25rem',
+                }}>
+                  Customer Contact
+                </div>
+                {contactFields.map(renderOverrideRow)}
+              </>
+            )}
+
+            {formData.project_id && (
+              <>
+                <div style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '0.5rem',
+                  marginTop: formData.customer_id ? '1rem' : '0.25rem',
+                }}>
+                  Project Details
+                </div>
+                {projectFields.map(renderOverrideRow)}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Content Sections */}
         <div
@@ -474,7 +857,7 @@ const CaseStudyForm: React.FC = () => {
             Categorization
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
             <div className="form-group">
               <label className="form-label">Market</label>
               <select
@@ -484,27 +867,9 @@ const CaseStudyForm: React.FC = () => {
                 onChange={handleChange}
               >
                 <option value="">Select Market</option>
-                <option value="Healthcare">Healthcare</option>
-                <option value="Industrial">Industrial</option>
-                <option value="Commercial">Commercial</option>
-                <option value="Education">Education</option>
-                <option value="Government">Government</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Construction Type</label>
-              <select
-                name="construction_type"
-                className="form-input"
-                value={formData.construction_type}
-                onChange={handleChange}
-              >
-                <option value="">Select Type</option>
-                <option value="New Construction">New Construction</option>
-                <option value="Renovation">Renovation</option>
-                <option value="Retrofit">Retrofit</option>
-                <option value="Service">Service</option>
+                {MARKETS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </div>
 
@@ -517,31 +882,85 @@ const CaseStudyForm: React.FC = () => {
                 onChange={handleChange}
               >
                 <option value="">Select Size</option>
-                <option value="Small">Small (&lt;$100K)</option>
-                <option value="Medium">Medium ($100K-$1M)</option>
-                <option value="Large">Large (&gt;$1M)</option>
+                <option value="Small">Small (&lt;$1M)</option>
+                <option value="Medium">Medium ($1M-$5M)</option>
+                <option value="Large">Large ($5M+)</option>
               </select>
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Services Provided</label>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              {services.map(service => (
+          <div className="form-group" style={{ marginTop: '0.5rem' }}>
+            <label className="form-label">Construction Type</label>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '0.5rem 1.5rem',
+            }}>
+              {['New Construction', 'Renovation', 'Retrofit', 'Addition', 'Service'].map(type => (
                 <label
-                  key={service}
-                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                  key={type}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    padding: '0.35rem 0',
+                    fontSize: '0.9rem',
+                  }}
                 >
                   <input
                     type="checkbox"
-                    checked={formData.services_provided.includes(service)}
-                    onChange={() => handleServiceToggle(service)}
-                    style={{ marginRight: '0.5rem' }}
+                    checked={formData.construction_type.includes(type)}
+                    onChange={() => handleConstructionTypeToggle(type)}
+                    style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
-                  {service}
+                  {type}
                 </label>
               ))}
             </div>
+          </div>
+
+        </div>
+
+        {/* Services Provided */}
+        <div
+          className="card"
+          style={{
+            marginBottom: '1.5rem',
+            padding: '1.5rem',
+          }}
+        >
+          <h3 style={{ marginTop: 0, marginBottom: '0.25rem', fontSize: '1rem', fontWeight: 600 }}>
+            Services Provided
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: 0, marginBottom: '1rem' }}>
+            Select all services that were provided on this project
+          </p>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '0.5rem 1.5rem',
+          }}>
+            {services.map(service => (
+              <label
+                key={service}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  padding: '0.35rem 0',
+                  fontSize: '0.9rem',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={formData.services_provided.includes(service)}
+                  onChange={() => handleServiceToggle(service)}
+                  style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
+                />
+                {service}
+              </label>
+            ))}
           </div>
         </div>
 

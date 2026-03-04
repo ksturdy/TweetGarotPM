@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { caseStudiesApi, CaseStudy } from '../../services/caseStudies';
+import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
 
 const getImageUrl = (filePath: string) => {
@@ -20,6 +21,8 @@ const CaseStudyList: React.FC = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [marketFilter, setMarketFilter] = useState<string>('');
+  const [sliderMin, setSliderMin] = useState<number>(0);
+  const [sliderMax, setSliderMax] = useState<number>(0);
 
   const { data: caseStudies, isLoading, error } = useQuery({
     queryKey: ['caseStudies', statusFilter, marketFilter],
@@ -30,6 +33,47 @@ const CaseStudyList: React.FC = () => {
       return caseStudiesApi.getAll(filters).then(res => res.data);
     },
   });
+
+  // Value range slider
+  const { dataMin, dataMax, step } = useMemo(() => {
+    if (!caseStudies || caseStudies.length === 0) return { dataMin: 0, dataMax: 0, step: 500000 };
+    const values = caseStudies
+      .map(cs => Number(cs.override_contract_value ?? cs.project_value ?? 0))
+      .filter(v => v > 0);
+    if (values.length === 0) return { dataMin: 0, dataMax: 0, step: 500000 };
+    const max = Math.max(...values);
+    const roundedMax = Math.ceil(max / 1000000) * 1000000 || 1000000;
+    const s = roundedMax > 50000000 ? 1000000 : roundedMax > 10000000 ? 500000 : 100000;
+    return { dataMin: 0, dataMax: roundedMax, step: s };
+  }, [caseStudies]);
+
+  useEffect(() => {
+    if (dataMax > 0 && sliderMax === 0) {
+      setSliderMax(dataMax);
+    }
+  }, [dataMax, sliderMax]);
+
+  const valueFilterActive = dataMax > 0 && sliderMax > 0 && (sliderMin > dataMin || sliderMax < dataMax);
+
+  const filteredCaseStudies = useMemo(() => {
+    if (!caseStudies) return [];
+    if (!valueFilterActive) return caseStudies;
+    return caseStudies.filter(cs => {
+      const val = Number(cs.override_contract_value ?? cs.project_value ?? 0);
+      if (val === 0) return true;
+      return val >= sliderMin && val <= sliderMax;
+    });
+  }, [caseStudies, sliderMin, sliderMax, valueFilterActive]);
+
+  const formatSliderValue = (val: number) => {
+    if (val === 0) return '$0';
+    if (val >= 1000000) return '$' + (val / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (val >= 1000) return '$' + Math.round(val / 1000) + 'K';
+    return '$' + val.toLocaleString();
+  };
+
+  const minPercent = dataMax > 0 ? (sliderMin / dataMax) * 100 : 0;
+  const maxPercent = dataMax > 0 ? (sliderMax / dataMax) * 100 : 100;
 
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
@@ -63,7 +107,7 @@ const CaseStudyList: React.FC = () => {
               &larr; Back to Marketing
             </Link>
             <h1>📊 Case Studies</h1>
-            <div className="sales-subtitle">{caseStudies?.length || 0} case studies</div>
+            <div className="sales-subtitle">{filteredCaseStudies.length} case studies</div>
           </div>
         </div>
         <div className="sales-header-actions">
@@ -110,21 +154,21 @@ const CaseStudyList: React.FC = () => {
               onChange={(e) => setMarketFilter(e.target.value)}
             >
               <option value="">All Markets</option>
-              <option value="Healthcare">Healthcare</option>
-              <option value="Industrial">Industrial</option>
-              <option value="Commercial">Commercial</option>
-              <option value="Education">Education</option>
-              <option value="Government">Government</option>
+              {MARKETS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
             </select>
           </div>
 
-          {(statusFilter || marketFilter) && (
+          {(statusFilter || marketFilter || valueFilterActive) && (
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button
                 className="btn btn-secondary"
                 onClick={() => {
                   setStatusFilter('');
                   setMarketFilter('');
+                  setSliderMin(dataMin);
+                  setSliderMax(dataMax);
                 }}
                 style={{ width: '100%' }}
               >
@@ -133,10 +177,116 @@ const CaseStudyList: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Value Range Slider */}
+        {dataMax > 0 && sliderMax > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <style>{`
+              .value-range-slider input[type="range"] {
+                -webkit-appearance: none;
+                appearance: none;
+                pointer-events: none;
+                background: transparent;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+              }
+              .value-range-slider input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: var(--primary, #3b82f6);
+                border: 2px solid white;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+                cursor: pointer;
+                pointer-events: all;
+              }
+              .value-range-slider input[type="range"]::-moz-range-thumb {
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: var(--primary, #3b82f6);
+                border: 2px solid white;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+                cursor: pointer;
+                pointer-events: all;
+              }
+            `}</style>
+            <label className="form-label" style={{ marginBottom: '0.5rem' }}>
+              Contract Value: {formatSliderValue(sliderMin)} — {formatSliderValue(sliderMax)}
+            </label>
+            <div
+              className="value-range-slider"
+              style={{ position: 'relative', height: '36px' }}
+            >
+              {/* Track background */}
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: 0,
+                right: 0,
+                height: '6px',
+                transform: 'translateY(-50%)',
+                backgroundColor: '#e2e8f0',
+                borderRadius: '3px',
+              }} />
+              {/* Active range highlight */}
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                height: '6px',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'var(--primary, #3b82f6)',
+                borderRadius: '3px',
+                left: `${minPercent}%`,
+                width: `${maxPercent - minPercent}%`,
+              }} />
+              <input
+                type="range"
+                min={dataMin}
+                max={dataMax}
+                step={step}
+                value={sliderMin}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val <= sliderMax - step) setSliderMin(val);
+                }}
+                style={{ zIndex: sliderMin > dataMax * 0.5 ? 5 : 3 }}
+              />
+              <input
+                type="range"
+                min={dataMin}
+                max={dataMax}
+                step={step}
+                value={sliderMax}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val >= sliderMin + step) setSliderMax(val);
+                }}
+                style={{ zIndex: 4 }}
+              />
+            </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '0.75rem',
+              color: 'var(--secondary)',
+              marginTop: '-4px',
+            }}>
+              <span>{formatSliderValue(dataMin)}</span>
+              <span>{formatSliderValue(dataMax)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Case Studies Grid */}
-      {caseStudies && caseStudies.length > 0 ? (
+      {filteredCaseStudies.length > 0 ? (
         <div
           style={{
             display: 'grid',
@@ -144,7 +294,7 @@ const CaseStudyList: React.FC = () => {
             gap: '1.5rem',
           }}
         >
-          {caseStudies.map((caseStudy: CaseStudy) => (
+          {filteredCaseStudies.map((caseStudy: CaseStudy) => (
             <div
               key={caseStudy.id}
               className="card"
@@ -242,85 +392,82 @@ const CaseStudyList: React.FC = () => {
                 </div>
 
                 {/* Project Metrics */}
-                {(caseStudy.project_value ||
-                  caseStudy.project_square_footage ||
-                  caseStudy.project_start_date) && (
+                {(() => {
+                  const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
+                  const effectiveSqft = caseStudy.override_square_footage ?? caseStudy.project_square_footage;
+                  const effectiveStart = caseStudy.override_start_date || caseStudy.project_start_date;
+                  const metricCount = [effectiveValue, effectiveSqft, effectiveStart].filter(Boolean).length;
+                  if (metricCount === 0) return null;
+                  return (
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-                      gap: '0.75rem',
-                      padding: '1rem',
+                      gridTemplateColumns: `repeat(${metricCount}, 1fr)`,
+                      gap: '0.5rem',
+                      padding: '0.75rem',
                       backgroundColor: '#f8fafc',
                       borderRadius: '6px',
                       marginBottom: '1rem',
+                      border: '1px solid #e2e8f0',
                     }}
                   >
-                    {caseStudy.project_value && (
-                      <div style={{ textAlign: 'center' }}>
+                    {effectiveValue && (
+                      <div style={{ textAlign: 'center', padding: '0.25rem 0' }}>
                         <div
                           style={{
-                            fontSize: '1.25rem',
-                            fontWeight: 600,
+                            fontSize: '1rem',
+                            fontWeight: 700,
                             color: 'var(--success)',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          ${Math.round(Number(caseStudy.project_value)).toLocaleString()}
+                          ${Number(effectiveValue) >= 1000000
+                            ? (Number(effectiveValue) / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+                            : Math.round(Number(effectiveValue)).toLocaleString()}
                         </div>
-                        <div
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--secondary)',
-                          }}
-                        >
+                        <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginTop: '2px' }}>
                           Value
                         </div>
                       </div>
                     )}
-                    {caseStudy.project_square_footage && (
-                      <div style={{ textAlign: 'center' }}>
+                    {effectiveSqft && (
+                      <div style={{ textAlign: 'center', padding: '0.25rem 0', borderLeft: effectiveValue ? '1px solid #e2e8f0' : 'none' }}>
                         <div
                           style={{
-                            fontSize: '1.25rem',
-                            fontWeight: 600,
+                            fontSize: '1rem',
+                            fontWeight: 700,
                             color: 'var(--primary)',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {Number(caseStudy.project_square_footage).toLocaleString()}
+                          {Number(effectiveSqft) >= 1000
+                            ? Math.round(Number(effectiveSqft) / 1000).toLocaleString() + 'K'
+                            : Number(effectiveSqft).toLocaleString()}
                         </div>
-                        <div
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--secondary)',
-                          }}
-                        >
-                          SF
+                        <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginTop: '2px' }}>
+                          Sq Ft
                         </div>
                       </div>
                     )}
-                    {caseStudy.project_start_date && (
-                      <div style={{ textAlign: 'center' }}>
+                    {effectiveStart && (
+                      <div style={{ textAlign: 'center', padding: '0.25rem 0', borderLeft: (effectiveValue || effectiveSqft) ? '1px solid #e2e8f0' : 'none' }}>
                         <div
                           style={{
-                            fontSize: '1.25rem',
-                            fontWeight: 600,
+                            fontSize: '1rem',
+                            fontWeight: 700,
                             color: 'var(--warning)',
                           }}
                         >
-                          {new Date(caseStudy.project_start_date).getFullYear()}
+                          {new Date(effectiveStart).getFullYear()}
                         </div>
-                        <div
-                          style={{
-                            fontSize: '0.75rem',
-                            color: 'var(--secondary)',
-                          }}
-                        >
+                        <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginTop: '2px' }}>
                           Year
                         </div>
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Market */}
                 {caseStudy.market && (

@@ -24,6 +24,15 @@ const CaseStudy = {
       services_provided,
       template_id,
       customer_logo_url,
+      override_contact_name,
+      override_contact_title,
+      override_contact_email,
+      override_contact_phone,
+      override_account_manager,
+      override_start_date,
+      override_end_date,
+      override_contract_value,
+      override_square_footage,
       created_by
     } = data;
 
@@ -32,8 +41,13 @@ const CaseStudy = {
         title, subtitle, project_id, customer_id, challenge, solution, results,
         executive_summary, cost_savings, timeline_improvement_days, quality_score,
         additional_metrics, market, construction_type, project_size, services_provided,
-        template_id, customer_logo_url, created_by, tenant_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        template_id, customer_logo_url,
+        override_contact_name, override_contact_title, override_contact_email,
+        override_contact_phone, override_account_manager,
+        override_start_date, override_end_date, override_contract_value, override_square_footage,
+        created_by, tenant_id, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
@@ -41,6 +55,12 @@ const CaseStudy = {
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size,
         services_provided, template_id || null, customer_logo_url || null,
+        override_contact_name || null, override_contact_title || null,
+        override_contact_email || null, override_contact_phone || null,
+        override_account_manager || null,
+        override_start_date || null, override_end_date || null,
+        override_contract_value != null ? override_contract_value : null,
+        override_square_footage != null ? override_square_footage : null,
         created_by, tenantId, 'draft'
       ]
     );
@@ -80,15 +100,21 @@ const CaseStudy = {
               p.end_date as project_end_date,
               p.square_footage as project_square_footage,
               c.customer_owner as customer_name,
+              c.account_manager as customer_account_manager,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
               CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name,
-              cst.name as template_name
+              cst.name as template_name,
+              pc.first_name || ' ' || pc.last_name as primary_contact_name,
+              pc.title as primary_contact_title,
+              pc.email as primary_contact_email,
+              COALESCE(pc.phone, pc.mobile) as primary_contact_phone
        FROM case_studies cs
        LEFT JOIN projects p ON cs.project_id = p.id
        LEFT JOIN customers c ON cs.customer_id = c.id
        LEFT JOIN users u ON cs.created_by = u.id
        LEFT JOIN users r ON cs.reviewed_by = r.id
        LEFT JOIN case_study_templates cst ON cs.template_id = cst.id
+       LEFT JOIN customer_contacts pc ON pc.customer_id = c.id AND pc.is_primary = true
        WHERE cs.id = $1 AND cs.tenant_id = $2`,
       [id, tenantId]
     );
@@ -175,6 +201,15 @@ const CaseStudy = {
       services_provided,
       template_id,
       customer_logo_url,
+      override_contact_name,
+      override_contact_title,
+      override_contact_email,
+      override_contact_phone,
+      override_account_manager,
+      override_start_date,
+      override_end_date,
+      override_contract_value,
+      override_square_footage,
       featured,
       display_order
     } = data;
@@ -199,10 +234,19 @@ const CaseStudy = {
         services_provided = COALESCE($16, services_provided),
         template_id = $17,
         customer_logo_url = COALESCE($18, customer_logo_url),
-        featured = COALESCE($19, featured),
-        display_order = COALESCE($20, display_order),
+        override_contact_name = $19,
+        override_contact_title = $20,
+        override_contact_email = $21,
+        override_contact_phone = $22,
+        override_account_manager = $23,
+        override_start_date = $24,
+        override_end_date = $25,
+        override_contract_value = $26,
+        override_square_footage = $27,
+        featured = COALESCE($28, featured),
+        display_order = COALESCE($29, display_order),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $21 AND tenant_id = $22
+       WHERE id = $30 AND tenant_id = $31
        RETURNING *`,
       [
         title, subtitle, project_id, customer_id, challenge, solution, results,
@@ -210,6 +254,12 @@ const CaseStudy = {
         additional_metrics ? JSON.stringify(additional_metrics) : null,
         market, construction_type, project_size, services_provided,
         template_id || null, customer_logo_url !== undefined ? (customer_logo_url || null) : undefined,
+        override_contact_name || null, override_contact_title || null,
+        override_contact_email || null, override_contact_phone || null,
+        override_account_manager || null,
+        override_start_date || null, override_end_date || null,
+        override_contract_value != null ? override_contract_value : null,
+        override_square_footage != null ? override_square_footage : null,
         featured, display_order, id, tenantId
       ]
     );
