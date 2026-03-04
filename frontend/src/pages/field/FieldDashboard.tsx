@@ -1,12 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import SearchIcon from '@mui/icons-material/Search';
 import FolderIcon from '@mui/icons-material/Folder';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import WbSunnyIcon from '@mui/icons-material/WbSunny';
+import CloudIcon from '@mui/icons-material/Cloud';
+import GrainIcon from '@mui/icons-material/Grain';
+import AcUnitIcon from '@mui/icons-material/AcUnit';
+import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
 import api from '../../services/api';
 import { favoritesService } from '../../services/favorites';
+import { useAuth } from '../../context/AuthContext';
 
 interface Project {
   id: number;
@@ -16,10 +22,62 @@ interface Project {
   client: string;
 }
 
+interface WeatherData {
+  temp: number;
+  description: string;
+  icon: string;
+  city: string;
+}
+
+const getWeatherIcon = (icon: string) => {
+  if (icon.includes('01') || icon.includes('02')) return <WbSunnyIcon />;
+  if (icon.includes('09') || icon.includes('10')) return <GrainIcon />;
+  if (icon.includes('11')) return <ThunderstormIcon />;
+  if (icon.includes('13')) return <AcUnitIcon />;
+  return <CloudIcon />;
+};
+
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
 const FieldDashboard: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+
+  // Fetch weather based on user's location
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&units=imperial&appid=0c67e87767e7e64e9c1ce88f1a3e3c9c`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            setWeather({
+              temp: Math.round(data.main.temp),
+              description: data.weather[0].description,
+              icon: data.weather[0].icon,
+              city: data.name,
+            });
+          }
+        } catch {
+          // Weather is non-critical
+        }
+      },
+      () => {},
+      { timeout: 5000 }
+    );
+  }, []);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
@@ -82,12 +140,76 @@ const FieldDashboard: React.FC = () => {
   }
 
   const hasFavorites = filtered.some(p => favoritedIds.includes(p.id));
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   return (
     <div>
-      <h1 className="field-page-title">Select a Job</h1>
-      <p className="field-page-subtitle">Choose a project to access field tools</p>
+      {/* Welcome Banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1a2332 0%, #2a3f5f 100%)',
+        borderRadius: 12,
+        padding: '20px 18px',
+        marginBottom: 16,
+        color: '#fff',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>
+              {getGreeting()}, {user?.firstName || 'there'}
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
+              {dateStr}
+            </div>
+          </div>
+          {weather && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              padding: '8px 12px',
+            }}>
+              <span style={{ display: 'flex', fontSize: 22, opacity: 0.9 }}>
+                {getWeatherIcon(weather.icon)}
+              </span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
+                  {weather.temp}&deg;F
+                </div>
+                <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'capitalize' }}>
+                  {weather.city}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
+      {/* Getting Started */}
+      <div style={{
+        background: '#f0f7ff',
+        border: '1px solid #bfdbfe',
+        borderRadius: 10,
+        padding: '14px 16px',
+        marginBottom: 16,
+        fontSize: 13,
+        color: '#1e40af',
+        lineHeight: 1.5,
+      }}>
+        <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 14 }}>
+          Getting Started
+        </div>
+        Select a job below to access daily reports, purchase orders, fitting orders, and safety JSAs. Star your frequent jobs for quick access.
+      </div>
+
+      {/* Search */}
       <div className="field-search">
         <SearchIcon className="field-search-icon" />
         <input
