@@ -1,5 +1,17 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import fittingTypesImg from '../assets/fitting-types-reference.png';
+
+function loadImageAsDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then(res => res.blob())
+    .then(blob => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    }));
+}
 
 interface FittingOrderItem {
   quantity?: number | null;
@@ -163,19 +175,31 @@ export async function generateFittingOrderPdf(order: FittingOrderData): Promise<
 
   y += infoRows * infoCellH + 8;
 
-  // ===== FITTING TYPES LEGEND =====
-  doc.setFillColor(250, 250, 250);
-  doc.setDrawColor(221, 221, 221);
-  doc.setLineWidth(0.5);
-  doc.rect(left, y, contentW, 14, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6);
-  doc.setTextColor(85, 85, 85);
-  doc.text(
-    'FITTING TYPES:  1-St. Joint   2-Reducer   3-Offset   4-Elbow   5-Tee   6-Wye   7-Dbl Branch   8-Tap   9-Transition   10-End Cap',
-    left + 4, y + 9
-  );
-  y += 18;
+  // ===== FITTING TYPES REFERENCE IMAGE =====
+  try {
+    const imgData = await loadImageAsDataUrl(fittingTypesImg);
+    // Original image is ~1567x168px; scale to content width, preserving aspect ratio
+    const imgH = contentW * (168 / 1567);
+    doc.setDrawColor(221, 221, 221);
+    doc.setLineWidth(0.5);
+    doc.rect(left, y, contentW, imgH + 4);
+    doc.addImage(imgData, 'PNG', left + 2, y + 2, contentW - 4, imgH);
+    y += imgH + 8;
+  } catch {
+    // Fallback to text legend if image fails to load
+    doc.setFillColor(250, 250, 250);
+    doc.setDrawColor(221, 221, 221);
+    doc.setLineWidth(0.5);
+    doc.rect(left, y, contentW, 14, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
+    doc.setTextColor(85, 85, 85);
+    doc.text(
+      'FITTING TYPES:  1-St. Joint   2-Reducer   3-Offset   4-Elbow   5-Tee   6-Wye   7-Dbl Branch   8-Tap   9-Transition   10-End Cap',
+      left + 4, y + 9
+    );
+    y += 18;
+  }
 
   // ===== FITTINGS TABLE =====
   const items = order.items || [];
