@@ -60,17 +60,17 @@ const FieldLayout: React.FC = () => {
 
   const handleBack = () => {
     if (!isProjectSelected) {
-      navigate('/');
+      // Already on field dashboard — nowhere to go back to
+      return;
+    }
+    const pathParts = currentPath.split('/');
+    // If we're on a detail/form page, go back to the list
+    if (pathParts.length > 5) {
+      navigate(pathParts.slice(0, 5).join('/'));
+    } else if (pathParts.length > 4) {
+      navigate(`/field/projects/${projectId}`);
     } else {
-      const pathParts = currentPath.split('/');
-      // If we're on a detail/form page, go back to the list
-      if (pathParts.length > 5) {
-        navigate(pathParts.slice(0, 5).join('/'));
-      } else if (pathParts.length > 4) {
-        navigate(`/field/projects/${projectId}`);
-      } else {
-        navigate('/field');
-      }
+      navigate('/field');
     }
   };
 
@@ -83,9 +83,11 @@ const FieldLayout: React.FC = () => {
     <div className="field-container">
       <header className="field-header">
         <div className="field-header-left">
-          <button className="field-header-back" onClick={handleBack}>
-            <ArrowBackIcon style={{ fontSize: 20 }} />
-          </button>
+          {isProjectSelected && (
+            <button className="field-header-back" onClick={handleBack}>
+              <ArrowBackIcon style={{ fontSize: 20 }} />
+            </button>
+          )}
           {isProjectSelected && project ? (
             <span className="field-header-title">{project.number} - {project.name}</span>
           ) : (
