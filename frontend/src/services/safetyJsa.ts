@@ -25,6 +25,8 @@ export interface SafetyJsa {
   reviewed_at: string | null;
   created_by: number;
   created_by_name: string;
+  project_name?: string;
+  project_number?: string;
   created_at: string;
   updated_at: string;
   hazards?: SafetyJsaHazard[];
@@ -81,4 +83,12 @@ export const safetyJsaApi = {
   complete: (id: number) => api.post<SafetyJsa>(`/safety-jsa/${id}/complete`),
 
   delete: (id: number) => api.delete(`/safety-jsa/${id}`),
+
+  downloadPdf: async (id: number): Promise<Blob> => {
+    const res = await api.get(`/safety-jsa/${id}/pdf`, { responseType: 'blob' });
+    return res.data;
+  },
+
+  emailPdf: (id: number, additionalEmails?: string[]) =>
+    api.post<{ success: boolean; message: string; preview?: boolean }>(`/safety-jsa/${id}/email`, { additionalEmails }),
 };

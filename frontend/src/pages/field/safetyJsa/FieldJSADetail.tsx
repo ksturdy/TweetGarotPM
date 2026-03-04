@@ -7,9 +7,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ShareIcon from '@mui/icons-material/Share';
 import {
   safetyJsaApi,
-  SafetyJsa,
   SafetyJsaHazard,
   SafetyJsaSignature,
 } from '../../../services/safetyJsa';
@@ -44,6 +45,8 @@ const FieldJSADetail: React.FC = () => {
   const [newWorkerName, setNewWorkerName] = useState('');
   const [showSignatureForm, setShowSignatureForm] = useState(false);
   const [signatureName, setSignatureName] = useState('');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const {
     data: jsa,
@@ -118,6 +121,64 @@ const FieldJSADetail: React.FC = () => {
     workerNamesMutation.mutate([...currentNames, newWorkerName.trim()]);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!jsa) return;
+    setDownloadingPdf(true);
+    try {
+      const blob = await safetyJsaApi.downloadPdf(jsa.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleShareJsa = async () => {
+    if (!jsa) return;
+    setSendingEmail(true);
+    try {
+      const blob = await safetyJsaApi.downloadPdf(jsa.id);
+      const filename = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: `JSA-${jsa.number}`,
+          text: `JSA-${jsa.number} for ${jsa.project_name || 'project'} (${jsa.project_number || ''})`,
+          files: [file],
+        });
+      } else {
+        // Fallback: download the PDF so user can attach manually
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        alert('PDF downloaded. Please attach it to your email to jsa@tweetgarot.com');
+      }
+    } catch (err: any) {
+      // User cancelling the share sheet throws an AbortError - that's fine
+      if (err?.name !== 'AbortError') {
+        console.error('Failed to share JSA:', err);
+        alert('Failed to generate PDF. Please try again.');
+      }
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="field-loading">Loading JSA...</div>;
   }
@@ -141,9 +202,41 @@ const FieldJSADetail: React.FC = () => {
         </span>
       </div>
 
+      {/* PDF & Email Actions */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          type="button"
+          style={{ opacity: downloadingPdf ? 0.6 : 1 }}
+        >
+          <PictureAsPdfIcon style={{ fontSize: 16 }} />
+          {downloadingPdf ? 'Generating...' : 'Download PDF'}
+        </button>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleShareJsa}
+          disabled={sendingEmail}
+          type="button"
+          style={{ opacity: sendingEmail ? 0.6 : 1 }}
+        >
+          <ShareIcon style={{ fontSize: 16 }} />
+          {sendingEmail ? 'Preparing...' : 'Share JSA'}
+        </button>
+      </div>
+
       {/* Details Section */}
       <div className="field-detail-section">
         <div className="field-detail-section-title">Details</div>
+        {jsa.project_name && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Project</span>
+            <span className="field-detail-value">
+              {jsa.project_name}{jsa.project_number ? ` (${jsa.project_number})` : ''}
+            </span>
+          </div>
+        )}
         <div className="field-detail-row">
           <span className="field-detail-label">Date of Work</span>
           <span className="field-detail-value">{formatDate(jsa.date_of_work)}</span>
