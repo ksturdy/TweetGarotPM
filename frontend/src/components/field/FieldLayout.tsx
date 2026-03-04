@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -20,6 +20,21 @@ const FieldLayout: React.FC = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Swap manifest so "Add to Home Screen" on iOS saves /field as the start URL
+  useEffect(() => {
+    const link = document.querySelector('link[rel="manifest"]');
+    const original = link?.getAttribute('href') || '';
+    link?.setAttribute('href', '/manifest-field.json');
+    // Also update apple-mobile-web-app-title for the home screen name
+    const titleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    const originalTitle = titleMeta?.getAttribute('content') || '';
+    titleMeta?.setAttribute('content', 'Titan Field');
+    return () => {
+      link?.setAttribute('href', original);
+      titleMeta?.setAttribute('content', originalTitle);
+    };
+  }, []);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],

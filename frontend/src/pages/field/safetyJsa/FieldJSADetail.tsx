@@ -148,32 +148,23 @@ const FieldJSADetail: React.FC = () => {
     try {
       const blob = await safetyJsaApi.downloadPdf(jsa.id);
       const filename = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
-      const file = new File([blob], filename, { type: 'application/pdf' });
+      const subject = `JSA-${jsa.number} - ${jsa.project_name || ''} (${jsa.project_number || ''})`;
 
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          title: `JSA-${jsa.number}`,
-          text: `JSA-${jsa.number} for ${jsa.project_name || 'project'} (${jsa.project_number || ''})`,
-          files: [file],
-        });
-      } else {
-        // Fallback: download the PDF so user can attach manually
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        alert('PDF downloaded. Please attach it to your email to jsa@tweetgarot.com');
-      }
-    } catch (err: any) {
-      // User cancelling the share sheet throws an AbortError - that's fine
-      if (err?.name !== 'AbortError') {
-        console.error('Failed to share JSA:', err);
-        alert('Failed to generate PDF. Please try again.');
-      }
+      // Download the PDF
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Open mail app with To/Subject pre-filled — user attaches the downloaded PDF
+      window.location.href = `mailto:jsa@tweetgarot.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`Please see attached ${filename}`)}`;
+    } catch (err) {
+      console.error('Failed to share JSA:', err);
+      alert('Failed to generate PDF. Please try again.');
     } finally {
       setSendingEmail(false);
     }
@@ -222,7 +213,7 @@ const FieldJSADetail: React.FC = () => {
           style={{ opacity: sendingEmail ? 0.6 : 1 }}
         >
           <ShareIcon style={{ fontSize: 16 }} />
-          {sendingEmail ? 'Preparing...' : 'Share JSA'}
+          {sendingEmail ? 'Preparing...' : 'Email JSA'}
         </button>
       </div>
 
