@@ -1,4 +1,5 @@
-import html2pdf from 'html2pdf.js';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface JsaData {
   number: number;
@@ -36,395 +37,310 @@ const EQUIPMENT_OPTIONS = [
   'All Terrain Forklift', 'Crane/Carry Deck', 'Excavation',
 ];
 
-function escapeHtml(text: string | undefined | null): string {
-  if (!text) return '';
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function formatDate(dateString: string | undefined | null): string {
   if (!dateString) return '';
   const date = new Date(dateString + 'T00:00:00');
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function buildJsaHtml(jsa: JsaData): string {
-  const ppeRequired = jsa.ppe_required || [];
-  const permitsRequired = jsa.permits_required || [];
-  const equipmentRequired = jsa.equipment_required || [];
-
-  const ppeOther = ppeRequired.filter(p => !PPE_OPTIONS.includes(p));
-  const permitOther = permitsRequired.filter(p => !PERMIT_OPTIONS.includes(p));
-  const equipOther = equipmentRequired.filter(p => !EQUIPMENT_OPTIONS.includes(p));
-
-  const checkbox = (checked: boolean) => checked
-    ? '<span class="cb checked">&#9746;</span>'
-    : '<span class="cb">&#9744;</span>';
-
-  const ppeCheckboxes = PPE_OPTIONS.map(item =>
-    `${checkbox(ppeRequired.includes(item))} ${item}`
-  ).join('&nbsp;&nbsp;');
-
-  const permitCheckboxes = PERMIT_OPTIONS.map(item =>
-    `${checkbox(permitsRequired.includes(item))} ${item}`
-  ).join('&nbsp;&nbsp;');
-
-  const equipCheckboxes = EQUIPMENT_OPTIONS.map(item =>
-    `${checkbox(equipmentRequired.includes(item))} ${item}`
-  ).join('&nbsp;&nbsp;');
-
-  const hazards = jsa.hazards || [];
-  const ROW_COUNT = Math.max(10, hazards.length);
-  let hazardRows = '';
-  for (let i = 0; i < ROW_COUNT; i++) {
-    const h = hazards[i];
-    hazardRows += `
-      <tr>
-        <td class="row-num">${i + 1}</td>
-        <td class="task-col">${h ? escapeHtml(h.step_description) : ''}</td>
-        <td class="hazard-col">${h ? escapeHtml(h.hazard) : ''}</td>
-        <td class="control-col">${h ? escapeHtml(h.control_measure) : ''}</td>
-      </tr>`;
+function drawCheckbox(doc: jsPDF, x: number, y: number, size: number, checked: boolean) {
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.4);
+  doc.rect(x, y, size, size);
+  if (checked) {
+    doc.setLineWidth(0.7);
+    doc.line(x + 1.5, y + 1.5, x + size - 1.5, y + size - 1.5);
+    doc.line(x + size - 1.5, y + 1.5, x + 1.5, y + size - 1.5);
+    doc.setLineWidth(0.4);
   }
-
-  const workerNames = jsa.worker_names || [];
-  const workerCols = 3;
-  const workerRows = Math.ceil(Math.max(workerNames.length, 6) / workerCols);
-  let workerHtml = '';
-  for (let r = 0; r < workerRows; r++) {
-    workerHtml += '<tr>';
-    for (let c = 0; c < workerCols; c++) {
-      const idx = r * workerCols + c;
-      const name = workerNames[idx] || '';
-      workerHtml += `<td class="worker-cell">${name ? escapeHtml(name) : '&nbsp;'}</td>`;
-    }
-    workerHtml += '</tr>';
-  }
-
-  return `
-<div class="form-wrapper">
-  <div class="header-row">
-    <div class="header-logo">
-      <div style="font-size:14pt;font-weight:bold;color:#1a3a5c;">Tweet Garot</div>
-      <div class="tagline">LIVE, WORK, PLAY - SAFE</div>
-    </div>
-    <div class="header-title">
-      <div class="header-title-top">JSA - Jobsite Safety Analysis</div>
-      <div class="header-fields">
-        <div class="header-field" style="grid-column: 1;">
-          <div class="label">Name of Project or Jobsite:</div>
-          <div class="value">${escapeHtml(jsa.project_name)}</div>
-        </div>
-        <div class="header-field" style="min-width: 120px;">
-          <div class="label">Project #:</div>
-          <div class="value">${escapeHtml(jsa.project_number)}</div>
-        </div>
-        <div class="header-field" style="min-width: 100px; border-right: none;">
-          <div class="label">Date:</div>
-          <div class="value">${formatDate(jsa.date_of_work)}</div>
-        </div>
-      </div>
-      <div class="header-fields">
-        <div class="header-field" style="grid-column: 1;">
-          <div class="label">Name of Customer and/or General Contractor:</div>
-          <div class="value">${escapeHtml(jsa.customer_name)}</div>
-        </div>
-        <div class="header-field" style="min-width: 120px;">
-          <div class="label">Department / Trade:</div>
-          <div class="value">${escapeHtml(jsa.department_trade)}</div>
-        </div>
-        <div class="header-field" style="min-width: 100px; border-right: none;">
-          <div class="label">Filled Out By:</div>
-          <div class="value">${escapeHtml(jsa.filled_out_by)}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="info-row">
-    <div class="cell" style="flex: 1;">
-      <span class="label">PPE: </span>
-      ${ppeCheckboxes}
-      ${ppeOther.length ? `&nbsp;&nbsp;<span class="label">Other(s):</span> ${escapeHtml(ppeOther.join(', '))}` : `&nbsp;&nbsp;${checkbox(false)} Other(s):`}
-    </div>
-  </div>
-
-  <div class="info-row">
-    <div class="cell" style="flex: 1;">
-      <span class="label">PERMITS: </span>
-      ${permitCheckboxes}
-      ${permitOther.length ? `&nbsp;&nbsp;<span class="label">Other(s):</span> ${escapeHtml(permitOther.join(', '))}` : `&nbsp;&nbsp;${checkbox(false)} Other(s):`}
-    </div>
-  </div>
-
-  <div class="info-row" style="border-bottom: 2px solid #000;">
-    <div class="cell" style="flex: 1;">
-      <span class="label">EQUIPMENT: </span>
-      ${equipCheckboxes}
-      ${equipOther.length ? `&nbsp;&nbsp;<span class="label">Other(s):</span> ${escapeHtml(equipOther.join(', '))}` : `&nbsp;&nbsp;${checkbox(false)} Other(s):`}
-    </div>
-  </div>
-
-  <div class="hazard-categories">
-    <em>Gravity / Mechanical / Electrical / Motion / Temperature / Chemical / Sound / Pressure / Radiation / Biological</em>
-  </div>
-
-  <table class="hazard-table">
-    <thead>
-      <tr>
-        <th style="width: 24px;"></th>
-        <th>MAJOR TASKS</th>
-        <th>POTENTIAL HAZARDS</th>
-        <th>CONTROL ACTION</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${hazardRows}
-    </tbody>
-  </table>
-
-  <div class="comments-section">
-    <div class="label">ADDITIONAL COMMENTS:</div>
-    <div class="content">${escapeHtml(jsa.additional_comments || jsa.notes)}</div>
-  </div>
-
-  <div class="worker-section">
-    <div class="label">
-      WORKER SIGN-IN (entire crew): By printing my name, I acknowledge my participation in the JSA and commit to work safely
-    </div>
-    <table class="worker-table">
-      ${workerHtml}
-    </table>
-  </div>
-
-  <div class="footer">
-    <span class="email">Send completed JSA to jsa@tweetgarot.com and to your Account or Project Manager</span>
-    <span>Rev 10/04/23</span>
-  </div>
-</div>`;
 }
 
-const JSA_STYLES = `
-  * { box-sizing: border-box; }
-  .form-wrapper {
-    font-family: Arial, Helvetica, sans-serif;
-    color: #000;
-    line-height: 1.3;
-    font-size: 8.5pt;
-    border: 2px solid #000;
+function drawCheckboxRow(
+  doc: jsPDF,
+  left: number,
+  yPos: number,
+  width: number,
+  height: number,
+  label: string,
+  options: string[],
+  selected: string[],
+) {
+  const cbSize = 7;
+  const textY = yPos + height / 2 + 2.5;
+  const cbY = yPos + (height - cbSize) / 2;
+  let x = left + 5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(0);
+  doc.text(label + ':', x, textY);
+  x += doc.getTextWidth(label + ':') + 4;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  const allSelected = selected || [];
+  const otherItems = allSelected.filter(s => !options.includes(s));
+
+  options.forEach(item => {
+    drawCheckbox(doc, x, cbY, cbSize, allSelected.includes(item));
+    x += cbSize + 2;
+    doc.text(item, x, textY);
+    x += doc.getTextWidth(item) + 5;
+  });
+
+  drawCheckbox(doc, x, cbY, cbSize, otherItems.length > 0);
+  x += cbSize + 2;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Other(s):', x, textY);
+  if (otherItems.length > 0) {
+    x += doc.getTextWidth('Other(s): ');
+    doc.setFont('helvetica', 'normal');
+    doc.text(otherItems.join(', '), x, textY);
   }
-  .header-row {
-    display: flex;
-    border-bottom: 2px solid #000;
-  }
-  .header-logo {
-    width: 180px;
-    padding: 6px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border-right: 1px solid #000;
-  }
-  .header-logo .tagline {
-    font-size: 7pt;
-    font-weight: bold;
-    font-style: italic;
-    margin-top: 3px;
-    color: #1a3a5c;
-  }
-  .header-title {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .header-title-top {
-    text-align: center;
-    font-size: 14pt;
-    font-weight: bold;
-    padding: 4px 0;
-    border-bottom: 1px solid #000;
-  }
-  .header-fields {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    flex: 1;
-  }
-  .header-field {
-    padding: 3px 6px;
-    border-right: 1px solid #000;
-    border-bottom: 1px solid #000;
-    font-size: 8pt;
-  }
-  .header-field:last-child { border-right: none; }
-  .header-field .label {
-    font-weight: bold;
-    font-size: 7pt;
-    text-transform: uppercase;
-  }
-  .header-field .value {
-    font-size: 9pt;
-    min-height: 14px;
-  }
-  .info-row {
-    display: flex;
-    border-bottom: 1px solid #000;
-  }
-  .info-row .cell {
-    padding: 2px 6px;
-    border-right: 1px solid #000;
-    font-size: 8pt;
-  }
-  .info-row .cell:last-child { border-right: none; }
-  .info-row .cell .label { font-weight: bold; font-size: 7pt; }
-  .cb { font-size: 11pt; vertical-align: middle; }
-  .cb.checked { font-weight: bold; }
-  .hazard-categories {
-    text-align: center;
-    font-style: italic;
-    font-weight: bold;
-    font-size: 8.5pt;
-    padding: 3px 6px;
-    border-bottom: 2px solid #000;
-    background: #f5f5f5;
-  }
-  .hazard-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .hazard-table th {
-    background: #e8e8e8;
-    padding: 3px 6px;
-    font-size: 8pt;
-    font-weight: bold;
-    text-transform: uppercase;
-    text-align: center;
-    border-bottom: 2px solid #000;
-    border-right: 1px solid #000;
-  }
-  .hazard-table th:last-child { border-right: none; }
-  .hazard-table td {
-    padding: 4px 6px;
-    border-bottom: 1px solid #bbb;
-    border-right: 1px solid #bbb;
-    font-size: 8pt;
-    vertical-align: top;
-    min-height: 20px;
-  }
-  .hazard-table td:last-child { border-right: none; }
-  .hazard-table .row-num {
-    width: 24px;
-    text-align: center;
-    font-weight: bold;
-    color: #555;
-  }
-  .hazard-table .task-col { width: 30%; }
-  .hazard-table .hazard-col { width: 35%; }
-  .hazard-table .control-col { width: 35%; }
-  .comments-section {
-    border-top: 2px solid #000;
-    padding: 3px 6px;
-    min-height: 40px;
-  }
-  .comments-section .label {
-    font-weight: bold;
-    font-size: 8pt;
-    text-transform: uppercase;
-  }
-  .comments-section .content {
-    font-size: 8.5pt;
-    white-space: pre-wrap;
-    min-height: 20px;
-  }
-  .worker-section {
-    border-top: 2px solid #000;
-    padding: 3px 6px;
-  }
-  .worker-section .label {
-    font-weight: bold;
-    font-size: 7.5pt;
-    margin-bottom: 4px;
-  }
-  .worker-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .worker-cell {
-    width: 33.33%;
-    padding: 3px 6px;
-    border: 1px solid #ccc;
-    font-size: 8.5pt;
-    min-height: 18px;
-  }
-  .footer {
-    border-top: 2px solid #000;
-    padding: 4px 8px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 7pt;
-    color: #555;
-  }
-  .footer .email {
-    font-weight: bold;
-    color: #1a3a5c;
-  }
-`;
+}
 
 export async function generateJsaPdf(jsa: JsaData): Promise<Blob> {
-  const htmlContent = buildJsaHtml(jsa);
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'pt',
+    format: 'letter',
+  });
 
-  // Container must be visible for html2canvas to render on iOS Safari
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.left = '0';
-  container.style.top = '0';
-  container.style.width = '1056px';
-  container.style.zIndex = '-9999';
-  container.style.opacity = '0';
-  container.style.pointerEvents = 'none';
-  container.style.overflow = 'hidden';
+  const pageW = 792;
+  const pageH = 612;
+  const margin = 25;
+  const contentW = pageW - 2 * margin;
+  const left = margin;
+  const right = pageW - margin;
+  let y = margin;
 
-  const style = document.createElement('style');
-  style.textContent = JSA_STYLES;
-  container.appendChild(style);
+  // ===== HEADER =====
+  const headerH = 68;
+  const logoW = 130;
 
-  const content = document.createElement('div');
-  content.innerHTML = htmlContent;
-  container.appendChild(content);
+  doc.setDrawColor(0);
+  doc.setLineWidth(1.5);
+  doc.rect(left, y, contentW, headerH);
 
-  document.body.appendChild(container);
+  doc.setLineWidth(0.5);
+  doc.line(left + logoW, y, left + logoW, y + headerH);
 
-  // Give iOS Safari time to layout the DOM
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Logo
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(26, 58, 92);
+  doc.text('Tweet Garot', left + logoW / 2, y + 28, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bolditalic');
+  doc.text('LIVE, WORK, PLAY - SAFE', left + logoW / 2, y + 40, { align: 'center' });
 
-  try {
-    const blob: Blob = await html2pdf()
-      .set({
-        margin: [0.35, 0.35, 0.35, 0.35],
-        filename: `JSA-${jsa.number}.pdf`,
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          width: 1056,
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: 1056,
-        },
-        jsPDF: {
-          unit: 'in',
-          format: 'letter',
-          orientation: 'landscape',
-        },
-      })
-      .from(container)
-      .outputPdf('blob');
+  // Title
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  const titleCX = left + logoW + (contentW - logoW) / 2;
+  doc.text('JSA - Jobsite Safety Analysis', titleCX, y + 15, { align: 'center' });
+  doc.setLineWidth(0.5);
+  doc.line(left + logoW, y + 20, right, y + 20);
 
-    return blob;
-  } finally {
-    document.body.removeChild(container);
+  // Info fields (2 rows x 3 cols)
+  const fsy = y + 20;
+  const frh = (headerH - 20) / 2;
+  const c1 = left + logoW;
+  const c1w = (contentW - logoW) * 0.55;
+  const c2 = c1 + c1w;
+  const c2w = (contentW - logoW) * 0.22;
+  const c3 = c2 + c2w;
+
+  doc.line(c1, fsy + frh, right, fsy + frh);
+  doc.line(c2, fsy, c2, y + headerH);
+  doc.line(c3, fsy, c3, y + headerH);
+
+  function infoField(fx: number, fy: number, lbl: string, val: string) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(0);
+    doc.text(lbl.toUpperCase(), fx + 3, fy + 9);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(val || '', fx + 3, fy + 19);
   }
+
+  infoField(c1, fsy, 'Name of Project or Jobsite:', jsa.project_name || '');
+  infoField(c2, fsy, 'Project #:', jsa.project_number || '');
+  infoField(c3, fsy, 'Date:', formatDate(jsa.date_of_work));
+  infoField(c1, fsy + frh, 'Name of Customer and/or General Contractor:', jsa.customer_name || '');
+  infoField(c2, fsy + frh, 'Department / Trade:', jsa.department_trade || '');
+  infoField(c3, fsy + frh, 'Filled Out By:', jsa.filled_out_by || '');
+
+  y += headerH;
+
+  // ===== PPE / PERMITS / EQUIPMENT =====
+  const rowH = 17;
+
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(left, y, contentW, rowH);
+  drawCheckboxRow(doc, left, y, contentW, rowH, 'PPE', PPE_OPTIONS, jsa.ppe_required || []);
+  y += rowH;
+
+  doc.rect(left, y, contentW, rowH);
+  drawCheckboxRow(doc, left, y, contentW, rowH, 'PERMITS', PERMIT_OPTIONS, jsa.permits_required || []);
+  y += rowH;
+
+  // Equipment - thin sides, thick bottom
+  doc.setLineWidth(0.5);
+  doc.line(left, y, right, y);
+  doc.line(left, y, left, y + rowH);
+  doc.line(right, y, right, y + rowH);
+  doc.setLineWidth(1.5);
+  doc.line(left, y + rowH, right, y + rowH);
+  drawCheckboxRow(doc, left, y, contentW, rowH, 'EQUIPMENT', EQUIPMENT_OPTIONS, jsa.equipment_required || []);
+  y += rowH;
+
+  // ===== HAZARD CATEGORIES =====
+  const catH = 14;
+  doc.setFillColor(245, 245, 245);
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(left, y, contentW, catH, 'FD');
+  doc.setLineWidth(1.5);
+  doc.line(left, y + catH, right, y + catH);
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(7);
+  doc.setTextColor(0);
+  doc.text(
+    'Gravity / Mechanical / Electrical / Motion / Temperature / Chemical / Sound / Pressure / Radiation / Biological',
+    left + contentW / 2, y + 10, { align: 'center' }
+  );
+  y += catH;
+
+  // ===== HAZARD TABLE =====
+  const hazards = jsa.hazards || [];
+  const ROW_COUNT = Math.max(10, hazards.length);
+  const tableBody: string[][] = [];
+  for (let i = 0; i < ROW_COUNT; i++) {
+    const h = hazards[i];
+    tableBody.push([
+      String(i + 1),
+      h?.step_description || '',
+      h?.hazard || '',
+      h?.control_measure || '',
+    ]);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left, right: margin },
+    head: [['', 'MAJOR TASKS', 'POTENTIAL HAZARDS', 'CONTROL ACTION']],
+    body: tableBody,
+    theme: 'grid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 7,
+      cellPadding: { top: 3, right: 4, bottom: 3, left: 4 },
+      lineColor: [187, 187, 187],
+      lineWidth: 0.5,
+      textColor: [0, 0, 0],
+      valign: 'top',
+      minCellHeight: 16,
+    },
+    headStyles: {
+      fillColor: [232, 232, 232],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      fontSize: 7,
+      halign: 'center',
+      lineColor: [0, 0, 0],
+      lineWidth: 0.75,
+    },
+    columnStyles: {
+      0: { cellWidth: 20, halign: 'center', fontStyle: 'bold', textColor: [85, 85, 85] },
+      1: { cellWidth: (contentW - 20) * 0.30 },
+      2: { cellWidth: (contentW - 20) * 0.35 },
+      3: { cellWidth: (contentW - 20) * 0.35 },
+    },
+  });
+
+  y = (doc as any).lastAutoTable.finalY;
+
+  // New page if not enough room for comments + workers + footer
+  if (y + 120 > pageH - margin) {
+    doc.addPage();
+    y = margin;
+  }
+
+  // ===== ADDITIONAL COMMENTS =====
+  doc.setDrawColor(0);
+  doc.setLineWidth(1.5);
+  doc.line(left, y, right, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(0);
+  doc.text('ADDITIONAL COMMENTS:', left + 5, y + 10);
+
+  const commentsText = jsa.additional_comments || jsa.notes || '';
+  if (commentsText) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    const lines = doc.splitTextToSize(commentsText, contentW - 10);
+    doc.text(lines, left + 5, y + 20);
+    y += 22 + lines.length * 9;
+  } else {
+    y += 25;
+  }
+
+  // ===== WORKER SIGN-IN =====
+  doc.setDrawColor(0);
+  doc.setLineWidth(1.5);
+  doc.line(left, y, right, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(0);
+  doc.text(
+    'WORKER SIGN-IN (entire crew): By printing my name, I acknowledge my participation in the JSA and commit to work safely',
+    left + 5, y + 10
+  );
+  y += 14;
+
+  const names = jsa.worker_names || [];
+  const wCols = 3;
+  const wRows = Math.ceil(Math.max(names.length, 6) / wCols);
+  const wColW = contentW / wCols;
+  const wCellH = 14;
+
+  for (let r = 0; r < wRows; r++) {
+    for (let c = 0; c < wCols; c++) {
+      const idx = r * wCols + c;
+      const name = names[idx] || '';
+      const cx = left + c * wColW;
+      doc.setDrawColor(204, 204, 204);
+      doc.setLineWidth(0.5);
+      doc.rect(cx, y, wColW, wCellH);
+      if (name) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(0);
+        doc.text(name, cx + 4, y + 10);
+      }
+    }
+    y += wCellH;
+  }
+
+  // ===== FOOTER =====
+  doc.setDrawColor(0);
+  doc.setLineWidth(1.5);
+  doc.line(left, y, right, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(26, 58, 92);
+  doc.text('Send completed JSA to jsa@tweetgarot.com and to your Account or Project Manager', left + 5, y + 9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(85, 85, 85);
+  doc.text('Rev 10/04/23', right - 5, y + 9, { align: 'right' });
+
+  return doc.output('blob');
 }

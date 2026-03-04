@@ -143,8 +143,19 @@ const FieldSmFittingOrderDetail: React.FC = () => {
       const blob = await generateFittingOrderPdf(order as any);
       const filename = `FO-SM-${order.number}.pdf`;
 
+      // On iOS, use native share sheet (lets user save to Files, AirDrop, etc.)
       const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIos) {
+        try {
+          const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+            await navigator.share({ files: [pdfFile], title: filename });
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+        // Fallback: open blob URL in new tab
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
       } else {
@@ -154,8 +165,10 @@ const FieldSmFittingOrderDetail: React.FC = () => {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
       }
     } catch {
       window.alert('Failed to generate PDF. Please try again.');

@@ -129,9 +129,19 @@ const FieldJSADetail: React.FC = () => {
       const blob = await generateJsaPdf(jsa);
       const filename = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
 
-      // On iOS, open in new tab (download attribute doesn't work in standalone PWA)
+      // On iOS, use native share sheet (lets user save to Files, AirDrop, etc.)
       const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIos) {
+        try {
+          const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+            await navigator.share({ files: [pdfFile], title: filename });
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+        // Fallback: open blob URL in new tab
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
       } else {
@@ -141,8 +151,10 @@ const FieldJSADetail: React.FC = () => {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
       }
     } catch (err) {
       console.error('Failed to download PDF:', err);
