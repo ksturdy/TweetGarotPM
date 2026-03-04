@@ -164,38 +164,37 @@ export const feedbackService = {
   }
 };
 
-// Module options for the feedback form
+// Module options for the feedback form — matches sidebar navigation
 export const MODULE_OPTIONS = [
-  'Projects',
-  'RFIs',
-  'Submittals',
-  'Change Orders',
-  'Daily Reports',
-  'Schedule',
-  'Estimates',
-  'HR',
-  'Account Management',
-  'Customers',
-  'Companies',
-  'Contacts',
-  'Users',
-  'Settings',
   'Dashboard',
+  'Sales',
+  'Estimating',
+  'Accounts',
+  'Projects',
+  'Field',
+  'Safety',
+  'Risk Management',
+  'Administration',
+  'HR',
+  'Users',
+  'Security',
+  'Settings',
   'Other'
 ];
 
 // Submodule options by module
 export const SUBMODULE_OPTIONS: Record<string, string[]> = {
-  'Projects': ['Project List', 'Project Details', 'Project Timeline', 'Project Budget', 'Specifications', 'Drawings'],
-  'RFIs': ['RFI List', 'RFI Detail', 'RFI Creation', 'RFI Actions', 'RFI PDF'],
-  'Submittals': ['Submittal List', 'Submittal Detail', 'Submittal Review', 'Submittal PDF'],
-  'Change Orders': ['Change Order List', 'Change Order Detail', 'Change Order Approval'],
-  'Daily Reports': ['Daily Report List', 'Daily Report Detail', 'Daily Report Creation'],
-  'Schedule': ['Schedule View', 'Gantt Chart', 'Task Management'],
-  'Estimates': ['Estimate List', 'Estimate Detail', 'Estimate Creation', 'Estimate Calculations'],
-  'HR': ['Employee List', 'Employee Detail', 'Department Management', 'Office Locations'],
-  'Account Management': ['Customer List', 'Customer Detail', 'Customer Metrics'],
-  'Users': ['User Management', 'Role Management', 'Permissions']
+  'Dashboard': ['Overview', 'Widgets', 'Reports'],
+  'Sales': ['Pipeline', 'Campaigns', 'Marketing'],
+  'Estimating': ['Estimates', 'Budgets', 'Cost Database'],
+  'Accounts': ['Overview', 'Customers', 'Contacts', 'Vendors', 'Work Orders', 'Teams'],
+  'Projects': ['Project List', 'Project Details', 'RFIs', 'Submittals', 'Change Orders', 'Daily Reports', 'Schedule', 'Specifications', 'Drawings'],
+  'Field': ['Dashboard', 'Daily Reports', 'Purchase Orders', 'Fitting Orders', 'Safety JSA', 'PDF Generation'],
+  'Safety': ['Safety Dashboard', 'Incidents', 'Inspections'],
+  'Risk Management': ['Risk Register', 'Risk Assessment'],
+  'HR': ['Dashboard', 'Employees', 'Departments', 'Locations'],
+  'Users': ['User Management', 'Role Management', 'Permissions'],
+  'Settings': ['General', 'Vista Data'],
 };
 
 export default feedbackService;

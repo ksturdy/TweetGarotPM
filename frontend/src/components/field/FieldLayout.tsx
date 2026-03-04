@@ -103,9 +103,13 @@ const FieldLayout: React.FC = () => {
           )}
         </div>
         <div className="field-header-right">
-          {isProjectSelected && (
+          {isProjectSelected ? (
             <button className="field-project-selector field-header-switch" onClick={() => navigate('/field')}>
               Switch Job
+            </button>
+          ) : (
+            <button className="field-project-selector field-header-switch" onClick={() => navigate('/')}>
+              Main App
             </button>
           )}
         </div>
