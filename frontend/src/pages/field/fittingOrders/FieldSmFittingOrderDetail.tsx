@@ -283,8 +283,8 @@ const FieldSmFittingOrderDetail: React.FC = () => {
         {items.length === 0 ? (
           <div style={{ fontSize: 13, color: '#6b7280' }}>No fittings added</div>
         ) : (
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -12px', padding: '0 12px' }}>
-            <table style={{ tableLayout: 'fixed', width: 930, borderCollapse: 'collapse', fontSize: 12, border: '1px solid #9ca3af' }}>
+          <div className="field-table-scroll">
+            <table className="field-fitting-table" style={{ fontSize: 12 }}>
               <colgroup>
                 <col style={{ width: 44 }} />
                 <col style={{ width: 56 }} />

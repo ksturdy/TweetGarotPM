@@ -347,8 +347,8 @@ const FieldSmFittingOrderForm: React.FC = () => {
 
       {/* Fitting Line Items Table */}
       <div style={{ marginBottom: 6 }}>
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -12px', padding: '0 12px', scrollBehavior: 'smooth' }}>
-          <table style={{ tableLayout: 'fixed', width: 960, borderCollapse: 'collapse', fontSize: 13, border: '1px solid #9ca3af' }}>
+        <div className="field-table-scroll">
+          <table className="field-fitting-table" style={{ fontSize: 13 }}>
             <colgroup>
               <col style={{ width: 44 }} />  {/* #REQ */}
               <col style={{ width: 56 }} />  {/* TYPE */}

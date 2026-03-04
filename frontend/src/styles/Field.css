@@ -5,6 +5,7 @@
 :root {
   --field-header-height: 52px;
   --field-bottom-nav-height: 56px;
+  --field-sidebar-width: 0px;
   --field-primary: #1a56db;
   --field-primary-light: #3b82f6;
   --field-bg: #f5f7fa;
@@ -97,12 +98,31 @@ html {
 }
 
 .field-header-brand {
-  font-size: 14px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-header-shield {
+  display: block;
+  flex-shrink: 0;
+}
+
+.field-header-brand-text {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
   background: linear-gradient(to right, #7eb3d5, #a8d5f0, #7eb3d5);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: 2px;
+  background-clip: text;
+  line-height: 1;
+}
+
+.field-header-brand-sub {
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  font-size: 0.85em;
 }
 
 .field-header-right {
@@ -815,6 +835,14 @@ html {
   padding: 0 12px;
 }
 
+/* Fitting order table */
+.field-fitting-table {
+  table-layout: fixed;
+  width: 960px;
+  border-collapse: collapse;
+  border: 1px solid #9ca3af;
+}
+
 /* Prevent body bounce when scrolling content areas */
 .field-container {
   position: fixed;
@@ -822,6 +850,18 @@ html {
   left: 0;
   right: 0;
   bottom: 0;
+}
+
+/* Body wrapper for sidebar + content layout */
+.field-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar Navigation - hidden on phone, visible on tablet/desktop via media queries */
+.field-sidebar {
+  display: none;
 }
 
 /* iPhone SE / small screens (375px and below) */
@@ -907,17 +947,96 @@ html {
   }
 }
 
-/* Tablet/iPad (768px+) */
-@media (min-width: 768px) {
-  .field-content {
-    max-width: 768px;
-    margin: 0 auto;
-    padding: 16px;
-    padding-bottom: calc(var(--field-bottom-nav-height) + 16px + env(safe-area-inset-bottom));
+/* ============================
+   Tablet / iPad (768px - 1199px)
+   ============================ */
+@media (min-width: 768px) and (max-width: 1199px) {
+  :root {
+    --field-sidebar-width: 72px;
   }
 
+  /* Hide bottom nav and header Switch Job on tablet */
+  .field-bottom-nav {
+    display: none;
+  }
+
+  .field-header-switch {
+    display: none;
+  }
+
+  /* Sidebar: icon rail */
+  .field-sidebar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: var(--field-sidebar-width);
+    min-width: var(--field-sidebar-width);
+    background: white;
+    border-right: 1px solid var(--field-border);
+    padding: 12px 0;
+    gap: 4px;
+    overflow-y: auto;
+  }
+
+  .field-sidebar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 56px;
+    height: 56px;
+    border: none;
+    background: none;
+    border-radius: 12px;
+    color: var(--field-text-secondary);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .field-sidebar-item:hover {
+    background: #f3f4f6;
+    color: var(--field-primary);
+  }
+
+  .field-sidebar-item.active {
+    background: #eff6ff;
+    color: var(--field-primary);
+  }
+
+  .field-sidebar-item svg {
+    font-size: 22px;
+  }
+
+  .field-sidebar-label {
+    display: block;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .field-sidebar-spacer {
+    flex: 1;
+  }
+
+  .field-sidebar-switch {
+    opacity: 0.7;
+  }
+
+  /* Content: remove max-width, more padding */
+  .field-content {
+    max-width: none;
+    flex: 1;
+    padding: 20px 24px;
+    padding-bottom: 20px;
+    overflow-y: auto;
+  }
+
+  /* Grids */
   .field-tiles {
     grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
   }
 
   .field-form-row {
@@ -926,6 +1045,238 @@ html {
 
   .field-ppe-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Cards */
+  .field-card {
+    padding: 16px 20px;
+  }
+
+  /* Page titles */
+  .field-page-title {
+    font-size: 22px;
+  }
+
+  /* Form sections */
+  .field-form-section {
+    padding: 20px;
+  }
+
+  /* Detail sections */
+  .field-detail-section {
+    padding: 20px;
+  }
+
+  /* FAB repositioned (no bottom nav) */
+  .field-fab {
+    bottom: 24px;
+    right: 24px;
+  }
+
+  /* Actions bar repositioned */
+  .field-actions-bar {
+    bottom: 0;
+  }
+
+  /* Table scroll: adjust margins for tablet padding */
+  .field-table-scroll {
+    margin: 0 -24px;
+    padding: 0 24px;
+  }
+}
+
+/* ============================
+   Desktop (1200px+)
+   ============================ */
+@media (min-width: 1200px) {
+  :root {
+    --field-sidebar-width: 220px;
+  }
+
+  /* Hide bottom nav and header Switch Job on desktop */
+  .field-bottom-nav {
+    display: none;
+  }
+
+  .field-header-switch {
+    display: none;
+  }
+
+  /* Sidebar: full width with labels */
+  .field-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: var(--field-sidebar-width);
+    min-width: var(--field-sidebar-width);
+    background: white;
+    border-right: 1px solid var(--field-border);
+    padding: 16px 12px;
+    gap: 4px;
+    overflow-y: auto;
+  }
+
+  .field-sidebar-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: 44px;
+    padding: 0 16px;
+    border: none;
+    background: none;
+    border-radius: 10px;
+    color: var(--field-text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+    text-align: left;
+  }
+
+  .field-sidebar-item:hover {
+    background: #f3f4f6;
+    color: var(--field-primary);
+  }
+
+  .field-sidebar-item.active {
+    background: linear-gradient(135deg, #002356 0%, #004080 100%);
+    color: #ffffff;
+  }
+
+  .field-sidebar-item svg {
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .field-sidebar-label {
+    display: block;
+  }
+
+  .field-sidebar-spacer {
+    flex: 1;
+  }
+
+  .field-sidebar-switch {
+    opacity: 0.7;
+    border-top: 1px solid var(--field-border);
+    padding-top: 12px;
+    margin-top: 8px;
+    border-radius: 0 0 10px 10px;
+  }
+
+  /* Content: wider, centered */
+  .field-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    flex: 1;
+    padding: 24px 32px;
+    padding-bottom: 24px;
+    overflow-y: auto;
+  }
+
+  /* Grids */
+  .field-tiles {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .field-tile {
+    padding: 28px 20px;
+  }
+
+  .field-tile-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 28px;
+  }
+
+  .field-tile-label {
+    font-size: 15px;
+  }
+
+  .field-form-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  .field-ppe-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* Cards */
+  .field-card {
+    padding: 18px 24px;
+    border-radius: 14px;
+  }
+
+  .field-card-title {
+    font-size: 16px;
+  }
+
+  .field-card-meta {
+    font-size: 13px;
+  }
+
+  /* Page titles */
+  .field-page-title {
+    font-size: 24px;
+  }
+
+  .field-page-subtitle {
+    font-size: 15px;
+  }
+
+  /* Form sections */
+  .field-form-section {
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  /* Detail sections */
+  .field-detail-section {
+    padding: 24px;
+  }
+
+  /* Buttons: auto width on desktop */
+  .field-btn {
+    width: auto;
+    min-width: 160px;
+  }
+
+  /* Search */
+  .field-search-input {
+    max-width: 480px;
+  }
+
+  /* FAB repositioned */
+  .field-fab {
+    bottom: 32px;
+    right: 32px;
+  }
+
+  /* Actions bar */
+  .field-actions-bar {
+    bottom: 0;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Header: allow longer project names */
+  .field-header-title {
+    max-width: 500px;
+  }
+
+  /* Fitting table: fill available width on desktop */
+  .field-fitting-table {
+    width: 100%;
+    min-width: 960px;
+  }
+
+  .field-table-scroll {
+    margin: 0;
+    padding: 0;
   }
 }
 
@@ -960,6 +1311,19 @@ html {
   .field-actions-bar {
     background: #1f2937;
     border-top-color: #374151;
+  }
+
+  .field-sidebar {
+    background: #1f2937;
+    border-right-color: #374151;
+  }
+
+  .field-sidebar-item:hover {
+    background: #374151;
+  }
+
+  .field-sidebar-item.active {
+    background: #1e3a5f;
   }
 }
 

@@ -7,6 +7,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import BuildIcon from '@mui/icons-material/Build';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import HomeIcon from '@mui/icons-material/Home';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import api from '../../services/api';
 import '../../styles/Field.css';
 
@@ -91,21 +92,60 @@ const FieldLayout: React.FC = () => {
           {isProjectSelected && project ? (
             <span className="field-header-title">{project.number} - {project.name}</span>
           ) : (
-            <span className="field-header-brand">TITAN FIELD</span>
+            <span className="field-header-brand">
+              <svg className="field-header-shield" width="24" height="28" viewBox="0 0 32 36" fill="none">
+                <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35V2Z" fill="#3B7DD8"/>
+                <path d="M16 2L30 8V16C30 24.8 23.8 32.8 16 35V2Z" fill="#7CB8F2"/>
+                <path d="M16 2L2 8V16C2 24.8 8.2 32.8 16 35C23.8 32.8 30 24.8 30 16V8L16 2Z" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+              </svg>
+              <span className="field-header-brand-text">TITAN <span className="field-header-brand-sub">FIELD</span></span>
+            </span>
           )}
         </div>
         <div className="field-header-right">
           {isProjectSelected && (
-            <button className="field-project-selector" onClick={() => navigate('/field')}>
+            <button className="field-project-selector field-header-switch" onClick={() => navigate('/field')}>
               Switch Job
             </button>
           )}
         </div>
       </header>
 
-      <main className="field-content">
-        <Outlet />
-      </main>
+      <div className="field-body">
+        {isProjectSelected && (
+          <aside className="field-sidebar">
+            <button className={`field-sidebar-item ${activeTab === 'home' ? 'active' : ''}`} onClick={() => navigate(`/field/projects/${projectId}`)}>
+              <HomeIcon />
+              <span className="field-sidebar-label">Home</span>
+            </button>
+            <button className={`field-sidebar-item ${activeTab === 'daily-reports' ? 'active' : ''}`} onClick={() => navTo('daily-reports')}>
+              <DescriptionIcon />
+              <span className="field-sidebar-label">Daily Reports</span>
+            </button>
+            <button className={`field-sidebar-item ${activeTab === 'purchase-orders' ? 'active' : ''}`} onClick={() => navTo('purchase-orders')}>
+              <ShoppingCartIcon />
+              <span className="field-sidebar-label">POs</span>
+            </button>
+            <button className={`field-sidebar-item ${activeTab === 'fitting' ? 'active' : ''}`} onClick={() => navigate(`/field/projects/${projectId}`)}>
+              <BuildIcon />
+              <span className="field-sidebar-label">Fitting</span>
+            </button>
+            <button className={`field-sidebar-item ${activeTab === 'safety' ? 'active' : ''}`} onClick={() => navTo('safety-jsa')}>
+              <HealthAndSafetyIcon />
+              <span className="field-sidebar-label">Safety</span>
+            </button>
+            <div className="field-sidebar-spacer" />
+            <button className="field-sidebar-item field-sidebar-switch" onClick={() => navigate('/field')}>
+              <SwapHorizIcon />
+              <span className="field-sidebar-label">Switch Job</span>
+            </button>
+          </aside>
+        )}
+
+        <main className="field-content">
+          <Outlet />
+        </main>
+      </div>
 
       {isProjectSelected && (
         <nav className="field-bottom-nav">
