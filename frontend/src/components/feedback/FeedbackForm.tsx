@@ -106,7 +106,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
       </p>
 
       <form onSubmit={handleSubmit} className="feedback-form">
-        <div className="form-row">
+        <div className="form-row form-row-4">
           <div className="form-group">
             <label htmlFor="type">Type *</label>
             <select
@@ -115,9 +115,9 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
               onChange={(e) => handleChange('type', e.target.value)}
               className="form-control"
             >
-              <option value="bug">🐛 Bug Report</option>
+              <option value="bug">🐛 Bug</option>
               <option value="enhancement">✨ Enhancement</option>
-              <option value="feature_request">🚀 Feature Request</option>
+              <option value="feature_request">🚀 Feature</option>
               <option value="improvement">📈 Improvement</option>
               <option value="other">💡 Other</option>
             </select>
@@ -137,9 +137,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
               <option value="critical">Critical</option>
             </select>
           </div>
-        </div>
 
-        <div className="form-row">
           <div className="form-group">
             <label htmlFor="module">Module *</label>
             <select
@@ -148,7 +146,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
               onChange={(e) => handleChange('module', e.target.value)}
               className={`form-control ${errors.module ? 'is-invalid' : ''}`}
             >
-              <option value="">Select a module...</option>
+              <option value="">Select...</option>
               {MODULE_OPTIONS.map(module => (
                 <option key={module} value={module}>{module}</option>
               ))}
@@ -165,7 +163,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
               className="form-control"
               disabled={!availableSubmodules.length}
             >
-              <option value="">Select a submodule...</option>
+              <option value="">Select...</option>
               {availableSubmodules.map(submodule => (
                 <option key={submodule} value={submodule}>{submodule}</option>
               ))}
@@ -195,7 +193,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
             onChange={(e) => handleChange('description', e.target.value)}
             className={`form-control ${errors.description ? 'is-invalid' : ''}`}
             placeholder="Provide detailed information about your feedback. For bugs, include steps to reproduce. For enhancements, describe the desired functionality..."
-            rows={8}
+            rows={4}
           />
           {errors.description && <div className="invalid-feedback">{errors.description}</div>}
           <div className="character-count">
@@ -214,6 +212,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
             type="submit"
             className="btn btn-primary"
             disabled={isSubmitting}
+            style={{ padding: '2px 10px', fontSize: '11px', height: '24px', width: 'auto', display: 'inline-flex', flex: 'none' }}
           >
             {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
           </button>

@@ -150,6 +150,17 @@ const FeedbackPage: React.FC = () => {
 
   const isAdmin = user?.role === 'admin';
 
+  // Default sort: non-completed items first by votes, then completed items by votes
+  // Only apply this grouping when no specific status filter is set
+  const sortedFeedbackItems = React.useMemo(() => {
+    if (filters.status) {
+      return feedbackItems;
+    }
+    const nonCompleted = feedbackItems.filter(f => f.status !== 'completed');
+    const completed = feedbackItems.filter(f => f.status === 'completed');
+    return [...nonCompleted, ...completed];
+  }, [feedbackItems, filters.status]);
+
   return (
     <div className="feedback-page">
       <div className="feedback-header">
@@ -236,7 +247,7 @@ const FeedbackPage: React.FC = () => {
             <div className="loading">Loading feedback...</div>
           ) : (
             <FeedbackList
-              feedbackItems={feedbackItems}
+              feedbackItems={sortedFeedbackItems}
               userVotes={userVotes}
               onVote={handleVote}
               onRemoveVote={handleRemoveVote}
