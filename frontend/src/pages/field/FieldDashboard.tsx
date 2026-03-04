@@ -25,16 +25,48 @@ interface Project {
 interface WeatherData {
   temp: number;
   description: string;
-  icon: string;
-  city: string;
+  code: number;
 }
 
-const getWeatherIcon = (icon: string) => {
-  if (icon.includes('01') || icon.includes('02')) return <WbSunnyIcon />;
-  if (icon.includes('09') || icon.includes('10')) return <GrainIcon />;
-  if (icon.includes('11')) return <ThunderstormIcon />;
-  if (icon.includes('13')) return <AcUnitIcon />;
-  return <CloudIcon />;
+// WMO weather codes → icon + description
+const WMO_WEATHER: Record<number, { icon: 'sun' | 'cloud' | 'rain' | 'snow' | 'storm'; label: string }> = {
+  0: { icon: 'sun', label: 'Clear sky' },
+  1: { icon: 'sun', label: 'Mostly clear' },
+  2: { icon: 'cloud', label: 'Partly cloudy' },
+  3: { icon: 'cloud', label: 'Overcast' },
+  45: { icon: 'cloud', label: 'Foggy' },
+  48: { icon: 'cloud', label: 'Icy fog' },
+  51: { icon: 'rain', label: 'Light drizzle' },
+  53: { icon: 'rain', label: 'Drizzle' },
+  55: { icon: 'rain', label: 'Heavy drizzle' },
+  61: { icon: 'rain', label: 'Light rain' },
+  63: { icon: 'rain', label: 'Rain' },
+  65: { icon: 'rain', label: 'Heavy rain' },
+  66: { icon: 'rain', label: 'Freezing rain' },
+  67: { icon: 'rain', label: 'Freezing rain' },
+  71: { icon: 'snow', label: 'Light snow' },
+  73: { icon: 'snow', label: 'Snow' },
+  75: { icon: 'snow', label: 'Heavy snow' },
+  77: { icon: 'snow', label: 'Snow grains' },
+  80: { icon: 'rain', label: 'Rain showers' },
+  81: { icon: 'rain', label: 'Rain showers' },
+  82: { icon: 'rain', label: 'Heavy showers' },
+  85: { icon: 'snow', label: 'Snow showers' },
+  86: { icon: 'snow', label: 'Heavy snow showers' },
+  95: { icon: 'storm', label: 'Thunderstorm' },
+  96: { icon: 'storm', label: 'Thunderstorm w/ hail' },
+  99: { icon: 'storm', label: 'Thunderstorm w/ hail' },
+};
+
+const getWeatherIcon = (code: number) => {
+  const info = WMO_WEATHER[code] || { icon: 'cloud' };
+  switch (info.icon) {
+    case 'sun': return <WbSunnyIcon />;
+    case 'rain': return <GrainIcon />;
+    case 'storm': return <ThunderstormIcon />;
+    case 'snow': return <AcUnitIcon />;
+    default: return <CloudIcon />;
+  }
 };
 
 const getGreeting = (): string => {
@@ -51,7 +83,7 @@ const FieldDashboard: React.FC = () => {
   const [search, setSearch] = useState('');
   const [weather, setWeather] = useState<WeatherData | null>(null);
 
-  // Fetch weather based on user's location
+  // Fetch weather based on user's location (Open-Meteo — free, no API key)
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -59,15 +91,16 @@ const FieldDashboard: React.FC = () => {
         try {
           const { latitude, longitude } = pos.coords;
           const res = await fetch(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&units=imperial&appid=0c67e87767e7e64e9c1ce88f1a3e3c9c`
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
           );
           if (res.ok) {
             const data = await res.json();
+            const code = data.current.weather_code as number;
+            const info = WMO_WEATHER[code] || { label: 'Unknown' };
             setWeather({
-              temp: Math.round(data.main.temp),
-              description: data.weather[0].description,
-              icon: data.weather[0].icon,
-              city: data.name,
+              temp: Math.round(data.current.temperature_2m),
+              description: info.label,
+              code,
             });
           }
         } catch {
@@ -177,14 +210,14 @@ const FieldDashboard: React.FC = () => {
               padding: '8px 12px',
             }}>
               <span style={{ display: 'flex', fontSize: 22, opacity: 0.9 }}>
-                {getWeatherIcon(weather.icon)}
+                {getWeatherIcon(weather.code)}
               </span>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}>
                   {weather.temp}&deg;F
                 </div>
-                <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'capitalize' }}>
-                  {weather.city}
+                <div style={{ fontSize: 10, opacity: 0.7 }}>
+                  {weather.description}
                 </div>
               </div>
             </div>
