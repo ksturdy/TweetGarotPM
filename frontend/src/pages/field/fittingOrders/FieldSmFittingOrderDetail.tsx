@@ -6,27 +6,23 @@ import SendIcon from '@mui/icons-material/Send';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EmailIcon from '@mui/icons-material/Email';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import BuildIcon from '@mui/icons-material/Build';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import ConstructionIcon from '@mui/icons-material/Construction';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { smFittingOrdersApi, SmFittingOrderItem } from '../../../services/smFittingOrders';
 import { FittingTypeReference } from './FittingTypeDiagrams';
 import { generateFittingOrderPdf } from '../../../utils/fittingOrderPdfClient';
 
-const FITTING_TYPES: Record<number, string> = {
-  1: 'St. Joint',
-  2: 'Reducer',
-  3: 'Offset',
-  4: 'Elbow',
-  5: 'Tee',
-  6: 'Wye',
-  7: 'Dbl Branch',
-  8: 'Tap',
-  9: 'Transition',
-  10: 'End Cap',
-};
-
-const formatDate = (dateStr: string | null): string => {
+const formatDate = (dateStr: string | Date | null | undefined): string => {
   if (!dateStr) return '-';
-  const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (dateStr instanceof Date) {
+    return isNaN(dateStr.getTime()) ? '-' : dateStr.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  const str = String(dateStr);
+  const date = new Date(str.includes('T') ? str : str + 'T00:00:00');
+  return isNaN(date.getTime()) ? '-' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const formatDateTime = (dateStr: string | null): string => {
@@ -57,14 +53,25 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     enabled: !!id,
   });
 
+  const invalidateOrder = () => {
+    queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-order', id] });
+    queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-orders'] });
+  };
+
   const submitMutation = useMutation({
     mutationFn: () => smFittingOrdersApi.submit(Number(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-order', id] });
-      queryClient.invalidateQueries({ queryKey: ['field-sm-fitting-orders'] });
-    },
+    onSuccess: invalidateOrder,
     onError: () => {
       window.alert('Failed to submit order. Please try again.');
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (data: Record<string, any>) =>
+      smFittingOrdersApi.updateStatus(Number(id), data),
+    onSuccess: invalidateOrder,
+    onError: () => {
+      window.alert('Failed to update status. Please try again.');
     },
   });
 
@@ -79,6 +86,12 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   const handleSubmit = () => {
     if (window.confirm('Submit this fitting order to the shop?')) {
       submitMutation.mutate();
+    }
+  };
+
+  const handleStatusChange = (status: string, label: string, extraData?: Record<string, any>) => {
+    if (window.confirm(`${label}?`)) {
+      statusMutation.mutate({ status, ...extraData });
     }
   };
 
@@ -181,8 +194,11 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     return <div className="field-loading">Loading order details...</div>;
   }
 
-  const isDraft = order.status === 'draft';
+  const status = order.status;
   const items: SmFittingOrderItem[] = order.items || [];
+  const isBusy = submitMutation.isPending || statusMutation.isPending || deleteMutation.isPending;
+  const canEdit = status === 'draft' || status === 'submitted';
+  const canCancel = status !== 'draft' && status !== 'installed' && status !== 'cancelled';
 
   return (
     <div>
@@ -193,8 +209,8 @@ const FieldSmFittingOrderDetail: React.FC = () => {
             Duct Work Fitting Order
           </p>
         </div>
-        <span className={`field-status field-status-${order.status}`}>
-          {order.status?.replace(/_/g, ' ')}
+        <span className={`field-status field-status-${status}`}>
+          {status?.replace(/_/g, ' ')}
         </span>
       </div>
 
@@ -347,7 +363,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
       </div>
 
       {/* Shop Info */}
-      {(order.shop_assigned_to || order.fabrication_start_date) && (
+      {(order.shop_assigned_to || order.fabrication_start_date || order.shop_received_date || order.fabrication_complete_date || order.delivery_date) && (
         <div className="field-detail-section">
           <div className="field-detail-section-title">Shop Info</div>
           {order.shop_assigned_to && (
@@ -372,6 +388,12 @@ const FieldSmFittingOrderDetail: React.FC = () => {
             <div className="field-detail-row">
               <span className="field-detail-label">Fab Complete</span>
               <span className="field-detail-value">{formatDate(order.fabrication_complete_date)}</span>
+            </div>
+          )}
+          {order.delivery_date && (
+            <div className="field-detail-row">
+              <span className="field-detail-label">Delivered</span>
+              <span className="field-detail-value">{formatDate(order.delivery_date)}</span>
             </div>
           )}
         </div>
@@ -402,27 +424,83 @@ const FieldSmFittingOrderDetail: React.FC = () => {
 
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
-        {isDraft && (
-          <>
-            <button
-              className="field-btn field-btn-primary"
-              onClick={handleSubmit}
-              disabled={submitMutation.isPending}
-            >
-              <SendIcon style={{ fontSize: 18 }} />
-              {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
-            </button>
-            <button
-              className="field-btn field-btn-secondary"
-              onClick={() =>
-                navigate(`/field/projects/${projectId}/sm-fitting-orders/${id}/edit`)
-              }
-            >
-              <EditIcon style={{ fontSize: 18 }} />
-              Edit Order
-            </button>
-          </>
+
+        {/* Status-specific actions */}
+        {status === 'draft' && (
+          <button
+            className="field-btn field-btn-primary"
+            onClick={handleSubmit}
+            disabled={isBusy}
+          >
+            <SendIcon style={{ fontSize: 18 }} />
+            {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
+          </button>
         )}
+
+        {status === 'submitted' && (
+          <button
+            className="field-btn field-btn-success"
+            onClick={() => handleStatusChange('in_fabrication', 'Start fabrication on this order', {
+              fabrication_start_date: new Date().toISOString().split('T')[0],
+            })}
+            disabled={isBusy}
+          >
+            <BuildIcon style={{ fontSize: 18 }} />
+            {statusMutation.isPending ? 'Updating...' : 'Start Fabrication'}
+          </button>
+        )}
+
+        {status === 'in_fabrication' && (
+          <button
+            className="field-btn field-btn-success"
+            onClick={() => handleStatusChange('ready', 'Mark this order as ready for delivery', {
+              fabrication_complete_date: new Date().toISOString().split('T')[0],
+            })}
+            disabled={isBusy}
+          >
+            <CheckCircleIcon style={{ fontSize: 18 }} />
+            {statusMutation.isPending ? 'Updating...' : 'Mark Ready'}
+          </button>
+        )}
+
+        {status === 'ready' && (
+          <button
+            className="field-btn field-btn-success"
+            onClick={() => handleStatusChange('delivered', 'Mark this order as delivered', {
+              delivery_date: new Date().toISOString().split('T')[0],
+            })}
+            disabled={isBusy}
+          >
+            <LocalShippingIcon style={{ fontSize: 18 }} />
+            {statusMutation.isPending ? 'Updating...' : 'Mark Delivered'}
+          </button>
+        )}
+
+        {status === 'delivered' && (
+          <button
+            className="field-btn field-btn-success"
+            onClick={() => handleStatusChange('installed', 'Mark this order as installed')}
+            disabled={isBusy}
+          >
+            <ConstructionIcon style={{ fontSize: 18 }} />
+            {statusMutation.isPending ? 'Updating...' : 'Mark Installed'}
+          </button>
+        )}
+
+        {/* Edit - available for draft and submitted */}
+        {canEdit && (
+          <button
+            className="field-btn field-btn-secondary"
+            onClick={() =>
+              navigate(`/field/projects/${projectId}/sm-fitting-orders/${id}/edit`)
+            }
+          >
+            <EditIcon style={{ fontSize: 18 }} />
+            Edit Order
+          </button>
+        )}
+
+        {/* PDF / Email - always available */}
         <button
           className="field-btn field-btn-primary"
           onClick={handleEmailToShop}
@@ -440,11 +518,26 @@ const FieldSmFittingOrderDetail: React.FC = () => {
           <PictureAsPdfIcon style={{ fontSize: 18 }} />
           {isDownloading ? 'Downloading...' : 'Download PDF'}
         </button>
-        {isDraft && (
+
+        {/* Cancel - available for non-draft, non-final statuses */}
+        {canCancel && (
+          <button
+            className="field-btn field-btn-danger"
+            onClick={() => handleStatusChange('cancelled', 'Cancel this fitting order')}
+            disabled={isBusy}
+            style={{ marginTop: 4 }}
+          >
+            <CancelIcon style={{ fontSize: 18 }} />
+            {statusMutation.isPending ? 'Cancelling...' : 'Cancel Order'}
+          </button>
+        )}
+
+        {/* Delete - draft only */}
+        {status === 'draft' && (
           <button
             className="field-btn field-btn-danger"
             onClick={handleDelete}
-            disabled={deleteMutation.isPending}
+            disabled={isBusy}
           >
             <DeleteIcon style={{ fontSize: 18 }} />
             {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
