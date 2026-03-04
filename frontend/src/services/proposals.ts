@@ -43,6 +43,7 @@ export interface Proposal {
   section_count?: number;
   sections?: ProposalSection[];
   case_studies?: ProposalCaseStudy[];
+  sell_sheets?: ProposalSellSheet[];
   service_offerings?: ProposalServiceOffering[];
   resumes?: ProposalResume[];
 }
@@ -56,6 +57,17 @@ export interface ProposalCaseStudy {
   market?: string;
   project_value?: number;
   case_study_status: string;
+  display_order: number;
+  notes?: string;
+}
+
+export interface ProposalSellSheet {
+  junction_id: number;
+  id: number;
+  service_name: string;
+  title?: string;
+  layout_style?: string;
+  sell_sheet_status: string;
   display_order: number;
   notes?: string;
 }
@@ -129,6 +141,13 @@ export const proposalsApi = {
     api.post(`/proposals/${id}/case-studies`, { case_study_id: caseStudyId, ...data }),
   removeCaseStudy: (id: number, caseStudyId: number) =>
     api.delete(`/proposals/${id}/case-studies/${caseStudyId}`),
+
+  // Sell Sheets
+  getSellSheets: (id: number) => api.get(`/proposals/${id}/sell-sheets`),
+  addSellSheet: (id: number, sellSheetId: number, data?: { notes?: string }) =>
+    api.post(`/proposals/${id}/sell-sheets`, { sell_sheet_id: sellSheetId, ...data }),
+  removeSellSheet: (id: number, sellSheetId: number) =>
+    api.delete(`/proposals/${id}/sell-sheets/${sellSheetId}`),
 
   // Service Offerings
   getServiceOfferings: (id: number) => api.get(`/proposals/${id}/service-offerings`),

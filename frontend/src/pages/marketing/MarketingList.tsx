@@ -54,6 +54,14 @@ const MarketingList: React.FC = () => {
       ready: true,
     },
     {
+      name: 'Sell Sheets',
+      icon: '📑',
+      path: '/sell-sheets',
+      desc: 'Service line sell sheets & PDFs',
+      color: '#f59e0b',
+      ready: true,
+    },
+    {
       name: 'Service Offerings',
       icon: '🔧',
       path: '/settings/service-offerings',

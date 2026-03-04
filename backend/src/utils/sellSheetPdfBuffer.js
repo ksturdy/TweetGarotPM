@@ -1,8 +1,8 @@
 const puppeteer = require('puppeteer');
-const { generateProposalPdfHtml } = require('./proposalPdfGenerator');
+const { generateSellSheetPdfHtml } = require('./sellSheetPdfGenerator');
 
-async function generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages = [], sellSheetPages = []) {
-  const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages);
+async function generateSellSheetPdfBuffer(sellSheet, images, logoBase64) {
+  const html = generateSellSheetPdfHtml(sellSheet, images, logoBase64);
   let browser = null;
 
   try {
@@ -41,7 +41,7 @@ async function generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages = 
 
     return Buffer.from(pdfBuffer);
   } catch (error) {
-    console.error('Error generating proposal PDF:', error);
+    console.error('Error generating sell sheet PDF:', error);
     throw error;
   } finally {
     if (browser) {
@@ -50,4 +50,4 @@ async function generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages = 
   }
 }
 
-module.exports = { generateProposalPdfBuffer };
+module.exports = { generateSellSheetPdfBuffer };

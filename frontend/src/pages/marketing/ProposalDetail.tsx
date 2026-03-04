@@ -5,6 +5,7 @@ import { proposalsApi } from '../../services/proposals';
 import { caseStudiesApi } from '../../services/caseStudies';
 import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
+import { sellSheetsApi } from '../../services/sellSheets';
 import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
 import './ProposalDetail.css';
 import '../../styles/SalesPipeline.css';
@@ -17,6 +18,7 @@ const ProposalDetail: React.FC = () => {
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
   const [showPreview, setShowPreview] = useState(false);
   const [csSearch, setCsSearch] = useState('');
+  const [ssSearch, setSsSearch] = useState('');
   const [soSearch, setSoSearch] = useState('');
   const [resumeSearch, setResumeSearch] = useState('');
 
@@ -59,6 +61,16 @@ const ProposalDetail: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
   });
 
+  const addSellSheetMutation = useMutation({
+    mutationFn: (sellSheetId: number) => proposalsApi.addSellSheet(parseInt(id!), sellSheetId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const removeSellSheetMutation = useMutation({
+    mutationFn: (sellSheetId: number) => proposalsApi.removeSellSheet(parseInt(id!), sellSheetId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
   const addServiceOfferingMutation = useMutation({
     mutationFn: (serviceOfferingId: number) => proposalsApi.addServiceOffering(parseInt(id!), serviceOfferingId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
@@ -84,6 +96,15 @@ const ProposalDetail: React.FC = () => {
     queryKey: ['caseStudies', { status: 'published' }],
     queryFn: async () => {
       const response = await caseStudiesApi.getAll({ status: 'published' });
+      return response.data;
+    },
+    enabled: isEditing,
+  });
+
+  const { data: availableSellSheets = [] } = useQuery({
+    queryKey: ['sellSheets', { status: 'published' }],
+    queryFn: async () => {
+      const response = await sellSheetsApi.getAll({ status: 'published' });
       return response.data;
     },
     enabled: isEditing,
@@ -350,6 +371,67 @@ const ProposalDetail: React.FC = () => {
                 })}
                 {availableCaseStudies.length === 0 && (
                   <p className="empty-text">No published case studies available</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Attached Sell Sheets */}
+      {((proposal.sell_sheets && proposal.sell_sheets.length > 0) || isEditing) && (
+        <div className="card">
+          <h2 className="section-title">Sell Sheets ({proposal.sell_sheets?.length || 0})</h2>
+          {!isEditing ? (
+            <div className="attachment-list">
+              {proposal.sell_sheets?.map((ss: any) => (
+                <div key={ss.id} className="attachment-display-item">
+                  <div className="attachment-name">{ss.title || ss.service_name}</div>
+                  <div className="attachment-meta">
+                    {ss.service_name}{ss.layout_style === 'two_column' ? ' | Two Column' : ' | Full Width'}
+                  </div>
+                  {ss.notes && <div className="attachment-notes">{ss.notes}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input search-input"
+                placeholder="Search sell sheets..."
+                value={ssSearch}
+                onChange={(e) => setSsSearch(e.target.value)}
+              />
+              <div className="attachment-checklist">
+                {availableSellSheets
+                  .filter((ss: any) =>
+                    !ssSearch || ss.service_name?.toLowerCase().includes(ssSearch.toLowerCase()) ||
+                    ss.title?.toLowerCase().includes(ssSearch.toLowerCase())
+                  )
+                  .map((ss: any) => {
+                  const isAttached = proposal.sell_sheets?.some((a: any) => a.id === ss.id);
+                  return (
+                    <label key={ss.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={isAttached}
+                        onChange={() => isAttached
+                          ? removeSellSheetMutation.mutate(ss.id)
+                          : addSellSheetMutation.mutate(ss.id)
+                        }
+                      />
+                      <div className="attachment-info">
+                        <div className="attachment-name">{ss.title || ss.service_name}</div>
+                        <div className="attachment-meta">
+                          {ss.service_name}{ss.layout_style === 'two_column' ? ' | Two Column' : ''}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {availableSellSheets.length === 0 && (
+                  <p className="empty-text">No published sell sheets available</p>
                 )}
               </div>
             </>

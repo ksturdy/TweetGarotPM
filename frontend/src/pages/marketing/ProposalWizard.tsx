@@ -7,6 +7,7 @@ import { customersApi } from '../../services/customers';
 import { caseStudiesApi } from '../../services/caseStudies';
 import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
+import { sellSheetsApi } from '../../services/sellSheets';
 import './ProposalWizard.css';
 import '../../styles/SalesPipeline.css';
 
@@ -50,9 +51,11 @@ const ProposalWizard: React.FC = () => {
 
   // Attachment state
   const [selectedCaseStudyIds, setSelectedCaseStudyIds] = useState<number[]>([]);
+  const [selectedSellSheetIds, setSelectedSellSheetIds] = useState<number[]>([]);
   const [selectedServiceOfferingIds, setSelectedServiceOfferingIds] = useState<number[]>([]);
   const [selectedResumeIds, setSelectedResumeIds] = useState<number[]>([]);
   const [csSearch, setCsSearch] = useState('');
+  const [ssSearch, setSsSearch] = useState('');
   const [soSearch, setSoSearch] = useState('');
   const [resumeSearch, setResumeSearch] = useState('');
 
@@ -93,6 +96,14 @@ const ProposalWizard: React.FC = () => {
     },
   });
 
+  const { data: sellSheets = [] } = useQuery({
+    queryKey: ['sellSheets', { status: 'published' }],
+    queryFn: async () => {
+      const response = await sellSheetsApi.getAll({ status: 'published' });
+      return response.data;
+    },
+  });
+
   const { data: serviceOfferings = [] } = useQuery({
     queryKey: ['serviceOfferings', { is_active: true }],
     queryFn: async () => {
@@ -126,6 +137,12 @@ const ProposalWizard: React.FC = () => {
   // Toggle helpers
   const toggleCaseStudy = (id: number) => {
     setSelectedCaseStudyIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSellSheet = (id: number) => {
+    setSelectedSellSheetIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
@@ -193,6 +210,7 @@ const ProposalWizard: React.FC = () => {
 
     // Include attachments
     if (selectedCaseStudyIds.length > 0) data.case_study_ids = selectedCaseStudyIds;
+    if (selectedSellSheetIds.length > 0) data.sell_sheet_ids = selectedSellSheetIds;
     if (selectedServiceOfferingIds.length > 0) data.service_offering_ids = selectedServiceOfferingIds;
     if (selectedResumeIds.length > 0) data.resume_ids = selectedResumeIds;
 
@@ -538,6 +556,41 @@ const ProposalWizard: React.FC = () => {
         </div>
       </div>
 
+      {/* Sell Sheets */}
+      <div className="card">
+        <h3 className="section-title">Sell Sheets ({selectedSellSheetIds.length} selected)</h3>
+        <input
+          type="text"
+          className="input search-input"
+          placeholder="Search sell sheets..."
+          value={ssSearch}
+          onChange={(e) => setSsSearch(e.target.value)}
+        />
+        <div className="attachment-checklist">
+          {sellSheets
+            .filter((ss: any) =>
+              !ssSearch || ss.service_name?.toLowerCase().includes(ssSearch.toLowerCase()) ||
+              ss.title?.toLowerCase().includes(ssSearch.toLowerCase())
+            )
+            .map((ss: any) => (
+              <label key={ss.id} className={`attachment-item ${selectedSellSheetIds.includes(ss.id) ? 'selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedSellSheetIds.includes(ss.id)}
+                  onChange={() => toggleSellSheet(ss.id)}
+                />
+                <div className="attachment-info">
+                  <div className="attachment-name">{ss.title || ss.service_name}</div>
+                  <div className="attachment-meta">{ss.service_name}{ss.layout_style === 'two_column' ? ' | Two Column' : ''}</div>
+                </div>
+              </label>
+            ))}
+          {sellSheets.length === 0 && (
+            <p className="empty-text">No published sell sheets available</p>
+          )}
+        </div>
+      </div>
+
       {/* Service Offerings */}
       <div className="card">
         <h3 className="section-title">Service Offerings ({selectedServiceOfferingIds.length} selected)</h3>
@@ -703,7 +756,7 @@ const ProposalWizard: React.FC = () => {
       )}
 
       {/* Attachments summary */}
-      {(selectedCaseStudyIds.length > 0 || selectedServiceOfferingIds.length > 0 || selectedResumeIds.length > 0) && (
+      {(selectedCaseStudyIds.length > 0 || selectedSellSheetIds.length > 0 || selectedServiceOfferingIds.length > 0 || selectedResumeIds.length > 0) && (
         <div className="card">
           <h3 className="section-title">Attachments</h3>
 
@@ -714,6 +767,18 @@ const ProposalWizard: React.FC = () => {
                 {selectedCaseStudyIds.map(id => {
                   const cs = caseStudies.find((c: any) => c.id === id);
                   return cs ? <span key={id} className="review-tag">{cs.title}</span> : null;
+                })}
+              </div>
+            </div>
+          )}
+
+          {selectedSellSheetIds.length > 0 && (
+            <div className="review-section">
+              <h3>Sell Sheets ({selectedSellSheetIds.length})</h3>
+              <div className="review-attachments">
+                {selectedSellSheetIds.map(id => {
+                  const ss = sellSheets.find((s: any) => s.id === id);
+                  return ss ? <span key={id} className="review-tag">{ss.title || ss.service_name}</span> : null;
                 })}
               </div>
             </div>

@@ -3,7 +3,9 @@ import ReactDOM from 'react-dom';
 import { Proposal, proposalsApi } from '../../services/proposals';
 import { CaseStudy, CaseStudyImage, caseStudiesApi } from '../../services/caseStudies';
 import { CaseStudyTemplate, caseStudyTemplatesApi } from '../../services/caseStudyTemplates';
+import { SellSheet, SellSheetImage, sellSheetsApi } from '../../services/sellSheets';
 import CaseStudyPreview from '../caseStudies/CaseStudyPreview';
+import SellSheetPreview from '../sellSheets/SellSheetPreview';
 
 interface FullCaseStudy {
   caseStudy: CaseStudy & { images?: CaseStudyImage[] };
@@ -22,7 +24,9 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
   onClose,
 }) => {
   const [fullCaseStudies, setFullCaseStudies] = useState<FullCaseStudy[]>([]);
+  const [fullSellSheets, setFullSellSheets] = useState<(SellSheet & { images?: SellSheetImage[] })[]>([]);
   const [loadingCs, setLoadingCs] = useState(false);
+  const [loadingSs, setLoadingSs] = useState(false);
 
   // Load full case study data when modal opens
   useEffect(() => {
@@ -58,6 +62,33 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
 
     return () => { cancelled = true; };
   }, [isOpen, proposal.case_studies]);
+
+  // Load full sell sheet data when modal opens
+  useEffect(() => {
+    if (!isOpen || !proposal.sell_sheets?.length) {
+      setFullSellSheets([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingSs(true);
+
+    Promise.all(
+      proposal.sell_sheets.map(async (ss: any) => {
+        const response = await sellSheetsApi.getById(ss.id);
+        return response.data;
+      })
+    ).then((results) => {
+      if (!cancelled) {
+        setFullSellSheets(results);
+        setLoadingSs(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadingSs(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [isOpen, proposal.sell_sheets]);
 
   if (!isOpen) return null;
 
@@ -375,6 +406,18 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
         {loadingCs && (
           <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
             Loading case studies...
+          </div>
+        )}
+
+        {/* Attached Sell Sheet Pages */}
+        {fullSellSheets.map((sellSheet) => (
+          <div key={sellSheet.id} style={{ borderTop: '4px solid #e5e7eb' }}>
+            <SellSheetPreview sellSheet={sellSheet} />
+          </div>
+        ))}
+        {loadingSs && (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+            Loading sell sheets...
           </div>
         )}
       </div>

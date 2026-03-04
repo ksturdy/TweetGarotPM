@@ -138,6 +138,18 @@ class Proposal {
     `, [id]);
     proposal.resumes = resumesResult.rows;
 
+    // Get attached sell sheets
+    const sellSheetsResult = await db.query(`
+      SELECT pss.id as junction_id, pss.display_order, pss.notes,
+             ss.id, ss.service_name, ss.title, ss.subtitle, ss.layout_style,
+             ss.status as sell_sheet_status
+      FROM proposal_sell_sheets pss
+      JOIN sell_sheets ss ON pss.sell_sheet_id = ss.id
+      WHERE pss.proposal_id = $1
+      ORDER BY pss.display_order
+    `, [id]);
+    proposal.sell_sheets = sellSheetsResult.rows;
+
     return proposal;
   }
 
@@ -209,11 +221,12 @@ class Proposal {
       }
 
       // Sync attached items if provided
-      if (data.case_study_ids || data.service_offering_ids || data.resume_ids) {
+      if (data.case_study_ids || data.service_offering_ids || data.resume_ids || data.sell_sheet_ids) {
         await Proposal.syncAttachments(proposal.id, {
           case_study_ids: data.case_study_ids || [],
           service_offering_ids: data.service_offering_ids || [],
           resume_ids: data.resume_ids || [],
+          sell_sheet_ids: data.sell_sheet_ids || [],
         }, client);
       }
 
@@ -326,11 +339,12 @@ class Proposal {
       }
 
       // Sync attached items if provided
-      if (data.case_study_ids || data.service_offering_ids || data.resume_ids) {
+      if (data.case_study_ids || data.service_offering_ids || data.resume_ids || data.sell_sheet_ids) {
         await Proposal.syncAttachments(proposal.id, {
           case_study_ids: data.case_study_ids || [],
           service_offering_ids: data.service_offering_ids || [],
           resume_ids: data.resume_ids || [],
+          sell_sheet_ids: data.sell_sheet_ids || [],
         }, client);
       }
 
@@ -657,6 +671,16 @@ class Proposal {
         );
       }
     }
+
+    if (attachments.sell_sheet_ids !== undefined) {
+      await queryFn('DELETE FROM proposal_sell_sheets WHERE proposal_id = $1', [proposalId]);
+      for (let i = 0; i < attachments.sell_sheet_ids.length; i++) {
+        await queryFn(
+          'INSERT INTO proposal_sell_sheets (proposal_id, sell_sheet_id, display_order) VALUES ($1, $2, $3)',
+          [proposalId, attachments.sell_sheet_ids[i], i + 1]
+        );
+      }
+    }
   }
 
   // --- Case Studies ---
@@ -755,6 +779,40 @@ class Proposal {
     const result = await db.query(
       'DELETE FROM proposal_resumes WHERE proposal_id = $1 AND resume_id = $2 RETURNING *',
       [proposalId, resumeId]
+    );
+    return result.rows[0];
+  }
+
+  // --- Sell Sheets ---
+
+  static async getSellSheets(proposalId) {
+    const result = await db.query(`
+      SELECT pss.id as junction_id, pss.display_order, pss.notes,
+             ss.id, ss.service_name, ss.title, ss.subtitle, ss.layout_style,
+             ss.status as sell_sheet_status
+      FROM proposal_sell_sheets pss
+      JOIN sell_sheets ss ON pss.sell_sheet_id = ss.id
+      WHERE pss.proposal_id = $1
+      ORDER BY pss.display_order
+    `, [proposalId]);
+    return result.rows;
+  }
+
+  static async addSellSheet(proposalId, sellSheetId, data = {}) {
+    const result = await db.query(`
+      INSERT INTO proposal_sell_sheets (proposal_id, sell_sheet_id, display_order, notes)
+      VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM proposal_sell_sheets WHERE proposal_id = $1)), $4)
+      ON CONFLICT (proposal_id, sell_sheet_id)
+      DO UPDATE SET notes = COALESCE(EXCLUDED.notes, proposal_sell_sheets.notes)
+      RETURNING *
+    `, [proposalId, sellSheetId, data.display_order || null, data.notes || null]);
+    return result.rows[0];
+  }
+
+  static async removeSellSheet(proposalId, sellSheetId) {
+    const result = await db.query(
+      'DELETE FROM proposal_sell_sheets WHERE proposal_id = $1 AND sell_sheet_id = $2 RETURNING *',
+      [proposalId, sellSheetId]
     );
     return result.rows[0];
   }

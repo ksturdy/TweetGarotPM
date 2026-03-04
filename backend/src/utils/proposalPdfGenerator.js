@@ -1,7 +1,7 @@
 /**
  * Proposal PDF HTML Generator
  * Generates a print-ready HTML document for proposals.
- * Case study pages are passed in as pre-rendered HTML from generateCaseStudyPdfHtml().
+ * Case study and sell sheet pages are passed in as pre-rendered HTML.
  */
 
 function escapeHtml(str) {
@@ -25,8 +25,9 @@ function formatDate(dateString) {
  * @param {Object} proposal - Full proposal object from findByIdAndTenant
  * @param {string} logoBase64 - Company logo as data URL
  * @param {string[]} caseStudyPages - Array of full HTML documents from generateCaseStudyPdfHtml
+ * @param {string[]} sellSheetPages - Array of full HTML documents from generateSellSheetPdfHtml
  */
-function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = []) {
+function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = [], sellSheetPages = []) {
   const sections = proposal.sections || [];
   const caseStudies = proposal.case_studies || [];
   const serviceOfferings = proposal.service_offerings || [];
@@ -41,6 +42,12 @@ function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = [])
 
   // Extract <body> content from each case study HTML page
   const caseStudyBodies = caseStudyPages.map(html => {
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    return bodyMatch ? bodyMatch[1] : '';
+  });
+
+  // Extract <body> content from each sell sheet HTML page
+  const sellSheetBodies = sellSheetPages.map(html => {
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     return bodyMatch ? bodyMatch[1] : '';
   });
@@ -177,7 +184,14 @@ ${renderContentSection('Terms & Conditions', proposal.terms_and_conditions)}
   <span>Prepared by ${escapeHtml(proposal.created_by_name || '')}</span>
 </div>
 
-<!-- Attached Case Study Pages (actual published case studies) -->
+<!-- Attached Sell Sheet Pages -->
+${sellSheetBodies.map(body => `
+<div class="cs-page">
+${body}
+</div>
+`).join('\n')}
+
+<!-- Attached Case Study Pages -->
 ${caseStudyBodies.map(body => `
 <div class="cs-page">
 ${body}

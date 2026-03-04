@@ -12,6 +12,9 @@ const CaseStudy = require('../models/CaseStudy');
 const CaseStudyImage = require('../models/CaseStudyImage');
 const CaseStudyTemplate = require('../models/CaseStudyTemplate');
 const { getFileUrl } = require('../utils/fileStorage');
+const SellSheet = require('../models/SellSheet');
+const SellSheetImage = require('../models/SellSheetImage');
+const { generateSellSheetPdfHtml } = require('../utils/sellSheetPdfGenerator');
 
 // Apply middleware to all routes
 router.use(authenticate);
@@ -312,6 +315,30 @@ router.delete('/:id/resumes/:resumeId', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// === SELL SHEET ATTACHMENT ROUTES ===
+
+// POST /api/proposals/:id/sell-sheets
+router.post('/:id/sell-sheets', async (req, res, next) => {
+  try {
+    const proposal = await Proposal.findByIdAndTenant(parseInt(req.params.id), req.tenantId);
+    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    if (!req.body.sell_sheet_id) return res.status(400).json({ error: 'sell_sheet_id is required' });
+    const result = await Proposal.addSellSheet(parseInt(req.params.id), req.body.sell_sheet_id, req.body);
+    res.status(201).json(result);
+  } catch (error) { next(error); }
+});
+
+// DELETE /api/proposals/:id/sell-sheets/:sellSheetId
+router.delete('/:id/sell-sheets/:sellSheetId', async (req, res, next) => {
+  try {
+    const proposal = await Proposal.findByIdAndTenant(parseInt(req.params.id), req.tenantId);
+    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    const removed = await Proposal.removeSellSheet(parseInt(req.params.id), parseInt(req.params.sellSheetId));
+    if (!removed) return res.status(404).json({ error: 'Sell sheet not attached to this proposal' });
+    res.json({ message: 'Sell sheet removed', item: removed });
+  } catch (error) { next(error); }
+});
+
 // === PDF / PREVIEW ===
 
 // Helper: load full case study HTML for each attached case study
@@ -343,6 +370,24 @@ async function buildCaseStudyPages(caseStudies, tenantId, logoBase64) {
   return pages;
 }
 
+// Helper: load full sell sheet HTML for each attached sell sheet
+async function buildSellSheetPages(sellSheets, tenantId, logoBase64) {
+  const pages = [];
+  for (const ss of sellSheets) {
+    const fullSs = await SellSheet.findByIdAndTenant(ss.id, tenantId);
+    if (!fullSs) continue;
+
+    const rawImages = await SellSheetImage.findBySellSheet(fullSs.id);
+    const images = await Promise.all(
+      rawImages.map(async (img) => ({ ...img, image_url: await getFileUrl(img.file_path) }))
+    );
+
+    const ssHtml = generateSellSheetPdfHtml(fullSs, images, logoBase64);
+    pages.push(ssHtml);
+  }
+  return pages;
+}
+
 // GET /api/proposals/:id/pdf - HTML preview (for browser print)
 router.get('/:id/pdf', async (req, res, next) => {
   try {
@@ -351,7 +396,8 @@ router.get('/:id/pdf', async (req, res, next) => {
 
     const logoBase64 = await fetchLogoBase64(req.tenantId);
     const caseStudyPages = await buildCaseStudyPages(proposal.case_studies || [], req.tenantId, logoBase64);
-    const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages);
+    const sellSheetPages = await buildSellSheetPages(proposal.sell_sheets || [], req.tenantId, logoBase64);
+    const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error) {
@@ -367,7 +413,8 @@ router.get('/:id/pdf-download', async (req, res, next) => {
 
     const logoBase64 = await fetchLogoBase64(req.tenantId);
     const caseStudyPages = await buildCaseStudyPages(proposal.case_studies || [], req.tenantId, logoBase64);
-    const pdfBuffer = await generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages);
+    const sellSheetPages = await buildSellSheetPages(proposal.sell_sheets || [], req.tenantId, logoBase64);
+    const pdfBuffer = await generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages, sellSheetPages);
 
     const filename = `Proposal-${(proposal.proposal_number || proposal.title).replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
