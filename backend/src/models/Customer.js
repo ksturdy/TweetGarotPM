@@ -474,6 +474,7 @@ const Customer = {
         p.status,
         p.description,
         COALESCE(gc.customer_facility, oc.customer_facility) as customer_facility,
+        e.first_name || ' ' || e.last_name as manager_name,
         CASE
           WHEN oc.customer_owner = $1 AND (gc.customer_owner IS NULL OR gc.customer_owner != $1) THEN 'Owner'
           WHEN gc.customer_owner = $1 AND (oc.customer_owner IS NULL OR oc.customer_owner != $1) THEN 'GC'
@@ -482,6 +483,7 @@ const Customer = {
       FROM projects p
       LEFT JOIN customers gc ON p.customer_id = gc.id
       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
+      LEFT JOIN employees e ON p.manager_id = e.id
       WHERE p.tenant_id = $2
         AND (gc.customer_owner = $1 OR oc.customer_owner = $1)
       ORDER BY p.number DESC NULLS LAST
@@ -538,9 +540,11 @@ const Customer = {
         o.created_at,
         ps.name as stage_name,
         ps.color as stage_color,
-        c.customer_facility
+        c.customer_facility,
+        e.first_name || ' ' || e.last_name as assigned_to_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       JOIN customers c ON o.customer_id = c.id
       WHERE c.customer_owner = $1 AND o.tenant_id = $2
       ORDER BY o.created_at DESC
@@ -561,12 +565,14 @@ const Customer = {
         0 as gm_percent,
         p.status,
         p.description,
+        e.first_name || ' ' || e.last_name as manager_name,
         CASE
           WHEN p.owner_customer_id = $1 AND p.customer_id != $1 THEN 'Owner'
           WHEN p.customer_id = $1 AND (p.owner_customer_id IS NULL OR p.owner_customer_id != $1) THEN 'GC'
           ELSE 'GC & Owner'
         END as relationship
       FROM projects p
+      LEFT JOIN employees e ON p.manager_id = e.id
       WHERE (p.customer_id = $1 OR p.owner_customer_id = $1) AND p.tenant_id = $2
     `, [customerId, tenantId]);
     return result.rows;

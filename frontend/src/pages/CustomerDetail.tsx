@@ -51,70 +51,55 @@ const CustomerDetail: React.FC = () => {
   const navigate = useNavigate();
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
+  const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
-  // Sorting state for work orders
+  // Sorting state
   const [woSortField, setWoSortField] = useState<WorkOrderSortField>('work_order_number');
   const [woSortDir, setWoSortDir] = useState<SortDirection>('desc');
-
-  // Sorting state for projects
   const [projSortField, setProjSortField] = useState<ProjectSortField>('number');
   const [projSortDir, setProjSortDir] = useState<SortDirection>('desc');
 
-  // Fetch main customer data
+  // Fetch data
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
     queryFn: () => getCustomer(id!),
   });
 
-  // Fetch company metrics (aggregated across all facilities, or filtered by selected facility)
   const { data: metrics } = useQuery({
     queryKey: ['company-metrics', id, selectedFacilityId],
     queryFn: () => getCompanyMetrics(id!, selectedFacilityId || undefined),
     enabled: !!customer,
   });
 
-  // Fetch all facilities for this company
   const { data: facilities = [] } = useQuery<Facility[]>({
     queryKey: ['company-facilities', id],
     queryFn: () => getCompanyFacilities(id!),
     enabled: !!customer,
   });
 
-  // Fetch data for the selected facility, or company-wide if none selected
   const activeFacilityId = selectedFacilityId || parseInt(id!);
   const isCompanyView = !selectedFacilityId;
 
-  // Projects: company-wide or facility-specific
   const { data: projects = [] } = useQuery({
     queryKey: ['customer-projects', id, selectedFacilityId],
-    queryFn: () => isCompanyView
-      ? getCompanyProjects(id!)
-      : getCustomerProjects(String(activeFacilityId)),
+    queryFn: () => isCompanyView ? getCompanyProjects(id!) : getCustomerProjects(String(activeFacilityId)),
   });
 
-  // Estimates: company-wide or facility-specific
   const { data: estimates = [] } = useQuery({
     queryKey: ['customer-bids', id, selectedFacilityId],
-    queryFn: () => isCompanyView
-      ? getCompanyBids(id!)
-      : getCustomerBids(String(activeFacilityId)),
+    queryFn: () => isCompanyView ? getCompanyBids(id!) : getCustomerBids(String(activeFacilityId)),
   });
 
-  // Opportunities: company-wide or facility-specific
   const { data: opportunities = [] } = useQuery({
     queryKey: ['customer-opportunities', id, selectedFacilityId],
-    queryFn: () => isCompanyView
-      ? getCompanyOpportunities(id!)
-      : getCustomerOpportunities(String(activeFacilityId)),
+    queryFn: () => isCompanyView ? getCompanyOpportunities(id!) : getCustomerOpportunities(String(activeFacilityId)),
   });
 
-  // Work orders: company-wide (with all=true) or facility-specific
   const { data: workOrders = [] } = useQuery({
     queryKey: ['customer-work-orders', id, selectedFacilityId],
     queryFn: () => getCustomerWorkOrders(id!, isCompanyView),
   });
 
-  // Contacts: always for the active facility
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ['customer-contacts', activeFacilityId],
     queryFn: () => getCustomerContacts(String(activeFacilityId)),
@@ -126,32 +111,21 @@ const CustomerDetail: React.FC = () => {
     return [...workOrders].sort((a: any, b: any) => {
       let aVal = a[woSortField];
       let bVal = b[woSortField];
-
-      // Handle nulls
       if (aVal == null) aVal = '';
       if (bVal == null) bVal = '';
-
-      // Numeric comparison for amounts
       if (woSortField === 'contract_amount') {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
       }
-
-      // Date comparison
       if (woSortField === 'entered_date') {
         aVal = aVal ? new Date(aVal).getTime() : 0;
         bVal = bVal ? new Date(bVal).getTime() : 0;
       }
-
-      // String comparison
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         const comparison = aVal.localeCompare(bVal, undefined, { numeric: true });
         return woSortDir === 'asc' ? comparison : -comparison;
       }
-
-      // Numeric comparison
-      if (woSortDir === 'asc') return aVal - bVal;
-      return bVal - aVal;
+      return woSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
   }, [workOrders, woSortField, woSortDir]);
 
@@ -161,56 +135,34 @@ const CustomerDetail: React.FC = () => {
     return [...projects].sort((a: any, b: any) => {
       let aVal = a[projSortField];
       let bVal = b[projSortField];
-
-      // Handle nulls
       if (aVal == null) aVal = '';
       if (bVal == null) bVal = '';
-
-      // Date comparison
       if (projSortField === 'date') {
         aVal = aVal ? new Date(aVal).getTime() : 0;
         bVal = bVal ? new Date(bVal).getTime() : 0;
-        if (projSortDir === 'asc') return aVal - bVal;
-        return bVal - aVal;
+        return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
       }
-
-      // Numeric comparison for contract_value and backlog
       if (projSortField === 'contract_value' || projSortField === 'backlog') {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
-        if (projSortDir === 'asc') return aVal - bVal;
-        return bVal - aVal;
+        return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
       }
-
-      // String comparison (handles alphanumeric project numbers)
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         const comparison = aVal.localeCompare(bVal, undefined, { numeric: true });
         return projSortDir === 'asc' ? comparison : -comparison;
       }
-
-      // Numeric comparison
-      if (projSortDir === 'asc') return aVal - bVal;
-      return bVal - aVal;
+      return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
   }, [projects, projSortField, projSortDir]);
 
-  // Sort handlers
   const handleWoSort = (field: WorkOrderSortField) => {
-    if (woSortField === field) {
-      setWoSortDir(woSortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setWoSortField(field);
-      setWoSortDir('desc');
-    }
+    if (woSortField === field) setWoSortDir(woSortDir === 'asc' ? 'desc' : 'asc');
+    else { setWoSortField(field); setWoSortDir('desc'); }
   };
 
   const handleProjSort = (field: ProjectSortField) => {
-    if (projSortField === field) {
-      setProjSortDir(projSortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setProjSortField(field);
-      setProjSortDir('desc');
-    }
+    if (projSortField === field) setProjSortDir(projSortDir === 'asc' ? 'desc' : 'asc');
+    else { setProjSortField(field); setProjSortDir('desc'); }
   };
 
   if (customerLoading) {
@@ -223,12 +175,7 @@ const CustomerDetail: React.FC = () => {
 
   const formatCurrency = (value: number | string | null | undefined) => {
     const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(num);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
   };
 
   const formatDate = (dateString: string) => {
@@ -241,21 +188,17 @@ const CustomerDetail: React.FC = () => {
     return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // Get selected facility info
-  const selectedFacility = selectedFacilityId
-    ? facilities.find(f => f.id === selectedFacilityId)
-    : null;
-
+  const selectedFacility = selectedFacilityId ? facilities.find(f => f.id === selectedFacilityId) : null;
   const displayName = customer.customer_owner || customer.customer_facility || 'Unnamed Company';
 
   return (
     <div className="customer-detail-page">
-      {/* Header */}
+      {/* Row 1: Header Strip */}
       <div className="cd-header">
         <div className="sales-page-header">
           <div className="sales-page-title">
             <div>
-              <Link to="/account-management/customers" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              <Link to="/account-management/customers" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '10px' }}>
                 &larr; Back to Customers
               </Link>
               <h1>👥 {displayName}</h1>
@@ -263,11 +206,7 @@ const CustomerDetail: React.FC = () => {
                 {selectedFacility ? (
                   <>
                     📍 Viewing: {selectedFacility.customer_facility}
-                    <button onClick={() => setSelectedFacilityId(null)} className="cd-clear-filter" style={{ marginLeft: '0.5rem' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
+                    <button onClick={() => setSelectedFacilityId(null)} className="cd-clear-filter" style={{ marginLeft: '4px' }}>✕</button>
                   </>
                 ) : (
                   facilities.length > 1 ? `${facilities.length} locations` : customer.city && customer.state ? `${customer.city}, ${customer.state}` : 'No location'
@@ -275,271 +214,221 @@ const CustomerDetail: React.FC = () => {
               </div>
             </div>
           </div>
-          <div className="sales-header-actions">
+          <div className="cd-header-right">
             <div className="cd-quick-tags">
-              {customer.market && (
-                <span className="cd-tag"><span className="cd-tag-icon">🏢</span>{customer.market}</span>
-              )}
-              {customer.account_manager && (
-                <span className="cd-tag"><span className="cd-tag-icon">👤</span>{customer.account_manager}</span>
-              )}
-              {customer.active_customer && (
-                <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>
-              )}
+              {customer.market && <span className="cd-tag"><span className="cd-tag-icon">🏢</span>{customer.market}</span>}
+              {customer.account_manager && <span className="cd-tag"><span className="cd-tag-icon">👤</span>{customer.account_manager}</span>}
+              {customer.active_customer && <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>}
             </div>
-          </div>
-        </div>
-
-        {/* Vista vs Titan Data Sections */}
-        <div className="cd-data-sections">
-          {/* Vista Data - Read Only */}
-          <div className="cd-data-section cd-vista-section">
-            <div className="cd-data-section-header">
-              <h4>Vista Information</h4>
-              <span className="cd-readonly-badge">Read Only</span>
-            </div>
-            <div className="cd-data-grid">
-              <div className="cd-data-item">
-                <span className="cd-data-label">Company</span>
-                <span className="cd-data-value">{customer.customer_owner || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Facility</span>
-                <span className="cd-data-value">{customer.customer_facility || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Customer #</span>
-                <span className="cd-data-value">{customer.customer_number || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Address</span>
-                <span className="cd-data-value">{customer.address || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">City</span>
-                <span className="cd-data-value">{customer.city || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">State</span>
-                <span className="cd-data-value">{customer.state || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Market</span>
-                <span className="cd-data-value">{customer.market || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Account Manager</span>
-                <span className="cd-data-value">{customer.account_manager || '-'}</span>
-              </div>
-              <div className="cd-data-item">
-                <span className="cd-data-label">Status</span>
-                <span className="cd-data-value">{customer.active_customer ? 'Active' : 'Inactive'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Titan Data - Editable */}
-          <div className="cd-data-section cd-titan-section">
-            <div className="cd-data-section-header">
-              <h4>Titan Information</h4>
-              <button onClick={() => setShowEditModal(true)} className="cd-edit-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                Edit
-              </button>
-            </div>
-            <div className="cd-data-grid">
-              <div className="cd-data-item cd-data-item-full">
-                <span className="cd-data-label">Notes</span>
-                <span className="cd-data-value cd-notes-value">{customer.notes || 'No notes added'}</span>
-              </div>
-            </div>
+            <button className={`cd-info-toggle ${showInfoDrawer ? 'active' : ''}`} onClick={() => setShowInfoDrawer(!showInfoDrawer)}>
+              ℹ️ Info
+            </button>
+            <button className="sales-btn sales-btn-secondary" onClick={() => setShowEditModal(true)}>
+              ✏️ Edit
+            </button>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="cd-kpi-grid">
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}>💰</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{formatCurrency(metrics?.ytd_revenue)}</div>
-            <div className="cd-kpi-label">YTD Sales</div>
-            <div className="cd-kpi-breakdown">
-              <div>WO: {formatCurrency(metrics?.wo_ytd_revenue)}</div>
-              <div>Proj: {formatCurrency(metrics?.proj_ytd_revenue)}</div>
-            </div>
-          </div>
-        </div>
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>📈</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{formatCurrency(metrics?.avg_annual_revenue)}</div>
-            <div className="cd-kpi-label">Avg Annual Sales ({metrics?.year_span || 1} yr{(metrics?.year_span || 1) > 1 ? 's' : ''})</div>
-            <div className="cd-kpi-breakdown">
-              <div>WO: {formatCurrency(metrics?.wo_avg_annual_revenue)}</div>
-              <div>Proj: {formatCurrency(metrics?.proj_avg_annual_revenue)}</div>
-            </div>
-          </div>
-        </div>
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)' }}>📊</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{metrics?.avg_gm_percent || 0}%</div>
-            <div className="cd-kpi-label">Avg GM%</div>
-            <div className="cd-kpi-breakdown">
-              <div>Proj: {metrics?.proj_gm_percent || 0}%</div>
-              <div>Est: {metrics?.estimate_gm_percent || 0}%</div>
-            </div>
-          </div>
-        </div>
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }}>📋</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{formatCurrency(metrics?.total_backlog)}</div>
-            <div className="cd-kpi-label">Backlog</div>
-            <div className="cd-kpi-breakdown">
-              <div>WO: {formatCurrency(metrics?.wo_backlog)}</div>
-              <div>Proj: {formatCurrency(metrics?.proj_backlog)}</div>
-            </div>
-          </div>
-        </div>
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #06b6d4, #3b82f6)' }}>🎯</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{metrics?.hit_rate || 0}%</div>
-            <div className="cd-kpi-label">Hit Rate</div>
-          </div>
-        </div>
-        <div className="cd-kpi-card">
-          <div className="cd-kpi-icon" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)' }}>💼</div>
-          <div className="cd-kpi-content">
-            <div className="cd-kpi-value">{formatCurrency(metrics?.pipeline_value)}</div>
-            <div className="cd-kpi-label">Pipeline</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="cd-main-grid">
-        {/* Left Column - Locations & Contacts */}
-        <div className="cd-sidebar">
-          {/* Locations Section */}
-          <div className="cd-section cd-locations-section">
-            <div className="cd-section-header">
-              <h3><span className="cd-section-icon">📍</span>Locations</h3>
-              <span className="cd-count">{facilities.length}</span>
-            </div>
-            <div className="cd-locations-list">
-              {facilities.length === 0 ? (
-                <div className="cd-empty-mini">No facilities found</div>
-              ) : (
-                facilities.map((facility) => (
-                  <div
-                    key={facility.id}
-                    className={`cd-location-item ${selectedFacilityId === facility.id ? 'selected' : ''} ${facility.id === parseInt(id!) && !selectedFacilityId ? 'current' : ''}`}
-                    onClick={() => setSelectedFacilityId(facility.id === selectedFacilityId ? null : facility.id)}
-                  >
-                    <div className="cd-location-info">
-                      <div className="cd-location-name">{facility.customer_facility || 'Unnamed'}</div>
-                      <div className="cd-location-address">{facility.city}, {facility.state}</div>
-                    </div>
-                    <div className="cd-location-stats">
-                      <span title="Work Orders">{facility.work_order_count || 0} WO</span>
-                      <span title="Estimates">{facility.estimate_count || 0} Est</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Contacts Section */}
-          <div className="cd-section cd-contacts-section">
-            <div className="cd-section-header">
-              <h3><span className="cd-section-icon">👥</span>Contacts</h3>
-              <button
-                className="cd-add-btn"
-                onClick={() => navigate(`/customers/${activeFacilityId}/contacts`)}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </button>
-            </div>
-            <div className="cd-contacts-list">
-              {contacts.length === 0 ? (
-                <div className="cd-empty-mini">No contacts yet</div>
-              ) : (
-                contacts.slice(0, 5).map((contact) => (
-                  <div key={contact.id} className="cd-contact-item">
-                    <div className="cd-contact-avatar">
-                      {getInitials(`${contact.first_name} ${contact.last_name}`)}
-                    </div>
-                    <div className="cd-contact-info">
-                      <div className="cd-contact-name">
-                        {contact.first_name} {contact.last_name}
-                        {contact.is_primary && <span className="cd-primary-badge">Primary</span>}
-                      </div>
-                      <div className="cd-contact-title">{contact.title || contact.email || '-'}</div>
-                    </div>
-                  </div>
-                ))
-              )}
-              {contacts.length > 5 && (
-                <button
-                  className="cd-view-all-btn"
-                  onClick={() => navigate(`/customers/${activeFacilityId}/contacts`)}
-                >
-                  View all {contacts.length} contacts
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column - Data Modules */}
-        <div className="cd-content">
-          {/* Work Orders Module */}
-          <div className="cd-module">
-            <div className="cd-module-header">
-              <div className="cd-module-title">
-                <span className="cd-module-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>🔧</span>
-                <h3>Work Orders</h3>
-                <span className="cd-count">{workOrders.length}</span>
+      {/* Row 2: Collapsible Info Drawer */}
+      {showInfoDrawer && (
+        <div className="cd-info-drawer">
+          <div className="cd-info-drawer-content">
+            <div className="cd-info-section">
+              <div className="cd-info-section-header">
+                <h4>Vista Information</h4>
+                <span className="cd-readonly-badge">Read Only</span>
               </div>
-            </div>
-            <div className="cd-module-content">
-              {sortedWorkOrders.length === 0 ? (
-                <div className="cd-empty-state">
-                  <div className="cd-empty-icon">🔧</div>
-                  <p>No work orders yet</p>
+              <div className="cd-info-grid">
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Company</span>
+                  <span className="cd-info-value">{customer.customer_owner || '-'}</span>
                 </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Facility</span>
+                  <span className="cd-info-value">{customer.customer_facility || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Customer #</span>
+                  <span className="cd-info-value">{customer.customer_number || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Address</span>
+                  <span className="cd-info-value">{customer.address || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">City</span>
+                  <span className="cd-info-value">{customer.city || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">State</span>
+                  <span className="cd-info-value">{customer.state || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Market</span>
+                  <span className="cd-info-value">{customer.market || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Account Mgr</span>
+                  <span className="cd-info-value">{customer.account_manager || '-'}</span>
+                </div>
+                <div className="cd-info-item">
+                  <span className="cd-info-label">Status</span>
+                  <span className="cd-info-value">{customer.active_customer ? 'Active' : 'Inactive'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="cd-info-section">
+              <div className="cd-info-section-header">
+                <h4>Titan Information</h4>
+                <button onClick={() => setShowEditModal(true)} className="cd-edit-btn">✏️ Edit</button>
+              </div>
+              <div className="cd-info-grid">
+                <div className="cd-info-item cd-info-item-full">
+                  <span className="cd-info-label">Notes</span>
+                  <span className="cd-info-value cd-notes-value">{customer.notes || 'No notes added'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Row 3: KPI Strip */}
+      <div className="cd-kpi-grid">
+        <div className="cd-kpi-card green" title={`WO: ${formatCurrency(metrics?.wo_ytd_revenue)} | Proj: ${formatCurrency(metrics?.proj_ytd_revenue)}`}>
+          <div className="cd-kpi-value">{formatCurrency(metrics?.ytd_revenue)}</div>
+          <div className="cd-kpi-label">YTD Sales</div>
+        </div>
+        <div className="cd-kpi-card blue" title={`WO: ${formatCurrency(metrics?.wo_avg_annual_revenue)} | Proj: ${formatCurrency(metrics?.proj_avg_annual_revenue)}`}>
+          <div className="cd-kpi-value">{formatCurrency(metrics?.avg_annual_revenue)}</div>
+          <div className="cd-kpi-label">Avg Annual ({metrics?.year_span || 1} yr{(metrics?.year_span || 1) > 1 ? 's' : ''})</div>
+        </div>
+        <div className="cd-kpi-card amber" title={`Proj: ${metrics?.proj_gm_percent || 0}% | Est: ${metrics?.estimate_gm_percent || 0}%`}>
+          <div className="cd-kpi-value">{metrics?.avg_gm_percent || 0}%</div>
+          <div className="cd-kpi-label">Avg GM%</div>
+        </div>
+        <div className="cd-kpi-card purple" title={`WO: ${formatCurrency(metrics?.wo_backlog)} | Proj: ${formatCurrency(metrics?.proj_backlog)}`}>
+          <div className="cd-kpi-value">{formatCurrency(metrics?.total_backlog)}</div>
+          <div className="cd-kpi-label">Backlog</div>
+        </div>
+        <div className="cd-kpi-card cyan">
+          <div className="cd-kpi-value">{metrics?.hit_rate || 0}%</div>
+          <div className="cd-kpi-label">Hit Rate</div>
+        </div>
+        <div className="cd-kpi-card rose">
+          <div className="cd-kpi-value">{formatCurrency(metrics?.pipeline_value)}</div>
+          <div className="cd-kpi-label">Pipeline</div>
+        </div>
+      </div>
+
+      {/* Row 4: Main Content */}
+      <div className="cd-main-grid">
+        {/* Top Left: Locations Panel */}
+        <div className="cd-locations-panel">
+          <div className="cd-panel-header">
+            <h3><span className="cd-panel-icon">📍</span>Locations <span className="cd-count">{facilities.length}</span></h3>
+            <div className="cd-panel-actions">
+              <button className="cd-icon-btn" onClick={() => navigate(`/customers/${activeFacilityId}/contacts`)} title={`Contacts (${contacts.length})`}>
+                👥
+              </button>
+            </div>
+          </div>
+          <div className="cd-locations-list">
+            {facilities.length === 0 ? (
+              <div className="cd-empty-mini">No facilities found</div>
+            ) : (
+              facilities.map((facility) => (
+                <div
+                  key={facility.id}
+                  className={`cd-location-item ${selectedFacilityId === facility.id ? 'selected' : ''} ${facility.id === parseInt(id!) && !selectedFacilityId ? 'current' : ''}`}
+                  onClick={() => setSelectedFacilityId(facility.id === selectedFacilityId ? null : facility.id)}
+                >
+                  <div className="cd-location-info">
+                    <div className="cd-location-name">{facility.customer_facility || 'Unnamed'}</div>
+                    <div className="cd-location-address">{facility.city}, {facility.state}</div>
+                  </div>
+                  <div className="cd-location-stats">
+                    <span>{facility.work_order_count || 0} WO</span>
+                    <span>{facility.estimate_count || 0} Est</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Top Right: Projects */}
+        <div className="cd-module-card">
+          <div className="cd-module-header">
+            <span className="cd-module-title">🏗️ Projects <span className="cd-count">{projects.length}</span></span>
+          </div>
+          <div className="cd-module-body">
+            {sortedProjects.length === 0 ? (
+              <div className="cd-empty-state"><p>No projects</p></div>
+            ) : (
+              <table className="cd-table cd-projects-table">
+                <colgroup>
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '14%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="cd-sortable" onClick={() => handleProjSort('number')}># <SortIcon active={projSortField === 'number'} direction={projSortDir} /></th>
+                    <th className="cd-sortable" onClick={() => handleProjSort('name')}>Project <SortIcon active={projSortField === 'name'} direction={projSortDir} /></th>
+                    <th>PM</th>
+                    <th className="cd-sortable" onClick={() => handleProjSort('date')}>Date <SortIcon active={projSortField === 'date'} direction={projSortDir} /></th>
+                    <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} /></th>
+                    <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} /></th>
+                    <th className="cd-sortable" onClick={() => handleProjSort('status')}>Status <SortIcon active={projSortField === 'status'} direction={projSortDir} /></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedProjects.map((project: any) => (
+                    <tr key={project.id} onClick={() => navigate(`/projects/${project.id}`)} style={{ cursor: 'pointer' }}>
+                      <td><strong>{project.number || '-'}</strong></td>
+                      <td className="cd-truncate">{project.name}</td>
+                      <td className="cd-truncate">{project.manager_name || '-'}</td>
+                      <td>{formatDate(project.date)}</td>
+                      <td>{formatCurrency(project.contract_value)}</td>
+                      <td>{formatCurrency(project.backlog)}</td>
+                      <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom Row: Work Orders, Estimates, Opportunities */}
+        <div className="cd-modules-row">
+          {/* Work Orders */}
+          <div className="cd-module-card">
+            <div className="cd-module-header">
+              <span className="cd-module-title">🔧 Work Orders <span className="cd-count">{workOrders.length}</span></span>
+            </div>
+            <div className="cd-module-body">
+              {sortedWorkOrders.length === 0 ? (
+                <div className="cd-empty-state"><p>No work orders</p></div>
               ) : (
                 <table className="cd-table">
                   <thead>
                     <tr>
-                      <th className="cd-sortable" onClick={() => handleWoSort('work_order_number')}>
-                        WO # <SortIcon active={woSortField === 'work_order_number'} direction={woSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('description')}>
-                        Description <SortIcon active={woSortField === 'description'} direction={woSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('entered_date')}>
-                        Date <SortIcon active={woSortField === 'entered_date'} direction={woSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('contract_amount')}>
-                        Amount <SortIcon active={woSortField === 'contract_amount'} direction={woSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('status')}>
-                        Status <SortIcon active={woSortField === 'status'} direction={woSortDir} />
-                      </th>
+                      <th className="cd-sortable" onClick={() => handleWoSort('work_order_number')}>WO # <SortIcon active={woSortField === 'work_order_number'} direction={woSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleWoSort('description')}>Description <SortIcon active={woSortField === 'description'} direction={woSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleWoSort('entered_date')}>Date <SortIcon active={woSortField === 'entered_date'} direction={woSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleWoSort('contract_amount')}>Amount <SortIcon active={woSortField === 'contract_amount'} direction={woSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleWoSort('status')}>Status <SortIcon active={woSortField === 'status'} direction={woSortDir} /></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedWorkOrders.slice(0, 5).map((wo: any) => (
+                    {sortedWorkOrders.map((wo: any) => (
                       <tr key={wo.id}>
                         <td><strong>{wo.work_order_number}</strong></td>
                         <td className="cd-truncate">{wo.description || '-'}</td>
@@ -551,85 +440,16 @@ const CustomerDetail: React.FC = () => {
                   </tbody>
                 </table>
               )}
-              {workOrders.length > 5 && (
-                <button className="cd-view-all-btn" onClick={() => navigate('/account-management/work-orders')}>
-                  View all {workOrders.length} work orders
-                </button>
-              )}
             </div>
           </div>
 
-          {/* Projects Module */}
-          <div className="cd-module">
+          {/* Estimates */}
+          <div className="cd-module-card">
             <div className="cd-module-header">
-              <div className="cd-module-title">
-                <span className="cd-module-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>🏗️</span>
-                <h3>Projects</h3>
-                <span className="cd-count">{projects.length}</span>
-              </div>
-            </div>
-            <div className="cd-module-content">
-              {sortedProjects.length === 0 ? (
-                <div className="cd-empty-state">
-                  <div className="cd-empty-icon">🏗️</div>
-                  <p>No projects yet</p>
-                </div>
-              ) : (
-                <table className="cd-table">
-                  <thead>
-                    <tr>
-                      <th className="cd-sortable" onClick={() => handleProjSort('number')}>
-                        # <SortIcon active={projSortField === 'number'} direction={projSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleProjSort('name')}>
-                        Project Name <SortIcon active={projSortField === 'name'} direction={projSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleProjSort('date')}>
-                        Date <SortIcon active={projSortField === 'date'} direction={projSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>
-                        Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>
-                        Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} />
-                      </th>
-                      <th className="cd-sortable" onClick={() => handleProjSort('status')}>
-                        Status <SortIcon active={projSortField === 'status'} direction={projSortDir} />
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedProjects.slice(0, 5).map((project: any) => (
-                      <tr key={project.id} onClick={() => navigate(`/projects/${project.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><strong>{project.number || '-'}</strong></td>
-                        <td>{project.name}</td>
-                        <td>{formatDate(project.date)}</td>
-                        <td>{formatCurrency(project.contract_value)}</td>
-                        <td>{formatCurrency(project.backlog)}</td>
-                        <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {projects.length > 5 && (
-                <button className="cd-view-all-btn" onClick={() => navigate(`/customers/${id}/projects`)}>
-                  View all {projects.length} projects
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Estimates Module */}
-          <div className="cd-module">
-            <div className="cd-module-header">
-              <div className="cd-module-title">
-                <span className="cd-module-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>📊</span>
-                <h3>Estimates</h3>
-                <span className="cd-count">{estimates.length}</span>
-              </div>
+              <span className="cd-module-title">📊 Estimates <span className="cd-count">{estimates.length}</span></span>
               <button
-                className="cd-btn cd-btn-primary cd-btn-sm"
+                className="sales-btn sales-btn-primary"
+                style={{ padding: '2px 8px', fontSize: '10px' }}
                 onClick={() => navigate('/estimating/estimates/new', {
                   state: {
                     customerId: activeFacilityId,
@@ -637,33 +457,36 @@ const CustomerDetail: React.FC = () => {
                   }
                 })}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                New Estimate
+                + New
               </button>
             </div>
-            <div className="cd-module-content">
+            <div className="cd-module-body">
               {estimates.length === 0 ? (
-                <div className="cd-empty-state">
-                  <div className="cd-empty-icon">📊</div>
-                  <p>No estimates yet</p>
-                </div>
+                <div className="cd-empty-state"><p>No estimates</p></div>
               ) : (
                 <table className="cd-table">
+                  <colgroup>
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '38%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '10%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>Estimate</th>
                       <th>Date</th>
+                      <th>Estimate</th>
+                      <th>Stage</th>
                       <th>Value</th>
                       <th>GM%</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estimates.slice(0, 5).map((estimate: any) => (
+                    {estimates.map((estimate: any) => (
                       <tr key={estimate.id} onClick={() => navigate(`/estimating/estimates/${estimate.id}`)} style={{ cursor: 'pointer' }}>
-                        <td><strong>{estimate.name?.includes(' - ') ? estimate.name.split(' - ').slice(1).join(' - ') : estimate.name}</strong></td>
                         <td>{formatDate(estimate.date)}</td>
+                        <td className="cd-truncate"><strong>{estimate.name?.includes(' - ') ? estimate.name.split(' - ').slice(1).join(' - ') : estimate.name}</strong></td>
+                        <td><span className={`cd-status cd-status-${(estimate.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{estimate.status || '-'}</span></td>
                         <td>{formatCurrency(estimate.value)}</td>
                         <td>{estimate.gm_percent}%</td>
                       </tr>
@@ -671,51 +494,48 @@ const CustomerDetail: React.FC = () => {
                   </tbody>
                 </table>
               )}
-              {estimates.length > 5 && (
-                <button className="cd-view-all-btn" onClick={() => navigate(`/customers/${id}/estimates`)}>
-                  View all {estimates.length} estimates
-                </button>
-              )}
             </div>
           </div>
 
-          {/* Opportunities Module */}
-          <div className="cd-module">
+          {/* Opportunities */}
+          <div className="cd-module-card">
             <div className="cd-module-header">
-              <div className="cd-module-title">
-                <span className="cd-module-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>💼</span>
-                <h3>Opportunities</h3>
-                <span className="cd-count">{opportunities.length}</span>
-              </div>
+              <span className="cd-module-title">💼 Opportunities <span className="cd-count">{opportunities.length}</span></span>
               <button
-                className="cd-btn cd-btn-primary cd-btn-sm"
+                className="sales-btn sales-btn-primary"
+                style={{ padding: '2px 8px', fontSize: '10px' }}
                 onClick={() => navigate('/sales/pipeline/new', { state: { customerId: activeFacilityId } })}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                New Opportunity
+                + New
               </button>
             </div>
-            <div className="cd-module-content">
+            <div className="cd-module-body">
               {opportunities.length === 0 ? (
-                <div className="cd-empty-state">
-                  <div className="cd-empty-icon">💼</div>
-                  <p>No opportunities yet</p>
-                </div>
+                <div className="cd-empty-state"><p>No opportunities</p></div>
               ) : (
                 <table className="cd-table">
+                  <colgroup>
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '32%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '20%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
+                      <th>Date</th>
                       <th>Opportunity</th>
+                      <th>Assigned</th>
                       <th>Stage</th>
                       <th>Value</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {opportunities.slice(0, 5).map((opp: any) => (
+                    {opportunities.map((opp: any) => (
                       <tr key={opp.id} onClick={() => navigate('/sales', { state: { opportunityId: opp.id } })} style={{ cursor: 'pointer' }}>
-                        <td><strong>{opp.title}</strong></td>
+                        <td>{formatDate(opp.created_at)}</td>
+                        <td className="cd-truncate"><strong>{opp.title}</strong></td>
+                        <td className="cd-truncate">{opp.assigned_to_name || '-'}</td>
                         <td>
                           {opp.stage_name && (
                             <span className="cd-stage-badge" style={{ background: opp.stage_color || '#6b7280' }}>
@@ -728,11 +548,6 @@ const CustomerDetail: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
-              )}
-              {opportunities.length > 5 && (
-                <button className="cd-view-all-btn" onClick={() => navigate('/sales', { state: { customerId: parseInt(id!) } })}>
-                  View all {opportunities.length} opportunities
-                </button>
               )}
             </div>
           </div>
