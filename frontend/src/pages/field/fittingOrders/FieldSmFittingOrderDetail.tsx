@@ -8,6 +8,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { smFittingOrdersApi, SmFittingOrderItem } from '../../../services/smFittingOrders';
 import { FittingTypeReference } from './FittingTypeDiagrams';
+import { generateFittingOrderPdf } from '../../../utils/fittingOrderPdfClient';
 
 const FITTING_TYPES: Record<number, string> = {
   1: 'St. Joint',
@@ -91,35 +92,45 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     if (!order) return;
     setIsDownloading(true);
     try {
-      // Download the PDF
-      const res = await smFittingOrdersApi.downloadPdf(Number(id));
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `FO-SM-${order.number}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const blob = await generateFittingOrderPdf(order as any);
+      const filename = `FO-SM-${order.number}.pdf`;
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
 
-      // Open default email client with pre-filled subject and body
-      const subject = encodeURIComponent(
-        `Fitting Order FO-SM-${order.number} - ${order.title || 'Duct Work Fitting Order'}`
-      );
-      const itemCount = (order.items || []).length;
-      const body = encodeURIComponent(
-        `Please find the attached fitting order FO-SM-${order.number}.\n\n` +
-        `Title: ${order.title || 'Duct Work Fitting Order'}\n` +
-        `Material: ${order.material || '-'}\n` +
-        `Priority: ${order.priority || 'normal'}\n` +
-        `Fittings: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
-        `The PDF is attached to this email.\n\n` +
-        `Thank you,\nTweet Garot Mechanical`
-      );
-      window.location.href = `mailto:?subject=${subject}&body=${body}`;
-    } catch {
-      window.alert('Failed to download PDF. Please try again.');
+      // Use native share on mobile (works on iOS/Android) to attach file directly
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `FO-SM-${order.number}`,
+        });
+      } else {
+        // Desktop fallback: download file then open mailto
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        const subject = encodeURIComponent(
+          `Fitting Order FO-SM-${order.number} - ${order.title || 'Duct Work Fitting Order'}`
+        );
+        const itemCount = (order.items || []).length;
+        const body = encodeURIComponent(
+          `Please find the attached fitting order FO-SM-${order.number}.\n\n` +
+          `Title: ${order.title || 'Duct Work Fitting Order'}\n` +
+          `Material: ${order.material || '-'}\n` +
+          `Priority: ${order.priority || 'normal'}\n` +
+          `Fittings: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
+          `The PDF is attached to this email.\n\n` +
+          `Thank you,\nTweet Garot Mechanical`
+        );
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      window.alert('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -129,18 +140,25 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     if (!order) return;
     setIsDownloading(true);
     try {
-      const res = await smFittingOrdersApi.downloadPdf(Number(id));
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `FO-SM-${order.number}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const blob = await generateFittingOrderPdf(order as any);
+      const filename = `FO-SM-${order.number}.pdf`;
+
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos) {
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }
     } catch {
-      window.alert('Failed to download PDF. Please try again.');
+      window.alert('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }

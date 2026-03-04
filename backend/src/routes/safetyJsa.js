@@ -5,15 +5,8 @@ const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
-const { generateJsaPdfHtml } = require('../utils/jsaPdfGenerator');
+const { generateJsaPdfBuffer } = require('../utils/jsaPdfBuffer');
 const { sendEmail } = require('../utils/emailService');
-
-let puppeteer;
-try {
-  puppeteer = require('puppeteer');
-} catch (e) {
-  // puppeteer not installed - PDF generation will be unavailable
-}
 
 const router = express.Router();
 
@@ -59,9 +52,6 @@ router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next)
 // Download JSA as PDF
 router.get('/:id/pdf', async (req, res, next) => {
   try {
-    if (!puppeteer) {
-      return res.status(501).json({ error: 'PDF generation not available (puppeteer not installed)' });
-    }
     const jsa = await SafetyJsa.findById(req.params.id);
     if (!jsa) {
       return res.status(404).json({ error: 'JSA not found' });
@@ -71,37 +61,13 @@ router.get('/:id/pdf', async (req, res, next) => {
       return res.status(404).json({ error: 'JSA not found' });
     }
     const hazards = await SafetyJsa.getHazards(req.params.id);
-    const jsaWithHazards = { ...jsa, hazards };
-
     const logoBase64 = await fetchLogoBase64(req.tenantId);
-    const html = generateJsaPdfHtml(jsaWithHazards, logoBase64);
+    const pdfBuffer = await generateJsaPdfBuffer({ ...jsa, hazards }, logoBase64);
+    const filename = `JSA-${jsa.number}-${project.number || ''}.pdf`;
 
-    let browser = null;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      });
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1056, height: 816 });
-      await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
-      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
-
-      const pdfBuffer = await page.pdf({
-        format: 'Letter',
-        landscape: true,
-        printBackground: true,
-        margin: { top: '0.35in', right: '0.35in', bottom: '0.35in', left: '0.35in' },
-        preferCSSPageSize: false,
-      });
-
-      const filename = `JSA-${jsa.number}-${project.number || ''}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.send(Buffer.from(pdfBuffer));
-    } finally {
-      if (browser) await browser.close();
-    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
   } catch (error) {
     next(error);
   }
@@ -110,9 +76,6 @@ router.get('/:id/pdf', async (req, res, next) => {
 // Email JSA PDF to jsa@tweetgarot.com
 router.post('/:id/email', async (req, res, next) => {
   try {
-    if (!puppeteer) {
-      return res.status(501).json({ error: 'PDF generation not available (puppeteer not installed)' });
-    }
     const jsa = await SafetyJsa.findById(req.params.id);
     if (!jsa) {
       return res.status(404).json({ error: 'JSA not found' });
@@ -122,33 +85,9 @@ router.post('/:id/email', async (req, res, next) => {
       return res.status(404).json({ error: 'JSA not found' });
     }
 
-    // Generate the PDF
     const hazards = await SafetyJsa.getHazards(req.params.id);
-    const jsaWithHazards = { ...jsa, hazards };
     const logoBase64 = await fetchLogoBase64(req.tenantId);
-    const html = generateJsaPdfHtml(jsaWithHazards, logoBase64);
-
-    let pdfBuffer;
-    let browser = null;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      });
-      const page = await browser.newPage();
-      await page.setViewport({ width: 1056, height: 816 });
-      await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
-      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
-      pdfBuffer = Buffer.from(await page.pdf({
-        format: 'Letter',
-        landscape: true,
-        printBackground: true,
-        margin: { top: '0.35in', right: '0.35in', bottom: '0.35in', left: '0.35in' },
-        preferCSSPageSize: false,
-      }));
-    } finally {
-      if (browser) await browser.close();
-    }
+    const pdfBuffer = await generateJsaPdfBuffer({ ...jsa, hazards }, logoBase64);
 
     const filename = `JSA-${jsa.number}-${project.number || ''}.pdf`;
     const subject = `JSA-${jsa.number} - ${project.name || ''} (${project.number || ''})`;

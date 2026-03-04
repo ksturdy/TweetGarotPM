@@ -14,6 +14,7 @@ import {
   SafetyJsaHazard,
   SafetyJsaSignature,
 } from '../../../services/safetyJsa';
+import { generateJsaPdf } from '../../../utils/jsaPdfClient';
 
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00');
@@ -125,15 +126,24 @@ const FieldJSADetail: React.FC = () => {
     if (!jsa) return;
     setDownloadingPdf(true);
     try {
-      const blob = await safetyJsaApi.downloadPdf(jsa.id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const blob = await generateJsaPdf(jsa);
+      const filename = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
+
+      // On iOS, open in new tab (download attribute doesn't work in standalone PWA)
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos) {
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
     } catch (err) {
       console.error('Failed to download PDF:', err);
       alert('Failed to generate PDF. Please try again.');
@@ -146,23 +156,33 @@ const FieldJSADetail: React.FC = () => {
     if (!jsa) return;
     setSendingEmail(true);
     try {
-      const blob = await safetyJsaApi.downloadPdf(jsa.id);
+      const blob = await generateJsaPdf(jsa);
       const filename = `JSA-${jsa.number}-${jsa.project_number || ''}.pdf`;
-      const subject = `JSA-${jsa.number} - ${jsa.project_name || ''} (${jsa.project_number || ''})`;
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
 
-      // Download the PDF
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Use native share on mobile (works on iOS/Android) to attach file directly
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `JSA-${jsa.number}`,
+        });
+      } else {
+        // Desktop fallback: download file then open mailto
+        const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
 
-      // Open mail app with To/Subject pre-filled — user attaches the downloaded PDF
-      window.location.href = `mailto:jsa@tweetgarot.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`Please see attached ${filename}`)}`;
-    } catch (err) {
+        const subject = `JSA-${jsa.number} - ${jsa.project_name || ''} (${jsa.project_number || ''})`;
+        window.location.href = `mailto:jsa@tweetgarot.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`Please see attached ${filename}`)}`;
+      }
+    } catch (err: any) {
+      // User cancelled the share sheet — not an error
+      if (err?.name === 'AbortError') return;
       console.error('Failed to share JSA:', err);
       alert('Failed to generate PDF. Please try again.');
     } finally {
