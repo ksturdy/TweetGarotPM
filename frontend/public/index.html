@@ -6,11 +6,22 @@
     <meta name="theme-color" content="#1a2332" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Titan PM" />
+    <script>
+      // Write correct manifest and app title based on URL path
+      // Must use document.write so iOS Safari sees the right manifest before parsing completes
+      // Check both direct path AND the 404.html redirect pattern (/?/field...)
+      var isField = window.location.pathname.startsWith('/field') || window.location.search.startsWith('?/field');
+      if (isField) {
+        document.write('<meta name="apple-mobile-web-app-title" content="Titan Field" />');
+        document.write('<link rel="manifest" href="%PUBLIC_URL%/manifest-field.json" />');
+      } else {
+        document.write('<meta name="apple-mobile-web-app-title" content="Titan PM" />');
+        document.write('<link rel="manifest" href="%PUBLIC_URL%/manifest.json" />');
+      }
+    </script>
     <meta name="description" content="Titan Project Management System" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/favicon.svg" />
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Titan</title>
     <!-- SPA routing support for static hosting (Render) -->
     <script>
