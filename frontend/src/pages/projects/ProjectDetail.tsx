@@ -24,6 +24,7 @@ const MODULE_ICONS: { [key: string]: string } = {
   schedule: '📆',
   'phase-schedule': '📊',
   'weekly-goals': '🎯',
+  issues: '⚠️',
 };
 
 const ProjectDetail: React.FC = () => {
@@ -150,6 +151,7 @@ const ProjectDetail: React.FC = () => {
     { path: 'submittals', label: 'Submittals', description: 'Shop drawings and product data' },
     { path: 'change-orders', label: 'Change Orders', description: 'Contract modifications' },
     { path: 'daily-reports', label: 'Daily Reports', description: 'Field activity logs' },
+    { path: 'issues', label: 'Field Issues', description: 'Issues reported from the field' },
     { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
     { path: 'phase-schedule', label: 'Phase Schedule', description: 'Schedule phase codes with work contours' },
     { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },

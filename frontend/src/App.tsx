@@ -125,6 +125,8 @@ import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
 import FieldNearMissList from './pages/field/nearMiss/FieldNearMissList';
 import FieldNearMissForm from './pages/field/nearMiss/FieldNearMissForm';
 import FieldNearMissDetail from './pages/field/nearMiss/FieldNearMissDetail';
+import ProjectIssueList from './pages/issues/ProjectIssueList';
+import ProjectIssueDetail from './pages/issues/ProjectIssueDetail';
 import FieldIssueList from './pages/field/issues/FieldIssueList';
 import FieldIssueForm from './pages/field/issues/FieldIssueForm';
 import FieldIssueDetail from './pages/field/issues/FieldIssueDetail';
@@ -404,6 +406,8 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/change-orders/:id/edit" element={<ChangeOrderForm />} />
                 <Route path="/projects/:projectId/daily-reports" element={<DailyReportList />} />
                 <Route path="/projects/:projectId/daily-reports/:id" element={<DailyReportDetail />} />
+                <Route path="/projects/:projectId/issues" element={<ProjectIssueList />} />
+                <Route path="/projects/:projectId/issues/:id" element={<ProjectIssueDetail />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
                 <Route path="/projects/:projectId/phase-schedule" element={<PhaseSchedule />} />
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />

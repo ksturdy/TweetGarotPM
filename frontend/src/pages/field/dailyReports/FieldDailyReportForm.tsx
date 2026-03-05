@@ -97,6 +97,7 @@ const FieldDailyReportForm: React.FC = () => {
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [crews, setCrews] = useState<CrewEntry[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [weatherLoading, setWeatherLoading] = useState(false);
 
   const { data: existingReport } = useQuery({
@@ -107,6 +108,22 @@ const FieldDailyReportForm: React.FC = () => {
     },
     enabled: isEditMode,
   });
+
+  // Check if a report already exists for the selected date (new mode only)
+  useEffect(() => {
+    if (isEditMode || !projectId || !formData.report_date) return;
+    let cancelled = false;
+    dailyReportsApi.getByDate(Number(projectId), formData.report_date)
+      .then((res) => {
+        if (!cancelled && res.data?.id) {
+          navigate(`/field/projects/${projectId}/daily-reports/${res.data.id}/edit`, { replace: true });
+        }
+      })
+      .catch(() => {
+        // 404 means no report exists for this date - that's expected
+      });
+    return () => { cancelled = true; };
+  }, [isEditMode, projectId, formData.report_date, navigate]);
 
   useEffect(() => {
     if (existingReport) {
@@ -234,6 +251,7 @@ const FieldDailyReportForm: React.FC = () => {
     if (!formData.work_performed.trim()) return;
 
     setSaving(true);
+    setError('');
     try {
       const reportData: Partial<DailyReport> = {
         project_id: Number(projectId),
@@ -281,8 +299,10 @@ const FieldDailyReportForm: React.FC = () => {
       }
 
       navigate(`/field/projects/${projectId}/daily-reports`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save daily report:', err);
+      const msg = err?.response?.data?.error || err?.response?.data?.errors?.[0]?.msg || 'Failed to save report. Please try again.';
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -607,6 +627,21 @@ const FieldDailyReportForm: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div style={{
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 16,
+            color: '#dc2626',
+            fontSize: 14,
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Submit */}
         <div className="field-actions-bar">

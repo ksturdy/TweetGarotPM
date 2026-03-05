@@ -6,6 +6,7 @@ import { projectsApi } from '../../services/projects';
 import { usersApi } from '../../services/users';
 import { format } from 'date-fns';
 import RFIPreviewModal from '../../components/rfis/RFIPreviewModal';
+import FieldPhotoUpload from '../../components/field/FieldPhotoUpload';
 import '../../styles/SalesPipeline.css';
 
 const RFIDetail: React.FC = () => {
@@ -331,6 +332,11 @@ const RFIDetail: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Photos & Attachments */}
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <FieldPhotoUpload entityType="rfi" entityId={rfi.id} />
       </div>
 
       {/* Preview Modal */}
