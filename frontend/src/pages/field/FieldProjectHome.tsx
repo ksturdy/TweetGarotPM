@@ -3,9 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import DescriptionIcon from '@mui/icons-material/Description';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
-import AirIcon from '@mui/icons-material/Air';
-import PlumbingIcon from '@mui/icons-material/Plumbing';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BuildIcon from '@mui/icons-material/Build';
 
 const FieldProjectHome: React.FC = () => {
   const { projectId } = useParams();
@@ -13,11 +11,9 @@ const FieldProjectHome: React.FC = () => {
 
   const modules = [
     { label: 'Daily Reports', icon: <DescriptionIcon />, path: 'daily-reports', color: 'blue' },
-    { label: 'Purchase Orders', icon: <ShoppingCartIcon />, path: 'purchase-orders', color: 'green' },
-    { label: 'SM Fitting', icon: <AirIcon />, path: 'sm-fitting-orders', color: 'orange' },
-    { label: 'Piping Fitting', icon: <PlumbingIcon />, path: 'piping-fitting-orders', color: 'purple' },
-    { label: 'Plumbing Fitting', icon: <WaterDropIcon />, path: 'plumbing-fitting-orders', color: 'cyan' },
-    { label: 'Safety JSA', icon: <HealthAndSafetyIcon />, path: 'safety-jsa', color: 'red' },
+    { label: 'Field Purchase Orders', icon: <ShoppingCartIcon />, path: 'purchase-orders', color: 'green' },
+    { label: 'Fitting Orders', icon: <BuildIcon />, path: 'fitting-orders', color: 'purple' },
+    { label: 'Safety', icon: <HealthAndSafetyIcon />, path: 'safety', color: 'red' },
   ];
 
   return (

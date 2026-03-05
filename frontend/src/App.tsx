@@ -102,6 +102,8 @@ import TenantSettings from './pages/TenantSettings';
 import FieldLayout from './components/field/FieldLayout';
 import FieldDashboard from './pages/field/FieldDashboard';
 import FieldProjectHome from './pages/field/FieldProjectHome';
+import FittingOrdersHome from './pages/field/FittingOrdersHome';
+import SafetyHome from './pages/field/SafetyHome';
 import FieldDailyReportList from './pages/field/dailyReports/FieldDailyReportList';
 import FieldDailyReportForm from './pages/field/dailyReports/FieldDailyReportForm';
 import FieldDailyReportDetail from './pages/field/dailyReports/FieldDailyReportDetail';
@@ -120,6 +122,9 @@ import FieldPlumbingFittingOrderDetail from './pages/field/fittingOrders/FieldPl
 import FieldJSAList from './pages/field/safetyJsa/FieldJSAList';
 import FieldJSAForm from './pages/field/safetyJsa/FieldJSAForm';
 import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
+import FieldNearMissList from './pages/field/nearMiss/FieldNearMissList';
+import FieldNearMissForm from './pages/field/nearMiss/FieldNearMissForm';
+import FieldNearMissDetail from './pages/field/nearMiss/FieldNearMissDetail';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
@@ -259,6 +264,8 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/purchase-orders/new" element={<FieldPOForm />} />
           <Route path="projects/:projectId/purchase-orders/:id" element={<FieldPODetail />} />
           <Route path="projects/:projectId/purchase-orders/:id/edit" element={<FieldPOForm />} />
+          <Route path="projects/:projectId/fitting-orders" element={<FittingOrdersHome />} />
+          <Route path="projects/:projectId/safety" element={<SafetyHome />} />
           <Route path="projects/:projectId/sm-fitting-orders" element={<FieldSmFittingOrderList />} />
           <Route path="projects/:projectId/sm-fitting-orders/new" element={<FieldSmFittingOrderForm />} />
           <Route path="projects/:projectId/sm-fitting-orders/:id" element={<FieldSmFittingOrderDetail />} />
@@ -275,6 +282,10 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/safety-jsa/new" element={<FieldJSAForm />} />
           <Route path="projects/:projectId/safety-jsa/:id" element={<FieldJSADetail />} />
           <Route path="projects/:projectId/safety-jsa/:id/edit" element={<FieldJSAForm />} />
+          <Route path="projects/:projectId/safety-near-miss" element={<FieldNearMissList />} />
+          <Route path="projects/:projectId/safety-near-miss/new" element={<FieldNearMissForm />} />
+          <Route path="projects/:projectId/safety-near-miss/:id" element={<FieldNearMissDetail />} />
+          <Route path="projects/:projectId/safety-near-miss/:id/edit" element={<FieldNearMissForm />} />
         </Route>
 
         {/* Protected app routes */}

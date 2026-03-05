@@ -80,6 +80,7 @@ const smFittingOrderRoutes = require('./routes/smFittingOrders');
 const pipingFittingOrderRoutes = require('./routes/pipingFittingOrders');
 const plumbingFittingOrderRoutes = require('./routes/plumbingFittingOrders');
 const safetyJsaRoutes = require('./routes/safetyJsa');
+const nearMissReportRoutes = require('./routes/nearMissReports');
 const sellSheetRoutes = require('./routes/sellSheets');
 const projectAssignmentRoutes = require('./routes/projectAssignments');
 
@@ -193,6 +194,7 @@ app.use('/api/sm-fitting-orders', smFittingOrderRoutes);
 app.use('/api/piping-fitting-orders', pipingFittingOrderRoutes);
 app.use('/api/plumbing-fitting-orders', plumbingFittingOrderRoutes);
 app.use('/api/safety-jsa', safetyJsaRoutes);
+app.use('/api/near-miss-reports', nearMissReportRoutes);
 app.use('/api/sell-sheets', sellSheetRoutes);
 app.use('/api/project-assignments', projectAssignmentRoutes);
 

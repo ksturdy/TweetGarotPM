@@ -44,7 +44,7 @@ const FieldPOList: React.FC = () => {
 
   return (
     <div>
-      <h1 className="field-page-title">Purchase Orders</h1>
+      <h1 className="field-page-title">Field Purchase Orders</h1>
       <p className="field-page-subtitle">Field purchase orders for this project</p>
 
       <div className="field-filters">
