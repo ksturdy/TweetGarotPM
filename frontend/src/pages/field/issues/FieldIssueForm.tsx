@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import SaveIcon from '@mui/icons-material/Save';
 import { fieldIssuesApi, TRADE_OPTIONS, PRIORITY_OPTIONS } from '../../../services/fieldIssues';
+import FieldPhotoUpload from '../../../components/field/FieldPhotoUpload';
 
 const FieldIssueForm: React.FC = () => {
   const { projectId, id } = useParams();
@@ -62,12 +63,14 @@ const FieldIssueForm: React.FC = () => {
       } as any);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['field-issues', projectId] });
       if (isEdit) {
         queryClient.invalidateQueries({ queryKey: ['field-issue', id] });
+        navigate(`/field/projects/${projectId}/issues/${id}`);
+      } else {
+        navigate(`/field/projects/${projectId}/issues/${data.id}`);
       }
-      navigate(`/field/projects/${projectId}/issues`);
     },
   });
 
@@ -165,6 +168,11 @@ const FieldIssueForm: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Photos (edit mode only) */}
+      {isEdit && id && (
+        <FieldPhotoUpload entityType="field_issue" entityId={Number(id)} />
+      )}
 
       {/* Save Button */}
       <div className="field-actions-bar">

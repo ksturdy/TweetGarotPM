@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import SaveIcon from '@mui/icons-material/Save';
 import { rfisApi } from '../../../services/rfis';
+import FieldPhotoUpload from '../../../components/field/FieldPhotoUpload';
 
 const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' },
@@ -79,12 +80,14 @@ const FieldRFIForm: React.FC = () => {
       } as any);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['field-rfis', projectId] });
       if (isEdit) {
         queryClient.invalidateQueries({ queryKey: ['field-rfi', id] });
+        navigate(`/field/projects/${projectId}/rfis/${id}`);
+      } else {
+        navigate(`/field/projects/${projectId}/rfis/${data.id}`);
       }
-      navigate(`/field/projects/${projectId}/rfis`);
     },
   });
 
@@ -181,6 +184,11 @@ const FieldRFIForm: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Photos (edit mode only) */}
+      {isEdit && id && (
+        <FieldPhotoUpload entityType="rfi" entityId={Number(id)} />
+      )}
 
       {/* Save Button */}
       <div className="field-actions-bar">
