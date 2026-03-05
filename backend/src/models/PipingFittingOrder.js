@@ -22,7 +22,11 @@ const PipingFittingOrder = {
        WHERE o.id = $1`,
       [id]
     );
-    return result.rows[0];
+    const order = result.rows[0];
+    if (order) {
+      order.items = await this.getItems(id);
+    }
+    return order;
   },
 
   async findByProject(projectId, filters = {}) {
@@ -102,6 +106,67 @@ const PipingFittingOrder = {
        FROM piping_fitting_orders
        WHERE project_id = $1`,
       [projectId]
+    );
+    return result.rows[0];
+  },
+  // --- Line item methods ---
+
+  async getItems(orderId) {
+    const result = await db.query(
+      'SELECT * FROM piping_fitting_order_items WHERE fitting_order_id = $1 ORDER BY sort_order',
+      [orderId]
+    );
+    return result.rows;
+  },
+
+  async addItem(orderId, { sortOrder, fittingType, size, joinType, quantity, remarks }) {
+    const result = await db.query(
+      `INSERT INTO piping_fitting_order_items (fitting_order_id, sort_order, fitting_type, size, join_type, quantity, remarks)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [orderId, sortOrder || 1, fittingType, size, joinType, quantity || 1, remarks]
+    );
+    return result.rows[0];
+  },
+
+  async updateItem(itemId, data) {
+    const fields = [];
+    const values = [];
+    let paramCount = 1;
+
+    const allowedFields = ['sort_order', 'fitting_type', 'size', 'join_type', 'quantity', 'remarks'];
+
+    Object.keys(data).forEach((key) => {
+      if (allowedFields.includes(key) && data[key] !== undefined) {
+        fields.push(`${key} = $${paramCount}`);
+        values.push(data[key]);
+        paramCount++;
+      }
+    });
+
+    if (fields.length === 0) {
+      const result = await db.query('SELECT * FROM piping_fitting_order_items WHERE id = $1', [itemId]);
+      return result.rows[0];
+    }
+
+    values.push(itemId);
+    const result = await db.query(
+      `UPDATE piping_fitting_order_items SET ${fields.join(', ')}
+       WHERE id = $${paramCount}
+       RETURNING *`,
+      values
+    );
+    return result.rows[0];
+  },
+
+  async deleteItem(itemId) {
+    await db.query('DELETE FROM piping_fitting_order_items WHERE id = $1', [itemId]);
+  },
+
+  async findItemById(itemId) {
+    const result = await db.query(
+      'SELECT * FROM piping_fitting_order_items WHERE id = $1',
+      [itemId]
     );
     return result.rows[0];
   },

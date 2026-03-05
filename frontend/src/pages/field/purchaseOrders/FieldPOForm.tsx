@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import ContactsIcon from '@mui/icons-material/Contacts';
+import CloseIcon from '@mui/icons-material/Close';
 import { fieldPurchaseOrdersApi, FieldPurchaseOrder, FieldPurchaseOrderItem } from '../../../services/fieldPurchaseOrders';
+import { fieldFavoriteVendorsApi, FieldFavoriteVendor } from '../../../services/fieldFavoriteVendors';
 
 const UNIT_OPTIONS = ['EA', 'LF', 'SF', 'CY', 'GAL', 'BOX', 'ROLL', 'SET', 'LOT'];
 const SHIPPING_OPTIONS = ['Will Call', 'Deliver', 'Ship', 'Other'];
@@ -43,6 +46,24 @@ const FieldPOForm: React.FC = () => {
     { description: '', quantity: 1, unit: 'EA', unit_cost: 0 },
   ]);
   const [saving, setSaving] = useState(false);
+  const [showVendorPicker, setShowVendorPicker] = useState(false);
+
+  const { data: favoriteVendors = [] } = useQuery({
+    queryKey: ['field-favorite-vendors'],
+    queryFn: async () => {
+      const res = await fieldFavoriteVendorsApi.getAll();
+      return res.data;
+    },
+    enabled: showVendorPicker,
+  });
+
+  const pickVendor = (vendor: FieldFavoriteVendor) => {
+    setVendorName(vendor.name || '');
+    setVendorContact(vendor.contact_name || '');
+    setVendorPhone(vendor.phone || '');
+    setVendorEmail(vendor.email || '');
+    setShowVendorPicker(false);
+  };
 
   const { isLoading } = useQuery({
     queryKey: ['field-purchase-order', id],
@@ -215,7 +236,18 @@ const FieldPOForm: React.FC = () => {
 
       {/* Vendor Section */}
       <div className="field-form-section">
-        <div className="field-form-section-title">Vendor</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="field-form-section-title">Vendor</div>
+          <button
+            type="button"
+            className="field-btn field-btn-secondary"
+            onClick={() => setShowVendorPicker(true)}
+            style={{ padding: '6px 12px', fontSize: 13 }}
+          >
+            <ContactsIcon style={{ fontSize: 16, marginRight: 4 }} />
+            Pick from Favorites
+          </button>
+        </div>
         <div className="field-form-group">
           <label className="field-form-label">Vendor Name</label>
           <input
@@ -442,6 +474,81 @@ const FieldPOForm: React.FC = () => {
           {saving ? 'Saving...' : isEdit ? 'Update PO' : 'Create PO'}
         </button>
       </div>
+
+      {/* Vendor Picker Modal */}
+      {showVendorPicker && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+          }}
+          onClick={() => setShowVendorPicker(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '16px 16px 0 0',
+              width: '100%',
+              maxWidth: 500,
+              maxHeight: '70vh',
+              overflow: 'auto',
+              padding: '16px 16px 24px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: 0 }}>
+                Pick Vendor
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowVendorPicker(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#6b7280' }}
+              >
+                <CloseIcon style={{ fontSize: 22 }} />
+              </button>
+            </div>
+
+            {favoriteVendors.length === 0 ? (
+              <div style={{ padding: '16px 0', color: '#9ca3af', fontSize: 14, textAlign: 'center' }}>
+                No favorite vendors saved yet. Go to More &gt; Favorite Vendors to add some.
+              </div>
+            ) : (
+              favoriteVendors.map((vendor: FieldFavoriteVendor) => (
+                <button
+                  key={vendor.id}
+                  type="button"
+                  onClick={() => pickVendor(vendor)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 10,
+                    background: '#fff',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    marginBottom: 8,
+                  }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{vendor.name}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                    {[vendor.contact_name, vendor.location, vendor.phone].filter(Boolean).join(' \u2022 ')}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

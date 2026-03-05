@@ -1,15 +1,52 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
-import SendIcon from '@mui/icons-material/Send';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { pipingFittingOrdersApi, PipingFittingOrder } from '../../../services/pipingFittingOrders';
+import EmailIcon from '@mui/icons-material/Email';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import ContactsIcon from '@mui/icons-material/Contacts';
+import SkipNextIcon from '@mui/icons-material/SkipNext';
+import { pipingFittingOrdersApi, PipingFittingOrder, PipingFittingOrderItem } from '../../../services/pipingFittingOrders';
+import { fieldPurchaseOrdersApi, FieldPurchaseOrder, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
+import { fieldFavoriteVendorsApi, FieldFavoriteVendor } from '../../../services/fieldFavoriteVendors';
+import { generatePipingFittingOrderPdf } from '../../../utils/pipingFittingOrderPdfClient';
+
+const FITTING_LABELS: Record<string, string> = {
+  '90': '90\u00B0 Elbow',
+  '45': '45\u00B0 Elbow',
+  tee: 'Tee',
+  wye: 'Wye',
+  reducer: 'Reducer',
+  coupling: 'Coupling',
+  union: 'Union',
+  cap: 'Cap',
+  valve: 'Valve',
+  flange: 'Flange',
+  nipple: 'Nipple',
+  bushing: 'Bushing',
+  pipe: 'Pipe',
+  other: 'Other',
+};
+
+const JOIN_LABELS: Record<string, string> = {
+  threaded: 'Threaded',
+  welded: 'Welded',
+  flanged: 'Flanged',
+  grooved: 'Grooved',
+  press: 'Press',
+  soldered: 'Soldered',
+  glued: 'Glued',
+};
 
 const formatDate = (dateStr: string | null): string => {
   if (!dateStr) return '-';
-  const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const str = String(dateStr);
+  const date = new Date(str.includes('T') ? str : str + 'T00:00:00');
+  return isNaN(date.getTime()) ? '-' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const formatDateTime = (dateStr: string | null): string => {
@@ -24,10 +61,31 @@ const formatDateTime = (dateStr: string | null): string => {
   });
 };
 
+function buildItemDescription(item: PipingFittingOrderItem): string {
+  const fitting = FITTING_LABELS[item.fitting_type] || item.fitting_type || '';
+  const size = item.size || '';
+  const join = item.join_type ? (JOIN_LABELS[item.join_type] || item.join_type) : '';
+  return [size, fitting, join].filter(Boolean).join(' ');
+}
+
 const FieldPipingFittingOrderDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showPoModal, setShowPoModal] = useState(false);
+  const [creatingPo, setCreatingPo] = useState(false);
+  const [showQuoteVendorPicker, setShowQuoteVendorPicker] = useState(false);
+
+  const { data: quoteVendors = [] } = useQuery({
+    queryKey: ['field-favorite-vendors'],
+    queryFn: async () => {
+      const res = await fieldFavoriteVendorsApi.getAll();
+      return res.data;
+    },
+    enabled: showQuoteVendorPicker,
+  });
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['field-piping-fitting-order', id],
@@ -38,12 +96,14 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
     enabled: !!id,
   });
 
-  const submitMutation = useMutation({
-    mutationFn: () => pipingFittingOrdersApi.submit(Number(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-piping-fitting-order', id] });
-      queryClient.invalidateQueries({ queryKey: ['field-piping-fitting-orders'] });
+  // Fetch draft POs for "add to existing" option
+  const { data: draftPos } = useQuery({
+    queryKey: ['field-purchase-orders-draft', projectId],
+    queryFn: async () => {
+      const res = await fieldPurchaseOrdersApi.getByProject(Number(projectId), { status: 'draft' });
+      return res.data;
     },
+    enabled: showPoModal && !!projectId,
   });
 
   const deleteMutation = useMutation({
@@ -54,15 +114,171 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
     },
   });
 
-  const handleSubmit = () => {
-    if (window.confirm('Submit this fitting order to the shop?')) {
-      submitMutation.mutate();
-    }
-  };
-
   const handleDelete = () => {
     if (window.confirm('Delete this fitting order? This cannot be undone.')) {
       deleteMutation.mutate();
+    }
+  };
+
+  // ===== Submit for Quote (PDF / Email) =====
+  const handleEmailQuote = async (vendorEmail?: string) => {
+    if (!order) return;
+    setShowQuoteVendorPicker(false);
+    setIsDownloading(true);
+    try {
+      const blob = await generatePipingFittingOrderPdf(order as any);
+      const filename = `FO-PIP-${order.number}.pdf`;
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `FO-PIP-${order.number}${vendorEmail ? ` - ${vendorEmail}` : ''}`,
+        });
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        const itemCount = (order.items || []).length;
+        const subject = encodeURIComponent(
+          `Quote Request - Piping Fittings FO-PIP-${order.number} - ${order.title || ''}`
+        );
+        const body = encodeURIComponent(
+          `Please provide a quote for the attached piping fitting order FO-PIP-${order.number}.\n\n` +
+          `Title: ${order.title || ''}\n` +
+          `Material: ${order.material_type || '-'}\n` +
+          `Priority: ${order.priority || 'normal'}\n` +
+          `Fittings: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
+          `The PDF is attached to this email.\n\n` +
+          `Thank you,\nTweet Garot Mechanical`
+        );
+        const to = vendorEmail ? encodeURIComponent(vendorEmail) : '';
+        window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      window.alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!order) return;
+    setIsDownloading(true);
+    try {
+      const blob = await generatePipingFittingOrderPdf(order as any);
+      const filename = `FO-PIP-${order.number}.pdf`;
+
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos) {
+        try {
+          const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+            await navigator.share({ files: [pdfFile], title: filename });
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
+      }
+    } catch {
+      window.alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // ===== Create Purchase Order =====
+  const createNewPo = async () => {
+    if (!order) return;
+    setCreatingPo(true);
+    try {
+      const items = order.items || [];
+      const poData: Partial<FieldPurchaseOrder> = {
+        project_id: Number(projectId),
+        description: `Piping fittings from FO-PIP-${order.number}${order.title ? ` - ${order.title}` : ''}`,
+        notes: `Created from piping fitting order FO-PIP-${order.number}`,
+        cost_code: order.cost_code || '',
+        phase_code: order.phase_code || '',
+      };
+
+      const res = await fieldPurchaseOrdersApi.create(poData);
+      const newPoId = res.data.id;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        await fieldPurchaseOrdersApi.addItem(newPoId, {
+          sort_order: i + 1,
+          description: buildItemDescription(item),
+          quantity: item.quantity || 1,
+          unit: 'EA',
+          unit_cost: 0,
+          total_cost: 0,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['field-purchase-orders'] });
+      setShowPoModal(false);
+      navigate(`/field/projects/${projectId}/purchase-orders/${newPoId}/edit`);
+    } catch (err) {
+      console.error('Failed to create PO:', err);
+      window.alert('Failed to create purchase order. Please try again.');
+    } finally {
+      setCreatingPo(false);
+    }
+  };
+
+  const addToExistingPo = async (poId: number) => {
+    if (!order) return;
+    setCreatingPo(true);
+    try {
+      const items = order.items || [];
+      // Get existing items to determine sort_order offset
+      const existingRes = await fieldPurchaseOrdersApi.getById(poId);
+      const existingItems = existingRes.data.items || [];
+      const startOrder = existingItems.length + 1;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        await fieldPurchaseOrdersApi.addItem(poId, {
+          sort_order: startOrder + i,
+          description: buildItemDescription(item),
+          quantity: item.quantity || 1,
+          unit: 'EA',
+          unit_cost: 0,
+          total_cost: 0,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['field-purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['field-purchase-order', String(poId)] });
+      setShowPoModal(false);
+      navigate(`/field/projects/${projectId}/purchase-orders/${poId}/edit`);
+    } catch (err) {
+      console.error('Failed to add items to PO:', err);
+      window.alert('Failed to add items to purchase order. Please try again.');
+    } finally {
+      setCreatingPo(false);
     }
   };
 
@@ -71,6 +287,8 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
   }
 
   const isDraft = order.status === 'draft';
+  const items: PipingFittingOrderItem[] = order.items || [];
+  const isBusy = deleteMutation.isPending || isDownloading || creatingPo;
 
   return (
     <div>
@@ -97,6 +315,26 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
           <span className="field-detail-label">Required By</span>
           <span className="field-detail-value">{formatDate(order.required_by_date)}</span>
         </div>
+        {order.material_type && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Material</span>
+            <span className="field-detail-value">{order.material_type}</span>
+          </div>
+        )}
+        {order.location_on_site && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Location</span>
+            <span className="field-detail-value">{order.location_on_site}</span>
+          </div>
+        )}
+        {order.drawing_number && (
+          <div className="field-detail-row">
+            <span className="field-detail-label">Drawing</span>
+            <span className="field-detail-value">
+              {order.drawing_number}{order.drawing_revision ? ` Rev ${order.drawing_revision}` : ''}
+            </span>
+          </div>
+        )}
         {order.description && (
           <div className="field-detail-row">
             <span className="field-detail-label">Description</span>
@@ -105,78 +343,51 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Drawing Reference */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Drawing Reference</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Drawing Number</span>
-          <span className="field-detail-value">{order.drawing_number || '-'}</span>
+      {/* Fittings List */}
+      <div className="field-detail-section" style={{ padding: 0 }}>
+        <div className="field-detail-section-title" style={{ padding: '10px 12px', margin: 0 }}>
+          Fittings ({items.length} items)
         </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Revision</span>
-          <span className="field-detail-value">{order.drawing_revision || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Spec Section</span>
-          <span className="field-detail-value">{order.spec_section || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Location on Site</span>
-          <span className="field-detail-value">{order.location_on_site || '-'}</span>
-        </div>
-      </div>
-
-      {/* Material Specs */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Material Specs</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Material Type</span>
-          <span className="field-detail-value">{order.material_type || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Pipe Size</span>
-          <span className="field-detail-value">{order.pipe_size || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Pipe Schedule</span>
-          <span className="field-detail-value">{order.pipe_schedule || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Fitting Type</span>
-          <span className="field-detail-value">{order.fitting_type || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Weld Required</span>
-          <span className="field-detail-value">{order.weld_required ? 'Yes' : 'No'}</span>
-        </div>
-        {order.weld_required && (
-          <div className="field-detail-row">
-            <span className="field-detail-label">Weld Spec</span>
-            <span className="field-detail-value">{order.weld_spec || '-'}</span>
+        {items.length > 0 ? (
+          items.map((item, index) => (
+            <div
+              key={item.id}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                padding: '10px 12px',
+                borderBottom: index < items.length - 1 ? '1px solid #f3f4f6' : 'none',
+                background: index % 2 === 0 ? '#fff' : '#f9fafb',
+                gap: 6,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#111827', minWidth: 32 }}>
+                {item.quantity}x
+              </span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#1e40af' }}>
+                {item.size}
+              </span>
+              <span style={{ fontSize: 14, color: '#374151' }}>
+                {FITTING_LABELS[item.fitting_type] || item.fitting_type}
+              </span>
+              {item.join_type && (
+                <span style={{ fontSize: 12, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 4 }}>
+                  {JOIN_LABELS[item.join_type] || item.join_type}
+                </span>
+              )}
+              {item.remarks && (
+                <span style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic', width: '100%', paddingLeft: 32 }}>
+                  {item.remarks}
+                </span>
+              )}
+            </div>
+          ))
+        ) : (
+          <div style={{ padding: '16px 12px', color: '#9ca3af', fontSize: 14 }}>
+            No fittings added
           </div>
         )}
-      </div>
-
-      {/* Quantities */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Quantities</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Quantity</span>
-          <span className="field-detail-value">{order.quantity} {order.unit}</span>
-        </div>
-      </div>
-
-      {/* Coding */}
-      <div className="field-detail-section">
-        <div className="field-detail-section-title">Coding</div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Cost Code</span>
-          <span className="field-detail-value">{order.cost_code || '-'}</span>
-        </div>
-        <div className="field-detail-row">
-          <span className="field-detail-label">Phase Code</span>
-          <span className="field-detail-value">{order.phase_code || '-'}</span>
-        </div>
       </div>
 
       {/* Shop Info */}
@@ -194,7 +405,7 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
       {order.notes && (
         <div className="field-detail-section">
           <div className="field-detail-section-title">Notes</div>
-          <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.5, padding: '0 12px 8px' }}>
             {order.notes}
           </div>
         </div>
@@ -214,16 +425,40 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
       </div>
 
       {/* Actions */}
-      {isDraft && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
-          <button
-            className="field-btn field-btn-primary"
-            onClick={handleSubmit}
-            disabled={submitMutation.isPending}
-          >
-            <SendIcon style={{ fontSize: 18 }} />
-            {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
-          </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
+        {/* Submit for Quote */}
+        <button
+          className="field-btn field-btn-primary"
+          onClick={() => setShowQuoteVendorPicker(true)}
+          disabled={isBusy}
+          style={{ background: '#2563eb' }}
+        >
+          <EmailIcon style={{ fontSize: 18 }} />
+          {isDownloading ? 'Preparing PDF...' : 'Submit for Quote'}
+        </button>
+
+        {/* Create Purchase Order */}
+        <button
+          className="field-btn field-btn-success"
+          onClick={() => setShowPoModal(true)}
+          disabled={isBusy || items.length === 0}
+        >
+          <ShoppingCartIcon style={{ fontSize: 18 }} />
+          Create Purchase Order
+        </button>
+
+        {/* Download PDF */}
+        <button
+          className="field-btn field-btn-secondary"
+          onClick={handleDownloadPdf}
+          disabled={isBusy}
+        >
+          <PictureAsPdfIcon style={{ fontSize: 18 }} />
+          {isDownloading ? 'Downloading...' : 'Download PDF'}
+        </button>
+
+        {/* Edit - draft only */}
+        {isDraft && (
           <button
             className="field-btn field-btn-secondary"
             onClick={() =>
@@ -233,14 +468,240 @@ const FieldPipingFittingOrderDetail: React.FC = () => {
             <EditIcon style={{ fontSize: 18 }} />
             Edit Order
           </button>
+        )}
+
+        {/* Delete - draft only */}
+        {isDraft && (
           <button
             className="field-btn field-btn-danger"
             onClick={handleDelete}
-            disabled={deleteMutation.isPending}
+            disabled={isBusy}
           >
             <DeleteIcon style={{ fontSize: 18 }} />
             {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
           </button>
+        )}
+      </div>
+
+      {/* ===== Create PO Modal ===== */}
+      {showPoModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+          }}
+          onClick={() => !creatingPo && setShowPoModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '16px 16px 0 0',
+              width: '100%',
+              maxWidth: 500,
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: '16px 16px 24px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: 0 }}>
+                Create Purchase Order
+              </h2>
+              <button
+                type="button"
+                onClick={() => !creatingPo && setShowPoModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#6b7280' }}
+              >
+                <CloseIcon style={{ fontSize: 22 }} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 16px' }}>
+              {items.length} fitting{items.length !== 1 ? 's' : ''} will be added as line items to the purchase order.
+            </p>
+
+            {/* New PO option */}
+            <button
+              type="button"
+              onClick={createNewPo}
+              disabled={creatingPo}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                border: '2px solid #3b82f6',
+                borderRadius: 10,
+                background: '#eff6ff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              <AddIcon style={{ fontSize: 22, color: '#2563eb' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1e40af' }}>
+                  {creatingPo ? 'Creating...' : 'Create New PO'}
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  Start a new purchase order with these fittings
+                </div>
+              </div>
+            </button>
+
+            {/* Existing draft POs */}
+            {draftPos && draftPos.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Or add to existing draft PO
+                </div>
+                {draftPos.map((po: FieldPurchaseOrder) => (
+                  <button
+                    key={po.id}
+                    type="button"
+                    onClick={() => addToExistingPo(po.id)}
+                    disabled={creatingPo}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 10,
+                      background: '#fff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <ShoppingCartIcon style={{ fontSize: 20, color: '#6b7280' }} />
+                    <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>
+                        {formatFpoNumber(po)}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {po.vendor_name || 'No vendor'}{po.items ? ` \u2022 ${po.items.length} items` : ''}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Quote Vendor Picker Modal ===== */}
+      {showQuoteVendorPicker && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+          }}
+          onClick={() => setShowQuoteVendorPicker(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '16px 16px 0 0',
+              width: '100%',
+              maxWidth: 500,
+              maxHeight: '70vh',
+              overflow: 'auto',
+              padding: '16px 16px 24px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: 0 }}>
+                Send Quote To
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowQuoteVendorPicker(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#6b7280' }}
+              >
+                <CloseIcon style={{ fontSize: 22 }} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 12px' }}>
+              Select a vendor to pre-fill the email, or skip to send without.
+            </p>
+
+            {/* Skip option */}
+            <button
+              type="button"
+              onClick={() => handleEmailQuote()}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                background: '#f9fafb',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              <SkipNextIcon style={{ fontSize: 20, color: '#6b7280' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Skip - No Vendor</div>
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>Send quote without a pre-filled recipient</div>
+              </div>
+            </button>
+
+            {quoteVendors.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Favorite Vendors
+                </div>
+                {quoteVendors.map((vendor: FieldFavoriteVendor) => (
+                  <button
+                    key={vendor.id}
+                    type="button"
+                    onClick={() => handleEmailQuote(vendor.email)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 10,
+                      background: '#fff',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{vendor.name}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                      {[vendor.contact_name, vendor.email, vendor.phone].filter(Boolean).join(' \u2022 ')}
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

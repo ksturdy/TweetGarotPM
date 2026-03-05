@@ -125,6 +125,8 @@ import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
 import FieldNearMissList from './pages/field/nearMiss/FieldNearMissList';
 import FieldNearMissForm from './pages/field/nearMiss/FieldNearMissForm';
 import FieldNearMissDetail from './pages/field/nearMiss/FieldNearMissDetail';
+import FieldMoreHome from './pages/field/FieldMoreHome';
+import FieldFavoriteVendors from './pages/field/vendors/FieldFavoriteVendors';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
@@ -286,6 +288,8 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/safety-near-miss/new" element={<FieldNearMissForm />} />
           <Route path="projects/:projectId/safety-near-miss/:id" element={<FieldNearMissDetail />} />
           <Route path="projects/:projectId/safety-near-miss/:id/edit" element={<FieldNearMissForm />} />
+          <Route path="projects/:projectId/more" element={<FieldMoreHome />} />
+          <Route path="projects/:projectId/more/vendors" element={<FieldFavoriteVendors />} />
         </Route>
 
         {/* Protected app routes */}

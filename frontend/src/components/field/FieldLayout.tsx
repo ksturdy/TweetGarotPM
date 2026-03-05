@@ -7,6 +7,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import BuildIcon from '@mui/icons-material/Build';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import HomeIcon from '@mui/icons-material/Home';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -55,7 +56,8 @@ const FieldLayout: React.FC = () => {
     if (currentPath.includes('/daily-reports')) return 'daily-reports';
     if (currentPath.includes('/purchase-orders')) return 'purchase-orders';
     if (currentPath.includes('/fitting-orders') || currentPath.includes('sm-fitting') || currentPath.includes('piping-fitting') || currentPath.includes('plumbing-fitting')) return 'fitting';
-    if (currentPath.includes('/safety-jsa')) return 'safety';
+    if (currentPath.includes('/safety')) return 'safety';
+    if (currentPath.includes('/more')) return 'more';
     return 'home';
   };
 
@@ -136,13 +138,17 @@ const FieldLayout: React.FC = () => {
               <ShoppingCartIcon />
               <span className="field-sidebar-label">POs</span>
             </button>
-            <button className={`field-sidebar-item ${activeTab === 'fitting' ? 'active' : ''}`} onClick={() => navigate(`/field/projects/${projectId}`)}>
+            <button className={`field-sidebar-item ${activeTab === 'fitting' ? 'active' : ''}`} onClick={() => navTo('fitting-orders')}>
               <BuildIcon />
               <span className="field-sidebar-label">Fitting</span>
             </button>
-            <button className={`field-sidebar-item ${activeTab === 'safety' ? 'active' : ''}`} onClick={() => navTo('safety-jsa')}>
+            <button className={`field-sidebar-item ${activeTab === 'safety' ? 'active' : ''}`} onClick={() => navTo('safety')}>
               <HealthAndSafetyIcon />
               <span className="field-sidebar-label">Safety</span>
+            </button>
+            <button className={`field-sidebar-item ${activeTab === 'more' ? 'active' : ''}`} onClick={() => navTo('more')}>
+              <MoreHorizIcon />
+              <span className="field-sidebar-label">More</span>
             </button>
             <div className="field-sidebar-spacer" />
             <button className="field-sidebar-item field-sidebar-switch" onClick={() => navigate('/field')}>
@@ -171,13 +177,17 @@ const FieldLayout: React.FC = () => {
             <ShoppingCartIcon />
             <span>POs</span>
           </button>
-          <button className={`field-nav-item ${activeTab === 'fitting' ? 'active' : ''}`} onClick={() => navigate(`/field/projects/${projectId}`)}>
+          <button className={`field-nav-item ${activeTab === 'fitting' ? 'active' : ''}`} onClick={() => navTo('fitting-orders')}>
             <BuildIcon />
             <span>Fitting</span>
           </button>
-          <button className={`field-nav-item ${activeTab === 'safety' ? 'active' : ''}`} onClick={() => navTo('safety-jsa')}>
+          <button className={`field-nav-item ${activeTab === 'safety' ? 'active' : ''}`} onClick={() => navTo('safety')}>
             <HealthAndSafetyIcon />
             <span>Safety</span>
+          </button>
+          <button className={`field-nav-item ${activeTab === 'more' ? 'active' : ''}`} onClick={() => navTo('more')}>
+            <MoreHorizIcon />
+            <span>More</span>
           </button>
         </nav>
       )}

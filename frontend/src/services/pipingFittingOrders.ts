@@ -34,6 +34,18 @@ export interface PipingFittingOrder {
   created_by_name: string;
   created_at: string;
   updated_at: string;
+  items?: PipingFittingOrderItem[];
+}
+
+export interface PipingFittingOrderItem {
+  id: number;
+  fitting_order_id: number;
+  sort_order: number;
+  fitting_type: string;
+  size: string;
+  join_type: string;
+  quantity: number;
+  remarks: string;
 }
 
 export interface PipingFittingOrderStats {
@@ -66,4 +78,14 @@ export const pipingFittingOrdersApi = {
     api.post<PipingFittingOrder>(`/piping-fitting-orders/${id}/update-status`, data),
 
   delete: (id: number) => api.delete(`/piping-fitting-orders/${id}`),
+
+  // Line item methods
+  addItem: (orderId: number, data: Partial<PipingFittingOrderItem>) =>
+    api.post<PipingFittingOrderItem>(`/piping-fitting-orders/${orderId}/items`, data),
+
+  updateItem: (orderId: number, itemId: number, data: Partial<PipingFittingOrderItem>) =>
+    api.put<PipingFittingOrderItem>(`/piping-fitting-orders/${orderId}/items/${itemId}`, data),
+
+  deleteItem: (orderId: number, itemId: number) =>
+    api.delete(`/piping-fitting-orders/${orderId}/items/${itemId}`),
 };

@@ -193,4 +193,75 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+// --- Line item routes ---
+
+// Add line item
+router.post('/:id/items', async (req, res, next) => {
+  try {
+    const existing = await PipingFittingOrder.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const item = await PipingFittingOrder.addItem(req.params.id, {
+      sortOrder: req.body.sort_order,
+      fittingType: req.body.fitting_type,
+      size: req.body.size,
+      joinType: req.body.join_type,
+      quantity: req.body.quantity,
+      remarks: req.body.remarks,
+    });
+    res.status(201).json(item);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update line item
+router.put('/:id/items/:itemId', async (req, res, next) => {
+  try {
+    const existing = await PipingFittingOrder.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const existingItem = await PipingFittingOrder.findItemById(req.params.itemId);
+    if (!existingItem || existingItem.fitting_order_id !== parseInt(req.params.id)) {
+      return res.status(404).json({ error: 'Line item not found' });
+    }
+    const item = await PipingFittingOrder.updateItem(req.params.itemId, req.body);
+    res.json(item);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete line item
+router.delete('/:id/items/:itemId', async (req, res, next) => {
+  try {
+    const existing = await PipingFittingOrder.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Fitting order not found' });
+    }
+    const existingItem = await PipingFittingOrder.findItemById(req.params.itemId);
+    if (!existingItem || existingItem.fitting_order_id !== parseInt(req.params.id)) {
+      return res.status(404).json({ error: 'Line item not found' });
+    }
+    await PipingFittingOrder.deleteItem(req.params.itemId);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
