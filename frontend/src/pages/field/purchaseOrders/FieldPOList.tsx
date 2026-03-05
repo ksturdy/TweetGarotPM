@@ -89,8 +89,8 @@ const FieldPOList: React.FC = () => {
               <div className="field-card-subtitle">{po.description}</div>
             )}
             <div className="field-card-meta">
-              {formatCurrency(po.total)} &middot; {formatDate(po.created_at)}
-              {po.created_by_name && ` &middot; ${po.created_by_name}`}
+              {formatCurrency(po.total)} {'\u00B7'} {formatDate(po.created_at)}
+              {po.created_by_name && ` \u00B7 ${po.created_by_name}`}
             </div>
           </div>
         ))

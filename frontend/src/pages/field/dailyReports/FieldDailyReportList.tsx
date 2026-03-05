@@ -116,7 +116,7 @@ const FieldDailyReportList: React.FC = () => {
               </div>
             )}
             <div className="field-card-meta">
-              {formatTime(report.created_at)} &middot; By {report.created_by_name}
+              {formatTime(report.created_at)} {'\u00B7'} By {report.created_by_name}
             </div>
           </div>
         ))

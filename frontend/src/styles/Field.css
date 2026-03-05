@@ -186,7 +186,7 @@ html {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: var(--field-bottom-nav-height);
+  min-height: var(--field-bottom-nav-height);
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -857,6 +857,7 @@ html {
   display: flex;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* Sidebar Navigation - hidden on phone, visible on tablet/desktop via media queries */
@@ -926,7 +927,7 @@ html {
   }
 
   .field-bottom-nav {
-    height: var(--field-bottom-nav-height);
+    min-height: var(--field-bottom-nav-height);
   }
 
   .field-nav-item {

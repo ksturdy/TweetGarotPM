@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import SaveIcon from '@mui/icons-material/Save';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import { dailyReportsApi, DailyReport } from '../../../services/dailyReports';
 
 interface CrewEntry {
@@ -62,8 +63,22 @@ const weatherOptions = [
   'Rainy',
   'Windy',
   'Snowy',
+  'Stormy',
+  'Foggy',
   'Other',
 ];
+
+// Map WMO weather codes to our dropdown values
+const wmoToWeather = (code: number): string => {
+  if (code <= 1) return 'Sunny';
+  if (code === 2) return 'Partly Cloudy';
+  if (code === 3) return 'Cloudy';
+  if (code === 45 || code === 48) return 'Foggy';
+  if (code >= 51 && code <= 67) return 'Rainy';
+  if (code >= 71 && code <= 86) return 'Snowy';
+  if (code >= 95) return 'Stormy';
+  return 'Cloudy';
+};
 
 const tradeOptions = [
   { value: 'plumbing', label: 'Plumbing' },
@@ -82,6 +97,7 @@ const FieldDailyReportForm: React.FC = () => {
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [crews, setCrews] = useState<CrewEntry[]>([]);
   const [saving, setSaving] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   const { data: existingReport } = useQuery({
     queryKey: ['field-daily-report', id],
@@ -123,6 +139,38 @@ const FieldDailyReportForm: React.FC = () => {
       }
     }
   }, [existingReport]);
+
+  // Auto-fetch weather from Open-Meteo for new reports
+  useEffect(() => {
+    if (isEditMode || !navigator.geolocation) return;
+    setWeatherLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const code = data.current.weather_code as number;
+            const temp = Math.round(data.current.temperature_2m);
+            setFormData((prev) => ({
+              ...prev,
+              weather: wmoToWeather(code),
+              temperature: `${temp}°F`,
+            }));
+          }
+        } catch {
+          // Weather is non-critical
+        } finally {
+          setWeatherLoading(false);
+        }
+      },
+      () => setWeatherLoading(false),
+      { timeout: 5000 }
+    );
+  }, [isEditMode]);
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<DailyReport>) => dailyReportsApi.create(data),
@@ -254,7 +302,10 @@ const FieldDailyReportForm: React.FC = () => {
       <form onSubmit={handleSubmit}>
         {/* Date & Weather */}
         <div className="field-form-section">
-          <div className="field-form-section-title">Date &amp; Weather</div>
+          <div className="field-form-section-title">
+            Date &amp; Weather
+            {weatherLoading && <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 400, marginLeft: 8 }}>Fetching weather...</span>}
+          </div>
           <div className="field-form-group">
             <label className="field-form-label">Report Date</label>
             <input

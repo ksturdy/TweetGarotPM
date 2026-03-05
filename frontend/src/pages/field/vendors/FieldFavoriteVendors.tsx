@@ -212,21 +212,21 @@ const FieldFavoriteVendors: React.FC = () => {
             background: 'rgba(0,0,0,0.5)',
             zIndex: 1000,
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             justifyContent: 'center',
+            padding: 16,
           }}
           onClick={() => !saving && setShowForm(false)}
         >
           <div
             style={{
               background: '#fff',
-              borderRadius: '16px 16px 0 0',
+              borderRadius: 16,
               width: '100%',
               maxWidth: 500,
               maxHeight: '85vh',
               overflow: 'auto',
               padding: '16px 16px 24px',
-              WebkitOverflowScrolling: 'touch',
             }}
             onClick={(e) => e.stopPropagation()}
           >

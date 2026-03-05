@@ -9,9 +9,9 @@ const FittingOrdersHome: React.FC = () => {
   const navigate = useNavigate();
 
   const modules = [
-    { label: 'SM Fitting', icon: <AirIcon />, path: 'sm-fitting-orders', color: 'orange' },
-    { label: 'Piping Fitting', icon: <PlumbingIcon />, path: 'piping-fitting-orders', color: 'purple' },
-    { label: 'Plumbing Fitting', icon: <WaterDropIcon />, path: 'plumbing-fitting-orders', color: 'cyan' },
+    { label: 'Sheet Metal', icon: <AirIcon />, path: 'sm-fitting-orders', color: 'orange' },
+    { label: 'Piping', icon: <PlumbingIcon />, path: 'piping-fitting-orders', color: 'purple' },
+    { label: 'Plumbing', icon: <WaterDropIcon />, path: 'plumbing-fitting-orders', color: 'cyan' },
   ];
 
   return (
