@@ -340,7 +340,7 @@ const FieldSmFittingOrderList: React.FC = () => {
                 color: '#92400e',
                 marginBottom: 8,
               }}>
-                This order has status "{confirmDelete.status?.replace(/_/g, ' ')}". Only draft orders can be deleted. Consider cancelling instead.
+                Warning: This order has status "{confirmDelete.status?.replace(/_/g, ' ')}".
               </div>
             )}
 

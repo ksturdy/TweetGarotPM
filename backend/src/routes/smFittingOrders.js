@@ -186,12 +186,9 @@ router.post('/:id/update-status', verifyOrderOwnership, async (req, res, next) =
   }
 });
 
-// Delete (draft only)
+// Delete
 router.delete('/:id', verifyOrderOwnership, async (req, res, next) => {
   try {
-    if (req.order.status !== 'draft') {
-      return res.status(400).json({ error: 'Only draft orders can be deleted' });
-    }
     await SmFittingOrder.delete(req.params.id);
     res.status(204).send();
   } catch (error) {

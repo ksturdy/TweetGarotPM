@@ -96,7 +96,10 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   };
 
   const handleDelete = () => {
-    if (window.confirm('Delete this fitting order? This cannot be undone.')) {
+    const msg = order && order.status !== 'draft'
+      ? `⚠️ This fitting order has status "${order.status.replace(/_/g, ' ')}". Are you sure you want to permanently delete it?`
+      : 'Delete this fitting order? This cannot be undone.';
+    if (window.confirm(msg)) {
       deleteMutation.mutate();
     }
   };
@@ -532,17 +535,15 @@ const FieldSmFittingOrderDetail: React.FC = () => {
           </button>
         )}
 
-        {/* Delete - draft only */}
-        {status === 'draft' && (
-          <button
-            className="field-btn field-btn-danger"
-            onClick={handleDelete}
-            disabled={isBusy}
-          >
-            <DeleteIcon style={{ fontSize: 18 }} />
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
-          </button>
-        )}
+        {/* Delete */}
+        <button
+          className="field-btn field-btn-danger"
+          onClick={handleDelete}
+          disabled={isBusy}
+        >
+          <DeleteIcon style={{ fontSize: 18 }} />
+          {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
+        </button>
       </div>
     </div>
   );

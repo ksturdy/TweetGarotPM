@@ -170,7 +170,7 @@ router.post('/:id/approve', authorize('admin', 'manager'), async (req, res, next
   }
 });
 
-// Delete (draft only)
+// Delete
 router.delete('/:id', async (req, res, next) => {
   try {
     const existing = await FieldPurchaseOrder.findById(req.params.id);
@@ -180,9 +180,6 @@ router.delete('/:id', async (req, res, next) => {
     const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
     if (!project) {
       return res.status(404).json({ error: 'Purchase order not found' });
-    }
-    if (existing.status !== 'draft') {
-      return res.status(400).json({ error: 'Only draft purchase orders can be deleted' });
     }
     await FieldPurchaseOrder.delete(req.params.id);
     res.status(204).send();

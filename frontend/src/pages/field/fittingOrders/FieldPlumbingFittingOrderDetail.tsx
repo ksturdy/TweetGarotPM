@@ -61,7 +61,10 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
   };
 
   const handleDelete = () => {
-    if (window.confirm('Delete this fitting order? This cannot be undone.')) {
+    const msg = order && order.status !== 'draft'
+      ? `⚠️ This fitting order has status "${order.status.replace(/_/g, ' ')}". Are you sure you want to permanently delete it?`
+      : 'Delete this fitting order? This cannot be undone.';
+    if (window.confirm(msg)) {
       deleteMutation.mutate();
     }
   };
@@ -204,35 +207,37 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
       </div>
 
       {/* Actions */}
-      {isDraft && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
-          <button
-            className="field-btn field-btn-primary"
-            onClick={handleSubmit}
-            disabled={submitMutation.isPending}
-          >
-            <SendIcon style={{ fontSize: 18 }} />
-            {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
-          </button>
-          <button
-            className="field-btn field-btn-secondary"
-            onClick={() =>
-              navigate(`/field/projects/${projectId}/plumbing-fitting-orders/${id}/edit`)
-            }
-          >
-            <EditIcon style={{ fontSize: 18 }} />
-            Edit Order
-          </button>
-          <button
-            className="field-btn field-btn-danger"
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-          >
-            <DeleteIcon style={{ fontSize: 18 }} />
-            {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
-          </button>
-        </div>
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
+        {isDraft && (
+          <>
+            <button
+              className="field-btn field-btn-primary"
+              onClick={handleSubmit}
+              disabled={submitMutation.isPending}
+            >
+              <SendIcon style={{ fontSize: 18 }} />
+              {submitMutation.isPending ? 'Submitting...' : 'Submit to Shop'}
+            </button>
+            <button
+              className="field-btn field-btn-secondary"
+              onClick={() =>
+                navigate(`/field/projects/${projectId}/plumbing-fitting-orders/${id}/edit`)
+              }
+            >
+              <EditIcon style={{ fontSize: 18 }} />
+              Edit Order
+            </button>
+          </>
+        )}
+        <button
+          className="field-btn field-btn-danger"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          <DeleteIcon style={{ fontSize: 18 }} />
+          {deleteMutation.isPending ? 'Deleting...' : 'Delete Order'}
+        </button>
+      </div>
     </div>
   );
 };

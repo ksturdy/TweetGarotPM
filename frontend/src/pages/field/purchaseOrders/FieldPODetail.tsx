@@ -74,7 +74,10 @@ const FieldPODetail: React.FC = () => {
 
   const handleDelete = () => {
     if (!po) return;
-    if (!window.confirm('Are you sure you want to delete this purchase order?')) return;
+    const msg = po.status !== 'draft'
+      ? `⚠️ This purchase order has status "${po.status}". Are you sure you want to permanently delete it?`
+      : 'Are you sure you want to delete this purchase order?';
+    if (!window.confirm(msg)) return;
     setActionLoading('delete');
     deleteMutation.mutate(po.id);
   };
@@ -368,16 +371,16 @@ const FieldPODetail: React.FC = () => {
               <SendIcon style={{ fontSize: 18, marginRight: 4 }} />
               {actionLoading === 'submit' ? 'Submitting...' : 'Submit'}
             </button>
-            <button
-              className="field-btn field-btn-danger"
-              onClick={handleDelete}
-              disabled={actionLoading === 'delete'}
-            >
-              <DeleteIcon style={{ fontSize: 18, marginRight: 4 }} />
-              {actionLoading === 'delete' ? 'Deleting...' : 'Delete'}
-            </button>
           </>
         )}
+        <button
+          className="field-btn field-btn-danger"
+          onClick={handleDelete}
+          disabled={actionLoading === 'delete'}
+        >
+          <DeleteIcon style={{ fontSize: 18, marginRight: 4 }} />
+          {actionLoading === 'delete' ? 'Deleting...' : 'Delete'}
+        </button>
       </div>
     </div>
   );

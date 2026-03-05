@@ -170,7 +170,7 @@ router.post('/:id/update-status', async (req, res, next) => {
   }
 });
 
-// Delete (draft only)
+// Delete
 router.delete('/:id', async (req, res, next) => {
   try {
     const existing = await PlumbingFittingOrder.findById(req.params.id);
@@ -180,9 +180,6 @@ router.delete('/:id', async (req, res, next) => {
     const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
-    }
-    if (existing.status !== 'draft') {
-      return res.status(400).json({ error: 'Only draft orders can be deleted' });
     }
     await PlumbingFittingOrder.delete(req.params.id);
     res.status(204).send();

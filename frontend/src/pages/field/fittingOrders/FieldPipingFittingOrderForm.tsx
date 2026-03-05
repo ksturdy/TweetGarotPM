@@ -8,6 +8,14 @@ import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { pipingFittingOrdersApi, PipingFittingOrder, PipingFittingOrderItem } from '../../../services/pipingFittingOrders';
 
+type Category = 'fittings' | 'hangers' | 'hardware';
+
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'fittings', label: 'Fittings' },
+  { value: 'hangers', label: 'Hangers & Supports' },
+  { value: 'hardware', label: 'Hardware' },
+];
+
 const FITTING_TYPES = [
   { value: '90', label: '90\u00B0 Elbow' },
   { value: '45', label: '45\u00B0 Elbow' },
@@ -25,8 +33,32 @@ const FITTING_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+const HANGER_TYPES = [
+  { value: 'clevis_hanger', label: 'Clevis Hanger' },
+  { value: 'ring_hanger', label: 'Ring Hanger' },
+  { value: 'riser_clamp', label: 'Riser Clamp' },
+  { value: 'pipe_strap', label: 'Pipe Strap' },
+  { value: 'beam_clamp', label: 'Beam Clamp' },
+  { value: 'unistrut', label: 'Unistrut' },
+  { value: 'threaded_rod', label: 'Threaded Rod' },
+  { value: 'anchor', label: 'Anchor' },
+];
+
+const HARDWARE_TYPES = [
+  { value: 'nut', label: 'Nut' },
+  { value: 'bolt', label: 'Bolt' },
+  { value: 'washer', label: 'Washer' },
+  { value: 'screw', label: 'Screw' },
+  { value: 'all_thread', label: 'All-Thread' },
+  { value: 'other_hardware', label: 'Other' },
+];
+
 const PIPE_SIZES = [
   '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '4"', '5"', '6"', '8"', '10"', '12"', '14"', '16"',
+];
+
+const HARDWARE_SIZES = [
+  '1/4"', '5/16"', '3/8"', '1/2"', '5/8"', '3/4"',
 ];
 
 const JOIN_TYPES = [
@@ -38,6 +70,20 @@ const JOIN_TYPES = [
   { value: 'soldered', label: 'Soldered' },
   { value: 'glued', label: 'Glued' },
 ];
+
+const getItemTypes = (category: Category) => {
+  switch (category) {
+    case 'hangers': return HANGER_TYPES;
+    case 'hardware': return HARDWARE_TYPES;
+    default: return FITTING_TYPES;
+  }
+};
+
+const getSizes = (category: Category) => {
+  return category === 'hardware' ? HARDWARE_SIZES : PIPE_SIZES;
+};
+
+const hasJoinType = (category: Category) => category === 'fittings';
 
 interface LocalLineItem {
   id?: number;
@@ -89,6 +135,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
   const [lineItems, setLineItems] = useState<LocalLineItem[]>([]);
 
   // Quick-add state
+  const [selectedCategory, setSelectedCategory] = useState<Category>('fittings');
   const [selectedFitting, setSelectedFitting] = useState('');
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedJoinType, setSelectedJoinType] = useState('');
@@ -165,8 +212,10 @@ const FieldPipingFittingOrderForm: React.FC = () => {
       return;
     }
 
-    // All sizes picked
-    if (joinTypeLocked && selectedJoinType) {
+    // All sizes picked — skip join type for non-fitting categories
+    if (!hasJoinType(selectedCategory)) {
+      setStep('qty');
+    } else if (joinTypeLocked && selectedJoinType) {
       setStep('qty');
     } else {
       setStep('join');
@@ -335,7 +384,20 @@ const FieldPipingFittingOrderForm: React.FC = () => {
     return <div className="field-loading">Loading order...</div>;
   }
 
-  const getFittingLabel = (value: string) => FITTING_TYPES.find((f) => f.value === value)?.label || value;
+  const getFittingLabel = (value: string) =>
+    FITTING_TYPES.find((f) => f.value === value)?.label ||
+    HANGER_TYPES.find((f) => f.value === value)?.label ||
+    HARDWARE_TYPES.find((f) => f.value === value)?.label ||
+    value;
+
+  const handleCategoryChange = (cat: Category) => {
+    setSelectedCategory(cat);
+    setSelectedFitting('');
+    setSelectedSizes([]);
+    if (!joinTypeLocked) setSelectedJoinType('');
+    setQuantity(1);
+    setStep('fitting');
+  };
   const getJoinLabel = (value: string) => JOIN_TYPES.find((j) => j.value === value)?.label || value;
 
   const compactLabel: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 2, whiteSpace: 'nowrap' };
@@ -404,54 +466,85 @@ const FieldPipingFittingOrderForm: React.FC = () => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#1e40af' }}>
-            Quick Add Fitting
+            Quick Add
           </div>
-          {/* Lock Join Type Toggle */}
-          <button
-            type="button"
-            onClick={() => setJoinTypeLocked(!joinTypeLocked)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 10px',
-              border: joinTypeLocked ? '2px solid #3b82f6' : '1px solid #d1d5db',
-              borderRadius: 6,
-              background: joinTypeLocked ? '#eff6ff' : '#fff',
-              color: joinTypeLocked ? '#1e40af' : '#6b7280',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {joinTypeLocked ? <LockIcon style={{ fontSize: 14 }} /> : <LockOpenIcon style={{ fontSize: 14 }} />}
-            {joinTypeLocked ? `Joint: ${getJoinLabel(selectedJoinType)}` : 'Lock Joint'}
-          </button>
+          {/* Lock Join Type Toggle - only for fittings */}
+          {hasJoinType(selectedCategory) && (
+            <button
+              type="button"
+              onClick={() => setJoinTypeLocked(!joinTypeLocked)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 10px',
+                border: joinTypeLocked ? '2px solid #3b82f6' : '1px solid #d1d5db',
+                borderRadius: 6,
+                background: joinTypeLocked ? '#eff6ff' : '#fff',
+                color: joinTypeLocked ? '#1e40af' : '#6b7280',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {joinTypeLocked ? <LockIcon style={{ fontSize: 14 }} /> : <LockOpenIcon style={{ fontSize: 14 }} />}
+              {joinTypeLocked ? `Joint: ${getJoinLabel(selectedJoinType)}` : 'Lock Joint'}
+            </button>
+          )}
+        </div>
+
+        {/* Category Tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.value}
+              type="button"
+              onClick={() => handleCategoryChange(cat.value)}
+              style={{
+                padding: '6px 14px',
+                border: selectedCategory === cat.value ? '2px solid #3b82f6' : '1px solid #d1d5db',
+                borderRadius: 20,
+                background: selectedCategory === cat.value ? '#eff6ff' : '#fff',
+                color: selectedCategory === cat.value ? '#1e40af' : '#6b7280',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
 
         {/* Step breadcrumb */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, fontSize: 11, color: '#9ca3af', flexWrap: 'wrap' }}>
           <span style={{ color: step === 'fitting' ? '#1e40af' : selectedFitting ? '#10b981' : '#9ca3af', fontWeight: step === 'fitting' ? 700 : 400 }}>
-            {selectedFitting ? getFittingLabel(selectedFitting) : 'Fitting'}
+            {selectedFitting ? getFittingLabel(selectedFitting) : (selectedCategory === 'fittings' ? 'Fitting' : 'Item')}
           </span>
-          <span>&rsaquo;</span>
+          <span>{'\u203A'}</span>
           <span style={{ color: step === 'size' ? '#1e40af' : selectedSizes.length === sizeConfig.count ? '#10b981' : '#9ca3af', fontWeight: step === 'size' ? 700 : 400 }}>
             {selectedSizes.length > 0 ? selectedSizes.join(' x ') + (selectedSizes.length < sizeConfig.count ? ' x ?' : '') : 'Size'}
           </span>
-          <span>&rsaquo;</span>
-          <span style={{ color: step === 'join' ? '#1e40af' : selectedJoinType ? '#10b981' : '#9ca3af', fontWeight: step === 'join' ? 700 : 400 }}>
-            {selectedJoinType ? getJoinLabel(selectedJoinType) : 'Joint'}
-          </span>
-          <span>&rsaquo;</span>
+          {hasJoinType(selectedCategory) && (
+            <>
+              <span>{'\u203A'}</span>
+              <span style={{ color: step === 'join' ? '#1e40af' : selectedJoinType ? '#10b981' : '#9ca3af', fontWeight: step === 'join' ? 700 : 400 }}>
+                {selectedJoinType ? getJoinLabel(selectedJoinType) : 'Joint'}
+              </span>
+            </>
+          )}
+          <span>{'\u203A'}</span>
           <span style={{ color: step === 'qty' ? '#1e40af' : '#9ca3af', fontWeight: step === 'qty' ? 700 : 400 }}>
             Qty
           </span>
         </div>
 
-        {/* Step 1: Fitting Type - button grid */}
+        {/* Step 1: Item Type - button grid */}
         {step === 'fitting' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-            {FITTING_TYPES.map((ft) => (
+            {getItemTypes(selectedCategory).map((ft) => (
               <button
                 key={ft.value}
                 type="button"
@@ -489,7 +582,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-              {PIPE_SIZES.map((sz) => (
+              {getSizes(selectedCategory).map((sz) => (
                 <button
                   key={sz}
                   type="button"
@@ -525,7 +618,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
                   onClick={() => { setSelectedFitting(''); setSelectedSizes([]); setStep('fitting'); }}
                   style={{ fontSize: 12, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
                 >
-                  Back to fitting type
+                  Back to item type
                 </button>
               )}
             </div>
@@ -622,7 +715,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (joinTypeLocked && selectedJoinType) {
+                  if (!hasJoinType(selectedCategory) || (joinTypeLocked && selectedJoinType)) {
                     setSelectedSizes((prev) => prev.slice(0, -1)); setStep('size');
                   } else {
                     setSelectedJoinType(''); setStep('join');
@@ -642,7 +735,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
       {lineItems.length > 0 && (
         <div className="field-form-section" style={{ padding: '8px 0', marginBottom: 70 }}>
           <div style={{ padding: '6px 12px', fontSize: 13, fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>
-            Fittings ({lineItems.length} items)
+            Items ({lineItems.length})
           </div>
           {lineItems.map((item, index) => (
             <div
@@ -688,7 +781,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
 
       {lineItems.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 16px', color: '#9ca3af', fontSize: 14, marginBottom: 70 }}>
-          No fittings added yet. Use the quick add above to start building your list.
+          No items added yet. Use the quick add above to start building your list.
         </div>
       )}
 
