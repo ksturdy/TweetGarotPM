@@ -22,7 +22,7 @@ const User = {
    * Find user by email (global lookup for login)
    */
   async findByEmail(email) {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await db.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     return result.rows[0];
   },
 
@@ -31,7 +31,7 @@ const User = {
    */
   async findByEmailAndTenant(email, tenantId) {
     const result = await db.query(
-      'SELECT * FROM users WHERE email = $1 AND tenant_id = $2',
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND tenant_id = $2',
       [email, tenantId]
     );
     return result.rows[0];
