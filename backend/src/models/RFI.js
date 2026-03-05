@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const RFI = {
-  async create({ projectId, number, subject, question, priority, dueDate, assignedTo, createdBy, recipientCompanyId, recipientContactId }) {
+  async create({ projectId, number, subject, question, priority, dueDate, assignedTo, createdBy, recipientCompanyId, recipientContactId, source }) {
     const result = await db.query(
-      `INSERT INTO rfis (project_id, number, subject, question, priority, due_date, assigned_to, created_by, recipient_company_id, recipient_contact_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open')
+      `INSERT INTO rfis (project_id, number, subject, question, priority, due_date, assigned_to, created_by, recipient_company_id, recipient_contact_id, status, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open', $11)
        RETURNING *`,
-      [projectId, number, subject, question, priority || 'normal', dueDate, assignedTo, createdBy, recipientCompanyId, recipientContactId]
+      [projectId, number, subject, question, priority || 'normal', dueDate, assignedTo, createdBy, recipientCompanyId, recipientContactId, source || 'pm']
     );
     return result.rows[0];
   },
@@ -62,6 +62,11 @@ const RFI = {
     if (filters.status) {
       params.push(filters.status);
       query += ` AND r.status = $${params.length}`;
+    }
+
+    if (filters.source) {
+      params.push(filters.source);
+      query += ` AND r.source = $${params.length}`;
     }
 
     query += ' ORDER BY r.number DESC';

@@ -84,6 +84,8 @@ const nearMissReportRoutes = require('./routes/nearMissReports');
 const sellSheetRoutes = require('./routes/sellSheets');
 const fieldFavoriteVendorRoutes = require('./routes/fieldFavoriteVendors');
 const projectAssignmentRoutes = require('./routes/projectAssignments');
+const fieldIssueRoutes = require('./routes/fieldIssues');
+const attachmentRoutes = require('./routes/attachments');
 
 const app = express();
 
@@ -199,6 +201,8 @@ app.use('/api/near-miss-reports', nearMissReportRoutes);
 app.use('/api/sell-sheets', sellSheetRoutes);
 app.use('/api/field-favorite-vendors', fieldFavoriteVendorRoutes);
 app.use('/api/project-assignments', projectAssignmentRoutes);
+app.use('/api/field-issues', fieldIssueRoutes);
+app.use('/api/attachments', attachmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

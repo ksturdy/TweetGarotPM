@@ -4,6 +4,8 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import BuildIcon from '@mui/icons-material/Build';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 
 const FieldProjectHome: React.FC = () => {
   const { projectId } = useParams();
@@ -14,6 +16,8 @@ const FieldProjectHome: React.FC = () => {
     { label: 'Field Purchase Orders', icon: <ShoppingCartIcon />, path: 'purchase-orders', color: 'green' },
     { label: 'Fitting Orders', icon: <BuildIcon />, path: 'fitting-orders', color: 'purple' },
     { label: 'Safety', icon: <HealthAndSafetyIcon />, path: 'safety', color: 'red' },
+    { label: 'Issues', icon: <BugReportIcon />, path: 'issues', color: 'orange' },
+    { label: 'RFIs', icon: <QuestionAnswerIcon />, path: 'rfis', color: 'cyan' },
   ];
 
   return (

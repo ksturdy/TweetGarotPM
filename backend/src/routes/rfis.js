@@ -40,7 +40,7 @@ const verifyProjectOwnership = async (req, res, next) => {
 // Get RFIs for a project
 router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
-    const filters = { status: req.query.status };
+    const filters = { status: req.query.status, source: req.query.source };
     const rfis = await RFI.findByProject(req.params.projectId, filters);
     res.json(rfis);
   } catch (error) {

@@ -229,6 +229,22 @@ const RFIList: React.FC = () => {
                   <Link to={`/projects/${projectId}/rfis/${rfi.id}`} style={{ color: '#3b82f6', fontWeight: 600, textDecoration: 'none' }}>
                     {rfi.number}
                   </Link>
+                  {rfi.source === 'field' && (
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 6px',
+                      borderRadius: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      background: '#fff7ed',
+                      color: '#c2410c',
+                      border: '1px solid #fed7aa',
+                      marginLeft: 6,
+                      verticalAlign: 'middle',
+                    }}>
+                      Field
+                    </span>
+                  )}
                 </td>
                 <td>
                   <div className="sales-project-cell">

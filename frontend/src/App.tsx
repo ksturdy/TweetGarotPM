@@ -125,6 +125,12 @@ import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
 import FieldNearMissList from './pages/field/nearMiss/FieldNearMissList';
 import FieldNearMissForm from './pages/field/nearMiss/FieldNearMissForm';
 import FieldNearMissDetail from './pages/field/nearMiss/FieldNearMissDetail';
+import FieldIssueList from './pages/field/issues/FieldIssueList';
+import FieldIssueForm from './pages/field/issues/FieldIssueForm';
+import FieldIssueDetail from './pages/field/issues/FieldIssueDetail';
+import FieldRFIList from './pages/field/rfis/FieldRFIList';
+import FieldRFIForm from './pages/field/rfis/FieldRFIForm';
+import FieldRFIDetail from './pages/field/rfis/FieldRFIDetail';
 import FieldMoreHome from './pages/field/FieldMoreHome';
 import FieldFavoriteVendors from './pages/field/vendors/FieldFavoriteVendors';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
@@ -288,6 +294,14 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/safety-near-miss/new" element={<FieldNearMissForm />} />
           <Route path="projects/:projectId/safety-near-miss/:id" element={<FieldNearMissDetail />} />
           <Route path="projects/:projectId/safety-near-miss/:id/edit" element={<FieldNearMissForm />} />
+          <Route path="projects/:projectId/issues" element={<FieldIssueList />} />
+          <Route path="projects/:projectId/issues/new" element={<FieldIssueForm />} />
+          <Route path="projects/:projectId/issues/:id" element={<FieldIssueDetail />} />
+          <Route path="projects/:projectId/issues/:id/edit" element={<FieldIssueForm />} />
+          <Route path="projects/:projectId/rfis" element={<FieldRFIList />} />
+          <Route path="projects/:projectId/rfis/new" element={<FieldRFIForm />} />
+          <Route path="projects/:projectId/rfis/:id" element={<FieldRFIDetail />} />
+          <Route path="projects/:projectId/rfis/:id/edit" element={<FieldRFIForm />} />
           <Route path="projects/:projectId/more" element={<FieldMoreHome />} />
           <Route path="projects/:projectId/more/vendors" element={<FieldFavoriteVendors />} />
         </Route>

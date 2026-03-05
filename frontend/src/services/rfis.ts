@@ -63,13 +63,16 @@ export interface RFI {
   project_number: string | null;
   project_client: string | null;
 
+  // Source
+  source: 'pm' | 'field' | null;
+
   responded_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export const rfisApi = {
-  getByProject: (projectId: number, filters?: { status?: string }) =>
+  getByProject: (projectId: number, filters?: { status?: string; source?: string }) =>
     api.get<RFI[]>(`/rfis/project/${projectId}`, { params: filters }),
 
   getById: (id: number) => api.get<RFI>(`/rfis/${id}`),

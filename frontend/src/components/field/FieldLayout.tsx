@@ -57,6 +57,8 @@ const FieldLayout: React.FC = () => {
     if (currentPath.includes('/purchase-orders')) return 'purchase-orders';
     if (currentPath.includes('/fitting-orders') || currentPath.includes('sm-fitting') || currentPath.includes('piping-fitting') || currentPath.includes('plumbing-fitting')) return 'fitting';
     if (currentPath.includes('/safety')) return 'safety';
+    if (currentPath.includes('/issues')) return 'home';
+    if (currentPath.includes('/rfis')) return 'home';
     if (currentPath.includes('/more')) return 'more';
     return 'home';
   };
