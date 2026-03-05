@@ -1,7 +1,8 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { rfisApi } from '../../../services/rfis';
 import FieldPhotoUpload from '../../../components/field/FieldPhotoUpload';
 
@@ -15,6 +16,7 @@ const priorityColors: Record<string, { bg: string; text: string; border: string 
 const FieldRFIDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: rfi, isLoading } = useQuery({
     queryKey: ['field-rfi', id],
@@ -136,9 +138,9 @@ const FieldRFIDetail: React.FC = () => {
       {/* Photos */}
       <FieldPhotoUpload entityType="rfi" entityId={rfi.id} />
 
-      {/* Edit Button (only for open, field-submitted RFIs) */}
-      {rfi.status === 'open' && rfi.source === 'field' && (
-        <div className="field-actions-bar">
+      {/* Action Buttons */}
+      <div className="field-actions-bar">
+        {rfi.status === 'open' && rfi.source === 'field' && (
           <button
             className="field-btn field-btn-primary"
             onClick={() =>
@@ -149,8 +151,23 @@ const FieldRFIDetail: React.FC = () => {
             <EditIcon style={{ fontSize: 18 }} />
             Edit
           </button>
-        </div>
-      )}
+        )}
+        <button
+          className="field-btn field-btn-danger field-btn-sm"
+          onClick={() => {
+            if (window.confirm('Are you sure you want to delete this RFI?')) {
+              rfisApi.delete(Number(id)).then(() => {
+                queryClient.invalidateQueries({ queryKey: ['field-rfis', projectId] });
+                navigate(`/field/projects/${projectId}/rfis`);
+              });
+            }
+          }}
+          type="button"
+          style={{ width: 'auto', minWidth: 48 }}
+        >
+          <DeleteIcon style={{ fontSize: 18 }} />
+        </button>
+      </div>
     </div>
   );
 };

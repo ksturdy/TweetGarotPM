@@ -153,38 +153,40 @@ const FieldIssueDetail: React.FC = () => {
       <FieldPhotoUpload entityType="field_issue" entityId={issue.id} />
 
       {/* Action Buttons */}
-      {issue.status === 'draft' && (
-        <div className="field-actions-bar">
-          <button
-            className="field-btn field-btn-success"
-            onClick={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending}
-            type="button"
-          >
-            <CheckCircleIcon style={{ fontSize: 18 }} />
-            {submitMutation.isPending ? 'Submitting...' : 'Submit'}
-          </button>
-          <button
-            className="field-btn field-btn-primary"
-            onClick={() =>
-              navigate(`/field/projects/${projectId}/issues/${id}/edit`)
-            }
-            type="button"
-          >
-            <EditIcon style={{ fontSize: 18 }} />
-            Edit
-          </button>
-          <button
-            className="field-btn field-btn-danger field-btn-sm"
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-            type="button"
-            style={{ width: 'auto', minWidth: 48 }}
-          >
-            <DeleteIcon style={{ fontSize: 18 }} />
-          </button>
-        </div>
-      )}
+      <div className="field-actions-bar">
+        {issue.status === 'draft' && (
+          <>
+            <button
+              className="field-btn field-btn-success"
+              onClick={() => submitMutation.mutate()}
+              disabled={submitMutation.isPending}
+              type="button"
+            >
+              <CheckCircleIcon style={{ fontSize: 18 }} />
+              {submitMutation.isPending ? 'Submitting...' : 'Submit'}
+            </button>
+            <button
+              className="field-btn field-btn-primary"
+              onClick={() =>
+                navigate(`/field/projects/${projectId}/issues/${id}/edit`)
+              }
+              type="button"
+            >
+              <EditIcon style={{ fontSize: 18 }} />
+              Edit
+            </button>
+          </>
+        )}
+        <button
+          className="field-btn field-btn-danger field-btn-sm"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+          type="button"
+          style={{ width: 'auto', minWidth: 48 }}
+        >
+          <DeleteIcon style={{ fontSize: 18 }} />
+        </button>
+      </div>
     </div>
   );
 };

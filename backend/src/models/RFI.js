@@ -109,6 +109,10 @@ const RFI = {
     return result.rows[0];
   },
 
+  async delete(id) {
+    await db.query('DELETE FROM rfis WHERE id = $1', [id]);
+  },
+
   async getNextNumber(projectId) {
     const result = await db.query(
       'SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM rfis WHERE project_id = $1',

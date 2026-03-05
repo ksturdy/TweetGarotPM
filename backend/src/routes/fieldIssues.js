@@ -135,7 +135,7 @@ router.post('/:id/submit', async (req, res, next) => {
   }
 });
 
-// Delete (draft only)
+// Delete issue
 router.delete('/:id', async (req, res, next) => {
   try {
     const existing = await FieldIssue.findById(req.params.id);
@@ -145,9 +145,6 @@ router.delete('/:id', async (req, res, next) => {
     const project = await Project.findByIdAndTenant(existing.project_id, req.tenantId);
     if (!project) {
       return res.status(404).json({ error: 'Issue not found' });
-    }
-    if (existing.status !== 'draft') {
-      return res.status(400).json({ error: 'Only draft issues can be deleted' });
     }
     await FieldIssue.delete(req.params.id);
     res.status(204).send();

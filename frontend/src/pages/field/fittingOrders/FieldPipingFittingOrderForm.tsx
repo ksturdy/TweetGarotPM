@@ -61,6 +61,16 @@ const HARDWARE_SIZES = [
   '1/4"', '5/16"', '3/8"', '1/2"', '5/8"', '3/4"',
 ];
 
+const UNISTRUT_SIZES = [
+  '1-5/8" x 1-5/8"',
+  '1-5/8" x 13/16"',
+  '1-5/8" x 3-1/4"',
+];
+
+const THREADED_ROD_SIZES = [
+  '1/4"', '3/8"', '1/2"', '5/8"', '3/4"', '7/8"', '1"',
+];
+
 const JOIN_TYPES = [
   { value: 'threaded', label: 'Threaded' },
   { value: 'welded', label: 'Welded' },
@@ -79,8 +89,12 @@ const getItemTypes = (category: Category) => {
   }
 };
 
-const getSizes = (category: Category) => {
-  return category === 'hardware' ? HARDWARE_SIZES : PIPE_SIZES;
+const getSizes = (category: Category, fittingType?: string) => {
+  if (fittingType === 'unistrut') return UNISTRUT_SIZES;
+  if (fittingType === 'threaded_rod') return THREADED_ROD_SIZES;
+  if (fittingType === 'anchor') return HARDWARE_SIZES;
+  if (category === 'hardware') return HARDWARE_SIZES;
+  return PIPE_SIZES;
 };
 
 const hasJoinType = (category: Category) => category === 'fittings';
@@ -582,7 +596,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-              {getSizes(selectedCategory).map((sz) => (
+              {getSizes(selectedCategory, selectedFitting).map((sz) => (
                 <button
                   key={sz}
                   type="button"

@@ -157,4 +157,22 @@ router.post('/:id/close', async (req, res, next) => {
   }
 });
 
+// Delete RFI
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const existingRfi = await RFI.findById(req.params.id);
+    if (!existingRfi) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+    const project = await Project.findByIdAndTenant(existingRfi.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'RFI not found' });
+    }
+    await RFI.delete(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

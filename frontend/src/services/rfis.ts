@@ -84,4 +84,6 @@ export const rfisApi = {
   respond: (id: number, response: string) => api.post<RFI>(`/rfis/${id}/respond`, { response }),
 
   close: (id: number) => api.post<RFI>(`/rfis/${id}/close`),
+
+  delete: (id: number) => api.delete(`/rfis/${id}`),
 };
