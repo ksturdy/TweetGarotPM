@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import { fieldPurchaseOrdersApi, FieldPurchaseOrder } from '../../../services/fieldPurchaseOrders';
+import { fieldPurchaseOrdersApi, FieldPurchaseOrder, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
 
-const STATUS_FILTERS = ['All', 'Draft', 'Submitted', 'Approved', 'Ordered'];
+const STATUS_FILTERS = ['All', 'Draft', 'Submitted'];
 
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -78,7 +78,7 @@ const FieldPOList: React.FC = () => {
           >
             <div className="field-card-header">
               <div>
-                <div className="field-card-number">FPO-{po.number}</div>
+                <div className="field-card-number">{formatFpoNumber(po)}</div>
                 <div className="field-card-title">{po.vendor_name || 'No Vendor'}</div>
               </div>
               <span className={`field-status field-status-${po.status}`}>

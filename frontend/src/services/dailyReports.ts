@@ -13,6 +13,8 @@ export interface DailyReportCrew {
 export interface DailyReport {
   id: number;
   project_id: number;
+  project_name?: string;
+  project_number?: string;
   report_date: string;
   weather: string;
   temperature: string;

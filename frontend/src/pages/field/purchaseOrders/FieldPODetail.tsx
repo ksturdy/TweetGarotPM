@@ -3,9 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import SendIcon from '@mui/icons-material/Send';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { fieldPurchaseOrdersApi, FieldPurchaseOrder, FieldPurchaseOrderItem } from '../../../services/fieldPurchaseOrders';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ShareIcon from '@mui/icons-material/Share';
+import { fieldPurchaseOrdersApi, FieldPurchaseOrder, FieldPurchaseOrderItem, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
+import { generateFieldPoPdf } from '../../../utils/fieldPoPdfClient';
+import { useAuth } from '../../../context/AuthContext';
 
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -28,7 +31,12 @@ const FieldPODetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { tenant } = useAuth();
+  // Use API proxy for logo to avoid R2 CORS issues in PDF generation
+  const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const { data: po, isLoading } = useQuery({
     queryKey: ['field-purchase-order', id],
@@ -41,16 +49,6 @@ const FieldPODetail: React.FC = () => {
 
   const submitMutation = useMutation({
     mutationFn: (poId: number) => fieldPurchaseOrdersApi.submit(poId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-purchase-order', id] });
-      queryClient.invalidateQueries({ queryKey: ['field-purchase-orders', projectId] });
-      setActionLoading(null);
-    },
-    onError: () => setActionLoading(null),
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: (poId: number) => fieldPurchaseOrdersApi.approve(poId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['field-purchase-order', id] });
       queryClient.invalidateQueries({ queryKey: ['field-purchase-orders', projectId] });
@@ -74,17 +72,99 @@ const FieldPODetail: React.FC = () => {
     submitMutation.mutate(po.id);
   };
 
-  const handleApprove = () => {
-    if (!po) return;
-    setActionLoading('approve');
-    approveMutation.mutate(po.id);
-  };
-
   const handleDelete = () => {
     if (!po) return;
     if (!window.confirm('Are you sure you want to delete this purchase order?')) return;
     setActionLoading('delete');
     deleteMutation.mutate(po.id);
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!po) return;
+    setDownloadingPdf(true);
+    try {
+      const blob = await generateFieldPoPdf(po as any, logoUrl);
+      const fpoNum = formatFpoNumber(po);
+      const filename = `${fpoNum}.pdf`;
+
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos) {
+        try {
+          const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+            await navigator.share({ files: [pdfFile], title: filename });
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
+      }
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleEmailPo = async () => {
+    if (!po) return;
+    setSendingEmail(true);
+    try {
+      const blob = await generateFieldPoPdf(po as any, logoUrl);
+      const fpoNum2 = formatFpoNumber(po);
+      const filename = `${fpoNum2}.pdf`;
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: fpoNum2,
+        });
+      } else {
+        const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        const itemCount = (po.items || []).length;
+        const subject = encodeURIComponent(
+          `Purchase Order ${fpoNum2} - ${po.vendor_name || 'No Vendor'}`
+        );
+        const body = encodeURIComponent(
+          `Please find the attached purchase order ${fpoNum2}.\n\n` +
+          `Vendor: ${po.vendor_name || 'N/A'}\n` +
+          `Items: ${itemCount}\n` +
+          `Total: ${formatCurrency(po.total)}\n\n` +
+          `The PDF is attached to this email.\n\n` +
+          `Thank you,\nTweet Garot Mechanical`
+        );
+        window.location.href = `mailto:${po.vendor_email ? encodeURIComponent(po.vendor_email) : ''}?subject=${subject}&body=${body}`;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      console.error('Failed to share PO:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   if (isLoading) {
@@ -97,11 +177,10 @@ const FieldPODetail: React.FC = () => {
 
   const items = po.items || [];
   const isDraft = po.status === 'draft';
-  const isSubmitted = po.status === 'submitted';
 
   return (
     <div>
-      <h1 className="field-page-title">FPO-{po.number}</h1>
+      <h1 className="field-page-title">{formatFpoNumber(po)}</h1>
       <p className="field-page-subtitle">{po.vendor_name || 'No Vendor'}</p>
 
       {/* Status */}
@@ -109,12 +188,36 @@ const FieldPODetail: React.FC = () => {
         <span className={`field-status field-status-${po.status}`}>{po.status}</span>
       </div>
 
+      {/* PDF & Email Actions */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          type="button"
+          style={{ opacity: downloadingPdf ? 0.6 : 1 }}
+        >
+          <PictureAsPdfIcon style={{ fontSize: 16 }} />
+          {downloadingPdf ? 'Generating...' : 'Download PDF'}
+        </button>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleEmailPo}
+          disabled={sendingEmail}
+          type="button"
+          style={{ opacity: sendingEmail ? 0.6 : 1 }}
+        >
+          <ShareIcon style={{ fontSize: 16 }} />
+          {sendingEmail ? 'Preparing...' : 'Email PO'}
+        </button>
+      </div>
+
       {/* Header Info */}
       <div className="field-detail-section">
         <div className="field-detail-section-title">Purchase Order Details</div>
         <div className="field-detail-row">
           <span className="field-detail-label">PO Number</span>
-          <span className="field-detail-value">FPO-{po.number}</span>
+          <span className="field-detail-value">{formatFpoNumber(po)}</span>
         </div>
         <div className="field-detail-row">
           <span className="field-detail-label">Status</span>
@@ -128,12 +231,6 @@ const FieldPODetail: React.FC = () => {
           <span className="field-detail-label">Created Date</span>
           <span className="field-detail-value">{formatDate(po.created_at)}</span>
         </div>
-        {po.approved_by_name && (
-          <div className="field-detail-row">
-            <span className="field-detail-label">Approved By</span>
-            <span className="field-detail-value">{po.approved_by_name}</span>
-          </div>
-        )}
         {po.description && (
           <div className="field-detail-row">
             <span className="field-detail-label">Description</span>
@@ -280,16 +377,6 @@ const FieldPODetail: React.FC = () => {
               {actionLoading === 'delete' ? 'Deleting...' : 'Delete'}
             </button>
           </>
-        )}
-        {isSubmitted && (
-          <button
-            className="field-btn field-btn-success"
-            onClick={handleApprove}
-            disabled={actionLoading === 'approve'}
-          >
-            <CheckCircleIcon style={{ fontSize: 18, marginRight: 4 }} />
-            {actionLoading === 'approve' ? 'Approving...' : 'Approve'}
-          </button>
         )}
       </div>
     </div>

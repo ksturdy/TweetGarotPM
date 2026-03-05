@@ -3,6 +3,8 @@ import api from './api';
 export interface FieldPurchaseOrder {
   id: number;
   project_id: number;
+  project_name?: string;
+  project_number?: string;
   tenant_id: number;
   number: number;
   vendor_id: number | null;
@@ -53,6 +55,16 @@ export interface FieldPurchaseOrderTotals {
   approved_count: number;
   total_amount: number;
   approved_amount: number;
+}
+
+/** Format FPO display number: ProjectNumber-FPO-Sequence-UserInitials */
+export function formatFpoNumber(po: { project_number?: string; number: number; created_by_name?: string }): string {
+  const initials = (po.created_by_name || '')
+    .split(' ')
+    .map(n => n.charAt(0).toUpperCase())
+    .filter(Boolean)
+    .join('');
+  return `${po.project_number || ''}-FPO-${po.number}${initials ? '-' + initials : ''}`;
 }
 
 export const fieldPurchaseOrdersApi = {

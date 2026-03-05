@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { dailyReportsApi } from '../../services/dailyReports';
 import { projectsApi } from '../../services/projects';
@@ -8,6 +8,7 @@ import '../../styles/SalesPipeline.css';
 
 const DailyReportList: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -49,11 +50,16 @@ const DailyReportList: React.FC = () => {
               <th>Temperature</th>
               <th>Work Performed</th>
               <th>Created By</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {reports?.map((report) => (
-              <tr key={report.id}>
+              <tr
+                key={report.id}
+                onClick={() => navigate(`/projects/${projectId}/daily-reports/${report.id}`)}
+                style={{ cursor: 'pointer' }}
+              >
                 <td>{format(new Date(report.report_date), 'MMM d, yyyy')}</td>
                 <td>{report.weather || '-'}</td>
                 <td>{report.temperature || '-'}</td>
@@ -61,11 +67,24 @@ const DailyReportList: React.FC = () => {
                   {report.work_performed}
                 </td>
                 <td>{report.created_by_name}</td>
+                <td>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'white',
+                    backgroundColor: report.status === 'approved' ? '#22c55e' : report.status === 'submitted' ? '#3b82f6' : '#f59e0b',
+                    textTransform: 'capitalize',
+                  }}>
+                    {report.status}
+                  </span>
+                </td>
               </tr>
             ))}
             {reports?.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
+                <td colSpan={6} style={{ textAlign: 'center', color: 'var(--secondary)' }}>
                   No daily reports found
                 </td>
               </tr>

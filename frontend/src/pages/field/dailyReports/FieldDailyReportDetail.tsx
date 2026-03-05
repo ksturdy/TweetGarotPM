@@ -1,18 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EditIcon from '@mui/icons-material/Edit';
 import SendIcon from '@mui/icons-material/Send';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import GroupsIcon from '@mui/icons-material/Groups';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ShareIcon from '@mui/icons-material/Share';
 import { dailyReportsApi, DailyReport, DailyReportCrew } from '../../../services/dailyReports';
+import { generateDailyReportPdf } from '../../../utils/dailyReportPdfClient';
+import { useAuth } from '../../../context/AuthContext';
 
 const formatDate = (dateStr: string): string => {
   if (!dateStr) return '';
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', {
+  const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const date = new Date(d + 'T00:00:00');
+  return isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -47,6 +51,12 @@ const FieldDailyReportDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { tenant } = useAuth();
+  // Use API proxy for logo to avoid R2 CORS issues in PDF generation
+  const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
+
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const {
     data: report,
@@ -71,25 +81,87 @@ const FieldDailyReportDetail: React.FC = () => {
     },
   });
 
-  const approveMutation = useMutation({
-    mutationFn: () => dailyReportsApi.approve(Number(id)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-daily-report', id] });
-      queryClient.invalidateQueries({
-        queryKey: ['field-daily-reports', projectId],
-      });
-    },
-  });
-
   const handleSubmitReport = () => {
     if (window.confirm('Submit this daily report? It cannot be edited after submission.')) {
       submitMutation.mutate();
     }
   };
 
-  const handleApproveReport = () => {
-    if (window.confirm('Approve this daily report?')) {
-      approveMutation.mutate();
+  const handleDownloadPdf = async () => {
+    if (!report) return;
+    setDownloadingPdf(true);
+    try {
+      const blob = await generateDailyReportPdf(report, logoUrl);
+      const dateStr = report.report_date?.replace(/-/g, '') || '';
+      const filename = `DailyReport-${dateStr}-${report.project_number || ''}.pdf`;
+
+      const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIos) {
+        try {
+          const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+          if (navigator.share && navigator.canShare?.({ files: [pdfFile] })) {
+            await navigator.share({ files: [pdfFile], title: filename });
+            return;
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') return;
+        }
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 100);
+      }
+    } catch (err) {
+      console.error('Failed to download PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleEmailReport = async () => {
+    if (!report) return;
+    setSendingEmail(true);
+    try {
+      const blob = await generateDailyReportPdf(report, logoUrl);
+      const dateStr = report.report_date?.replace(/-/g, '') || '';
+      const filename = `DailyReport-${dateStr}-${report.project_number || ''}.pdf`;
+      const pdfFile = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `Daily Report - ${report.report_date}`,
+        });
+      } else {
+        const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        const fmtDate = new Date(report.report_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const subject = `Daily Report ${fmtDate} - ${report.project_name || ''} (${report.project_number || ''})`;
+        window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(`Please see attached ${filename}`)}`;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      console.error('Failed to share daily report:', err);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -133,6 +205,30 @@ const FieldDailyReportDetail: React.FC = () => {
         <span className={`field-status field-status-${report.status}`}>
           {report.status}
         </span>
+      </div>
+
+      {/* PDF & Email Actions */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleDownloadPdf}
+          disabled={downloadingPdf}
+          type="button"
+          style={{ opacity: downloadingPdf ? 0.6 : 1 }}
+        >
+          <PictureAsPdfIcon style={{ fontSize: 16 }} />
+          {downloadingPdf ? 'Generating...' : 'Download PDF'}
+        </button>
+        <button
+          className="field-btn field-btn-secondary field-btn-sm"
+          onClick={handleEmailReport}
+          disabled={sendingEmail}
+          type="button"
+          style={{ opacity: sendingEmail ? 0.6 : 1 }}
+        >
+          <ShareIcon style={{ fontSize: 16 }} />
+          {sendingEmail ? 'Preparing...' : 'Email Report'}
+        </button>
       </div>
 
       {/* Date & Weather */}
@@ -335,14 +431,6 @@ const FieldDailyReportDetail: React.FC = () => {
             </span>
           </div>
         )}
-        {report.approved_at && (
-          <div className="field-detail-row">
-            <span className="field-detail-label">Approved At</span>
-            <span className="field-detail-value">
-              {formatDateTime(report.approved_at)}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Action Buttons */}
@@ -369,16 +457,6 @@ const FieldDailyReportDetail: React.FC = () => {
               {submitMutation.isPending ? 'Submitting...' : 'Submit'}
             </button>
           </>
-        )}
-        {report.status === 'submitted' && (
-          <button
-            className="field-btn field-btn-success"
-            onClick={handleApproveReport}
-            disabled={approveMutation.isPending}
-          >
-            <CheckCircleIcon style={{ fontSize: 18, marginRight: 4 }} />
-            {approveMutation.isPending ? 'Approving...' : 'Approve'}
-          </button>
         )}
       </div>
     </div>

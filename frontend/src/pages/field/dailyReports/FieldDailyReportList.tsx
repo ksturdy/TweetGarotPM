@@ -27,12 +27,23 @@ const weatherIcon = (weather: string) => {
 };
 
 const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr + 'T00:00:00');
-  return date.toLocaleDateString('en-US', {
+  if (!dateStr) return '';
+  const d = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const date = new Date(d + 'T00:00:00');
+  return isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+  });
+};
+
+const formatTime = (dateStr: string | null): string => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? '' : date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
   });
 };
 
@@ -105,7 +116,7 @@ const FieldDailyReportList: React.FC = () => {
               </div>
             )}
             <div className="field-card-meta">
-              By {report.created_by_name}
+              {formatTime(report.created_at)} &middot; By {report.created_by_name}
             </div>
           </div>
         ))

@@ -122,6 +122,33 @@ router.patch(
 );
 
 /**
+ * Serve tenant logo (proxied for CORS-free access from client-side PDF generators)
+ * GET /api/tenant/logo
+ */
+router.get('/logo', async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.tenantId);
+    const logoUrl = tenant?.settings?.branding?.logo_url;
+    if (!logoUrl) return res.status(404).send('No logo configured');
+
+    if (logoUrl.startsWith('http')) {
+      // Proxy from R2/CDN
+      const response = await fetch(logoUrl);
+      if (!response.ok) return res.status(404).send('Logo not found');
+      res.set('Content-Type', response.headers.get('content-type') || 'image/png');
+      res.set('Cache-Control', 'public, max-age=3600');
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.send(buffer);
+    } else {
+      // Local file — redirect to static path
+      res.redirect(logoUrl);
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * Upload tenant logo
  * POST /api/tenant/logo
  */

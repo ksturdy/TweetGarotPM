@@ -30,8 +30,10 @@ const FieldPurchaseOrder = {
   async findByProject(projectId, filters = {}) {
     let query = `
       SELECT fpo.*,
+             p.number as project_number,
              u1.first_name || ' ' || u1.last_name as created_by_name
       FROM field_purchase_orders fpo
+      JOIN projects p ON fpo.project_id = p.id
       LEFT JOIN users u1 ON fpo.created_by = u1.id
       WHERE fpo.project_id = $1
     `;
