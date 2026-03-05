@@ -207,7 +207,7 @@ router.post(
   authorize('admin'),
   [
     body('email').isEmail().normalizeEmail(),
-    body('role').optional().isIn(['admin', 'manager', 'user']),
+    body('role').optional().isIn(['admin', 'manager', 'user', 'foreman']),
     body('hrAccess').optional().isIn(['none', 'read', 'write']),
   ],
   validate,
@@ -345,7 +345,7 @@ router.put(
   '/users/:userId',
   authorize('admin'),
   [
-    body('role').optional().isIn(['admin', 'manager', 'user']),
+    body('role').optional().isIn(['admin', 'manager', 'user', 'foreman']),
     body('hrAccess').optional().isIn(['none', 'read', 'write']),
     body('isActive').optional().isBoolean(),
   ],

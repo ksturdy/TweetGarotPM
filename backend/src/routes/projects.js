@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Project = require('../models/Project');
+const ProjectAssignment = require('../models/ProjectAssignment');
 const { authenticate, authorize } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
 
@@ -25,6 +26,16 @@ router.get('/', async (req, res, next) => {
       status: req.query.status,
       managerId: req.query.managerId,
     };
+
+    // Foremen only see assigned projects
+    if (req.user.role === 'foreman') {
+      const assignedIds = await ProjectAssignment.getProjectIdsForUser(req.user.id, req.tenantId);
+      if (assignedIds.length === 0) {
+        return res.json([]);
+      }
+      filters.projectIds = assignedIds;
+    }
+
     const projects = await Project.findAllByTenant(req.tenantId, filters);
     res.json(projects);
   } catch (error) {
@@ -35,6 +46,14 @@ router.get('/', async (req, res, next) => {
 // Get single project (with tenant check)
 router.get('/:id', async (req, res, next) => {
   try {
+    // Foremen can only access assigned projects
+    if (req.user.role === 'foreman') {
+      const isAssigned = await ProjectAssignment.isAssigned(req.user.id, req.params.id, req.tenantId);
+      if (!isAssigned) {
+        return res.status(403).json({ error: 'Access denied - not assigned to this project' });
+      }
+    }
+
     const project = await Project.findByIdAndTenant(req.params.id, req.tenantId);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });

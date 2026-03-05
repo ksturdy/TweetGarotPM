@@ -171,6 +171,7 @@ const UserManagement: React.FC = () => {
     switch (role) {
       case 'admin': return 'lost';
       case 'manager': return 'quoted';
+      case 'foreman': return 'negotiation';
       default: return 'lead';
     }
   };
@@ -393,6 +394,7 @@ const UserManagement: React.FC = () => {
                           <option value="admin">Admin</option>
                           <option value="manager">Manager</option>
                           <option value="user">User</option>
+                          <option value="foreman">Foreman</option>
                         </select>
                       </td>
                       <td>

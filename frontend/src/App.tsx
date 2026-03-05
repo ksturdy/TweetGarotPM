@@ -154,6 +154,25 @@ const PlatformAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children 
   return <>{children}</>;
 };
 
+const ForemanRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  // Foremen can only access the /field routes
+  if (user.role === 'foreman') {
+    return <Navigate to="/field" />;
+  }
+
+  return <>{children}</>;
+};
+
 const App: React.FC = () => {
   const { user } = useAuth();
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
@@ -262,6 +281,7 @@ const App: React.FC = () => {
           path="/*"
           element={
             <PrivateRoute>
+              <ForemanRoute>
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
@@ -364,6 +384,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:id/drawings/:drawingId" element={<DrawingDetail />} />
               </Routes>
             </Layout>
+              </ForemanRoute>
           </PrivateRoute>
         }
       />

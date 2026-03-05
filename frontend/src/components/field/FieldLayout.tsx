@@ -9,6 +9,7 @@ import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import HomeIcon from '@mui/icons-material/Home';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import '../../styles/Field.css';
 
 interface Project {
@@ -21,6 +22,7 @@ const FieldLayout: React.FC = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   // Swap manifest so "Add to Home Screen" on iOS saves /field as the start URL
   useEffect(() => {
@@ -106,6 +108,10 @@ const FieldLayout: React.FC = () => {
           {isProjectSelected ? (
             <button className="field-project-selector field-header-switch" onClick={() => navigate('/field')}>
               Switch Job
+            </button>
+          ) : user?.role === 'foreman' ? (
+            <button className="field-project-selector field-header-switch" onClick={() => logout()}>
+              Logout
             </button>
           ) : (
             <button className="field-project-selector field-header-switch" onClick={() => navigate('/')}>

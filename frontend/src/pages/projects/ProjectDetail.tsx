@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
+import { projectAssignmentsApi, FOREMAN_TRADES } from '../../services/projectAssignments';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 import SearchableSelect from '../../components/SearchableSelect';
 import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
@@ -26,7 +29,10 @@ const MODULE_ICONS: { [key: string]: string } = {
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [isEditingTitan, setIsEditingTitan] = useState(false);
+  const [foremanSearch, setForemanSearch] = useState('');
+  const [selectedTrade, setSelectedTrade] = useState('');
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -36,6 +42,54 @@ const ProjectDetail: React.FC = () => {
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
+  });
+
+  const isAdminOrManager = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+
+  // Fetch current assignments for this project
+  const { data: projectAssignments = [] } = useQuery({
+    queryKey: ['project-assignments', id],
+    queryFn: () => projectAssignmentsApi.getByProject(Number(id)),
+    enabled: isAdminOrManager,
+  });
+
+  // Search employees for typeahead (uses lightweight endpoint, no HR access needed)
+  const { data: employeeSearchResults = [] } = useQuery({
+    queryKey: ['employee-search', foremanSearch],
+    queryFn: () => api.get(`/project-assignments/search-employees?q=${encodeURIComponent(foremanSearch)}`).then(res => res.data),
+    enabled: isAdminOrManager && foremanSearch.length >= 2,
+  });
+
+  // Filter out already-assigned employees
+  const assignedEmployeeIds = projectAssignments.map((a: any) => a.employee_id);
+  const filteredResults = (employeeSearchResults as any[]).filter(
+    (e: any) => !assignedEmployeeIds.includes(e.id)
+  );
+
+  const addForemanMutation = useMutation({
+    mutationFn: ({ employeeId, trade }: { employeeId: number; trade?: string }) =>
+      projectAssignmentsApi.addToProject(Number(id), employeeId, trade),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
+      setForemanSearch('');
+      setSelectedTrade('');
+    },
+  });
+
+  const removeForemanMutation = useMutation({
+    mutationFn: (employeeId: number) =>
+      projectAssignmentsApi.removeFromProject(Number(id), employeeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
+    },
+  });
+
+  const updateTradeMutation = useMutation({
+    mutationFn: ({ employeeId, trade }: { employeeId: number; trade: string }) =>
+      projectAssignmentsApi.updateTrade(Number(id), employeeId, trade),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
+    },
   });
 
   // Titan-editable fields only
@@ -478,6 +532,179 @@ const ProjectDetail: React.FC = () => {
                   <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>🔗</div>
                   <div style={{ fontSize: '0.8rem' }}>No Titan data linked yet</div>
                   <div style={{ fontSize: '0.7rem', marginTop: '0.15rem' }}>Click Edit to link Customer and Owner</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Field Foremen Assignment - Admin/Manager only */}
+          {isAdminOrManager && (
+            <div style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid #e2e8f0'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                marginBottom: '0.5rem',
+              }}>
+                <span style={{ fontSize: '0.9rem' }}>👷</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Field Foremen</span>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '0.15rem' }}>
+                  ({projectAssignments.length})
+                </span>
+              </div>
+
+              {/* Search to add */}
+              <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Search employees to add..."
+                    value={foremanSearch}
+                    onChange={(e) => setForemanSearch(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '0.35rem 0.5rem',
+                      fontSize: '0.8rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: '5px',
+                      background: 'var(--bg-dark)',
+                    }}
+                  />
+                  <select
+                    value={selectedTrade}
+                    onChange={(e) => setSelectedTrade(e.target.value)}
+                    style={{
+                      padding: '0.35rem 0.4rem',
+                      fontSize: '0.75rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: '5px',
+                      background: 'var(--bg-dark)',
+                      color: selectedTrade ? 'inherit' : '#94a3b8',
+                    }}
+                  >
+                    <option value="">Trade</option>
+                    {FOREMAN_TRADES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Search results dropdown */}
+                {foremanSearch.length >= 2 && filteredResults.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: '5px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 10,
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                  }}>
+                    {filteredResults.slice(0, 10).map((emp: any) => (
+                      <div
+                        key={emp.id}
+                        onClick={() => addForemanMutation.mutate({ employeeId: emp.id, trade: selectedTrade || undefined })}
+                        style={{
+                          padding: '0.4rem 0.6rem',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                          borderBottom: '1px solid #f1f5f9',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+                      >
+                        <span style={{ fontWeight: 500 }}>{emp.first_name} {emp.last_name}</span>
+                        <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{emp.job_title || emp.email}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {foremanSearch.length >= 2 && filteredResults.length === 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: '5px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    zIndex: 10,
+                    padding: '0.5rem',
+                    fontSize: '0.75rem',
+                    color: '#94a3b8',
+                    textAlign: 'center',
+                  }}>
+                    No matching employees found
+                  </div>
+                )}
+              </div>
+
+              {/* Assigned foremen list */}
+              {projectAssignments.length === 0 ? (
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  No foremen assigned yet
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {projectAssignments.map((a: any) => (
+                    <div key={a.employee_id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.25rem 0.4rem',
+                      background: '#f8fafc',
+                      borderRadius: '5px',
+                      fontSize: '0.8rem',
+                    }}>
+                      <span style={{ fontWeight: 500, flex: 1 }}>
+                        {a.first_name} {a.last_name}
+                      </span>
+                      <select
+                        value={a.trade || ''}
+                        onChange={(e) => updateTradeMutation.mutate({ employeeId: a.employee_id, trade: e.target.value })}
+                        style={{
+                          padding: '0.15rem 0.3rem',
+                          fontSize: '0.7rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'white',
+                          color: a.trade ? 'inherit' : '#94a3b8',
+                        }}
+                      >
+                        <option value="">Trade</option>
+                        {FOREMAN_TRADES.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => removeForemanMutation.mutate(a.employee_id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          padding: '0 0.2rem',
+                          lineHeight: 1,
+                        }}
+                        title="Remove"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

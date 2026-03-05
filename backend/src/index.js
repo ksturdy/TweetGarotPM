@@ -81,6 +81,7 @@ const pipingFittingOrderRoutes = require('./routes/pipingFittingOrders');
 const plumbingFittingOrderRoutes = require('./routes/plumbingFittingOrders');
 const safetyJsaRoutes = require('./routes/safetyJsa');
 const sellSheetRoutes = require('./routes/sellSheets');
+const projectAssignmentRoutes = require('./routes/projectAssignments');
 
 const app = express();
 
@@ -193,6 +194,7 @@ app.use('/api/piping-fitting-orders', pipingFittingOrderRoutes);
 app.use('/api/plumbing-fitting-orders', plumbingFittingOrderRoutes);
 app.use('/api/safety-jsa', safetyJsaRoutes);
 app.use('/api/sell-sheets', sellSheetRoutes);
+app.use('/api/project-assignments', projectAssignmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

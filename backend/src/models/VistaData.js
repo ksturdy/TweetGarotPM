@@ -1532,9 +1532,19 @@ const VistaData = {
       );
 
       for (const vpEmp of unlinked.rows) {
-        // Generate a unique placeholder email since it's required
-        // Use both employee_number and vp_id to ensure uniqueness
-        const email = `vp${vpEmp.employee_number || ''}_${vpEmp.id}@tweetgarot.imported`;
+        // Generate email as firstname.lastname@tweetgarot.com
+        const firstName = (vpEmp.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const lastName = (vpEmp.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        let email = `${firstName}.${lastName}@tweetgarot.com`;
+
+        // Check for duplicate email and append employee number if needed
+        const existing = await client.query(
+          `SELECT id FROM employees WHERE email = $1 AND tenant_id = $2`,
+          [email, tenantId]
+        );
+        if (existing.rows.length > 0) {
+          email = `${firstName}.${lastName}${vpEmp.employee_number || vpEmp.id}@tweetgarot.com`;
+        }
 
         // Create new Titan employee
         const newEmployee = await client.query(

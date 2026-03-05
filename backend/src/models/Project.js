@@ -137,6 +137,11 @@ const Project = {
       query += ` AND p.manager_id = $${params.length}`;
     }
 
+    if (filters.projectIds && filters.projectIds.length > 0) {
+      params.push(filters.projectIds);
+      query += ` AND p.id = ANY($${params.length})`;
+    }
+
     query += ' ORDER BY p.created_at DESC';
 
     const result = await db.query(query, params);

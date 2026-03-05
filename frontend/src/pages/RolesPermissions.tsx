@@ -8,6 +8,7 @@ interface PermissionRow {
   admin?: boolean;
   manager?: boolean;
   user?: boolean;
+  foreman?: boolean;
   note?: string;
 }
 
@@ -21,28 +22,34 @@ interface HRPermissionRow {
 
 const rolePermissions: PermissionRow[] = [
   { capability: 'Projects', isCategory: true },
-  { capability: 'View projects', admin: true, manager: true, user: true },
-  { capability: 'Create projects', admin: true, manager: true, user: false },
-  { capability: 'Edit projects', admin: true, manager: true, user: false },
-  { capability: 'Delete projects', admin: true, manager: false, user: false },
+  { capability: 'View projects', admin: true, manager: true, user: true, foreman: false, note: 'Foremen see assigned projects via Field module' },
+  { capability: 'Create projects', admin: true, manager: true, user: false, foreman: false },
+  { capability: 'Edit projects', admin: true, manager: true, user: false, foreman: false },
+  { capability: 'Delete projects', admin: true, manager: false, user: false, foreman: false },
   { capability: 'RFIs / Submittals / Change Orders', isCategory: true },
-  { capability: 'View', admin: true, manager: true, user: true },
-  { capability: 'Create / Edit', admin: true, manager: true, user: true },
+  { capability: 'View', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'Create / Edit', admin: true, manager: true, user: true, foreman: false },
   { capability: 'Daily Reports', isCategory: true },
-  { capability: 'View daily reports', admin: true, manager: true, user: true },
-  { capability: 'Create / Edit daily reports', admin: true, manager: true, user: true },
+  { capability: 'View daily reports', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'Create / Edit daily reports', admin: true, manager: true, user: true, foreman: false },
   { capability: 'Schedule', isCategory: true },
-  { capability: 'View schedule items', admin: true, manager: true, user: true },
-  { capability: 'Create / Edit schedule items', admin: true, manager: true, user: true },
+  { capability: 'View schedule items', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'Create / Edit schedule items', admin: true, manager: true, user: true, foreman: false },
+  { capability: 'Field Module', isCategory: true },
+  { capability: 'Access Field dashboard', admin: true, manager: true, user: true, foreman: true },
+  { capability: 'Field daily reports', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field purchase orders', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field fitting orders', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
+  { capability: 'Field safety JSA', admin: true, manager: true, user: true, foreman: true, note: 'Foremen: assigned projects only' },
   { capability: 'Administration', isCategory: true },
-  { capability: 'Access admin dashboard', admin: true, manager: false, user: false },
-  { capability: 'Manage users', admin: true, manager: false, user: false },
-  { capability: 'Security settings', admin: true, manager: false, user: false },
-  { capability: 'Tenant settings', admin: true, manager: false, user: false },
+  { capability: 'Access admin dashboard', admin: true, manager: false, user: false, foreman: false },
+  { capability: 'Manage users', admin: true, manager: false, user: false, foreman: false },
+  { capability: 'Security settings', admin: true, manager: false, user: false, foreman: false },
+  { capability: 'Tenant settings', admin: true, manager: false, user: false, foreman: false },
   { capability: 'Security Actions', isCategory: true },
-  { capability: 'Reset user passwords', admin: true, manager: false, user: false, note: 'Also available with HR Full Access' },
-  { capability: 'Disable user 2FA', admin: true, manager: false, user: false, note: 'Also available with HR Full Access' },
-  { capability: 'Force password change', admin: true, manager: false, user: false, note: 'Also available with HR Full Access' },
+  { capability: 'Reset user passwords', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
+  { capability: 'Disable user 2FA', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
+  { capability: 'Force password change', admin: true, manager: false, user: false, foreman: false, note: 'Also available with HR Full Access' },
 ];
 
 const hrPermissions: HRPermissionRow[] = [
@@ -115,6 +122,12 @@ const RolesPermissions: React.FC = () => {
             Can view projects and create RFIs, submittals, daily reports, and schedule items
           </div>
         </div>
+        <div className="sales-kpi-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+          <div className="sales-kpi-label">Foreman</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '0.5rem' }}>
+            Field-only access to assigned projects. Can submit daily reports, POs, fitting orders, and JSAs
+          </div>
+        </div>
       </div>
 
       {/* System Roles Table */}
@@ -125,7 +138,7 @@ const RolesPermissions: React.FC = () => {
         <table className="sales-table">
           <thead>
             <tr>
-              <th style={{ width: '40%' }}>Capability</th>
+              <th style={{ width: '35%' }}>Capability</th>
               <th style={{ textAlign: 'center' }}>
                 <span className="sales-stage-badge lost"><span className="sales-stage-dot"></span>Admin</span>
               </th>
@@ -135,6 +148,9 @@ const RolesPermissions: React.FC = () => {
               <th style={{ textAlign: 'center' }}>
                 <span className="sales-stage-badge lead"><span className="sales-stage-dot"></span>User</span>
               </th>
+              <th style={{ textAlign: 'center' }}>
+                <span className="sales-stage-badge negotiation"><span className="sales-stage-dot"></span>Foreman</span>
+              </th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -142,7 +158,7 @@ const RolesPermissions: React.FC = () => {
             {rolePermissions.map((row, idx) =>
               row.isCategory ? (
                 <tr key={idx} style={{ background: 'var(--bg-dark, #f8fafc)' }}>
-                  <td colSpan={5} style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)', padding: '10px 16px' }}>
+                  <td colSpan={6} style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)', padding: '10px 16px' }}>
                     {row.capability}
                   </td>
                 </tr>
@@ -152,6 +168,7 @@ const RolesPermissions: React.FC = () => {
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.admin} /></td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.manager} /></td>
                   <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.user} /></td>
+                  <td style={{ textAlign: 'center' }}><PermissionCell allowed={row.foreman} /></td>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>{row.note || ''}</td>
                 </tr>
               )
