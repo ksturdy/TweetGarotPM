@@ -32,13 +32,13 @@ const Estimate = {
   async findById(id) {
     const result = await db.query(
       `SELECT e.*,
-              u1.first_name || ' ' || u1.last_name as estimator_full_name,
+              emp.first_name || ' ' || emp.last_name as estimator_full_name,
               u2.first_name || ' ' || u2.last_name as created_by_name,
               u3.first_name || ' ' || u3.last_name as approved_by_name,
               c.customer_facility,
               c.customer_owner
        FROM estimates e
-       LEFT JOIN users u1 ON e.estimator_id = u1.id
+       LEFT JOIN employees emp ON e.estimator_id = emp.id
        LEFT JOIN users u2 ON e.created_by = u2.id
        LEFT JOIN users u3 ON e.approved_by = u3.id
        LEFT JOIN customers c ON e.customer_id = c.id
@@ -51,13 +51,13 @@ const Estimate = {
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
       `SELECT e.*,
-              u1.first_name || ' ' || u1.last_name as estimator_full_name,
+              emp.first_name || ' ' || emp.last_name as estimator_full_name,
               u2.first_name || ' ' || u2.last_name as created_by_name,
               u3.first_name || ' ' || u3.last_name as approved_by_name,
               c.customer_facility,
               c.customer_owner
        FROM estimates e
-       LEFT JOIN users u1 ON e.estimator_id = u1.id
+       LEFT JOIN employees emp ON e.estimator_id = emp.id
        LEFT JOIN users u2 ON e.created_by = u2.id
        LEFT JOIN users u3 ON e.approved_by = u3.id
        LEFT JOIN customers c ON e.customer_id = c.id
@@ -70,11 +70,11 @@ const Estimate = {
   async findAll(filters = {}, tenantId) {
     let query = `
       SELECT e.*,
-             u1.first_name || ' ' || u1.last_name as estimator_full_name,
+             emp.first_name || ' ' || emp.last_name as estimator_full_name,
              c.customer_facility,
              c.customer_owner
       FROM estimates e
-      LEFT JOIN users u1 ON e.estimator_id = u1.id
+      LEFT JOIN employees emp ON e.estimator_id = emp.id
       LEFT JOIN customers c ON e.customer_id = c.id
       WHERE e.tenant_id = $1
     `;

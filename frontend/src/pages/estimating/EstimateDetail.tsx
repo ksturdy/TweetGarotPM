@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
+import SearchableSelect from '../../components/SearchableSelect';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
@@ -66,8 +67,6 @@ const EstimateDetail: React.FC = () => {
 
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [estimatorSearch, setEstimatorSearch] = useState('');
-  const [showEstimatorDropdown, setShowEstimatorDropdown] = useState(false);
   const [sections, setSections] = useState<EstimateSection[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
@@ -125,10 +124,6 @@ const EstimateDetail: React.FC = () => {
 
       if (estimate.customer_name) {
         setCustomerSearch(estimate.customer_name);
-      }
-
-      if (estimate.estimator_name) {
-        setEstimatorSearch(estimate.estimator_name);
       }
 
       // Set link toggles based on existing data
@@ -220,23 +215,10 @@ const EstimateDetail: React.FC = () => {
   ).slice(0, 10);
 
   const employees = employeesData?.data?.data || [];
-  const filteredEmployees = employees.filter((emp: any) => {
-    if (!estimatorSearch) return true;
-    const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
-    return fullName.includes(estimatorSearch.toLowerCase()) ||
-           emp.first_name?.toLowerCase().includes(estimatorSearch.toLowerCase()) ||
-           emp.last_name?.toLowerCase().includes(estimatorSearch.toLowerCase());
-  }).slice(0, 10);
-
-  const handleEstimatorSelect = (employee: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      estimator_id: employee.id,
-      estimator_name: `${employee.first_name} ${employee.last_name}`,
-    }));
-    setEstimatorSearch(`${employee.first_name} ${employee.last_name}`);
-    setShowEstimatorDropdown(false);
-  };
+  const estimatorOptions = employees.map((emp: any) => ({
+    value: emp.id,
+    label: `${emp.first_name} ${emp.last_name}${emp.job_title ? ` - ${emp.job_title}` : ''}`,
+  }));
 
   const addSection = () => {
     setSections((prev) => [
@@ -515,20 +497,27 @@ const EstimateDetail: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="sales-header-actions">
+        <div className="sales-header-actions" style={{ alignItems: 'center' }}>
           <button
-            className="btn btn-primary"
+            className="btn btn-sm btn-primary"
+            onClick={handleSaveChanges}
+            disabled={updateMutation.isPending}
+          >
+            {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
             onClick={() => setIsPreviewOpen(true)}
           >
             View Proposal
           </button>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 500 }}>Change Status:</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+            <label style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</label>
             <select
               value={estimate.status}
               onChange={(e) => handleStatusChange(e.target.value)}
               className="form-input"
-              style={{ fontSize: '0.875rem', padding: '0.5rem' }}
+              style={{ fontSize: '0.8rem', padding: '0.35rem 0.5rem' }}
               disabled={updateStatusMutation.isPending}
             >
               <option value="in progress">In Progress</option>
@@ -544,21 +533,10 @@ const EstimateDetail: React.FC = () => {
       <form onSubmit={(e) => handleSubmit(e, 'draft')}>
         {/* Estimate Header */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ margin: 0 }}>Estimate Information</h2>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={handleSaveChanges}
-              disabled={updateMutation.isPending}
-              style={{ padding: '0.5rem 1rem' }}
-            >
-              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
+          <h2 style={{ margin: '0 0 1rem 0' }}>Estimate Information</h2>
 
-          {/* Row 1: Estimate Number, Project Name, Customer */}
-          <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+          {/* Row 1: Est#, Project Name, Customer, Estimator, Building Type */}
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Est #</label>
               <input
@@ -654,10 +632,24 @@ const EstimateDetail: React.FC = () => {
                 />
               )}
             </div>
-          </div>
 
-          {/* Row 2: Building Type, Location, Square Footage, Estimator */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator</label>
+              <SearchableSelect
+                options={estimatorOptions}
+                value={formData.estimator_id?.toString() || ''}
+                onChange={(value) => {
+                  const emp = employees.find((e: any) => e.id === parseInt(value));
+                  setFormData((prev) => ({
+                    ...prev,
+                    estimator_id: value ? parseInt(value) : undefined,
+                    estimator_name: emp ? `${emp.first_name} ${emp.last_name}` : '',
+                  }));
+                }}
+                placeholder="Select estimator..."
+              />
+            </div>
+
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type</label>
               <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange} style={{ padding: '0.5rem' }}>
@@ -666,7 +658,10 @@ const EstimateDetail: React.FC = () => {
                 ))}
               </select>
             </div>
+          </div>
 
+          {/* Row 2: Location, Sq Ft, Bid Date, Start Date, Duration */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 100px', gap: '0.75rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Location</label>
               <input
@@ -692,91 +687,6 @@ const EstimateDetail: React.FC = () => {
               />
             </div>
 
-            <div className="form-group" style={{ position: 'relative', marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator</label>
-              <input
-                type="text"
-                className="form-input"
-                value={estimatorSearch}
-                onChange={(e) => {
-                  setEstimatorSearch(e.target.value);
-                  setShowEstimatorDropdown(true);
-                  // Clear selection if user is typing something different
-                  if (formData.estimator_name && e.target.value !== formData.estimator_name) {
-                    setFormData((prev) => ({
-                      ...prev,
-                      estimator_id: undefined,
-                      estimator_name: '',
-                    }));
-                  }
-                }}
-                onFocus={() => setShowEstimatorDropdown(true)}
-                placeholder="Search estimator..."
-                style={{ padding: '0.5rem' }}
-              />
-              {showEstimatorDropdown && filteredEmployees && filteredEmployees.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    maxHeight: '250px',
-                    overflowY: 'auto',
-                    backgroundColor: 'white',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.375rem',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    zIndex: 1000,
-                    marginTop: '0.25rem',
-                  }}
-                >
-                  {filteredEmployees.map((employee: any) => (
-                    <div
-                      key={employee.id}
-                      onClick={() => handleEstimatorSelect(employee)}
-                      style={{
-                        padding: '0.5rem 0.75rem',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--background)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                        {employee.first_name} {employee.last_name}
-                      </div>
-                      {employee.position && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
-                          {employee.position}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showEstimatorDropdown && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    zIndex: 999,
-                  }}
-                  onClick={() => setShowEstimatorDropdown(false)}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Row 3: Bid Date, Project Start Date, Duration */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bid Date</label>
               <input
@@ -819,7 +729,7 @@ const EstimateDetail: React.FC = () => {
           <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Project Participants</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               {/* Company */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Company</label>
@@ -902,7 +812,7 @@ const EstimateDetail: React.FC = () => {
                       }}
                       style={{ width: '14px', height: '14px' }}
                     />
-                    Link to Existing General Contractor
+                    Link to Existing GC
                   </label>
                   {linkToExistingGC && (
                     <select
@@ -922,12 +832,10 @@ const EstimateDetail: React.FC = () => {
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Facility/Location Name */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+              {/* Facility/Location Name */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Facility/Location Name</label>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Facility/Location</label>
                 <input
                   type="text"
                   name="facility_name"
@@ -950,7 +858,7 @@ const EstimateDetail: React.FC = () => {
                       }}
                       style={{ width: '14px', height: '14px' }}
                     />
-                    Link to Existing Facility/Location
+                    Link to Existing Facility
                   </label>
                   {linkToExistingFacility && (
                     <select
@@ -970,7 +878,6 @@ const EstimateDetail: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div></div>
             </div>
           </div>
 

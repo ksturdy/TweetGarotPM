@@ -289,8 +289,8 @@ const EstimatesList: React.FC = () => {
         bValue = (b.status || '').toLowerCase();
         break;
       case 'estimator_name':
-        aValue = (a.estimator_name || '').toLowerCase();
-        bValue = (b.estimator_name || '').toLowerCase();
+        aValue = (a.estimator_full_name || a.estimator_name || '').toLowerCase();
+        bValue = (b.estimator_full_name || b.estimator_name || '').toLowerCase();
         break;
       default:
         return 0;
@@ -513,15 +513,15 @@ const EstimatesList: React.FC = () => {
                     </span>
                   </td>
                   <td>
-                    {estimate.estimator_name ? (
+                    {(estimate.estimator_full_name || estimate.estimator_name) ? (
                       <div className="est-person-cell">
                         <div
                           className="est-person-avatar"
-                          style={{ background: getEstimatorColor(estimate.estimator_name) }}
+                          style={{ background: getEstimatorColor(estimate.estimator_full_name || estimate.estimator_name) }}
                         >
-                          {getEstimatorInitials(estimate.estimator_name)}
+                          {getEstimatorInitials(estimate.estimator_full_name || estimate.estimator_name)}
                         </div>
-                        {estimate.estimator_name}
+                        {estimate.estimator_full_name || estimate.estimator_name}
                       </div>
                     ) : (
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>Unassigned</span>
