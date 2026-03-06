@@ -1,9 +1,10 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import MenuIcon from '@mui/icons-material/Menu';
 import NotificationBell from './NotificationBell';
 import './Layout.css';
 
@@ -13,6 +14,21 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, tenant, logout } = useAuth();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on route change (mobile/tablet)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen(prev => !prev);
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
 
   // Get tenant branding
   const logoUrl = tenant?.settings?.branding?.logo_url;
@@ -24,6 +40,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <header className="header">
         <div className="header-content">
           <div className="header-left">
+            <button className="hamburger-btn" onClick={toggleSidebar} aria-label="Toggle navigation">
+              <MenuIcon />
+            </button>
             <Link to="/" className="logo-default">
               <div className="logo-shield">
                 <svg width="32" height="36" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -41,7 +60,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Link>
             <Link to="/feedback" className="header-feedback-btn" title="Send Feedback">
               <FeedbackIcon fontSize="small" />
-              <span>Feedback</span>
+              <span className="feedback-label">Feedback</span>
             </Link>
           </div>
           <div className="header-center">
@@ -62,8 +81,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </div>
       </header>
+      {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
       <div className="layout-body">
-        <Sidebar />
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
         <main className="main">{children}</main>
       </div>
     </div>

@@ -253,24 +253,68 @@
   background: #9ca3af;
 }
 
-/* Responsive */
+/* Responsive - Tablet/Mobile: sidebar slides in from left */
 @media (max-width: 1024px) {
   .sidebar {
     transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 70;
+    box-shadow: none;
   }
 
   .sidebar.open {
     transform: translateX(0);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Hide collapse toggle on mobile - not needed */
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .sidebar-content {
+    -webkit-overflow-scrolling: touch;
   }
 }
 
 @media (max-width: 768px) {
   .sidebar {
-    width: 100%;
-    max-width: 280px;
+    width: 280px;
+    max-width: 80vw;
   }
 
+  /* Always show expanded on mobile */
   .sidebar.collapsed {
-    width: 64px;
+    width: 280px;
+    max-width: 80vw;
+  }
+
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .nav-expand-icon,
+  .sidebar.collapsed .nav-children {
+    display: flex;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: flex-start;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .sidebar.collapsed .nav-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* Larger touch targets on mobile */
+  .nav-item {
+    padding: 0.75rem;
+    min-height: 44px;
+  }
+
+  .nav-child-item {
+    padding: 0.625rem 0.75rem;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
   }
 }

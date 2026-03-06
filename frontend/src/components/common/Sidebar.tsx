@@ -50,7 +50,12 @@ const getInitialExpandedSections = (): string[] => {
   return DEFAULT_EXPANDED;
 };
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState<string[]>(getInitialExpandedSections);
@@ -249,6 +254,7 @@ const Sidebar: React.FC = () => {
                   key={child.path}
                   to={child.path}
                   className={`nav-child-item ${isChildPathActive(child.path, childPaths) ? 'active' : ''}`}
+                  onClick={onClose}
                 >
                   {child.label}
                 </Link>
@@ -265,6 +271,7 @@ const Sidebar: React.FC = () => {
         to={item.path || '/'}
         className={`nav-item ${isActive ? 'active' : ''}`}
         title={isCollapsed ? item.label : undefined}
+        onClick={onClose}
       >
         <span className="nav-icon">{item.icon}</span>
         {!isCollapsed && <span className="nav-label">{item.label}</span>}
@@ -273,7 +280,7 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+    <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-content">
         <nav className="sidebar-nav">
           {navItems.map(renderNavItem)}
