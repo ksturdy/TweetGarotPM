@@ -2,6 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { notificationsApi, Notification } from '../services/notifications';
 import './NotificationsPage.css';
 
@@ -9,6 +11,7 @@ const ENTITY_LABELS: Record<string, string> = {
   rfi: 'RFI',
   field_issue: 'Field Issue',
   daily_report: 'Daily Report',
+  feedback: 'Feedback',
 };
 
 function formatDate(dateStr: string): string {
@@ -46,12 +49,41 @@ const NotificationsPage: React.FC = () => {
     },
   });
 
+  const deleteNotification = useMutation({
+    mutationFn: (id: number) => notificationsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications-page'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-list'] });
+    },
+  });
+
+  const deleteAll = useMutation({
+    mutationFn: () => notificationsApi.deleteAll(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications-page'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-list'] });
+    },
+  });
+
   function handleClick(n: Notification) {
     if (!n.read_at) {
       markAsRead.mutate(n.id);
     }
     if (n.link) {
       navigate(n.link);
+    }
+  }
+
+  function handleDelete(e: React.MouseEvent, id: number) {
+    e.stopPropagation();
+    deleteNotification.mutate(id);
+  }
+
+  function handleClearAll() {
+    if (window.confirm('Delete all notifications? This cannot be undone.')) {
+      deleteAll.mutate();
     }
   }
 
@@ -62,12 +94,20 @@ const NotificationsPage: React.FC = () => {
     <div className="notifications-page">
       <div className="notifications-page-header">
         <h1>Notifications</h1>
-        {unreadCount > 0 && (
-          <button className="btn btn-secondary btn-sm" onClick={() => markAllAsRead.mutate()}>
-            <DoneAllIcon fontSize="small" />
-            Mark all as read ({unreadCount})
-          </button>
-        )}
+        <div className="notifications-page-header-actions">
+          {unreadCount > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={() => markAllAsRead.mutate()}>
+              <DoneAllIcon fontSize="small" />
+              Mark all as read ({unreadCount})
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button className="btn-clear-all" onClick={handleClearAll}>
+              <DeleteSweepIcon fontSize="small" />
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
@@ -96,6 +136,13 @@ const NotificationsPage: React.FC = () => {
                 <span className="notif-date">{formatDate(n.created_at)}</span>
                 {!n.read_at && <span className="notif-dot" />}
               </div>
+              <button
+                className="notif-delete-btn"
+                onClick={(e) => handleDelete(e, n.id)}
+                title="Delete notification"
+              >
+                <CloseIcon fontSize="small" />
+              </button>
             </div>
           ))}
         </div>

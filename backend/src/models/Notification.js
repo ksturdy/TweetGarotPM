@@ -60,6 +60,21 @@ const Notification = {
       [userId, tenantId]
     );
   },
+
+  async delete(id, userId) {
+    const result = await db.query(
+      'DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
+    );
+    return result.rows[0];
+  },
+
+  async deleteAll(userId, tenantId) {
+    await db.query(
+      'DELETE FROM notifications WHERE user_id = $1 AND tenant_id = $2',
+      [userId, tenantId]
+    );
+  },
 };
 
 module.exports = Notification;

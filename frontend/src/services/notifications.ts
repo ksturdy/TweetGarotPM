@@ -34,4 +34,10 @@ export const notificationsApi = {
 
   markAllAsRead: () =>
     api.put<{ success: boolean }>('/notifications/read-all'),
+
+  delete: (id: number) =>
+    api.delete<{ success: boolean }>(`/notifications/${id}`),
+
+  deleteAll: () =>
+    api.delete<{ success: boolean }>('/notifications'),
 };

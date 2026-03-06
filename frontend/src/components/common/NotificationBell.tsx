@@ -11,6 +11,7 @@ const ENTITY_ICONS: Record<string, string> = {
   rfi: 'RFI',
   field_issue: 'Issue',
   daily_report: 'Report',
+  feedback: 'Feedback',
 };
 
 function timeAgo(dateStr: string): string {
@@ -34,11 +35,12 @@ const NotificationBell: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Poll for unread count every 60 seconds
+  // Poll for unread count every 15 seconds
   const { data: countData } = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: () => notificationsApi.getUnreadCount().then(r => r.data),
-    refetchInterval: 60000,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
   });
 
   // Fetch notifications when dropdown is open
