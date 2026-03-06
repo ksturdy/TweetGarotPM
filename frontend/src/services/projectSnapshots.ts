@@ -105,4 +105,10 @@ export const projectSnapshotsApi = {
    */
   getLatest: (projectId: number) =>
     api.get<ProjectSnapshot>(`/projects/${projectId}/snapshots/latest`),
+
+  /**
+   * Backfill all existing snapshots with margin overrides from the project
+   */
+  backfillMargin: (projectId: number) =>
+    api.patch<{ message: string; snapshotsUpdated: number }>(`/projects/${projectId}/snapshots/backfill-margin`),
 };

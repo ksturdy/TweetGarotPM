@@ -98,6 +98,7 @@ import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
+import ExecutiveReport from './pages/reports/ExecutiveReport';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -393,6 +394,7 @@ const App: React.FC = () => {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
+                <Route path="/executive-report" element={<ExecutiveReport />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />

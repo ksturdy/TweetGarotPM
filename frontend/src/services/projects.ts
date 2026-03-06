@@ -33,6 +33,8 @@ export interface Project {
   ship_state?: string;
   ship_zip?: string;
   email_distribution_list?: string;
+  override_original_estimated_margin?: number | null;
+  override_original_estimated_margin_pct?: number | null;
   created_at: string;
   // Note: favorite is now managed per-user via favoritesService
   isFavorited?: boolean; // Runtime property added by UI

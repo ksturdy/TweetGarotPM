@@ -5,7 +5,7 @@ const ProjectSnapshot = require('../models/ProjectSnapshot');
 
 /**
  * Capture financial snapshots for all active/open projects across all tenants.
- * Runs automatically every Wednesday at 6:00 PM ET via cron.
+ * Runs automatically every Thursday at 6:00 PM ET via cron.
  * Can also be triggered manually via POST /api/projects/snapshots/capture-all.
  */
 async function captureAllSnapshots() {
@@ -64,8 +64,8 @@ async function captureAllSnapshots() {
                 percent_complete: percentComplete,
                 gross_profit_dollars: vistaContract.gross_profit_dollars,
                 gross_profit_percent: vistaContract.gross_profit_percent,
-                original_estimated_margin: vistaContract.original_estimated_margin,
-                original_estimated_margin_pct: vistaContract.original_estimated_margin_pct,
+                original_estimated_margin: project.override_original_estimated_margin ?? vistaContract.original_estimated_margin,
+                original_estimated_margin_pct: project.override_original_estimated_margin_pct ?? vistaContract.original_estimated_margin_pct,
                 billed_amount: vistaContract.billed_amount,
                 received_amount: vistaContract.received_amount,
                 open_receivables: vistaContract.open_receivables,

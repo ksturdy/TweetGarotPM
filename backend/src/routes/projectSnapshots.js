@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/database');
 const ProjectSnapshot = require('../models/ProjectSnapshot');
+const Project = require('../models/Project');
 const VistaData = require('../models/VistaData');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
@@ -41,12 +43,14 @@ router.post('/:projectId/snapshots', async (req, res) => {
     // Get the custom snapshot date from request, or use today
     const snapshotDate = req.body.snapshotDate || new Date().toISOString().split('T')[0];
 
-    // Fetch current Vista data for this project
+    // Fetch current Vista data and project (for margin overrides)
     const vistaContract = await VistaData.getContractByProjectId(Number(projectId), tenantId);
 
     if (!vistaContract) {
       return res.status(404).json({ error: 'No Vista contract linked to this project' });
     }
+
+    const project = await Project.findByIdAndTenant(Number(projectId), tenantId);
 
     // Calculate percent complete (earned / projected revenue)
     const percentComplete = vistaContract.projected_revenue && vistaContract.projected_revenue > 0
@@ -76,8 +80,8 @@ router.post('/:projectId/snapshots', async (req, res) => {
         // Margin
         gross_profit_dollars: vistaContract.gross_profit_dollars,
         gross_profit_percent: vistaContract.gross_profit_percent,
-        original_estimated_margin: vistaContract.original_estimated_margin,
-        original_estimated_margin_pct: vistaContract.original_estimated_margin_pct,
+        original_estimated_margin: project.override_original_estimated_margin ?? vistaContract.original_estimated_margin,
+        original_estimated_margin_pct: project.override_original_estimated_margin_pct ?? vistaContract.original_estimated_margin_pct,
 
         // Billing & AR
         billed_amount: vistaContract.billed_amount,
@@ -187,6 +191,56 @@ router.post('/snapshots/capture-all', async (req, res) => {
   } catch (error) {
     console.error('Error during bulk snapshot capture:', error);
     res.status(500).json({ error: 'Failed to capture snapshots' });
+  }
+});
+
+/**
+ * PATCH /api/projects/:projectId/snapshots/backfill-margin
+ * Retroactively update all existing snapshots with the current margin overrides
+ */
+router.patch('/:projectId/snapshots/backfill-margin', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const tenantId = req.tenantId;
+
+    const project = await Project.findByIdAndTenant(Number(projectId), tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.override_original_estimated_margin == null &&
+        project.override_original_estimated_margin_pct == null) {
+      return res.status(400).json({ error: 'No margin overrides set on this project' });
+    }
+
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (project.override_original_estimated_margin != null) {
+      setClauses.push(`original_estimated_margin = $${paramIndex++}`);
+      values.push(project.override_original_estimated_margin);
+    }
+    if (project.override_original_estimated_margin_pct != null) {
+      setClauses.push(`original_estimated_margin_pct = $${paramIndex++}`);
+      values.push(project.override_original_estimated_margin_pct);
+    }
+
+    values.push(Number(projectId), tenantId);
+
+    const result = await db.query(
+      `UPDATE project_snapshots SET ${setClauses.join(', ')}
+       WHERE project_id = $${paramIndex++} AND tenant_id = $${paramIndex}`,
+      values
+    );
+
+    res.json({
+      message: `Updated ${result.rowCount} snapshots with margin overrides`,
+      snapshotsUpdated: result.rowCount
+    });
+  } catch (error) {
+    console.error('Error backfilling margin overrides:', error);
+    res.status(500).json({ error: 'Failed to backfill margin overrides' });
   }
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract } from '../../services/vistaData';
@@ -110,6 +110,9 @@ const ProjectFinancials: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [showSnapshotSuccess, setShowSnapshotSuccess] = useState(false);
+  const [showOverrideInputs, setShowOverrideInputs] = useState(false);
+  const [marginOverride, setMarginOverride] = useState('');
+  const [marginPctOverride, setMarginPctOverride] = useState('');
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -133,6 +136,55 @@ const ProjectFinancials: React.FC = () => {
       alert(error.response?.data?.error || 'Failed to capture snapshot. Please try again.');
     },
   });
+
+  useEffect(() => {
+    if (project) {
+      setMarginOverride(project.override_original_estimated_margin != null
+        ? String(project.override_original_estimated_margin) : '');
+      setMarginPctOverride(project.override_original_estimated_margin_pct != null
+        ? String(Number(project.override_original_estimated_margin_pct) * 100) : '');
+    }
+  }, [project]);
+
+  const saveOverridesMutation = useMutation({
+    mutationFn: (data: { override_original_estimated_margin: number | null; override_original_estimated_margin_pct: number | null }) =>
+      projectsApi.update(Number(projectId), data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+    },
+    onError: (error: any) => {
+      console.error('Error saving margin overrides:', error);
+      alert('Failed to save overrides.');
+    },
+  });
+
+  const backfillMutation = useMutation({
+    mutationFn: () => projectSnapshotsApi.backfillMargin(Number(projectId)),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['projectSnapshots', projectId] });
+      alert(`Updated ${res.data.snapshotsUpdated} historical snapshot(s) with margin overrides.`);
+    },
+    onError: (error: any) => {
+      console.error('Error backfilling snapshots:', error);
+      alert(error.response?.data?.error || 'Failed to update past snapshots.');
+    },
+  });
+
+  const handleSaveOverrides = () => {
+    saveOverridesMutation.mutate({
+      override_original_estimated_margin: marginOverride ? parseFloat(marginOverride) : null,
+      override_original_estimated_margin_pct: marginPctOverride ? parseFloat(marginPctOverride) / 100 : null,
+    });
+  };
+
+  const handleClearOverrides = () => {
+    setMarginOverride('');
+    setMarginPctOverride('');
+    saveOverridesMutation.mutate({
+      override_original_estimated_margin: null,
+      override_original_estimated_margin_pct: null,
+    });
+  };
 
   if (isLoading) return <div className="loading">Loading...</div>;
 
@@ -215,6 +267,70 @@ const ProjectFinancials: React.FC = () => {
               <Row label="Gross Profit %" value={fmtPct(c.gross_profit_percent)} valueColor={getGrossProfitColor(c.gross_profit_percent, c.original_estimated_margin_pct)} />
               <Row label="Orig Est Margin" value={fmt(c.original_estimated_margin)} />
               <Row label="Orig Est Margin %" value={fmtPct(c.original_estimated_margin_pct)} />
+              {project?.override_original_estimated_margin != null && (
+                <Row label="Override Margin $" value={fmt(project.override_original_estimated_margin)} valueColor="#2563eb" />
+              )}
+              {project?.override_original_estimated_margin_pct != null && (
+                <Row label="Override Margin %" value={fmtPct(project.override_original_estimated_margin_pct)} valueColor="#2563eb" />
+              )}
+              <div style={{ marginTop: '0.35rem' }}>
+                <button
+                  onClick={() => setShowOverrideInputs(!showOverrideInputs)}
+                  style={{ fontSize: '0.65rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  {showOverrideInputs ? 'Hide Override' : 'Set Override'}
+                </button>
+              </div>
+              {showOverrideInputs && (
+                <div style={{ marginTop: '0.35rem', padding: '0.5rem', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.35rem' }}>
+                    Override Vista margin for snapshots & charts
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.7rem', color: '#475569', minWidth: '25px' }}>$</label>
+                    <input
+                      type="number" step="0.01" value={marginOverride}
+                      onChange={e => setMarginOverride(e.target.value)}
+                      placeholder="Margin $"
+                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.7rem', color: '#475569', minWidth: '25px' }}>%</label>
+                    <input
+                      type="number" step="0.1" value={marginPctOverride}
+                      onChange={e => setMarginPctOverride(e.target.value)}
+                      placeholder="Margin %"
+                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handleSaveOverrides}
+                      disabled={saveOverridesMutation.isPending}
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      {saveOverridesMutation.isPending ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => backfillMutation.mutate()}
+                      disabled={backfillMutation.isPending || (project?.override_original_estimated_margin == null && project?.override_original_estimated_margin_pct == null)}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      {backfillMutation.isPending ? 'Updating...' : 'Apply to Past Snapshots'}
+                    </button>
+                    <button
+                      onClick={handleClearOverrides}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', color: '#ef4444' }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
             </Section>
           </div>
 

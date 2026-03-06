@@ -221,7 +221,7 @@ const ProjectPerformance: React.FC = () => {
         ...chartOptions.scales.y,
         ticks: {
           ...chartOptions.scales.y.ticks,
-          callback: (value: any) => `${value}%`,
+          callback: (value: any) => `${Number(value).toFixed(2)}%`,
         },
       },
     },
@@ -235,7 +235,13 @@ const ProjectPerformance: React.FC = () => {
         ...chartOptions.scales.y,
         ticks: {
           ...chartOptions.scales.y.ticks,
-          callback: (value: any) => `$${(value / 1000).toFixed(0)}K`,
+          callback: (value: any) => {
+            const num = Number(value);
+            if (Math.abs(num) >= 1000000) {
+              return `$${(num / 1000000).toFixed(1)}M`;
+            }
+            return `$${(num / 1000).toFixed(0)}K`;
+          },
         },
       },
     },
@@ -273,7 +279,7 @@ const ProjectPerformance: React.FC = () => {
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📊</div>
           <h3 style={{ margin: '0 0 0.5rem 0', color: '#475569' }}>No Performance Data Yet</h3>
           <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Historical snapshots are captured weekly on Wednesdays. Charts will populate as data is collected over time.
+            Historical snapshots are captured weekly on Thursdays. Charts will populate as data is collected over time.
           </p>
           <Link
             to={`/projects/${projectId}/financials`}
@@ -304,7 +310,7 @@ const ProjectPerformance: React.FC = () => {
           fontSize: '0.8rem',
           color: '#92400e'
         }}>
-          📌 Note: Historical data snapshots are automatically captured every Wednesday after payroll posts. You can also capture snapshots manually from the Financials page. Charts will populate as data is collected over time.
+          📌 Note: Historical data snapshots are automatically captured every Thursday after payroll posts. You can also capture snapshots manually from the Financials page. Charts will populate as data is collected over time.
         </div>
       </div>
 

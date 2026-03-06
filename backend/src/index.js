@@ -88,6 +88,7 @@ const projectAssignmentRoutes = require('./routes/projectAssignments');
 const fieldIssueRoutes = require('./routes/fieldIssues');
 const notificationRoutes = require('./routes/notifications');
 const attachmentRoutes = require('./routes/attachments');
+const executiveReportRoutes = require('./routes/executiveReport');
 
 const app = express();
 
@@ -207,6 +208,7 @@ app.use('/api/project-assignments', projectAssignmentRoutes);
 app.use('/api/field-issues', fieldIssueRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/attachments', attachmentRoutes);
+app.use('/api/executive-report', executiveReportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -298,14 +300,14 @@ app.listen(config.port, () => {
   console.log(`  ${process.env.ANTHROPIC_API_KEY ? '✅' : '⚠️'} Anthropic API (AI features)`);
   console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)`);
 
-  // Weekly financial snapshots - every Wednesday at 6:00 PM ET
-  cron.schedule('0 18 * * 3', () => {
+  // Weekly financial snapshots - every Thursday at 6:00 PM ET
+  cron.schedule('0 18 * * 4', () => {
     console.log('[Cron] Running weekly financial snapshots...');
     captureAllSnapshots().catch(err => {
       console.error('[Cron] Weekly snapshot job failed:', err);
     });
   }, { timezone: 'America/New_York' });
-  console.log(`  ✅ Weekly snapshot cron scheduled (Wednesdays 6:00 PM ET)\n`);
+  console.log(`  ✅ Weekly snapshot cron scheduled (Thursdays 6:00 PM ET)\n`);
 });
 
 

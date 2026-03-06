@@ -23,6 +23,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ConstructionIcon from '@mui/icons-material/Construction';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import './Sidebar.css';
 
 interface NavItem {
@@ -118,6 +119,11 @@ const Sidebar: React.FC = () => {
       label: 'Risk Management',
       path: '/risk-management',
       icon: <GavelIcon />,
+    },
+    {
+      label: 'Executive Report',
+      path: '/executive-report',
+      icon: <AssessmentIcon />,
     },
   ];
 
