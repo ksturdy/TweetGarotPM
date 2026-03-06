@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import NotificationBell from './NotificationBell';
 import './Layout.css';
 
 interface LayoutProps {
@@ -46,6 +47,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="header-center">
           </div>
           <div className="header-right">
+            <NotificationBell />
             <div className="user-menu">
               <span className="user-name">
                 {user?.firstName} {user?.lastName}

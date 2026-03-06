@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
-import WaterDropIcon from '@mui/icons-material/WaterDrop';
-import { plumbingFittingOrdersApi, PlumbingFittingOrder } from '../../../services/plumbingFittingOrders';
+import HandymanIcon from '@mui/icons-material/Handyman';
+import { sheetMetalFittingOrdersApi, SheetMetalFittingOrder } from '../../../services/sheetMetalFittingOrders';
 
 const statusOptions = ['all', 'draft', 'submitted', 'in_fabrication', 'ready', 'delivered', 'installed'];
 
@@ -26,16 +26,16 @@ const formatDate = (dateStr: string | null): string => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const FieldPlumbingFittingOrderList: React.FC = () => {
+const FieldSheetMetalFittingOrderList: React.FC = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('all');
 
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['field-plumbing-fitting-orders', projectId, statusFilter],
+    queryKey: ['field-sheet-metal-fitting-orders', projectId, statusFilter],
     queryFn: async () => {
       const filters = statusFilter !== 'all' ? { status: statusFilter } : undefined;
-      const res = await plumbingFittingOrdersApi.getByProject(Number(projectId), filters);
+      const res = await sheetMetalFittingOrdersApi.getByProject(Number(projectId), filters);
       return res.data;
     },
     enabled: !!projectId,
@@ -47,8 +47,8 @@ const FieldPlumbingFittingOrderList: React.FC = () => {
 
   return (
     <div>
-      <h1 className="field-page-title">Plumbing Fitting Orders</h1>
-      <p className="field-page-subtitle">Plumbing fabrication orders</p>
+      <h1 className="field-page-title">Sheet Metal Fitting Orders</h1>
+      <p className="field-page-subtitle">Sheet metal fabrication orders</p>
 
       <div className="field-filters">
         {statusOptions.map((status) => (
@@ -64,24 +64,24 @@ const FieldPlumbingFittingOrderList: React.FC = () => {
 
       {orders.length === 0 ? (
         <div className="field-empty">
-          <WaterDropIcon />
+          <HandymanIcon />
           <div className="field-empty-title">No fitting orders yet</div>
           <div className="field-empty-text">
-            Tap the + button to create your first plumbing fitting order
+            Tap the + button to create your first sheet metal fitting order
           </div>
         </div>
       ) : (
-        orders.map((order: PlumbingFittingOrder) => (
+        orders.map((order: SheetMetalFittingOrder) => (
           <div
             key={order.id}
             className="field-card"
             onClick={() =>
-              navigate(`/field/projects/${projectId}/plumbing-fitting-orders/${order.id}`)
+              navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders/${order.id}`)
             }
           >
             <div className="field-card-header">
               <div>
-                <div className="field-card-number">FO-PLB-{order.number}</div>
+                <div className="field-card-number">FO-SM-{order.number}</div>
                 <div className="field-card-title">{order.title}</div>
               </div>
               <span className={`field-status field-status-${order.status}`}>
@@ -115,7 +115,7 @@ const FieldPlumbingFittingOrderList: React.FC = () => {
       <button
         className="field-fab"
         onClick={() =>
-          navigate(`/field/projects/${projectId}/plumbing-fitting-orders/new`)
+          navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders/new`)
         }
         aria-label="Create fitting order"
       >
@@ -125,4 +125,4 @@ const FieldPlumbingFittingOrderList: React.FC = () => {
   );
 };
 
-export default FieldPlumbingFittingOrderList;
+export default FieldSheetMetalFittingOrderList;

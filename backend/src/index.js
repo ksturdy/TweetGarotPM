@@ -79,12 +79,14 @@ const fieldPurchaseOrderRoutes = require('./routes/fieldPurchaseOrders');
 const smFittingOrderRoutes = require('./routes/smFittingOrders');
 const pipingFittingOrderRoutes = require('./routes/pipingFittingOrders');
 const plumbingFittingOrderRoutes = require('./routes/plumbingFittingOrders');
+const sheetMetalFittingOrderRoutes = require('./routes/sheetMetalFittingOrders');
 const safetyJsaRoutes = require('./routes/safetyJsa');
 const nearMissReportRoutes = require('./routes/nearMissReports');
 const sellSheetRoutes = require('./routes/sellSheets');
 const fieldFavoriteVendorRoutes = require('./routes/fieldFavoriteVendors');
 const projectAssignmentRoutes = require('./routes/projectAssignments');
 const fieldIssueRoutes = require('./routes/fieldIssues');
+const notificationRoutes = require('./routes/notifications');
 const attachmentRoutes = require('./routes/attachments');
 
 const app = express();
@@ -196,12 +198,14 @@ app.use('/api/field-purchase-orders', fieldPurchaseOrderRoutes);
 app.use('/api/sm-fitting-orders', smFittingOrderRoutes);
 app.use('/api/piping-fitting-orders', pipingFittingOrderRoutes);
 app.use('/api/plumbing-fitting-orders', plumbingFittingOrderRoutes);
+app.use('/api/sheet-metal-fitting-orders', sheetMetalFittingOrderRoutes);
 app.use('/api/safety-jsa', safetyJsaRoutes);
 app.use('/api/near-miss-reports', nearMissReportRoutes);
 app.use('/api/sell-sheets', sellSheetRoutes);
 app.use('/api/field-favorite-vendors', fieldFavoriteVendorRoutes);
 app.use('/api/project-assignments', projectAssignmentRoutes);
 app.use('/api/field-issues', fieldIssueRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/attachments', attachmentRoutes);
 
 // Health check

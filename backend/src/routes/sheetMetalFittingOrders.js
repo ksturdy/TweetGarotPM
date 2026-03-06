@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const PlumbingFittingOrder = require('../models/PlumbingFittingOrder');
+const SheetMetalFittingOrder = require('../models/SheetMetalFittingOrder');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
@@ -39,7 +39,7 @@ const verifyProjectOwnership = async (req, res, next) => {
 router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next) => {
   try {
     const filters = { status: req.query.status, priority: req.query.priority };
-    const orders = await PlumbingFittingOrder.findByProject(req.params.projectId, filters);
+    const orders = await SheetMetalFittingOrder.findByProject(req.params.projectId, filters);
     res.json(orders);
   } catch (error) {
     next(error);
@@ -49,7 +49,7 @@ router.get('/project/:projectId', verifyProjectOwnership, async (req, res, next)
 // Get project stats
 router.get('/project/:projectId/stats', verifyProjectOwnership, async (req, res, next) => {
   try {
-    const stats = await PlumbingFittingOrder.getProjectStats(req.params.projectId);
+    const stats = await SheetMetalFittingOrder.getProjectStats(req.params.projectId);
     res.json(stats);
   } catch (error) {
     next(error);
@@ -59,7 +59,7 @@ router.get('/project/:projectId/stats', verifyProjectOwnership, async (req, res,
 // Get single order
 router.get('/:id', async (req, res, next) => {
   try {
-    const order = await PlumbingFittingOrder.findById(req.params.id);
+    const order = await SheetMetalFittingOrder.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -85,8 +85,8 @@ router.post(
   async (req, res, next) => {
     try {
       const projectId = req.body.project_id || req.body.projectId;
-      const number = await PlumbingFittingOrder.getNextNumber(projectId);
-      const order = await PlumbingFittingOrder.create({
+      const number = await SheetMetalFittingOrder.getNextNumber(projectId);
+      const order = await SheetMetalFittingOrder.create({
         projectId,
         tenantId: req.tenantId,
         number,
@@ -99,9 +99,6 @@ router.post(
         specSection: req.body.spec_section,
         locationOnSite: req.body.location_on_site,
         materialType: req.body.material_type,
-        pipeSize: req.body.pipe_size,
-        fixtureType: req.body.fixture_type,
-        roughInDimensions: req.body.rough_in_dimensions,
         quantity: req.body.quantity,
         unit: req.body.unit,
         costCode: req.body.cost_code,
@@ -119,7 +116,7 @@ router.post(
 // Update order
 router.put('/:id', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -127,7 +124,7 @@ router.put('/:id', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const order = await PlumbingFittingOrder.update(req.params.id, req.body);
+    const order = await SheetMetalFittingOrder.update(req.params.id, req.body);
     res.json(order);
   } catch (error) {
     next(error);
@@ -137,7 +134,7 @@ router.put('/:id', async (req, res, next) => {
 // Submit to shop
 router.post('/:id/submit', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -145,7 +142,7 @@ router.post('/:id/submit', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const order = await PlumbingFittingOrder.update(req.params.id, { status: 'submitted' });
+    const order = await SheetMetalFittingOrder.update(req.params.id, { status: 'submitted' });
     res.json(order);
   } catch (error) {
     next(error);
@@ -155,7 +152,7 @@ router.post('/:id/submit', async (req, res, next) => {
 // Update fabrication status
 router.post('/:id/update-status', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -163,7 +160,7 @@ router.post('/:id/update-status', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const order = await PlumbingFittingOrder.update(req.params.id, req.body);
+    const order = await SheetMetalFittingOrder.update(req.params.id, req.body);
     res.json(order);
   } catch (error) {
     next(error);
@@ -173,7 +170,7 @@ router.post('/:id/update-status', async (req, res, next) => {
 // Delete
 router.delete('/:id', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -181,7 +178,7 @@ router.delete('/:id', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    await PlumbingFittingOrder.delete(req.params.id);
+    await SheetMetalFittingOrder.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -193,7 +190,7 @@ router.delete('/:id', async (req, res, next) => {
 // Add line item
 router.post('/:id/items', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -201,7 +198,7 @@ router.post('/:id/items', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const item = await PlumbingFittingOrder.addItem(req.params.id, {
+    const item = await SheetMetalFittingOrder.addItem(req.params.id, {
       sortOrder: req.body.sort_order,
       fittingType: req.body.fitting_type,
       size: req.body.size,
@@ -218,7 +215,7 @@ router.post('/:id/items', async (req, res, next) => {
 // Update line item
 router.put('/:id/items/:itemId', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -226,11 +223,11 @@ router.put('/:id/items/:itemId', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const existingItem = await PlumbingFittingOrder.findItemById(req.params.itemId);
+    const existingItem = await SheetMetalFittingOrder.findItemById(req.params.itemId);
     if (!existingItem || existingItem.fitting_order_id !== parseInt(req.params.id)) {
       return res.status(404).json({ error: 'Line item not found' });
     }
-    const item = await PlumbingFittingOrder.updateItem(req.params.itemId, req.body);
+    const item = await SheetMetalFittingOrder.updateItem(req.params.itemId, req.body);
     res.json(item);
   } catch (error) {
     next(error);
@@ -240,7 +237,7 @@ router.put('/:id/items/:itemId', async (req, res, next) => {
 // Delete line item
 router.delete('/:id/items/:itemId', async (req, res, next) => {
   try {
-    const existing = await PlumbingFittingOrder.findById(req.params.id);
+    const existing = await SheetMetalFittingOrder.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
@@ -248,11 +245,11 @@ router.delete('/:id/items/:itemId', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Fitting order not found' });
     }
-    const existingItem = await PlumbingFittingOrder.findItemById(req.params.itemId);
+    const existingItem = await SheetMetalFittingOrder.findItemById(req.params.itemId);
     if (!existingItem || existingItem.fitting_order_id !== parseInt(req.params.id)) {
       return res.status(404).json({ error: 'Line item not found' });
     }
-    await PlumbingFittingOrder.deleteItem(req.params.itemId);
+    await SheetMetalFittingOrder.deleteItem(req.params.itemId);
     res.status(204).send();
   } catch (error) {
     next(error);

@@ -4,6 +4,7 @@ const RFI = require('../models/RFI');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { notify } = require('../utils/notificationService');
 
 const router = express.Router();
 
@@ -84,6 +85,26 @@ router.post(
         number,
         createdBy: req.user.id,
       });
+
+      // Notify PM (fire-and-forget)
+      notify({
+        tenantId: req.tenantId,
+        projectId: req.body.projectId,
+        entityType: 'rfi',
+        entityId: rfi.id,
+        eventType: 'created',
+        title: `New RFI #${number}: ${req.body.subject}`,
+        message: `submitted RFI #${number}: ${req.body.subject}`,
+        link: `/projects/${req.body.projectId}/rfis/${rfi.id}`,
+        createdBy: req.user.id,
+        emailSubject: `New RFI #${number} — ${req.body.subject}`,
+        emailDetails: [
+          { label: 'RFI #', value: String(number) },
+          { label: 'Subject', value: req.body.subject },
+          { label: 'Priority', value: req.body.priority || 'Normal' },
+        ],
+      });
+
       res.status(201).json(rfi);
     } catch (error) {
       next(error);

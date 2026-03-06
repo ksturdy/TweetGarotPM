@@ -74,7 +74,7 @@ const DailyReportList: React.FC = () => {
                     fontSize: '0.75rem',
                     fontWeight: 600,
                     color: 'white',
-                    backgroundColor: report.status === 'approved' ? '#22c55e' : report.status === 'submitted' ? '#3b82f6' : '#f59e0b',
+                    backgroundColor: report.status === 'approved' ? '#22c55e' : report.status === 'submitted' ? '#3b82f6' : report.status === 'revision' ? '#ef4444' : '#f59e0b',
                     textTransform: 'capitalize',
                   }}>
                     {report.status}

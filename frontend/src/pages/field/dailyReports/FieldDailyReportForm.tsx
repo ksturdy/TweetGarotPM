@@ -267,7 +267,7 @@ const FieldDailyReportForm: React.FC = () => {
         safety_notes: formData.safety_notes,
         visitors: formData.visitors,
         issues: formData.issues,
-        status: 'draft',
+        status: isEditMode && existingReport?.status === 'revision' ? 'revision' : 'draft',
       };
 
       let reportId: number;
@@ -320,6 +320,21 @@ const FieldDailyReportForm: React.FC = () => {
       </p>
 
       <form onSubmit={handleSubmit}>
+        {/* Revision Notes Banner */}
+        {isEditMode && existingReport?.status === 'revision' && existingReport?.revision_notes && (
+          <div style={{
+            background: '#fffbeb',
+            border: '1px solid #fbbf24',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 16,
+            fontSize: '0.9rem',
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 4, color: '#92400e' }}>Revision Requested</div>
+            <div>{existingReport.revision_notes}</div>
+          </div>
+        )}
+
         {/* Date & Weather */}
         <div className="field-form-section">
           <div className="field-form-section-title">

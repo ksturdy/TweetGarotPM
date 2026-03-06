@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dailyReportsApi, DailyReportCrew } from '../../services/dailyReports';
@@ -44,6 +44,18 @@ const DailyReportDetail: React.FC = () => {
     },
   });
 
+  const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState('');
+
+  const reviseMutation = useMutation({
+    mutationFn: () => dailyReportsApi.revise(Number(id), { revision_notes: revisionNotes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dailyReport', id] });
+      setShowRevisionForm(false);
+      setRevisionNotes('');
+    },
+  });
+
   if (isLoading) {
     return <div className="loading">Loading...</div>;
   }
@@ -62,6 +74,7 @@ const DailyReportDetail: React.FC = () => {
     draft: '#f59e0b',
     submitted: '#3b82f6',
     approved: '#22c55e',
+    revision: '#ef4444',
   };
 
   return (
@@ -89,21 +102,69 @@ const DailyReportDetail: React.FC = () => {
             {report.status}
           </span>
           {report.status === 'submitted' && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                if (window.confirm('Approve this daily report?')) {
-                  approveMutation.mutate();
-                }
-              }}
-              disabled={approveMutation.isPending}
-              style={{ fontSize: '0.8rem', padding: '4px 12px' }}
-            >
-              {approveMutation.isPending ? 'Approving...' : 'Approve'}
-            </button>
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  if (window.confirm('Approve this daily report?')) {
+                    approveMutation.mutate();
+                  }
+                }}
+                disabled={approveMutation.isPending}
+                style={{ fontSize: '0.8rem', padding: '4px 12px' }}
+              >
+                {approveMutation.isPending ? 'Approving...' : 'Approve'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowRevisionForm(true)}
+                style={{ fontSize: '0.8rem', padding: '4px 12px' }}
+              >
+                Revise &amp; Resubmit
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Revision reason inline form */}
+      {showRevisionForm && (
+        <div className="card" style={{ padding: '1rem', marginBottom: '0.75rem', border: '2px solid #f59e0b' }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '0.85rem' }}>Send Back for Revision</h4>
+          <textarea
+            value={revisionNotes}
+            onChange={(e) => setRevisionNotes(e.target.value)}
+            placeholder="Reason for revision (required)..."
+            rows={3}
+            style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.85rem', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={() => { setShowRevisionForm(false); setRevisionNotes(''); }} style={{ fontSize: '0.8rem', padding: '4px 12px' }}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => reviseMutation.mutate()}
+              disabled={!revisionNotes.trim() || reviseMutation.isPending}
+              style={{ fontSize: '0.8rem', padding: '4px 12px', backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
+            >
+              {reviseMutation.isPending ? 'Sending...' : 'Send for Revision'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Revision notes banner */}
+      {report.revision_notes && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fbbf24', borderRadius: 8, padding: '8px 12px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+          <strong>Revision Notes:</strong> {report.revision_notes}
+          {report.revised_by_name && (
+            <span style={{ color: '#6b7280', marginLeft: 8 }}>
+              — {report.revised_by_name}, {report.revised_at ? format(new Date(report.revised_at), 'MMM d, yyyy h:mm a') : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ padding: '1rem 1.25rem' }}>
         {/* Row 1: Date/Weather + Work Performed side by side */}
@@ -248,6 +309,7 @@ const DailyReportDetail: React.FC = () => {
           <span><strong>Created By:</strong> {report.created_by_name}</span>
           <span><strong>Created:</strong> {report.created_at ? format(new Date(report.created_at), 'MMM d, yyyy h:mm a') : 'N/A'}</span>
           {report.submitted_at && <span><strong>Submitted:</strong> {format(new Date(report.submitted_at), 'MMM d, yyyy h:mm a')}</span>}
+          {report.revised_at && <span><strong>Returned:</strong> {format(new Date(report.revised_at), 'MMM d, yyyy h:mm a')} by {report.revised_by_name}</span>}
           {report.approved_at && <span><strong>Approved:</strong> {format(new Date(report.approved_at), 'MMM d, yyyy h:mm a')}</span>}
         </div>
       </div>

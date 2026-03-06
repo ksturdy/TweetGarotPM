@@ -3,15 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AirIcon from '@mui/icons-material/Air';
 import PlumbingIcon from '@mui/icons-material/Plumbing';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import HandymanIcon from '@mui/icons-material/Handyman';
 
 const FittingOrdersHome: React.FC = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
 
   const modules = [
-    { label: 'Sheet Metal', icon: <AirIcon />, path: 'sm-fitting-orders', color: 'orange' },
+    { label: 'Duct Fab', icon: <AirIcon />, path: 'sm-fitting-orders', color: 'orange' },
     { label: 'Piping', icon: <PlumbingIcon />, path: 'piping-fitting-orders', color: 'purple' },
     { label: 'Plumbing', icon: <WaterDropIcon />, path: 'plumbing-fitting-orders', color: 'cyan' },
+    { label: 'Sheet Metal', icon: <HandymanIcon />, path: 'sheet-metal-fitting-orders', color: 'amber' },
   ];
 
   return (

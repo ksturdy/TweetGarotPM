@@ -15,10 +15,12 @@ const DailyReport = {
     const result = await db.query(
       `SELECT dr.*,
               p.name as project_name, p.number as project_number,
-              u.first_name || ' ' || u.last_name as created_by_name
+              u.first_name || ' ' || u.last_name as created_by_name,
+              ru.first_name || ' ' || ru.last_name as revised_by_name
        FROM daily_reports dr
        JOIN projects p ON dr.project_id = p.id
        LEFT JOIN users u ON dr.created_by = u.id
+       LEFT JOIN users ru ON dr.revised_by = ru.id
        WHERE dr.id = $1`,
       [id]
     );
@@ -105,6 +107,22 @@ const DailyReport = {
        WHERE id = $2
        RETURNING *`,
       [approvedBy, id]
+    );
+    return result.rows[0];
+  },
+
+  async revise(id, { revisedBy, revisionNotes }) {
+    const result = await db.query(
+      `UPDATE daily_reports
+       SET status = 'revision',
+           revision_notes = $1,
+           revised_by = $2,
+           revised_at = NOW(),
+           revision_count = COALESCE(revision_count, 0) + 1,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [revisionNotes || null, revisedBy, id]
     );
     return result.rows[0];
   },

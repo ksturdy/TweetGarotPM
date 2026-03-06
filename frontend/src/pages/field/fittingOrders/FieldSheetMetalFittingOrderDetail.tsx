@@ -9,10 +9,10 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
-import { plumbingFittingOrdersApi, PlumbingFittingOrder, PlumbingFittingOrderItem } from '../../../services/plumbingFittingOrders';
+import { sheetMetalFittingOrdersApi, SheetMetalFittingOrder, SheetMetalFittingOrderItem } from '../../../services/sheetMetalFittingOrders';
 import { fieldPurchaseOrdersApi, FieldPurchaseOrder, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
 import { fieldFavoriteVendorsApi, FieldFavoriteVendor } from '../../../services/fieldFavoriteVendors';
-import { generatePlumbingFittingOrderPdf } from '../../../utils/plumbingFittingOrderPdfClient';
+import { generateSheetMetalFittingOrderPdf } from '../../../utils/sheetMetalFittingOrderPdfClient';
 
 const FITTING_LABELS: Record<string, string> = {
   '90': '90\u00B0 Elbow',
@@ -20,27 +20,31 @@ const FITTING_LABELS: Record<string, string> = {
   tee: 'Tee',
   wye: 'Wye',
   reducer: 'Reducer',
-  coupling: 'Coupling',
-  union: 'Union',
-  cap: 'Cap',
-  p_trap: 'P-Trap',
-  cleanout: 'Cleanout',
-  closet_flange: 'Closet Flange',
-  no_hub_coupling: 'No-Hub Coupling',
-  adapter: 'Adapter',
-  bushing: 'Bushing',
-  pipe: 'Pipe',
+  offset: 'Offset',
+  transition: 'Transition',
+  end_cap: 'End Cap',
+  takeoff: 'Takeoff/Tap',
+  start_collar: 'Start Collar',
+  flex_connector: 'Flex Connector',
+  volume_damper: 'Volume Damper',
+  fire_damper: 'Fire Damper',
+  turning_vanes: 'Turning Vanes',
+  duct: 'Duct (Straight)',
   other: 'Other',
-  // Hangers
-  clevis_hanger: 'Clevis Hanger',
-  ring_hanger: 'Ring Hanger',
-  riser_clamp: 'Riser Clamp',
-  pipe_strap: 'Pipe Strap',
-  beam_clamp: 'Beam Clamp',
-  unistrut: 'Unistrut',
-  threaded_rod: 'Threaded Rod',
-  anchor: 'Anchor',
+  // Accessories
+  register: 'Register',
+  grille: 'Grille',
+  diffuser: 'Diffuser',
+  access_door: 'Access Door',
+  smoke_detector: 'Smoke Det. Housing',
+  filter_box: 'Filter Box',
+  vav_box: 'VAV Box',
+  mixing_box: 'Mixing Box',
   // Hardware
+  drive_cleat: 'Drive Cleat',
+  s_cleat: 'S-Cleat',
+  hanger_strap: 'Hanger Strap',
+  threaded_rod: 'Threaded Rod',
   nut: 'Nut',
   bolt: 'Bolt',
   washer: 'Washer',
@@ -50,14 +54,13 @@ const FITTING_LABELS: Record<string, string> = {
 };
 
 const JOIN_LABELS: Record<string, string> = {
-  no_hub: 'No-Hub',
-  solvent_weld: 'Solvent Weld',
-  soldered: 'Soldered',
-  threaded: 'Threaded',
-  propress: 'ProPress',
-  push_fit: 'Push-Fit',
-  crimp: 'Crimp',
-  glued: 'Glued',
+  s_drive: 'S & Drive',
+  tdc: 'TDC',
+  flanged: 'Flanged',
+  raw_crimped: 'Raw/Crimped',
+  welded: 'Welded',
+  slip_joint: 'Slip Joint',
+  standing_seam: 'Standing Seam',
 };
 
 const formatDate = (dateStr: string | null): string => {
@@ -79,14 +82,14 @@ const formatDateTime = (dateStr: string | null): string => {
   });
 };
 
-function buildItemDescription(item: PlumbingFittingOrderItem): string {
+function buildItemDescription(item: SheetMetalFittingOrderItem): string {
   const fitting = FITTING_LABELS[item.fitting_type] || item.fitting_type || '';
   const size = item.size || '';
   const join = item.join_type ? (JOIN_LABELS[item.join_type] || item.join_type) : '';
   return [size, fitting, join].filter(Boolean).join(' ');
 }
 
-const FieldPlumbingFittingOrderDetail: React.FC = () => {
+const FieldSheetMetalFittingOrderDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -106,15 +109,14 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
   });
 
   const { data: order, isLoading } = useQuery({
-    queryKey: ['field-plumbing-fitting-order', id],
+    queryKey: ['field-sheet-metal-fitting-order', id],
     queryFn: async () => {
-      const res = await plumbingFittingOrdersApi.getById(Number(id));
+      const res = await sheetMetalFittingOrdersApi.getById(Number(id));
       return res.data;
     },
     enabled: !!id,
   });
 
-  // Fetch draft POs for "add to existing" option
   const { data: draftPos } = useQuery({
     queryKey: ['field-purchase-orders-draft', projectId],
     queryFn: async () => {
@@ -125,10 +127,10 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => plumbingFittingOrdersApi.delete(Number(id)),
+    mutationFn: () => sheetMetalFittingOrdersApi.delete(Number(id)),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field-plumbing-fitting-orders'] });
-      navigate(`/field/projects/${projectId}/plumbing-fitting-orders`);
+      queryClient.invalidateQueries({ queryKey: ['field-sheet-metal-fitting-orders'] });
+      navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders`);
     },
   });
 
@@ -141,20 +143,19 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
     }
   };
 
-  // ===== Submit for Quote (PDF / Email) =====
   const handleEmailQuote = async (vendorEmail?: string) => {
     if (!order) return;
     setShowQuoteVendorPicker(false);
     setIsDownloading(true);
     try {
-      const blob = await generatePlumbingFittingOrderPdf(order as any);
-      const filename = `FO-PLB-${order.number}.pdf`;
+      const blob = await generateSheetMetalFittingOrderPdf(order as any);
+      const filename = `FO-SM-${order.number}.pdf`;
       const pdfFile = new File([blob], filename, { type: 'application/pdf' });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
         await navigator.share({
           files: [pdfFile],
-          title: `FO-PLB-${order.number}${vendorEmail ? ` - ${vendorEmail}` : ''}`,
+          title: `FO-SM-${order.number}${vendorEmail ? ` - ${vendorEmail}` : ''}`,
         });
       } else {
         const url = window.URL.createObjectURL(blob);
@@ -168,14 +169,14 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
 
         const itemCount = (order.items || []).length;
         const subject = encodeURIComponent(
-          `Quote Request - Plumbing Fittings FO-PLB-${order.number} - ${order.title || ''}`
+          `Quote Request - Sheet Metal Fittings FO-SM-${order.number} - ${order.title || ''}`
         );
         const body = encodeURIComponent(
-          `Please provide a quote for the attached plumbing fitting order FO-PLB-${order.number}.\n\n` +
+          `Please provide a quote for the attached sheet metal fitting order FO-SM-${order.number}.\n\n` +
           `Title: ${order.title || ''}\n` +
           `Material: ${order.material_type || '-'}\n` +
           `Priority: ${order.priority || 'normal'}\n` +
-          `Fittings: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
+          `Items: ${itemCount} item${itemCount !== 1 ? 's' : ''}\n\n` +
           `The PDF is attached to this email.\n\n` +
           `Thank you,\nTweet Garot Mechanical`
         );
@@ -194,8 +195,8 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
     if (!order) return;
     setIsDownloading(true);
     try {
-      const blob = await generatePlumbingFittingOrderPdf(order as any);
-      const filename = `FO-PLB-${order.number}.pdf`;
+      const blob = await generateSheetMetalFittingOrderPdf(order as any);
+      const filename = `FO-SM-${order.number}.pdf`;
 
       const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (isIos) {
@@ -229,7 +230,6 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
     }
   };
 
-  // ===== Create Purchase Order =====
   const createNewPo = async () => {
     if (!order) return;
     setCreatingPo(true);
@@ -237,8 +237,8 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
       const items = order.items || [];
       const poData: Partial<FieldPurchaseOrder> = {
         project_id: Number(projectId),
-        description: `Plumbing fittings from FO-PLB-${order.number}${order.title ? ` - ${order.title}` : ''}`,
-        notes: `Created from plumbing fitting order FO-PLB-${order.number}`,
+        description: `Sheet metal fittings from FO-SM-${order.number}${order.title ? ` - ${order.title}` : ''}`,
+        notes: `Created from sheet metal fitting order FO-SM-${order.number}`,
         cost_code: order.cost_code || '',
         phase_code: order.phase_code || '',
       };
@@ -307,14 +307,14 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
   }
 
   const isDraft = order.status === 'draft';
-  const items: PlumbingFittingOrderItem[] = order.items || [];
+  const items: SheetMetalFittingOrderItem[] = order.items || [];
   const isBusy = deleteMutation.isPending || isDownloading || creatingPo;
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h1 className="field-page-title">FO-PLB-{order.number}</h1>
+          <h1 className="field-page-title">FO-SM-{order.number}</h1>
           <p className="field-page-subtitle" style={{ marginBottom: 0 }}>{order.title}</p>
         </div>
         <span className={`field-status field-status-${order.status}`}>
@@ -363,10 +363,10 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Fittings List */}
+      {/* Items List */}
       <div className="field-detail-section" style={{ padding: 0 }}>
         <div className="field-detail-section-title" style={{ padding: '10px 12px', margin: 0 }}>
-          Fittings ({items.length} items)
+          Items ({items.length})
         </div>
         {items.length > 0 ? (
           items.map((item, index) => (
@@ -385,7 +385,7 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
               <span style={{ fontSize: 15, fontWeight: 700, color: '#111827', minWidth: 32 }}>
                 {item.quantity}x
               </span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#0e7490' }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#92400e' }}>
                 {item.size}
               </span>
               <span style={{ fontSize: 14, color: '#374151' }}>
@@ -405,7 +405,7 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
           ))
         ) : (
           <div style={{ padding: '16px 12px', color: '#9ca3af', fontSize: 14 }}>
-            No fittings added
+            No items added
           </div>
         )}
       </div>
@@ -446,18 +446,16 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
 
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, marginBottom: 24 }}>
-        {/* Submit for Quote */}
         <button
           className="field-btn field-btn-primary"
           onClick={() => setShowQuoteVendorPicker(true)}
           disabled={isBusy}
-          style={{ background: '#0891b2' }}
+          style={{ background: '#b45309' }}
         >
           <EmailIcon style={{ fontSize: 18 }} />
           {isDownloading ? 'Preparing PDF...' : 'Submit for Quote'}
         </button>
 
-        {/* Create Purchase Order */}
         <button
           className="field-btn field-btn-success"
           onClick={() => setShowPoModal(true)}
@@ -467,7 +465,6 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
           Create Purchase Order
         </button>
 
-        {/* Download PDF */}
         <button
           className="field-btn field-btn-secondary"
           onClick={handleDownloadPdf}
@@ -477,12 +474,11 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
           {isDownloading ? 'Downloading...' : 'Download PDF'}
         </button>
 
-        {/* Edit - draft only */}
         {isDraft && (
           <button
             className="field-btn field-btn-secondary"
             onClick={() =>
-              navigate(`/field/projects/${projectId}/plumbing-fitting-orders/${id}/edit`)
+              navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders/${id}/edit`)
             }
           >
             <EditIcon style={{ fontSize: 18 }} />
@@ -490,7 +486,6 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
           </button>
         )}
 
-        {/* Delete */}
         <button
           className="field-btn field-btn-danger"
           onClick={handleDelete}
@@ -501,7 +496,7 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
         </button>
       </div>
 
-      {/* ===== Create PO Modal ===== */}
+      {/* Create PO Modal */}
       {showPoModal && (
         <div
           style={{
@@ -545,10 +540,9 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
             </div>
 
             <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 16px' }}>
-              {items.length} fitting{items.length !== 1 ? 's' : ''} will be added as line items to the purchase order.
+              {items.length} item{items.length !== 1 ? 's' : ''} will be added as line items to the purchase order.
             </p>
 
-            {/* New PO option */}
             <button
               type="button"
               onClick={createNewPo}
@@ -556,9 +550,9 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
               style={{
                 width: '100%',
                 padding: '14px 16px',
-                border: '2px solid #06b6d4',
+                border: '2px solid #d97706',
                 borderRadius: 10,
-                background: '#ecfeff',
+                background: '#fef3c7',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -566,18 +560,17 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
                 marginBottom: 12,
               }}
             >
-              <AddIcon style={{ fontSize: 22, color: '#0891b2' }} />
+              <AddIcon style={{ fontSize: 22, color: '#b45309' }} />
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#0e7490' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#92400e' }}>
                   {creatingPo ? 'Creating...' : 'Create New PO'}
                 </div>
                 <div style={{ fontSize: 12, color: '#6b7280' }}>
-                  Start a new purchase order with these fittings
+                  Start a new purchase order with these items
                 </div>
               </div>
             </button>
 
-            {/* Existing draft POs */}
             {draftPos && draftPos.length > 0 && (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -619,7 +612,7 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
         </div>
       )}
 
-      {/* ===== Quote Vendor Picker Modal ===== */}
+      {/* Quote Vendor Picker Modal */}
       {showQuoteVendorPicker && (
         <div
           style={{
@@ -666,7 +659,6 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
               Select a vendor to pre-fill the email, or skip to send without.
             </p>
 
-            {/* Skip option */}
             <button
               type="button"
               onClick={() => handleEmailQuote()}
@@ -726,4 +718,4 @@ const FieldPlumbingFittingOrderDetail: React.FC = () => {
   );
 };
 
-export default FieldPlumbingFittingOrderDetail;
+export default FieldSheetMetalFittingOrderDetail;

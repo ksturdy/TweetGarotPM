@@ -1,5 +1,16 @@
 import api from './api';
 
+export interface PlumbingFittingOrderItem {
+  id: number;
+  fitting_order_id: number;
+  sort_order: number;
+  fitting_type: string;
+  size: string;
+  join_type: string;
+  quantity: number;
+  remarks: string;
+}
+
 export interface PlumbingFittingOrder {
   id: number;
   project_id: number;
@@ -32,6 +43,7 @@ export interface PlumbingFittingOrder {
   created_by_name: string;
   created_at: string;
   updated_at: string;
+  items?: PlumbingFittingOrderItem[];
 }
 
 export interface PlumbingFittingOrderStats {
@@ -64,4 +76,14 @@ export const plumbingFittingOrdersApi = {
     api.post<PlumbingFittingOrder>(`/plumbing-fitting-orders/${id}/update-status`, data),
 
   delete: (id: number) => api.delete(`/plumbing-fitting-orders/${id}`),
+
+  // Line item methods
+  addItem: (orderId: number, data: Partial<PlumbingFittingOrderItem>) =>
+    api.post<PlumbingFittingOrderItem>(`/plumbing-fitting-orders/${orderId}/items`, data),
+
+  updateItem: (orderId: number, itemId: number, data: Partial<PlumbingFittingOrderItem>) =>
+    api.put<PlumbingFittingOrderItem>(`/plumbing-fitting-orders/${orderId}/items/${itemId}`, data),
+
+  deleteItem: (orderId: number, itemId: number) =>
+    api.delete(`/plumbing-fitting-orders/${orderId}/items/${itemId}`),
 };

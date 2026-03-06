@@ -4,6 +4,7 @@ const FieldIssue = require('../models/FieldIssue');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { notify } = require('../utils/notificationService');
 
 const router = express.Router();
 
@@ -92,6 +93,27 @@ router.post(
         notes: req.body.notes,
         createdBy: req.user.id,
       });
+
+      // Notify PM (fire-and-forget)
+      notify({
+        tenantId: req.tenantId,
+        projectId,
+        entityType: 'field_issue',
+        entityId: issue.id,
+        eventType: 'created',
+        title: `New Issue #${number}: ${req.body.title}`,
+        message: `reported field issue #${number}: ${req.body.title}`,
+        link: `/projects/${projectId}/field-issues/${issue.id}`,
+        createdBy: req.user.id,
+        emailSubject: `New Field Issue #${number} — ${req.body.title}`,
+        emailDetails: [
+          { label: 'Issue #', value: String(number) },
+          { label: 'Title', value: req.body.title },
+          { label: 'Priority', value: req.body.priority || 'Normal' },
+          { label: 'Trade', value: req.body.trade || 'N/A' },
+        ],
+      });
+
       res.status(201).json(issue);
     } catch (error) {
       next(error);

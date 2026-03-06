@@ -85,6 +85,7 @@ import ProjectedRevenue from './pages/projects/ProjectedRevenue';
 import LaborForecast from './pages/projects/LaborForecast';
 import PhaseSchedule from './pages/projects/PhaseSchedule';
 import FeedbackPage from './pages/FeedbackPage';
+import NotificationsPage from './pages/NotificationsPage';
 import AdministrationDashboard from './pages/administration/AdministrationDashboard';
 import RiskManagementDashboard from './pages/riskManagement/RiskManagementDashboard';
 import ContractReviewList from './pages/riskManagement/ContractReviewList';
@@ -119,6 +120,9 @@ import FieldPipingFittingOrderDetail from './pages/field/fittingOrders/FieldPipi
 import FieldPlumbingFittingOrderList from './pages/field/fittingOrders/FieldPlumbingFittingOrderList';
 import FieldPlumbingFittingOrderForm from './pages/field/fittingOrders/FieldPlumbingFittingOrderForm';
 import FieldPlumbingFittingOrderDetail from './pages/field/fittingOrders/FieldPlumbingFittingOrderDetail';
+import FieldSheetMetalFittingOrderList from './pages/field/fittingOrders/FieldSheetMetalFittingOrderList';
+import FieldSheetMetalFittingOrderForm from './pages/field/fittingOrders/FieldSheetMetalFittingOrderForm';
+import FieldSheetMetalFittingOrderDetail from './pages/field/fittingOrders/FieldSheetMetalFittingOrderDetail';
 import FieldJSAList from './pages/field/safetyJsa/FieldJSAList';
 import FieldJSAForm from './pages/field/safetyJsa/FieldJSAForm';
 import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
@@ -288,6 +292,10 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/plumbing-fitting-orders/new" element={<FieldPlumbingFittingOrderForm />} />
           <Route path="projects/:projectId/plumbing-fitting-orders/:id" element={<FieldPlumbingFittingOrderDetail />} />
           <Route path="projects/:projectId/plumbing-fitting-orders/:id/edit" element={<FieldPlumbingFittingOrderForm />} />
+          <Route path="projects/:projectId/sheet-metal-fitting-orders" element={<FieldSheetMetalFittingOrderList />} />
+          <Route path="projects/:projectId/sheet-metal-fitting-orders/new" element={<FieldSheetMetalFittingOrderForm />} />
+          <Route path="projects/:projectId/sheet-metal-fitting-orders/:id" element={<FieldSheetMetalFittingOrderDetail />} />
+          <Route path="projects/:projectId/sheet-metal-fitting-orders/:id/edit" element={<FieldSheetMetalFittingOrderForm />} />
           <Route path="projects/:projectId/safety-jsa" element={<FieldJSAList />} />
           <Route path="projects/:projectId/safety-jsa/new" element={<FieldJSAForm />} />
           <Route path="projects/:projectId/safety-jsa/:id" element={<FieldJSADetail />} />
@@ -382,6 +390,7 @@ const App: React.FC = () => {
                 <Route path="/employee-resumes/:id" element={<EmployeeResumeForm />} />
 
                 <Route path="/feedback" element={<FeedbackPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />

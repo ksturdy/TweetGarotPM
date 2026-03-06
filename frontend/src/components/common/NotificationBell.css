@@ -1,0 +1,226 @@
+.notification-bell-wrapper {
+  position: relative;
+}
+
+.notification-bell-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notification-bell-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+/* Dropdown */
+.notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-height: 500px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 2px 10px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notification-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.notification-dropdown-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2332;
+}
+
+.notification-mark-all {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #3B7DD8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.notification-mark-all:hover {
+  background: #eff6ff;
+}
+
+/* List */
+.notification-dropdown-list {
+  overflow-y: auto;
+  max-height: 380px;
+}
+
+.notification-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.notification-item:hover {
+  background: #f9fafb;
+}
+
+.notification-item.unread {
+  background: #eff6ff;
+}
+
+.notification-item.unread:hover {
+  background: #dbeafe;
+}
+
+.notification-type-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  letter-spacing: 0.03em;
+}
+
+.notification-type-badge.rfi {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.notification-type-badge.field_issue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notification-type-badge.daily_report {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.notification-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item-message {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item-time {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 3px;
+}
+
+.notification-unread-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3B7DD8;
+  margin-top: 6px;
+}
+
+/* Footer */
+.notification-dropdown-footer {
+  border-top: 1px solid #e5e7eb;
+  padding: 8px;
+}
+
+.notification-view-all {
+  width: 100%;
+  padding: 8px;
+  background: none;
+  border: none;
+  color: #3B7DD8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.notification-view-all:hover {
+  background: #eff6ff;
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .notification-dropdown {
+    width: 320px;
+    right: -60px;
+  }
+}

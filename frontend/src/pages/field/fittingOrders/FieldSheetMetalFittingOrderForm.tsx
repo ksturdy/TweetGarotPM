@@ -6,13 +6,13 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
-import { plumbingFittingOrdersApi, PlumbingFittingOrder, PlumbingFittingOrderItem } from '../../../services/plumbingFittingOrders';
+import { sheetMetalFittingOrdersApi, SheetMetalFittingOrder, SheetMetalFittingOrderItem } from '../../../services/sheetMetalFittingOrders';
 
-type Category = 'fittings' | 'hangers' | 'hardware';
+type Category = 'fittings' | 'accessories' | 'hardware';
 
 const CATEGORIES: { value: Category; label: string }[] = [
   { value: 'fittings', label: 'Fittings' },
-  { value: 'hangers', label: 'Hangers & Supports' },
+  { value: 'accessories', label: 'Accessories' },
   { value: 'hardware', label: 'Hardware' },
 ];
 
@@ -22,31 +22,35 @@ const FITTING_TYPES = [
   { value: 'tee', label: 'Tee' },
   { value: 'wye', label: 'Wye' },
   { value: 'reducer', label: 'Reducer' },
-  { value: 'coupling', label: 'Coupling' },
-  { value: 'union', label: 'Union' },
-  { value: 'cap', label: 'Cap' },
-  { value: 'p_trap', label: 'P-Trap' },
-  { value: 'cleanout', label: 'Cleanout' },
-  { value: 'closet_flange', label: 'Closet Flange' },
-  { value: 'no_hub_coupling', label: 'No-Hub Coupling' },
-  { value: 'adapter', label: 'Adapter' },
-  { value: 'bushing', label: 'Bushing' },
-  { value: 'pipe', label: 'Pipe' },
+  { value: 'offset', label: 'Offset' },
+  { value: 'transition', label: 'Transition' },
+  { value: 'end_cap', label: 'End Cap' },
+  { value: 'takeoff', label: 'Takeoff/Tap' },
+  { value: 'start_collar', label: 'Start Collar' },
+  { value: 'flex_connector', label: 'Flex Connector' },
+  { value: 'volume_damper', label: 'Volume Damper' },
+  { value: 'fire_damper', label: 'Fire Damper' },
+  { value: 'turning_vanes', label: 'Turning Vanes' },
+  { value: 'duct', label: 'Duct (Straight)' },
   { value: 'other', label: 'Other' },
 ];
 
-const HANGER_TYPES = [
-  { value: 'clevis_hanger', label: 'Clevis Hanger' },
-  { value: 'ring_hanger', label: 'Ring Hanger' },
-  { value: 'riser_clamp', label: 'Riser Clamp' },
-  { value: 'pipe_strap', label: 'Pipe Strap' },
-  { value: 'beam_clamp', label: 'Beam Clamp' },
-  { value: 'unistrut', label: 'Unistrut' },
-  { value: 'threaded_rod', label: 'Threaded Rod' },
-  { value: 'anchor', label: 'Anchor' },
+const ACCESSORY_TYPES = [
+  { value: 'register', label: 'Register' },
+  { value: 'grille', label: 'Grille' },
+  { value: 'diffuser', label: 'Diffuser' },
+  { value: 'access_door', label: 'Access Door' },
+  { value: 'smoke_detector', label: 'Smoke Det. Housing' },
+  { value: 'filter_box', label: 'Filter Box' },
+  { value: 'vav_box', label: 'VAV Box' },
+  { value: 'mixing_box', label: 'Mixing Box' },
 ];
 
 const HARDWARE_TYPES = [
+  { value: 'drive_cleat', label: 'Drive Cleat' },
+  { value: 's_cleat', label: 'S-Cleat' },
+  { value: 'hanger_strap', label: 'Hanger Strap' },
+  { value: 'threaded_rod', label: 'Threaded Rod' },
   { value: 'nut', label: 'Nut' },
   { value: 'bolt', label: 'Bolt' },
   { value: 'washer', label: 'Washer' },
@@ -55,18 +59,12 @@ const HARDWARE_TYPES = [
   { value: 'other_hardware', label: 'Other' },
 ];
 
-const PIPE_SIZES = [
-  '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '3"', '4"', '6"', '8"',
+const DUCT_SIZES = [
+  '4"', '5"', '6"', '7"', '8"', '9"', '10"', '12"', '14"', '16"', '18"', '20"', '24"', '30"', '36"',
 ];
 
 const HARDWARE_SIZES = [
   '1/4"', '5/16"', '3/8"', '1/2"', '5/8"', '3/4"',
-];
-
-const UNISTRUT_SIZES = [
-  '1-5/8" x 1-5/8"',
-  '1-5/8" x 13/16"',
-  '1-5/8" x 3-1/4"',
 ];
 
 const THREADED_ROD_SIZES = [
@@ -74,30 +72,27 @@ const THREADED_ROD_SIZES = [
 ];
 
 const JOIN_TYPES = [
-  { value: 'no_hub', label: 'No-Hub' },
-  { value: 'solvent_weld', label: 'Solvent Weld' },
-  { value: 'soldered', label: 'Soldered' },
-  { value: 'threaded', label: 'Threaded' },
-  { value: 'propress', label: 'ProPress' },
-  { value: 'push_fit', label: 'Push-Fit' },
-  { value: 'crimp', label: 'Crimp' },
-  { value: 'glued', label: 'Glued' },
+  { value: 's_drive', label: 'S & Drive' },
+  { value: 'tdc', label: 'TDC' },
+  { value: 'flanged', label: 'Flanged' },
+  { value: 'raw_crimped', label: 'Raw/Crimped' },
+  { value: 'welded', label: 'Welded' },
+  { value: 'slip_joint', label: 'Slip Joint' },
+  { value: 'standing_seam', label: 'Standing Seam' },
 ];
 
 const getItemTypes = (category: Category) => {
   switch (category) {
-    case 'hangers': return HANGER_TYPES;
+    case 'accessories': return ACCESSORY_TYPES;
     case 'hardware': return HARDWARE_TYPES;
     default: return FITTING_TYPES;
   }
 };
 
 const getSizes = (category: Category, fittingType?: string) => {
-  if (fittingType === 'unistrut') return UNISTRUT_SIZES;
   if (fittingType === 'threaded_rod') return THREADED_ROD_SIZES;
-  if (fittingType === 'anchor') return HARDWARE_SIZES;
   if (category === 'hardware') return HARDWARE_SIZES;
-  return PIPE_SIZES;
+  return DUCT_SIZES;
 };
 
 const hasJoinType = (category: Category) => category === 'fittings';
@@ -111,28 +106,26 @@ interface LocalLineItem {
   remarks: string;
 }
 
-// How many size picks each fitting type needs, and labels for each pick
 const getSizeConfig = (fittingType: string): { count: number; labels: string[] } => {
   switch (fittingType) {
     case 'tee':
     case 'wye':
-      return { count: 3, labels: ['Run', 'Run', 'Branch'] };
+      return { count: 3, labels: ['Main', 'Main', 'Branch'] };
     case 'reducer':
-    case 'bushing':
+    case 'transition':
       return { count: 2, labels: ['Large End', 'Small End'] };
     default:
       return { count: 1, labels: ['Size'] };
   }
 };
 
-const FieldPlumbingFittingOrderForm: React.FC = () => {
+const FieldSheetMetalFittingOrderForm: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
 
-  // Order header
-  const [form, setForm] = useState<Partial<PlumbingFittingOrder>>({
+  const [form, setForm] = useState<Partial<SheetMetalFittingOrder>>({
     project_id: Number(projectId),
     title: '',
     description: '',
@@ -148,10 +141,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
     notes: '',
   });
 
-  // Line items
   const [lineItems, setLineItems] = useState<LocalLineItem[]>([]);
-
-  // Quick-add state
   const [selectedCategory, setSelectedCategory] = useState<Category>('fittings');
   const [selectedFitting, setSelectedFitting] = useState('');
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
@@ -159,8 +149,6 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [joinTypeLocked, setJoinTypeLocked] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Step tracking for guided flow
   const [step, setStep] = useState<'fitting' | 'size' | 'join' | 'qty'>('fitting');
 
   const qtyInputRef = useRef<HTMLInputElement>(null);
@@ -169,9 +157,9 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
   const sizeConfig = getSizeConfig(selectedFitting);
 
   const { isLoading: loadingExisting } = useQuery({
-    queryKey: ['field-plumbing-fitting-order', id],
+    queryKey: ['field-sheet-metal-fitting-order', id],
     queryFn: async () => {
-      const res = await plumbingFittingOrdersApi.getById(Number(id));
+      const res = await sheetMetalFittingOrdersApi.getById(Number(id));
       const order = res.data;
       setForm({
         project_id: order.project_id,
@@ -190,7 +178,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
       });
       if (order.items && order.items.length > 0) {
         setLineItems(
-          order.items.map((item: PlumbingFittingOrderItem) => ({
+          order.items.map((item: SheetMetalFittingOrderItem) => ({
             id: item.id,
             fitting_type: item.fitting_type || '',
             size: item.size || '',
@@ -205,7 +193,6 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
     enabled: isEdit,
   });
 
-  // Auto-focus quantity input when reaching qty step
   useEffect(() => {
     if (step === 'qty' && qtyInputRef.current) {
       qtyInputRef.current.focus();
@@ -224,12 +211,8 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
     setSelectedSizes(newSizes);
 
     const config = getSizeConfig(selectedFitting);
-    if (newSizes.length < config.count) {
-      // Need more size picks - stay on size step
-      return;
-    }
+    if (newSizes.length < config.count) return;
 
-    // All sizes picked — skip join type for non-fitting categories
     if (!hasJoinType(selectedCategory)) {
       setStep('qty');
     } else if (joinTypeLocked && selectedJoinType) {
@@ -258,16 +241,12 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
 
     setLineItems((prev) => [...prev, newItem]);
 
-    // Reset for next item
     setSelectedFitting('');
     setSelectedSizes([]);
-    if (!joinTypeLocked) {
-      setSelectedJoinType('');
-    }
+    if (!joinTypeLocked) setSelectedJoinType('');
     setQuantity(1);
     setStep('fitting');
 
-    // Scroll to bottom after a tick
     setTimeout(() => {
       listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -287,34 +266,32 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    const target = e.target;
-    const name = target.name;
-    const value = target.value;
+    const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: Partial<PlumbingFittingOrder>) => plumbingFittingOrdersApi.create(data),
+    mutationFn: (data: Partial<SheetMetalFittingOrder>) => sheetMetalFittingOrdersApi.create(data),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ orderId, data }: { orderId: number; data: Partial<PlumbingFittingOrder> }) =>
-      plumbingFittingOrdersApi.update(orderId, data),
+    mutationFn: ({ orderId, data }: { orderId: number; data: Partial<SheetMetalFittingOrder> }) =>
+      sheetMetalFittingOrdersApi.update(orderId, data),
   });
 
   const addItemMutation = useMutation({
-    mutationFn: ({ orderId, data }: { orderId: number; data: Partial<PlumbingFittingOrderItem> }) =>
-      plumbingFittingOrdersApi.addItem(orderId, data),
+    mutationFn: ({ orderId, data }: { orderId: number; data: Partial<SheetMetalFittingOrderItem> }) =>
+      sheetMetalFittingOrdersApi.addItem(orderId, data),
   });
 
   const updateItemMutation = useMutation({
-    mutationFn: ({ orderId, itemId, data }: { orderId: number; itemId: number; data: Partial<PlumbingFittingOrderItem> }) =>
-      plumbingFittingOrdersApi.updateItem(orderId, itemId, data),
+    mutationFn: ({ orderId, itemId, data }: { orderId: number; itemId: number; data: Partial<SheetMetalFittingOrderItem> }) =>
+      sheetMetalFittingOrdersApi.updateItem(orderId, itemId, data),
   });
 
   const deleteItemMutation = useMutation({
     mutationFn: ({ orderId, itemId }: { orderId: number; itemId: number }) =>
-      plumbingFittingOrdersApi.deleteItem(orderId, itemId),
+      sheetMetalFittingOrdersApi.deleteItem(orderId, itemId),
   });
 
   const handleSave = async () => {
@@ -323,12 +300,12 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
       return;
     }
     if (lineItems.length === 0) {
-      window.alert('Add at least one fitting to the order.');
+      window.alert('Add at least one item to the order.');
       return;
     }
     setSaving(true);
     try {
-      const orderData: Partial<PlumbingFittingOrder> = {
+      const orderData: Partial<SheetMetalFittingOrder> = {
         ...form,
         project_id: Number(projectId),
       };
@@ -337,22 +314,19 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
         const orderId = Number(id);
         await updateMutation.mutateAsync({ orderId, data: orderData });
 
-        // Get existing items to compare
-        const existingRes = await plumbingFittingOrdersApi.getById(orderId);
+        const existingRes = await sheetMetalFittingOrdersApi.getById(orderId);
         const existingItems = existingRes.data.items || [];
-        const existingIds = existingItems.map((item: PlumbingFittingOrderItem) => item.id);
+        const existingIds = existingItems.map((item: SheetMetalFittingOrderItem) => item.id);
         const currentIds = lineItems.filter((item) => item.id).map((item) => item.id as number);
 
-        // Delete removed items
         const deletedIds = existingIds.filter((eid: number) => !currentIds.includes(eid));
         for (const itemId of deletedIds) {
           await deleteItemMutation.mutateAsync({ orderId, itemId });
         }
 
-        // Update existing and add new items
         for (let i = 0; i < lineItems.length; i++) {
           const item = lineItems[i];
-          const itemData: Partial<PlumbingFittingOrderItem> = {
+          const itemData: Partial<SheetMetalFittingOrderItem> = {
             sort_order: i + 1,
             fitting_type: item.fitting_type,
             size: item.size,
@@ -386,9 +360,9 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['field-plumbing-fitting-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['field-plumbing-fitting-order', id] });
-      navigate(`/field/projects/${projectId}/plumbing-fitting-orders`);
+      queryClient.invalidateQueries({ queryKey: ['field-sheet-metal-fitting-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['field-sheet-metal-fitting-order', id] });
+      navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders`);
     } catch (err) {
       console.error('Failed to save:', err);
       window.alert('Failed to save. Please try again.');
@@ -403,7 +377,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
 
   const getFittingLabel = (value: string) =>
     FITTING_TYPES.find((f) => f.value === value)?.label ||
-    HANGER_TYPES.find((f) => f.value === value)?.label ||
+    ACCESSORY_TYPES.find((f) => f.value === value)?.label ||
     HARDWARE_TYPES.find((f) => f.value === value)?.label ||
     value;
 
@@ -415,6 +389,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
     setQuantity(1);
     setStep('fitting');
   };
+
   const getJoinLabel = (value: string) => JOIN_TYPES.find((j) => j.value === value)?.label || value;
 
   const compactLabel: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 2, whiteSpace: 'nowrap' };
@@ -423,7 +398,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
   return (
     <div>
       <h1 className="field-page-title" style={{ marginBottom: 2 }}>
-        {isEdit ? 'Edit Fitting Order' : 'New Plumbing Fitting Order'}
+        {isEdit ? 'Edit Fitting Order' : 'New Sheet Metal Fitting Order'}
       </h1>
 
       {/* Compact Header Info */}
@@ -431,18 +406,17 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 8px' }}>
           <div style={{ gridColumn: 'span 2' }}>
             <label style={compactLabel}>Title *</label>
-            <input style={compactInput} name="title" value={form.title || ''} onChange={handleChange} placeholder="e.g. 1st Floor Restroom Rough-In" />
+            <input style={compactInput} name="title" value={form.title || ''} onChange={handleChange} placeholder="e.g. 2nd Floor Supply Ductwork" />
           </div>
           <div>
             <label style={compactLabel}>Material</label>
             <select style={{ ...compactInput, background: '#fff' }} name="material_type" value={form.material_type || ''} onChange={handleChange}>
               <option value="">Select...</option>
-              <option value="Cast Iron">Cast Iron</option>
-              <option value="PVC">PVC</option>
-              <option value="CPVC">CPVC</option>
+              <option value="Galvanized Steel">Galvanized Steel</option>
+              <option value="Stainless Steel">Stainless Steel</option>
+              <option value="Aluminum">Aluminum</option>
+              <option value="Black Iron">Black Iron</option>
               <option value="Copper">Copper</option>
-              <option value="PEX">PEX</option>
-              <option value="ABS">ABS</option>
             </select>
           </div>
           <div>
@@ -460,7 +434,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
           </div>
           <div>
             <label style={compactLabel}>Location</label>
-            <input style={compactInput} name="location_on_site" value={form.location_on_site || ''} onChange={handleChange} placeholder="e.g. 1st Floor" />
+            <input style={compactInput} name="location_on_site" value={form.location_on_site || ''} onChange={handleChange} placeholder="e.g. 2nd Floor" />
           </div>
           <div>
             <label style={compactLabel}>Drawing #</label>
@@ -476,16 +450,15 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
       {/* Quick Add Section */}
       <div style={{
         background: '#fff',
-        border: '2px solid #06b6d4',
+        border: '2px solid #d97706',
         borderRadius: 12,
         padding: 12,
         marginBottom: 8,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#0e7490' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#92400e' }}>
             Quick Add
           </div>
-          {/* Lock Join Type Toggle - only for fittings */}
           {hasJoinType(selectedCategory) && (
             <button
               type="button"
@@ -495,10 +468,10 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
                 alignItems: 'center',
                 gap: 4,
                 padding: '4px 10px',
-                border: joinTypeLocked ? '2px solid #06b6d4' : '1px solid #d1d5db',
+                border: joinTypeLocked ? '2px solid #d97706' : '1px solid #d1d5db',
                 borderRadius: 6,
-                background: joinTypeLocked ? '#ecfeff' : '#fff',
-                color: joinTypeLocked ? '#0e7490' : '#6b7280',
+                background: joinTypeLocked ? '#fef3c7' : '#fff',
+                color: joinTypeLocked ? '#92400e' : '#6b7280',
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -519,10 +492,10 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
               onClick={() => handleCategoryChange(cat.value)}
               style={{
                 padding: '6px 14px',
-                border: selectedCategory === cat.value ? '2px solid #06b6d4' : '1px solid #d1d5db',
+                border: selectedCategory === cat.value ? '2px solid #d97706' : '1px solid #d1d5db',
                 borderRadius: 20,
-                background: selectedCategory === cat.value ? '#ecfeff' : '#fff',
-                color: selectedCategory === cat.value ? '#0e7490' : '#6b7280',
+                background: selectedCategory === cat.value ? '#fef3c7' : '#fff',
+                color: selectedCategory === cat.value ? '#92400e' : '#6b7280',
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -537,28 +510,28 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
 
         {/* Step breadcrumb */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, fontSize: 11, color: '#9ca3af', flexWrap: 'wrap' }}>
-          <span style={{ color: step === 'fitting' ? '#0e7490' : selectedFitting ? '#10b981' : '#9ca3af', fontWeight: step === 'fitting' ? 700 : 400 }}>
+          <span style={{ color: step === 'fitting' ? '#92400e' : selectedFitting ? '#10b981' : '#9ca3af', fontWeight: step === 'fitting' ? 700 : 400 }}>
             {selectedFitting ? getFittingLabel(selectedFitting) : (selectedCategory === 'fittings' ? 'Fitting' : 'Item')}
           </span>
           <span>{'\u203A'}</span>
-          <span style={{ color: step === 'size' ? '#0e7490' : selectedSizes.length === sizeConfig.count ? '#10b981' : '#9ca3af', fontWeight: step === 'size' ? 700 : 400 }}>
+          <span style={{ color: step === 'size' ? '#92400e' : selectedSizes.length === sizeConfig.count ? '#10b981' : '#9ca3af', fontWeight: step === 'size' ? 700 : 400 }}>
             {selectedSizes.length > 0 ? selectedSizes.join(' x ') + (selectedSizes.length < sizeConfig.count ? ' x ?' : '') : 'Size'}
           </span>
           {hasJoinType(selectedCategory) && (
             <>
               <span>{'\u203A'}</span>
-              <span style={{ color: step === 'join' ? '#0e7490' : selectedJoinType ? '#10b981' : '#9ca3af', fontWeight: step === 'join' ? 700 : 400 }}>
+              <span style={{ color: step === 'join' ? '#92400e' : selectedJoinType ? '#10b981' : '#9ca3af', fontWeight: step === 'join' ? 700 : 400 }}>
                 {selectedJoinType ? getJoinLabel(selectedJoinType) : 'Joint'}
               </span>
             </>
           )}
           <span>{'\u203A'}</span>
-          <span style={{ color: step === 'qty' ? '#0e7490' : '#9ca3af', fontWeight: step === 'qty' ? 700 : 400 }}>
+          <span style={{ color: step === 'qty' ? '#92400e' : '#9ca3af', fontWeight: step === 'qty' ? 700 : 400 }}>
             Qty
           </span>
         </div>
 
-        {/* Step 1: Item Type - button grid */}
+        {/* Step 1: Item Type */}
         {step === 'fitting' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
             {getItemTypes(selectedCategory).map((ft) => (
@@ -585,7 +558,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
           </div>
         )}
 
-        {/* Step 2: Size - button grid (multi-pick for tee/reducer) */}
+        {/* Step 2: Size */}
         {step === 'size' && (
           <div>
             {sizeConfig.count > 1 && (
@@ -642,7 +615,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
           </div>
         )}
 
-        {/* Step 3: Join Type - button grid */}
+        {/* Step 3: Join Type */}
         {step === 'join' && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -694,7 +667,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
                     width: '100%',
                     height: 48,
                     padding: '0 12px',
-                    border: '2px solid #06b6d4',
+                    border: '2px solid #d97706',
                     borderRadius: 8,
                     fontSize: 24,
                     fontWeight: 700,
@@ -711,7 +684,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
                 style={{
                   height: 48,
                   padding: '0 24px',
-                  background: '#0891b2',
+                  background: '#d97706',
                   color: '#fff',
                   border: 'none',
                   borderRadius: 8,
@@ -770,7 +743,7 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
                   <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>
                     {item.quantity}x
                   </span>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#0e7490' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: '#92400e' }}>
                     {item.size}
                   </span>
                   <span style={{ fontSize: 14, color: '#374151' }}>
@@ -825,4 +798,4 @@ const FieldPlumbingFittingOrderForm: React.FC = () => {
   );
 };
 
-export default FieldPlumbingFittingOrderForm;
+export default FieldSheetMetalFittingOrderForm;

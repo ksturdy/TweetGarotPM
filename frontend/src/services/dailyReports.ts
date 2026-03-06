@@ -32,6 +32,11 @@ export interface DailyReport {
   submitted_at: string | null;
   approved_by: number | null;
   approved_at: string | null;
+  revision_notes: string | null;
+  revised_by: number | null;
+  revised_by_name?: string;
+  revised_at: string | null;
+  revision_count: number;
   created_by: number;
   created_by_name: string;
   created_at: string;
@@ -57,6 +62,9 @@ export const dailyReportsApi = {
   submit: (id: number) => api.post<DailyReport>(`/daily-reports/${id}/submit`),
 
   approve: (id: number) => api.post<DailyReport>(`/daily-reports/${id}/approve`),
+
+  revise: (id: number, data: { revision_notes?: string }) =>
+    api.post<DailyReport>(`/daily-reports/${id}/revise`, data),
 
   addCrew: (reportId: number, data: Partial<DailyReportCrew>) =>
     api.post<DailyReportCrew>(`/daily-reports/${reportId}/crews`, data),

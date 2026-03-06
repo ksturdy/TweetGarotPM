@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
-const PlumbingFittingOrder = {
-  async create({ projectId, tenantId, number, title, description, priority, requiredByDate, drawingNumber, drawingRevision, specSection, locationOnSite, materialType, pipeSize, fixtureType, roughInDimensions, quantity, unit, costCode, phaseCode, notes, createdBy }) {
+const SheetMetalFittingOrder = {
+  async create({ projectId, tenantId, number, title, description, priority, requiredByDate, drawingNumber, drawingRevision, specSection, locationOnSite, materialType, quantity, unit, costCode, phaseCode, notes, createdBy }) {
     const result = await db.query(
-      `INSERT INTO plumbing_fitting_orders (project_id, tenant_id, number, title, description, priority, required_by_date, drawing_number, drawing_revision, spec_section, location_on_site, material_type, pipe_size, fixture_type, rough_in_dimensions, quantity, unit, cost_code, phase_code, notes, created_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'draft')
+      `INSERT INTO sheet_metal_fitting_orders (project_id, tenant_id, number, title, description, priority, required_by_date, drawing_number, drawing_revision, spec_section, location_on_site, material_type, quantity, unit, cost_code, phase_code, notes, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'draft')
        RETURNING *`,
-      [projectId, tenantId, number, title, description, priority || 'normal', requiredByDate || null, drawingNumber, drawingRevision, specSection, locationOnSite, materialType, pipeSize, fixtureType, roughInDimensions, quantity || 1, unit, costCode, phaseCode, notes, createdBy]
+      [projectId, tenantId, number, title, description, priority || 'normal', requiredByDate || null, drawingNumber, drawingRevision, specSection, locationOnSite, materialType, quantity || 1, unit, costCode, phaseCode, notes, createdBy]
     );
     return result.rows[0];
   },
@@ -16,7 +16,7 @@ const PlumbingFittingOrder = {
       `SELECT o.*,
               p.name as project_name, p.number as project_number,
               u.first_name || ' ' || u.last_name as created_by_name
-       FROM plumbing_fitting_orders o
+       FROM sheet_metal_fitting_orders o
        JOIN projects p ON o.project_id = p.id
        LEFT JOIN users u ON o.created_by = u.id
        WHERE o.id = $1`,
@@ -33,7 +33,7 @@ const PlumbingFittingOrder = {
     let query = `
       SELECT o.*,
              u.first_name || ' ' || u.last_name as created_by_name
-      FROM plumbing_fitting_orders o
+      FROM sheet_metal_fitting_orders o
       LEFT JOIN users u ON o.created_by = u.id
       WHERE o.project_id = $1
     `;
@@ -73,7 +73,7 @@ const PlumbingFittingOrder = {
 
     values.push(id);
     const result = await db.query(
-      `UPDATE plumbing_fitting_orders SET ${fields.join(', ')}, updated_at = NOW()
+      `UPDATE sheet_metal_fitting_orders SET ${fields.join(', ')}, updated_at = NOW()
        WHERE id = $${paramCount}
        RETURNING *`,
       values
@@ -82,12 +82,12 @@ const PlumbingFittingOrder = {
   },
 
   async delete(id) {
-    await db.query('DELETE FROM plumbing_fitting_orders WHERE id = $1', [id]);
+    await db.query('DELETE FROM sheet_metal_fitting_orders WHERE id = $1', [id]);
   },
 
   async getNextNumber(projectId) {
     const result = await db.query(
-      'SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM plumbing_fitting_orders WHERE project_id = $1',
+      'SELECT COALESCE(MAX(number), 0) + 1 as next_number FROM sheet_metal_fitting_orders WHERE project_id = $1',
       [projectId]
     );
     return result.rows[0].next_number;
@@ -103,7 +103,7 @@ const PlumbingFittingOrder = {
          COUNT(*) FILTER (WHERE status = 'ready') as ready_count,
          COUNT(*) FILTER (WHERE status = 'delivered') as delivered_count,
          COUNT(*) FILTER (WHERE status = 'installed') as installed_count
-       FROM plumbing_fitting_orders
+       FROM sheet_metal_fitting_orders
        WHERE project_id = $1`,
       [projectId]
     );
@@ -114,7 +114,7 @@ const PlumbingFittingOrder = {
 
   async getItems(orderId) {
     const result = await db.query(
-      'SELECT * FROM plumbing_fitting_order_items WHERE fitting_order_id = $1 ORDER BY sort_order',
+      'SELECT * FROM sheet_metal_fitting_order_items WHERE fitting_order_id = $1 ORDER BY sort_order',
       [orderId]
     );
     return result.rows;
@@ -122,7 +122,7 @@ const PlumbingFittingOrder = {
 
   async addItem(orderId, { sortOrder, fittingType, size, joinType, quantity, remarks }) {
     const result = await db.query(
-      `INSERT INTO plumbing_fitting_order_items (fitting_order_id, sort_order, fitting_type, size, join_type, quantity, remarks)
+      `INSERT INTO sheet_metal_fitting_order_items (fitting_order_id, sort_order, fitting_type, size, join_type, quantity, remarks)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [orderId, sortOrder || 1, fittingType, size, joinType, quantity || 1, remarks]
@@ -146,13 +146,13 @@ const PlumbingFittingOrder = {
     });
 
     if (fields.length === 0) {
-      const result = await db.query('SELECT * FROM plumbing_fitting_order_items WHERE id = $1', [itemId]);
+      const result = await db.query('SELECT * FROM sheet_metal_fitting_order_items WHERE id = $1', [itemId]);
       return result.rows[0];
     }
 
     values.push(itemId);
     const result = await db.query(
-      `UPDATE plumbing_fitting_order_items SET ${fields.join(', ')}
+      `UPDATE sheet_metal_fitting_order_items SET ${fields.join(', ')}
        WHERE id = $${paramCount}
        RETURNING *`,
       values
@@ -161,16 +161,16 @@ const PlumbingFittingOrder = {
   },
 
   async deleteItem(itemId) {
-    await db.query('DELETE FROM plumbing_fitting_order_items WHERE id = $1', [itemId]);
+    await db.query('DELETE FROM sheet_metal_fitting_order_items WHERE id = $1', [itemId]);
   },
 
   async findItemById(itemId) {
     const result = await db.query(
-      'SELECT * FROM plumbing_fitting_order_items WHERE id = $1',
+      'SELECT * FROM sheet_metal_fitting_order_items WHERE id = $1',
       [itemId]
     );
     return result.rows[0];
   },
 };
 
-module.exports = PlumbingFittingOrder;
+module.exports = SheetMetalFittingOrder;

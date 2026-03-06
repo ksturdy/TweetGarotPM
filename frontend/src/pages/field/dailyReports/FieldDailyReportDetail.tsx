@@ -51,7 +51,7 @@ const FieldDailyReportDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { tenant } = useAuth();
+  const { tenant, user } = useAuth();
   // Use API proxy for logo to avoid R2 CORS issues in PDF generation
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
 
@@ -81,9 +81,26 @@ const FieldDailyReportDetail: React.FC = () => {
     },
   });
 
+  const reviseMutation = useMutation({
+    mutationFn: () => dailyReportsApi.revise(Number(id), {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-daily-report', id] });
+      queryClient.invalidateQueries({ queryKey: ['field-daily-reports', projectId] });
+    },
+  });
+
   const handleSubmitReport = () => {
-    if (window.confirm('Submit this daily report? It cannot be edited after submission.')) {
+    const msg = report?.status === 'revision'
+      ? 'Resubmit this daily report?'
+      : 'Submit this daily report? It cannot be edited after submission.';
+    if (window.confirm(msg)) {
       submitMutation.mutate();
+    }
+  };
+
+  const handleRecallReport = () => {
+    if (window.confirm('Recall this report for editing? It will need to be resubmitted.')) {
+      reviseMutation.mutate();
     }
   };
 
@@ -206,6 +223,26 @@ const FieldDailyReportDetail: React.FC = () => {
           {report.status}
         </span>
       </div>
+
+      {/* Revision Notes Banner */}
+      {report.status === 'revision' && report.revision_notes && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #fbbf24',
+          borderRadius: 8,
+          padding: '12px 16px',
+          marginBottom: 16,
+          fontSize: '0.9rem',
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, color: '#92400e' }}>Revision Requested</div>
+          <div>{report.revision_notes}</div>
+          {report.revised_by_name && (
+            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 4 }}>
+              By {report.revised_by_name} on {formatDateTime(report.revised_at)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* PDF & Email Actions */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -435,7 +472,7 @@ const FieldDailyReportDetail: React.FC = () => {
 
       {/* Action Buttons */}
       <div className="field-actions-bar">
-        {report.status === 'draft' && (
+        {(report.status === 'draft' || report.status === 'revision') && (
           <>
             <button
               className="field-btn field-btn-secondary"
@@ -454,9 +491,18 @@ const FieldDailyReportDetail: React.FC = () => {
               disabled={submitMutation.isPending}
             >
               <SendIcon style={{ fontSize: 18, marginRight: 4 }} />
-              {submitMutation.isPending ? 'Submitting...' : 'Submit'}
+              {submitMutation.isPending ? 'Submitting...' : (report.status === 'revision' ? 'Resubmit' : 'Submit')}
             </button>
           </>
+        )}
+        {report.status === 'submitted' && report.created_by === user?.id && (
+          <button
+            className="field-btn field-btn-secondary"
+            onClick={handleRecallReport}
+            disabled={reviseMutation.isPending}
+          >
+            {reviseMutation.isPending ? 'Recalling...' : 'Recall for Editing'}
+          </button>
         )}
       </div>
     </div>

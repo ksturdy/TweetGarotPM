@@ -4,6 +4,7 @@ const DailyReport = require('../models/DailyReport');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { notify } = require('../utils/notificationService');
 
 const router = express.Router();
 
@@ -141,6 +142,11 @@ router.put('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Daily report not found' });
     }
 
+    // Only draft and revision reports can be edited
+    if (!['draft', 'revision'].includes(existingReport.status)) {
+      return res.status(400).json({ error: 'Only draft or revision reports can be edited' });
+    }
+
     const report = await DailyReport.update(req.params.id, req.body);
     res.json(report);
   } catch (error) {
@@ -180,7 +186,35 @@ router.post('/:id/submit', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Daily report not found' });
     }
+    // Only draft or revision reports can be submitted
+    if (!['draft', 'revision'].includes(existingReport.status)) {
+      return res.status(400).json({ error: 'Only draft or revision reports can be submitted' });
+    }
+
+    const isResubmission = existingReport.status === 'revision';
     const report = await DailyReport.submit(req.params.id, { submittedBy: req.user.id });
+
+    // Notify PM (fire-and-forget)
+    const reportDate = existingReport.report_date
+      ? new Date(existingReport.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'Unknown date';
+    notify({
+      tenantId: req.tenantId,
+      projectId: existingReport.project_id,
+      entityType: 'daily_report',
+      entityId: existingReport.id,
+      eventType: isResubmission ? 'resubmitted' : 'submitted',
+      title: isResubmission ? `Daily Report Resubmitted — ${reportDate}` : `Daily Report Submitted — ${reportDate}`,
+      message: isResubmission ? `resubmitted the daily report for ${reportDate}` : `submitted the daily report for ${reportDate}`,
+      link: `/projects/${existingReport.project_id}/daily-reports/${existingReport.id}`,
+      createdBy: req.user.id,
+      emailSubject: isResubmission ? `Daily Report Resubmitted — ${reportDate}` : `Daily Report Submitted — ${reportDate}`,
+      emailDetails: [
+        { label: 'Date', value: reportDate },
+        { label: 'Weather', value: existingReport.weather || 'N/A' },
+      ],
+    });
+
     res.json(report);
   } catch (error) {
     next(error);
@@ -199,6 +233,66 @@ router.post('/:id/approve', async (req, res, next) => {
       return res.status(404).json({ error: 'Daily report not found' });
     }
     const report = await DailyReport.approve(req.params.id, { approvedBy: req.user.id });
+    res.json(report);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Revise daily report (send back for revision)
+router.post('/:id/revise', async (req, res, next) => {
+  try {
+    const existingReport = await DailyReport.findById(req.params.id);
+    if (!existingReport) {
+      return res.status(404).json({ error: 'Daily report not found' });
+    }
+    const project = await Project.findByIdAndTenant(existingReport.project_id, req.tenantId);
+    if (!project) {
+      return res.status(404).json({ error: 'Daily report not found' });
+    }
+
+    // Only submitted reports can be sent back for revision
+    if (existingReport.status !== 'submitted') {
+      return res.status(400).json({ error: 'Only submitted reports can be sent back for revision' });
+    }
+
+    // Determine if this is a PM action or field worker self-recall
+    const isPmAction = req.user.id !== existingReport.created_by;
+
+    // PM must provide revision notes
+    if (isPmAction && !req.body.revision_notes?.trim()) {
+      return res.status(400).json({ error: 'Revision reason is required' });
+    }
+
+    const report = await DailyReport.revise(req.params.id, {
+      revisedBy: req.user.id,
+      revisionNotes: req.body.revision_notes || null,
+    });
+
+    // Send notification to field worker when PM initiates revision
+    if (isPmAction) {
+      const reportDate = existingReport.report_date
+        ? new Date(existingReport.report_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'Unknown date';
+      notify({
+        tenantId: req.tenantId,
+        projectId: existingReport.project_id,
+        entityType: 'daily_report',
+        entityId: existingReport.id,
+        eventType: 'revision_requested',
+        title: `Daily Report Returned — ${reportDate}`,
+        message: `returned the daily report for ${reportDate} for revision`,
+        link: `/field/projects/${existingReport.project_id}/daily-reports/${existingReport.id}`,
+        createdBy: req.user.id,
+        targetUserId: existingReport.created_by,
+        emailSubject: `Daily Report Returned for Revision — ${reportDate}`,
+        emailDetails: [
+          { label: 'Date', value: reportDate },
+          { label: 'Reason', value: req.body.revision_notes },
+        ],
+      });
+    }
+
     res.json(report);
   } catch (error) {
     next(error);

@@ -1,0 +1,141 @@
+.notifications-page {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.notifications-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.notifications-page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a2332;
+}
+
+.notifications-page-header .btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notifications-loading {
+  text-align: center;
+  padding: 40px;
+  color: #9ca3af;
+}
+
+.notifications-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+}
+
+.notifications-empty p:first-child {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.notifications-list {
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.notifications-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.notifications-list-item:last-child {
+  border-bottom: none;
+}
+
+.notifications-list-item:hover {
+  background: #f9fafb;
+}
+
+.notifications-list-item.unread {
+  background: #eff6ff;
+}
+
+.notifications-list-item.unread:hover {
+  background: #dbeafe;
+}
+
+.notif-type-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 2px;
+  letter-spacing: 0.03em;
+}
+
+.notif-type-tag.rfi {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.notif-type-tag.field_issue {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notif-type-tag.daily_report {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+}
+
+.notif-message {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 3px;
+  line-height: 1.3;
+}
+
+.notif-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notif-date {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3B7DD8;
+  flex-shrink: 0;
+}
