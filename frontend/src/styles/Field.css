@@ -55,7 +55,7 @@ html {
   z-index: 100;
   background: linear-gradient(135deg, #1a2332 0%, #2c3e50 50%, #34495e 100%);
   color: white;
-  height: var(--field-header-height);
+  min-height: var(--field-header-height);
   padding: 0 12px;
   padding-top: env(safe-area-inset-top);
   display: flex;
@@ -925,7 +925,7 @@ html {
   }
 
   .field-header {
-    height: var(--field-header-height);
+    min-height: var(--field-header-height);
   }
 
   .field-bottom-nav {
