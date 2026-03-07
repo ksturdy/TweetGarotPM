@@ -125,6 +125,7 @@ const TakeoffForm: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'fitting' | 'size' | 'join' | 'qty'>('fitting');
   const [editingMaterialIdx, setEditingMaterialIdx] = useState<number | null>(null);
+  const [editingQtyIdx, setEditingQtyIdx] = useState<number | null>(null);
 
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -289,6 +290,17 @@ const TakeoffForm: React.FC = () => {
     setLineItems(prev => prev.map((item, i) => {
       if (i !== index) return item;
       return { ...item, material_unit_cost: unitCost, material_cost: unitCost * item.quantity };
+    }));
+  };
+
+  const handleQtyChange = (index: number, newQty: number) => {
+    const qty = Math.max(0, newQty);
+    setLineItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const baseHoursTotal = item.base_hours_per_unit * qty;
+      const adjustedHours = baseHoursTotal * perfMultiplier;
+      const materialCost = item.material_unit_cost * qty;
+      return { ...item, quantity: qty, base_hours_total: baseHoursTotal, adjusted_hours: adjustedHours, material_cost: materialCost };
     }));
   };
 
@@ -687,7 +699,30 @@ const TakeoffForm: React.FC = () => {
             <tbody>
               {lineItems.map((item, index) => (
                 <tr key={index} style={{ borderBottom: '1px solid #f3f4f6', background: item.rate_not_found ? '#fef2f2' : index % 2 === 0 ? '#fff' : '#fafbfc' }}>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.quantity}</td>
+                  <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                    {editingQtyIdx === index ? (
+                      <input
+                        type="number"
+                        autoFocus
+                        value={item.quantity}
+                        onChange={(e) => handleQtyChange(index, Number(e.target.value))}
+                        onBlur={() => setEditingQtyIdx(null)}
+                        onKeyDown={(e) => e.key === 'Enter' && setEditingQtyIdx(null)}
+                        style={{
+                          width: 60, padding: '4px 6px', border: '1px solid #3b82f6',
+                          borderRadius: 4, fontSize: 14, textAlign: 'center', fontWeight: 700,
+                        }}
+                        min="0"
+                      />
+                    ) : (
+                      <span
+                        onClick={() => setEditingQtyIdx(index)}
+                        style={{ fontSize: 14, fontWeight: 700, color: '#111827', cursor: 'pointer' }}
+                      >
+                        {item.quantity}
+                      </span>
+                    )}
+                  </td>
                   <td style={{ padding: '8px 12px', fontSize: 14, fontWeight: 600, color: '#1e40af' }}>{item.size}</td>
                   <td style={{ padding: '8px 12px', fontSize: 13, color: '#374151' }}>{getFittingLabel(item.fitting_type)}</td>
                   <td style={{ padding: '8px 12px' }}>
