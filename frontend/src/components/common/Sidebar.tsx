@@ -89,6 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       icon: <CalculateIcon />,
       children: [
         { label: 'Estimates', path: '/estimating' },
+        { label: 'Takeoffs', path: '/estimating/takeoffs' },
         { label: 'Budgets', path: '/estimating/budgets' },
         { label: 'Cost Database', path: '/estimating/cost-database' },
       ],

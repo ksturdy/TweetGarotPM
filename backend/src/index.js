@@ -87,6 +87,7 @@ const fieldFavoriteVendorRoutes = require('./routes/fieldFavoriteVendors');
 const projectAssignmentRoutes = require('./routes/projectAssignments');
 const fieldIssueRoutes = require('./routes/fieldIssues');
 const notificationRoutes = require('./routes/notifications');
+const takeoffRoutes = require('./routes/takeoffs');
 const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
 
@@ -207,6 +208,7 @@ app.use('/api/field-favorite-vendors', fieldFavoriteVendorRoutes);
 app.use('/api/project-assignments', projectAssignmentRoutes);
 app.use('/api/field-issues', fieldIssueRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/takeoffs', takeoffRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
 

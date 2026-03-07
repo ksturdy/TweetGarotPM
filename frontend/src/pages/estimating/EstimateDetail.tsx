@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
+import { takeoffsApi, Takeoff } from '../../services/takeoffs';
 import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
@@ -10,6 +11,17 @@ import SearchableSelect from '../../components/SearchableSelect';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
+
+const FITTING_LABELS: Record<string, string> = {
+  '90': '90\u00B0 Elbow', '45': '45\u00B0 Elbow', tee: 'Tee', wye: 'Wye',
+  reducer: 'Reducer', coupling: 'Coupling', union: 'Union', cap: 'Cap',
+  valve: 'Valve', flange: 'Flange', nipple: 'Nipple', bushing: 'Bushing', pipe: 'Pipe',
+};
+
+const JOIN_LABELS: Record<string, string> = {
+  threaded: 'Threaded', welded: 'Welded', flanged: 'Flanged',
+  grooved: 'Grooved', press: 'Press', soldered: 'Soldered', glued: 'Glued',
+};
 
 const EstimateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +45,13 @@ const EstimateDetail: React.FC = () => {
     queryKey: ['employees'],
     queryFn: () => employeesApi.getAll(),
   });
+
+  // Fetch all takeoffs for import picker
+  const { data: allTakeoffsRes } = useQuery({
+    queryKey: ['takeoffs-all'],
+    queryFn: () => takeoffsApi.getAll(),
+  });
+  const allTakeoffs: Takeoff[] = allTakeoffsRes?.data || [];
 
   const [formData, setFormData] = useState<Estimate>({
     estimate_number: '',
@@ -71,6 +90,9 @@ const EstimateDetail: React.FC = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showTakeoffPicker, setShowTakeoffPicker] = useState(false);
+  const [selectedTakeoffId, setSelectedTakeoffId] = useState<number | ''>('');
+  const [selectedImportMode, setSelectedImportMode] = useState<'summary' | 'detail'>('summary');
 
   // Link to existing toggles for project participants
   const [linkToExistingOwner, setLinkToExistingOwner] = useState(false);
@@ -230,6 +252,98 @@ const EstimateDetail: React.FC = () => {
         items: [],
       },
     ]);
+  };
+
+  const importTakeoff = async (takeoffId: number, mode: 'summary' | 'detail') => {
+    try {
+      const res = await takeoffsApi.getById(takeoffId);
+      const takeoff = res.data;
+      const items = takeoff.items || [];
+      if (items.length === 0) return;
+
+      let lineItems: EstimateLineItem[];
+
+      if (mode === 'summary') {
+        const totalHours = items.reduce((s: number, i: any) => s + (Number(i.adjusted_hours) || 0), 0);
+        const totalMatCost = items.reduce((s: number, i: any) => s + (Number(i.material_cost) || 0), 0);
+        const matWastePct = 10;
+        const matWaste = totalMatCost * (matWastePct / 100);
+
+        lineItems = [{
+          item_order: 1,
+          item_type: 'labor',
+          description: `${takeoff.name} - Piping Labor (${items.length} items)`,
+          quantity: 1,
+          unit: 'LS',
+          labor_hours: Math.round(totalHours),
+          labor_rate: 0,
+          labor_cost: 0,
+          labor_burden_percentage: 35,
+          labor_burden_amount: 0,
+          material_unit_cost: Math.round(totalMatCost),
+          material_cost: Math.round(totalMatCost),
+          material_waste_percentage: matWastePct,
+          material_waste_amount: Math.round(matWaste),
+          equipment_unit_cost: 0,
+          equipment_cost: 0,
+          subcontractor_cost: 0,
+          rental_duration: 0,
+          rental_rate: 0,
+          rental_cost: 0,
+          total_cost: Math.round(totalMatCost + matWaste),
+        }];
+      } else {
+        lineItems = items.map((item: any, idx: number) => {
+          const fitting = FITTING_LABELS[item.fitting_type] || item.fitting_type;
+          const join = item.join_type ? ` - ${JOIN_LABELS[item.join_type] || item.join_type}` : '';
+          const desc = `${item.size} ${fitting}${join}`;
+          const qty = Number(item.quantity) || 0;
+          const adjHours = Number(item.adjusted_hours) || 0;
+          const matUnit = Number(item.material_unit_cost) || 0;
+          const matCost = matUnit * qty;
+          const matWastePct = 10;
+          const matWaste = matCost * (matWastePct / 100);
+
+          return {
+            item_order: idx + 1,
+            item_type: 'labor' as string,
+            description: desc,
+            quantity: qty,
+            unit: item.fitting_type === 'pipe' ? 'LF' : 'EA',
+            labor_hours: Math.round(adjHours),
+            labor_rate: 0,
+            labor_cost: 0,
+            labor_burden_percentage: 35,
+            labor_burden_amount: 0,
+            material_unit_cost: Math.round(matUnit),
+            material_cost: Math.round(matCost),
+            material_waste_percentage: matWastePct,
+            material_waste_amount: Math.round(matWaste),
+            equipment_unit_cost: 0,
+            equipment_cost: 0,
+            subcontractor_cost: 0,
+            rental_duration: 0,
+            rental_rate: 0,
+            rental_cost: 0,
+            total_cost: Math.round(matCost + matWaste),
+          };
+        });
+      }
+
+      const newSection: EstimateSection = {
+        section_name: `${takeoff.name} (${takeoff.takeoff_number})`,
+        section_order: sections.length,
+        description: `Imported from takeoff ${takeoff.takeoff_number} (${mode}). Performance factor: ${Number(takeoff.performance_factor) > 0 ? '+' : ''}${takeoff.performance_factor}%`,
+        items: lineItems,
+      };
+
+      setSections((prev) => [...prev, newSection]);
+      setShowTakeoffPicker(false);
+      setSelectedTakeoffId('');
+      setSelectedImportMode('summary');
+    } catch (err) {
+      console.error('Failed to import takeoff:', err);
+    }
   };
 
   const updateSection = (sectionIndex: number, field: keyof EstimateSection, value: any) => {
@@ -959,10 +1073,65 @@ const EstimateDetail: React.FC = () => {
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{ margin: 0 }}>Estimate Breakdown</h2>
-            <button type="button" className="btn btn-secondary" onClick={addSection}>
-              + Add Section
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowTakeoffPicker(true)}>
+                + Add Takeoff
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={addSection}>
+                + Add Section
+              </button>
+            </div>
           </div>
+
+          {showTakeoffPicker && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+              background: '#f0f4ff', borderRadius: 8, marginBottom: '1rem', border: '1px solid #c7d2fe',
+            }}>
+              <select
+                value={selectedTakeoffId}
+                onChange={(e) => setSelectedTakeoffId(e.target.value ? Number(e.target.value) : '')}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13 }}
+              >
+                <option value="">Select a takeoff...</option>
+                {allTakeoffs.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.takeoff_number} - {t.name} ({Number(t.total_adjusted_hours).toFixed(1)} hrs, {t.total_items} items)
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedImportMode}
+                onChange={(e) => setSelectedImportMode(e.target.value as 'summary' | 'detail')}
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13 }}
+              >
+                <option value="summary">Summary (1 line item)</option>
+                <option value="detail">Detail (all line items)</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => selectedTakeoffId && importTakeoff(Number(selectedTakeoffId), selectedImportMode)}
+                disabled={!selectedTakeoffId}
+                style={{
+                  padding: '6px 16px', borderRadius: 6, border: 'none', fontSize: 13, fontWeight: 600,
+                  background: selectedTakeoffId ? '#1e40af' : '#d1d5db',
+                  color: '#fff', cursor: selectedTakeoffId ? 'pointer' : 'default',
+                }}
+              >
+                Import
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowTakeoffPicker(false); setSelectedTakeoffId(''); }}
+                style={{
+                  padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db',
+                  background: '#fff', fontSize: 13, cursor: 'pointer', color: '#6b7280',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
 
           {sections.map((section, sectionIndex) => (
             <div key={sectionIndex} className="estimate-section" style={{ marginBottom: '2rem' }}>
