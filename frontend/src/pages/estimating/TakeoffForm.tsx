@@ -41,6 +41,13 @@ const JOIN_TYPES = [
   { value: 'glued', label: 'Glued' },
 ];
 
+const FLANGE_TYPES = [
+  { value: 'slip-on', label: 'Slip-On' },
+  { value: 'blind', label: 'Blind' },
+  { value: 'weld-neck', label: 'Weld Neck' },
+  { value: 'threaded', label: 'Threaded' },
+];
+
 const getSizeConfig = (fittingType: string): { count: number; labels: string[] } => {
   switch (fittingType) {
     case 'tee':
@@ -87,6 +94,7 @@ interface LocalLineItem {
   material_unit_cost: number;
   material_cost: number;
   remarks: string;
+  rate_not_found?: boolean;
 }
 
 const TakeoffForm: React.FC = () => {
@@ -175,7 +183,7 @@ const TakeoffForm: React.FC = () => {
   const getFittingRateKey = (value: string) =>
     FITTING_TYPES.find(f => f.value === value)?.rateKey || value;
   const getJoinLabel = (value: string) =>
-    JOIN_TYPES.find(j => j.value === value)?.label || value;
+    JOIN_TYPES.find(j => j.value === value)?.label || FLANGE_TYPES.find(j => j.value === value)?.label || value;
 
   const perfMultiplier = 1 + (form.performance_factor / 100);
 
@@ -221,13 +229,17 @@ const TakeoffForm: React.FC = () => {
 
     // Lookup productivity rate
     let baseHoursPerUnit = 0;
+    let rateNotFound = false;
     try {
       const res = await takeoffsApi.lookupRate(rateKey, selectedJoinType || null, lookupSize);
       if (res.data.found) {
         baseHoursPerUnit = Number(res.data.hours_per_unit);
+      } else {
+        rateNotFound = true;
       }
     } catch (err) {
       console.error('Rate lookup failed:', err);
+      rateNotFound = true;
     }
 
     const qty = quantity || 1;
@@ -245,6 +257,7 @@ const TakeoffForm: React.FC = () => {
       material_unit_cost: 0,
       material_cost: 0,
       remarks: '',
+      rate_not_found: rateNotFound,
     };
 
     setLineItems(prev => [...prev, newItem]);
@@ -584,7 +597,7 @@ const TakeoffForm: React.FC = () => {
         {step === 'join' && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
-              {JOIN_TYPES.map(jt => (
+              {(selectedFitting === 'flange' ? FLANGE_TYPES : JOIN_TYPES).map(jt => (
                 <button
                   key={jt.value}
                   type="button"
@@ -673,18 +686,24 @@ const TakeoffForm: React.FC = () => {
             </thead>
             <tbody>
               {lineItems.map((item, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid #f3f4f6', background: index % 2 === 0 ? '#fff' : '#fafbfc' }}>
+                <tr key={index} style={{ borderBottom: '1px solid #f3f4f6', background: item.rate_not_found ? '#fef2f2' : index % 2 === 0 ? '#fff' : '#fafbfc' }}>
                   <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.quantity}</td>
                   <td style={{ padding: '8px 12px', fontSize: 14, fontWeight: 600, color: '#1e40af' }}>{item.size}</td>
                   <td style={{ padding: '8px 12px', fontSize: 13, color: '#374151' }}>{getFittingLabel(item.fitting_type)}</td>
                   <td style={{ padding: '8px 12px' }}>
                     {item.join_type && (
-                      <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>
+                      <span style={{ fontSize: 11, color: item.rate_not_found ? '#dc2626' : '#6b7280', background: item.rate_not_found ? '#fee2e2' : '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>
                         {getJoinLabel(item.join_type)}
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: 13, color: '#6b7280' }}>{item.base_hours_per_unit.toFixed(2)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: 13, color: item.rate_not_found ? '#dc2626' : '#6b7280' }}>
+                    {item.rate_not_found ? (
+                      <span title="No productivity rate found for this fitting/join type/size combination" style={{ cursor: 'help' }}>
+                        No rate
+                      </span>
+                    ) : item.base_hours_per_unit.toFixed(2)}
+                  </td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.base_hours_total.toFixed(2)}</td>
                   <td style={{ padding: '8px 12px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#10b981' }}>{item.adjusted_hours.toFixed(2)}</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right' }}>

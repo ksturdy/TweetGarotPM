@@ -21,6 +21,7 @@ const FITTING_LABELS: Record<string, string> = {
 const JOIN_LABELS: Record<string, string> = {
   threaded: 'Threaded', welded: 'Welded', flanged: 'Flanged',
   grooved: 'Grooved', press: 'Press', soldered: 'Soldered', glued: 'Glued',
+  'slip-on': 'Slip-On', blind: 'Blind', 'weld-neck': 'Weld Neck',
 };
 
 const EstimateDetail: React.FC = () => {

@@ -6,7 +6,6 @@ const ProductivityRate = {
    * Falls back: exact join_type match → any available rate for that fitting+diameter.
    */
   async lookup(tenantId, fittingType, joinType, pipeDiameter) {
-    // Try exact match first (with specific join type)
     if (joinType) {
       const result = await db.query(
         `SELECT hours_per_unit, unit FROM piping_productivity_rates
@@ -14,14 +13,12 @@ const ProductivityRate = {
          LIMIT 1`,
         [tenantId, fittingType, joinType, pipeDiameter]
       );
-      if (result.rows.length > 0) return result.rows[0];
+      return result.rows[0] || null;
     }
 
-    // Fallback: any available rate for this fitting + diameter
     const result = await db.query(
       `SELECT hours_per_unit, unit FROM piping_productivity_rates
        WHERE tenant_id = $1 AND fitting_type = $2 AND pipe_diameter = $3
-       ORDER BY join_type NULLS FIRST
        LIMIT 1`,
       [tenantId, fittingType, pipeDiameter]
     );
