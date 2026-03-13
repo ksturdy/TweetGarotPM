@@ -191,21 +191,21 @@ router.post('/similar', async (req, res, next) => {
   try {
     const { buildingType, projectType, bidType, sqft } = req.body;
 
-    if (!buildingType || !projectType) {
+    if (!buildingType && !projectType) {
       return res.status(400).json({
-        error: 'Building type and project type are required'
+        error: 'At least one of building type or project type is required'
       });
     }
 
     const [similarProjects, averages] = await Promise.all([
       HistoricalProject.findSimilar({
-        buildingType,
-        projectType,
+        buildingType: buildingType || null,
+        projectType: projectType || null,
         bidType: bidType || null,
         sqft: sqft || null,
         limit: 20  // Return more projects for preview
       }),
-      HistoricalProject.getCategoryAverages(buildingType, projectType)
+      HistoricalProject.getCategoryAverages(buildingType || null, projectType || null)
     ]);
 
     // Add match criteria details and inflation adjustment to each project
@@ -274,40 +274,55 @@ router.post('/generate', async (req, res, next) => {
       projectType,
       bidType,
       sqft,
-      scope
+      scope,
+      location,
+      selectedProjectIds
     } = req.body;
 
     // Validation
-    if (!projectName || !buildingType || !projectType || !sqft) {
+    if (!projectName || !sqft || (!buildingType && !projectType)) {
       return res.status(400).json({
-        error: 'Project name, building type, project type, and square footage are required'
+        error: 'Project name, square footage, and at least one of building type or project type are required'
       });
     }
 
-    // Find similar projects
+    // Find similar projects for scoring
     const similarProjects = await HistoricalProject.findSimilar({
-      buildingType,
-      projectType,
+      buildingType: buildingType || null,
+      projectType: projectType || null,
       bidType: bidType || null,
       sqft,
-      limit: 5
+      limit: 20
     });
 
-    // Get top 3 for detailed analysis
-    const topProjects = similarProjects.slice(0, 3);
+    let topProjects, projectDetailsRaw;
 
-    // Get full details of top 3 projects
-    const projectDetailsRaw = await Promise.all(
-      topProjects.map(p => HistoricalProject.findById(p.id))
-    );
+    if (selectedProjectIds && selectedProjectIds.length > 0) {
+      // User selected specific projects — use those
+      const ids = selectedProjectIds.map(id => parseInt(id, 10));
+      projectDetailsRaw = (await Promise.all(
+        ids.map(id => HistoricalProject.findById(id))
+      )).filter(p => p != null);
+      // Map similarity scores from the scored list (use == for type-safe comparison)
+      topProjects = ids.map(id => {
+        const scored = similarProjects.find(s => parseInt(s.id) === id);
+        return scored || { id, similarity_score: 0 };
+      });
+    } else {
+      // Default: auto-select top 3
+      topProjects = similarProjects.slice(0, 3);
+      projectDetailsRaw = await Promise.all(
+        topProjects.map(p => HistoricalProject.findById(p.id))
+      );
+    }
 
     // Apply inflation adjustment to project costs
     const projectDetails = projectDetailsRaw.map(p => adjustProjectCostsForInflation(p));
 
     // Get category averages
     const averagesRaw = await HistoricalProject.getCategoryAverages(
-      buildingType,
-      projectType
+      buildingType || null,
+      projectType || null
     );
 
     // Adjust averages for inflation based on average project age
@@ -322,7 +337,8 @@ router.post('/generate', async (req, res, next) => {
       sqft,
       scope,
       projectDetails,
-      averages
+      averages,
+      location
     );
 
     // Call Claude to generate budget
@@ -396,7 +412,7 @@ router.post('/generate', async (req, res, next) => {
 });
 
 // Helper function to build AI system prompt
-function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType, sqft, scope, projectDetails, averages) {
+function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
 
@@ -408,9 +424,10 @@ function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType
 
 ## NEW PROJECT DETAILS:
 - Project Name: ${projectName}
-- Building Type: ${buildingType}
-- Project Type: ${projectType}
+${buildingType ? `- Building Type: ${buildingType}` : '- Building Type: Not specified'}
+${projectType ? `- Project Type: ${projectType}` : '- Project Type: Not specified'}
 - Bid Type: ${bidType || 'Not specified'}
+${location ? `- Location: ${location}` : ''}
 - Square Footage: ${formatNumber(sqft)} SF
 ${scope ? `- Additional Scope Notes: ${scope}` : ''}
 

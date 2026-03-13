@@ -122,8 +122,8 @@ export const budgetGeneratorService = {
   },
 
   async findSimilar(criteria: {
-    buildingType: string;
-    projectType: string;
+    buildingType?: string;
+    projectType?: string;
     bidType?: string;
     sqft?: number;
   }): Promise<SimilarProjectsResponse> {
@@ -133,11 +133,13 @@ export const budgetGeneratorService = {
 
   async generate(params: {
     projectName: string;
-    buildingType: string;
-    projectType: string;
+    buildingType?: string;
+    projectType?: string;
     bidType?: string;
     sqft: number;
     scope?: string;
+    location?: string;
+    selectedProjectIds?: number[];
   }): Promise<BudgetGeneratorResponse> {
     const response = await api.post<BudgetGeneratorResponse>('/budget-generator/generate', params);
     return response.data;

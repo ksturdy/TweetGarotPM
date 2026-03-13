@@ -25,6 +25,9 @@ interface EditableValues {
   profitPercent: number;
   contingencyPercent: number;
   sectionAdjustments: { [key: string]: number }; // percentage adjustments per section
+  excludedSections: { [key: string]: boolean }; // sections excluded from budget
+  customAssumptions: string[] | null; // null = use generated, array = user override
+  customRisks: string[] | null; // null = use generated, array = user override
 }
 
 const BudgetGenerator: React.FC = () => {
@@ -37,6 +40,7 @@ const BudgetGenerator: React.FC = () => {
   const [buildingType, setBuildingType] = useState('');
   const [projectType, setProjectType] = useState('');
   const [bidType, setBidType] = useState('');
+  const [location, setLocation] = useState('');
   const [sqft, setSqft] = useState('');
   const [scope, setScope] = useState('');
 
@@ -51,6 +55,7 @@ const BudgetGenerator: React.FC = () => {
   const [previewProjects, setPreviewProjects] = useState<any[]>([]);
   const [previewAverages, setPreviewAverages] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
 
   // Results state
   const [budget, setBudget] = useState<GeneratedBudget | null>(null);
@@ -63,9 +68,13 @@ const BudgetGenerator: React.FC = () => {
     overheadPercent: 10,
     profitPercent: 10,
     contingencyPercent: 5,
-    sectionAdjustments: {}
+    sectionAdjustments: {},
+    excludedSections: {},
+    customAssumptions: null,
+    customRisks: null
   });
   const [adjustedBudget, setAdjustedBudget] = useState<GeneratedBudget | null>(null);
+  const [editingAdjustment, setEditingAdjustment] = useState<string | null>(null);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -110,7 +119,10 @@ const BudgetGenerator: React.FC = () => {
         overheadPercent: existingBudget.overhead_percent || 10,
         profitPercent: existingBudget.profit_percent || 10,
         contingencyPercent: existingBudget.contingency_percent || 5,
-        sectionAdjustments: {}
+        sectionAdjustments: {},
+        excludedSections: {},
+        customAssumptions: null,
+        customRisks: null
       });
 
       // Reconstruct the budget object for display
@@ -185,9 +197,9 @@ const BudgetGenerator: React.FC = () => {
     }
   };
 
-  // Load preview when form changes
+  // Load preview when form changes - requires at least one of buildingType or projectType
   useEffect(() => {
-    if (buildingType && projectType) {
+    if (buildingType || projectType) {
       loadPreview();
     } else {
       setShowPreview(false);
@@ -200,14 +212,18 @@ const BudgetGenerator: React.FC = () => {
     try {
       setPreviewLoading(true);
       const result = await budgetGeneratorService.findSimilar({
-        buildingType,
-        projectType,
+        buildingType: buildingType || undefined,
+        projectType: projectType || undefined,
         bidType: bidType || undefined,
         sqft: sqft ? parseFloat(sqft) : undefined
       });
       setPreviewProjects(result.similarProjects);
       setPreviewAverages(result.averages);
       setShowPreview(true);
+      // Auto-select top 3 projects by default
+      setSelectedProjectIds(
+        result.similarProjects.slice(0, 3).map((p: any) => p.id).filter(Boolean)
+      );
     } catch (err) {
       console.error('Error loading preview:', err);
     } finally {
@@ -235,8 +251,9 @@ const BudgetGenerator: React.FC = () => {
   const calculateAdjustedBudget = () => {
     if (!budget) return;
 
-    // Calculate overall adjustment multiplier based on section adjustments
-    const sectionMultipliers = budget.sections.map(section => {
+    // Calculate overall adjustment multiplier based on non-excluded section adjustments
+    const includedSections = budget.sections.filter(s => !editableValues.excludedSections[s.name]);
+    const sectionMultipliers = includedSections.map(section => {
       const adjustment = editableValues.sectionAdjustments[section.name] || 0;
       return 1 + (adjustment / 100);
     });
@@ -246,8 +263,9 @@ const BudgetGenerator: React.FC = () => {
 
     // Calculate adjusted section costs
     const adjustedSections = budget.sections.map(section => {
+      const isExcluded = editableValues.excludedSections[section.name];
       const adjustment = editableValues.sectionAdjustments[section.name] || 0;
-      const multiplier = 1 + (adjustment / 100);
+      const multiplier = isExcluded ? 0 : 1 + (adjustment / 100);
 
       const adjustedItems = section.items.map(item => ({
         ...item,
@@ -263,24 +281,64 @@ const BudgetGenerator: React.FC = () => {
       };
     });
 
-    // Calculate new totals
+    // Calculate new totals using section subtotals as the source of truth
+    // Section subtotals include all costs (labor, material, equipment) so they ARE the direct cost
+    const directCostSubtotal = adjustedSections.reduce((sum, s) => sum + s.subtotal, 0);
+    // Labor/material/equipment/subcontract breakdown from items (for display only)
     const laborSubtotal = adjustedSections.reduce((sum, s) =>
       sum + s.items.reduce((isum, i) => isum + (i.laborCost || 0), 0), 0);
     const materialSubtotal = adjustedSections.reduce((sum, s) =>
       sum + s.items.reduce((isum, i) => isum + (i.materialCost || 0), 0), 0);
-    // Equipment and subcontract totals from original budget, adjusted by average multiplier
     const equipmentSubtotal = budget.totals.equipmentSubtotal * avgMultiplier;
     const subcontractSubtotal = budget.totals.subcontractSubtotal * avgMultiplier;
-    const directCostSubtotal = laborSubtotal + materialSubtotal + equipmentSubtotal + subcontractSubtotal;
 
     const overhead = directCostSubtotal * (editableValues.overheadPercent / 100);
     const profit = directCostSubtotal * (editableValues.profitPercent / 100);
     const contingency = directCostSubtotal * (editableValues.contingencyPercent / 100);
     const grandTotal = directCostSubtotal + overhead + profit + contingency;
 
+    // Build assumptions: use custom if user has edited, otherwise auto-generate from edits
+    let adjustedAssumptions: string[];
+    if (editableValues.customAssumptions !== null) {
+      adjustedAssumptions = [...editableValues.customAssumptions];
+    } else {
+      adjustedAssumptions = [...budget.assumptions];
+      const excludedNames = Object.entries(editableValues.excludedSections)
+        .filter(([, excluded]) => excluded)
+        .map(([name]) => name);
+      if (excludedNames.length > 0) {
+        const filtered = adjustedAssumptions.filter(a => {
+          const lower = a.toLowerCase();
+          return !excludedNames.some(name => lower.includes(name.toLowerCase()));
+        });
+        filtered.push(`Excluded from scope: ${excludedNames.join(', ')}`);
+        adjustedAssumptions = filtered;
+      }
+      const adjustedSectionNames = Object.entries(editableValues.sectionAdjustments)
+        .filter(([name, val]) => val !== 0 && !editableValues.excludedSections[name])
+        .map(([name, val]) => `${name} (${val >= 0 ? '+' : ''}${val}%)`);
+      if (adjustedSectionNames.length > 0) {
+        adjustedAssumptions.push(`Manual adjustments applied: ${adjustedSectionNames.join(', ')}`);
+      }
+      const markupNotes: string[] = [];
+      if (editableValues.overheadPercent !== 10) markupNotes.push(`Overhead: ${editableValues.overheadPercent}%`);
+      if (editableValues.profitPercent !== 10) markupNotes.push(`Profit: ${editableValues.profitPercent}%`);
+      if (editableValues.contingencyPercent !== 5) markupNotes.push(`Contingency: ${editableValues.contingencyPercent}%`);
+      if (markupNotes.length > 0) {
+        adjustedAssumptions.push(`Markup percentages adjusted — ${markupNotes.join(', ')}`);
+      }
+    }
+
+    // Use custom risks if user has edited, otherwise use original
+    const adjustedRisks = editableValues.customRisks !== null
+      ? [...editableValues.customRisks]
+      : [...budget.risks];
+
     const adjusted: GeneratedBudget = {
       ...budget,
       sections: adjustedSections,
+      assumptions: adjustedAssumptions,
+      risks: adjustedRisks,
       totals: {
         laborSubtotal,
         materialSubtotal,
@@ -307,8 +365,8 @@ const BudgetGenerator: React.FC = () => {
     setError('');
     setSuccessMessage('');
 
-    if (!projectName || !buildingType || !projectType || !sqft) {
-      setError('Please fill in all required fields.');
+    if (!projectName || !sqft || (!buildingType && !projectType)) {
+      setError('Please fill in project name, square footage, and at least one of building type or project type.');
       return;
     }
 
@@ -320,22 +378,28 @@ const BudgetGenerator: React.FC = () => {
 
       const result = await budgetGeneratorService.generate({
         projectName,
-        buildingType,
-        projectType,
+        buildingType: buildingType || undefined,
+        projectType: projectType || undefined,
         bidType: bidType || undefined,
         sqft: parseFloat(sqft),
-        scope: scope || undefined
+        scope: scope || undefined,
+        location: location || undefined,
+        selectedProjectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined
       });
 
       setBudget(result.budget);
       setComparableProjects(result.similarProjects);
 
-      // Initialize editable values from generated budget
+      // Initialize editable values from generated budget - derive actual percentages from AI output
+      const dc = result.budget.totals.directCostSubtotal;
       setEditableValues({
-        overheadPercent: 10,
-        profitPercent: 10,
-        contingencyPercent: 5,
-        sectionAdjustments: {}
+        overheadPercent: dc > 0 ? Math.round((result.budget.totals.overhead / dc) * 100) : 10,
+        profitPercent: dc > 0 ? Math.round((result.budget.totals.profit / dc) * 100) : 10,
+        contingencyPercent: dc > 0 ? Math.round((result.budget.totals.contingency / dc) * 100) : 5,
+        sectionAdjustments: {},
+        excludedSections: {},
+        customAssumptions: null,
+        customRisks: null
       });
 
       // Auto-expand summary section
@@ -408,6 +472,7 @@ const BudgetGenerator: React.FC = () => {
     setBuildingType('');
     setProjectType('');
     setBidType('');
+    setLocation('');
     setSqft('');
     setScope('');
     setBudget(null);
@@ -423,7 +488,10 @@ const BudgetGenerator: React.FC = () => {
       overheadPercent: 10,
       profitPercent: 10,
       contingencyPercent: 5,
-      sectionAdjustments: {}
+      sectionAdjustments: {},
+      excludedSections: {},
+      customAssumptions: null,
+      customRisks: null
     });
   };
 
@@ -440,6 +508,7 @@ const BudgetGenerator: React.FC = () => {
         building_type: currentBudget.summary.buildingType,
         project_type: currentBudget.summary.projectType,
         bid_type: bidType || undefined,
+        location: location || undefined,
         square_footage: currentBudget.summary.squareFootage,
         scope_notes: scope || undefined,
         estimated_total: currentBudget.summary.estimatedTotalCost,
@@ -503,6 +572,16 @@ const BudgetGenerator: React.FC = () => {
     if (!isEditMode && budget) {
       // Entering edit mode - set adjusted budget to current budget
       setAdjustedBudget({ ...budget });
+      // Derive actual percentages from budget so edits don't shift the total
+      const dc = budget.totals.directCostSubtotal;
+      if (dc > 0) {
+        setEditableValues(prev => ({
+          ...prev,
+          overheadPercent: Math.round((budget.totals.overhead / dc) * 100),
+          profitPercent: Math.round((budget.totals.profit / dc) * 100),
+          contingencyPercent: Math.round((budget.totals.contingency / dc) * 100),
+        }));
+      }
     }
     setIsEditMode(!isEditMode);
   };
@@ -524,6 +603,45 @@ const BudgetGenerator: React.FC = () => {
         [sectionName]: value
       }
     }));
+  };
+
+  const handleToggleExclude = (sectionName: string) => {
+    setHasUserEdited(true);
+    setEditableValues(prev => ({
+      ...prev,
+      excludedSections: {
+        ...prev.excludedSections,
+        [sectionName]: !prev.excludedSections[sectionName]
+      }
+    }));
+  };
+
+  const handleAdjustmentInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, sectionName: string) => {
+    if (e.key === 'Enter') {
+      const value = parseInt((e.target as HTMLInputElement).value, 10);
+      if (!isNaN(value)) {
+        handleSectionAdjustment(sectionName, value);
+      }
+      setEditingAdjustment(null);
+    } else if (e.key === 'Escape') {
+      setEditingAdjustment(null);
+    }
+  };
+
+  const handleAdjustmentInputBlur = (e: React.FocusEvent<HTMLInputElement>, sectionName: string) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value)) {
+      handleSectionAdjustment(sectionName, value);
+    }
+    setEditingAdjustment(null);
+  };
+
+  const handleToggleProjectSelection = (projectId: number) => {
+    setSelectedProjectIds(prev =>
+      prev.includes(projectId)
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
+    );
   };
 
   // Get current budget (adjusted if in edit mode)
@@ -700,14 +818,13 @@ const BudgetGenerator: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Building Type *</label>
+                <label className="form-label">Building Type</label>
                 <select
                   className="form-input"
                   value={buildingType}
                   onChange={(e) => setBuildingType(e.target.value)}
-                  required
                 >
-                  <option value="">Select building type</option>
+                  <option value="">Any building type</option>
                   {options.buildingTypes.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}
@@ -715,14 +832,13 @@ const BudgetGenerator: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Project Type *</label>
+                <label className="form-label">Project Type</label>
                 <select
                   className="form-input"
                   value={projectType}
                   onChange={(e) => setProjectType(e.target.value)}
-                  required
                 >
-                  <option value="">Select project type</option>
+                  <option value="">Any project type</option>
                   {options.projectTypes.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}
@@ -741,6 +857,17 @@ const BudgetGenerator: React.FC = () => {
                     <option key={type} value={type}>{type}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Location</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g., Green Bay, WI"
+                />
               </div>
 
               <div className="form-group">
@@ -777,7 +904,7 @@ const BudgetGenerator: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={loading || !projectName || !buildingType || !projectType || !sqft}
+                  disabled={loading || !projectName || (!buildingType && !projectType) || !sqft}
                 >
                   {loading ? 'Generating...' : 'Generate Budget'}
                 </button>
@@ -853,20 +980,53 @@ const BudgetGenerator: React.FC = () => {
                 <h4>Section Adjustments</h4>
                 {currentBudget.sections.map(section => {
                   const adjustment = editableValues.sectionAdjustments[section.name] || 0;
+                  const isExcluded = editableValues.excludedSections[section.name];
                   return (
-                    <div key={section.name} className="slider-group">
-                      <label>
-                        {section.name}: {adjustment >= 0 ? '+' : ''}{adjustment}%
-                      </label>
-                      <input
-                        type="range"
-                        min="-50"
-                        max="50"
-                        step="1"
-                        value={adjustment}
-                        onChange={(e) => handleSectionAdjustment(section.name, parseFloat(e.target.value))}
-                      />
-                      <span className="slider-value">{formatCurrency(section.subtotal)}</span>
+                    <div key={section.name} className={`slider-group ${isExcluded ? 'section-excluded' : ''}`}>
+                      <div className="slider-group-header">
+                        <button
+                          type="button"
+                          className={`section-exclude-toggle ${isExcluded ? 'excluded' : ''}`}
+                          onClick={() => handleToggleExclude(section.name)}
+                          title={isExcluded ? 'Include section' : 'Exclude section'}
+                        >
+                          {isExcluded ? '○' : '●'}
+                        </button>
+                        <label className={isExcluded ? 'excluded-label' : ''}>
+                          {section.name}:
+                          {editingAdjustment === `panel-${section.name}` ? (
+                            <input
+                              type="number"
+                              className="adjustment-input"
+                              defaultValue={adjustment}
+                              autoFocus
+                              onKeyDown={(e) => handleAdjustmentInputKeyDown(e, section.name)}
+                              onBlur={(e) => handleAdjustmentInputBlur(e, section.name)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span
+                              className="adjustment-label-clickable"
+                              onClick={() => !isExcluded && setEditingAdjustment(`panel-${section.name}`)}
+                            >
+                              {' '}{adjustment >= 0 ? '+' : ''}{adjustment}%
+                            </span>
+                          )}
+                        </label>
+                      </div>
+                      {!isExcluded && (
+                        <input
+                          type="range"
+                          min="-100"
+                          max="100"
+                          step="1"
+                          value={Math.max(-100, Math.min(100, adjustment))}
+                          onChange={(e) => handleSectionAdjustment(section.name, parseFloat(e.target.value))}
+                        />
+                      )}
+                      <span className="slider-value">
+                        {isExcluded ? 'Excluded' : formatCurrency(section.subtotal)}
+                      </span>
                     </div>
                   );
                 })}
@@ -904,35 +1064,33 @@ const BudgetGenerator: React.FC = () => {
 
           {currentBudget && (
             <>
-              {/* Summary Card with Confidence Details */}
+              {/* Summary Card */}
               <div className="card summary-card">
                 <div className="summary-header">
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <h2 style={{ margin: 0 }}>{currentBudget.summary.projectName}</h2>
-                    <p style={{ color: 'rgba(255, 255, 255, 0.8)', margin: '0.5rem 0 0 0' }}>
+                    <p>
                       {currentBudget.summary.buildingType} - {currentBudget.summary.projectType}
                     </p>
                   </div>
                   {getConfidenceBadge(currentBudget.summary.confidenceLevel)}
                 </div>
 
-                {/* Confidence Details Section */}
-                <div className="confidence-details">
-                  {(() => {
-                    const details = getConfidenceDetails(currentBudget.summary.confidenceLevel);
-                    return (
-                      <>
-                        <span className="confidence-icon">{details.icon}</span>
-                        <div className="confidence-text">
-                          <strong>{details.text}</strong>
-                          <span>{details.subtext}</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
                 <div className="summary-totals">
+                  <div className="total-item confidence-details-item">
+                    {(() => {
+                      const details = getConfidenceDetails(currentBudget.summary.confidenceLevel);
+                      return (
+                        <div className="confidence-details">
+                          <span className="confidence-icon">{details.icon}</span>
+                          <div className="confidence-text">
+                            <strong>{details.text}</strong>
+                            <span>{details.subtext}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   <div className="total-item main-total">
                     <span className="total-label">Estimated Total</span>
                     <span className="total-value">{formatCurrency(currentBudget.summary.estimatedTotalCost)}</span>
@@ -1027,32 +1185,59 @@ const BudgetGenerator: React.FC = () => {
 
                 {currentBudget.sections.map((section, index) => {
                   const adjustment = editableValues.sectionAdjustments[section.name] || 0;
+                  const isExcluded = editableValues.excludedSections[section.name];
                   return (
-                  <div key={index} className="budget-section">
+                  <div key={index} className={`budget-section ${isExcluded ? 'section-excluded' : ''}`}>
                     <div
                       className="section-header-row"
                       onClick={() => toggleSection(section.name)}
                     >
+                      {isEditMode && (
+                        <button
+                          type="button"
+                          className={`section-exclude-toggle-inline ${isExcluded ? 'excluded' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); handleToggleExclude(section.name); }}
+                          title={isExcluded ? 'Include section' : 'Exclude section'}
+                        >
+                          {isExcluded ? '○' : '●'}
+                        </button>
+                      )}
                       <span className="section-expand-icon">
                         {expandedSections[section.name] ? '▼' : '▶'}
                       </span>
-                      <span className="section-name">{section.name}</span>
-                      {isEditMode && (
+                      <span className={`section-name ${isExcluded ? 'excluded-label' : ''}`}>{section.name}</span>
+                      {isEditMode && !isExcluded && (
                         <div className="section-inline-slider" onClick={(e) => e.stopPropagation()}>
-                          <span className="inline-adjustment-label">
-                            {adjustment >= 0 ? '+' : ''}{adjustment}%
-                          </span>
+                          {editingAdjustment === `inline-${section.name}` ? (
+                            <input
+                              type="number"
+                              className="adjustment-input inline"
+                              defaultValue={adjustment}
+                              autoFocus
+                              onKeyDown={(e) => handleAdjustmentInputKeyDown(e, section.name)}
+                              onBlur={(e) => handleAdjustmentInputBlur(e, section.name)}
+                            />
+                          ) : (
+                            <span
+                              className="inline-adjustment-label adjustment-label-clickable"
+                              onClick={() => setEditingAdjustment(`inline-${section.name}`)}
+                            >
+                              {adjustment >= 0 ? '+' : ''}{adjustment}%
+                            </span>
+                          )}
                           <input
                             type="range"
-                            min="-50"
-                            max="50"
+                            min="-100"
+                            max="100"
                             step="1"
-                            value={adjustment}
+                            value={Math.max(-100, Math.min(100, adjustment))}
                             onChange={(e) => handleSectionAdjustment(section.name, parseFloat(e.target.value))}
                           />
                         </div>
                       )}
-                      <span className="section-subtotal">{formatCurrency(section.subtotal)}</span>
+                      <span className="section-subtotal">
+                        {isExcluded ? <span className="excluded-amount">Excluded</span> : formatCurrency(section.subtotal)}
+                      </span>
                     </div>
 
                     {expandedSections[section.name] && section.items.length > 0 && (
@@ -1132,17 +1317,103 @@ const BudgetGenerator: React.FC = () => {
                     <h4>Key Assumptions</h4>
                     <ul>
                       {currentBudget.assumptions.map((assumption, index) => (
-                        <li key={index}>{assumption}</li>
+                        <li key={index}>
+                          {isEditMode ? (
+                            <div className="editable-list-item">
+                              <input
+                                type="text"
+                                className="editable-list-input"
+                                value={assumption}
+                                onChange={(e) => {
+                                  const current = editableValues.customAssumptions ?? [...currentBudget.assumptions];
+                                  const updated = [...current];
+                                  updated[index] = e.target.value;
+                                  setHasUserEdited(true);
+                                  setEditableValues(prev => ({ ...prev, customAssumptions: updated }));
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="editable-list-remove"
+                                title="Remove"
+                                onClick={() => {
+                                  const current = editableValues.customAssumptions ?? [...currentBudget.assumptions];
+                                  const updated = current.filter((_, i) => i !== index);
+                                  setHasUserEdited(true);
+                                  setEditableValues(prev => ({ ...prev, customAssumptions: updated }));
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : assumption}
+                        </li>
                       ))}
                     </ul>
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        className="editable-list-add"
+                        onClick={() => {
+                          const current = editableValues.customAssumptions ?? [...currentBudget.assumptions];
+                          setHasUserEdited(true);
+                          setEditableValues(prev => ({ ...prev, customAssumptions: [...current, ''] }));
+                        }}
+                      >
+                        + Add Assumption
+                      </button>
+                    )}
                   </div>
                   <div className="risks-section">
                     <h4>Potential Risks</h4>
                     <ul>
                       {currentBudget.risks.map((risk, index) => (
-                        <li key={index}>{risk}</li>
+                        <li key={index}>
+                          {isEditMode ? (
+                            <div className="editable-list-item">
+                              <input
+                                type="text"
+                                className="editable-list-input"
+                                value={risk}
+                                onChange={(e) => {
+                                  const current = editableValues.customRisks ?? [...currentBudget.risks];
+                                  const updated = [...current];
+                                  updated[index] = e.target.value;
+                                  setHasUserEdited(true);
+                                  setEditableValues(prev => ({ ...prev, customRisks: updated }));
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="editable-list-remove"
+                                title="Remove"
+                                onClick={() => {
+                                  const current = editableValues.customRisks ?? [...currentBudget.risks];
+                                  const updated = current.filter((_, i) => i !== index);
+                                  setHasUserEdited(true);
+                                  setEditableValues(prev => ({ ...prev, customRisks: updated }));
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : risk}
+                        </li>
                       ))}
                     </ul>
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        className="editable-list-add"
+                        onClick={() => {
+                          const current = editableValues.customRisks ?? [...currentBudget.risks];
+                          setHasUserEdited(true);
+                          setEditableValues(prev => ({ ...prev, customRisks: [...current, ''] }));
+                        }}
+                      >
+                        + Add Risk
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1192,11 +1463,31 @@ const BudgetGenerator: React.FC = () => {
                     </>
                   )}
 
+                  {selectedProjectIds.length > 0 && (
+                    <div className="selected-projects-count">
+                      {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} selected for generation
+                    </div>
+                  )}
+
                   {previewProjects.length > 0 ? (
                     <div className="preview-projects-grid">
-                      {previewProjects.slice(0, 12).map((project, index) => (
-                        <div key={project.id || index} className="preview-project-card">
+                      {previewProjects.slice(0, 12).map((project, index) => {
+                        const isSelected = project.id && selectedProjectIds.includes(project.id);
+                        return (
+                        <div
+                          key={project.id || index}
+                          className={`preview-project-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => project.id && handleToggleProjectSelection(project.id)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <div className="preview-project-header">
+                            <input
+                              type="checkbox"
+                              className="project-select-checkbox"
+                              checked={isSelected}
+                              onChange={() => project.id && handleToggleProjectSelection(project.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
                             <span className="project-rank">#{index + 1}</span>
                             <span className="match-badge">{project.similarity_score}% match</span>
                           </div>
@@ -1251,7 +1542,8 @@ const BudgetGenerator: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : !previewLoading && (
                     <div className="no-projects-message">

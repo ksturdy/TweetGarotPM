@@ -396,25 +396,34 @@
 .summary-card {
   background: #ffffff;
   color: #1f2937;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
 }
 
 .summary-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  text-align: left;
+  width: 100%;
 }
 
 .summary-header h2 {
   color: #002356;
   margin: 0;
   font-size: 1.25rem;
+  text-align: left;
 }
 
 .summary-header p {
   color: #6b7280 !important;
   font-size: 0.875rem;
   margin: 0.25rem 0 0 0 !important;
+  text-align: left;
 }
 
 .confidence-badge {
@@ -425,13 +434,14 @@
   color: white;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .summary-totals {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .total-item {
@@ -834,15 +844,16 @@
 }
 
 /* Confidence Details in Summary Card */
+.confidence-details-item {
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
 .confidence-details {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-  margin-bottom: 1.5rem;
+  gap: 0.75rem;
 }
 
 .confidence-icon {
@@ -1066,6 +1077,168 @@
   text-align: right;
 }
 
+/* Section Exclude Toggle */
+.section-exclude-toggle,
+.section-exclude-toggle-inline {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0 0.25rem;
+  color: #002356;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.section-exclude-toggle:hover,
+.section-exclude-toggle-inline:hover {
+  opacity: 0.7;
+}
+
+.section-exclude-toggle.excluded,
+.section-exclude-toggle-inline.excluded {
+  color: #9ca3af;
+}
+
+/* Excluded Section Styling */
+.budget-section.section-excluded .section-header-row {
+  opacity: 0.5;
+}
+
+.budget-section.section-excluded .section-name {
+  text-decoration: line-through;
+}
+
+.slider-group.section-excluded {
+  opacity: 0.5;
+}
+
+.slider-group.section-excluded label {
+  text-decoration: line-through;
+}
+
+.excluded-label {
+  text-decoration: line-through;
+  color: #9ca3af !important;
+}
+
+.excluded-amount {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Slider Group Header (with exclude toggle) */
+.slider-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+
+.slider-group-header label {
+  margin-bottom: 0 !important;
+  flex: 1;
+}
+
+/* Clickable Adjustment Label */
+.adjustment-label-clickable {
+  cursor: pointer;
+  border-bottom: 1px dashed #f59e0b;
+  transition: background-color 0.15s;
+}
+
+.adjustment-label-clickable:hover {
+  background-color: rgba(245, 158, 11, 0.1);
+  border-radius: 2px;
+}
+
+/* Inline Adjustment Input */
+.adjustment-input {
+  width: 60px;
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  background: #fffbeb;
+  color: #92400e;
+  text-align: center;
+  outline: none;
+  margin-left: 0.25rem;
+}
+
+.adjustment-input:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.adjustment-input.inline {
+  width: 50px;
+  font-size: 0.6875rem;
+}
+
+/* Editable List Items (Assumptions & Risks) */
+.editable-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.editable-list-input {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  background: #fff;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.editable-list-input:focus {
+  border-color: #002356;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 35, 86, 0.1);
+}
+
+.editable-list-remove {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.25rem;
+  line-height: 1;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
+}
+
+.editable-list-remove:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.editable-list-add {
+  background: none;
+  border: 1px dashed #d1d5db;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  text-align: center;
+}
+
+.editable-list-add:hover {
+  border-color: #002356;
+  color: #002356;
+  background: #f0f4ff;
+}
+
 /* Print Styles */
 @media print {
   .no-print {
@@ -1076,7 +1249,9 @@
     display: block !important;
   }
 
-  .section-inline-slider {
+  .section-inline-slider,
+  .section-exclude-toggle,
+  .section-exclude-toggle-inline {
     display: none !important;
   }
 
@@ -1234,10 +1409,36 @@
   box-shadow: 0 2px 8px rgba(0, 35, 86, 0.1);
 }
 
+.preview-project-card.selected {
+  border-color: #002356;
+  background: #f0f4ff;
+  box-shadow: 0 0 0 2px rgba(0, 35, 86, 0.15);
+}
+
+.project-select-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #002356;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.selected-projects-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #002356;
+  text-align: center;
+  padding: 0.5rem;
+  background: #f0f4ff;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
 .preview-project-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.375rem;
 }
 
 .preview-project-header .project-rank {

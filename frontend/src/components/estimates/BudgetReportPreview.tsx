@@ -235,19 +235,7 @@ const BudgetReportPreview: React.FC<BudgetReportPreviewProps> = ({
           <strong style={{ color: '#002356' }}>Methodology:</strong> {budget.summary.methodology}
         </div>
 
-        {scope && (
-          <div style={{
-            padding: '12px',
-            backgroundColor: '#fffbeb',
-            border: '1px solid #fde68a',
-            borderRadius: '4px',
-            fontSize: '10pt',
-            lineHeight: '1.5',
-            marginTop: '10px',
-          }}>
-            <strong style={{ color: '#92400e' }}>Scope Notes:</strong> {scope}
-          </div>
-        )}
+
       </div>
 
       {/* Cost Summary Table */}

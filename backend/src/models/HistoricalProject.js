@@ -137,6 +137,7 @@ const HistoricalProject = {
 
     // Build query with similarity scoring
     // Cast parameters to explicit types to avoid PostgreSQL type inference issues
+    // When a filter is NULL, award full points (not filtering on that criteria)
     const query = `
       SELECT
         id, name, building_type, project_type, bid_type,
@@ -148,10 +149,10 @@ const HistoricalProject = {
         hw_material_with_esc, chw_material_with_esc,
         ahu, rtu, vav, boilers, pumps, chiller,
         (
-          -- Building type match: 40 points
-          CASE WHEN building_type = $1::text THEN 40 ELSE 0 END +
-          -- Project type match: 35 points
-          CASE WHEN project_type = $2::text THEN 35 ELSE 0 END +
+          -- Building type match: 40 points (full points if not filtering)
+          CASE WHEN $1::text IS NULL THEN 40 WHEN building_type = $1::text THEN 40 ELSE 0 END +
+          -- Project type match: 35 points (full points if not filtering)
+          CASE WHEN $2::text IS NULL THEN 35 WHEN project_type = $2::text THEN 35 ELSE 0 END +
           -- Bid type match: 10 points
           CASE WHEN $3::text IS NULL OR bid_type = $3::text THEN 10 ELSE 0 END +
           -- Square footage similarity: 15 points

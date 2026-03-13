@@ -36,6 +36,7 @@ export interface Budget {
   building_type: string;
   project_type: string;
   bid_type: string;
+  location: string;
   square_footage: number;
   scope_notes: string;
   estimated_total: number;
