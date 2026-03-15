@@ -28,8 +28,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const [formData, setFormData] = useState({
     title: opportunity?.title || '',
     description: opportunity?.description || '',
-    estimated_value: opportunity?.estimated_value || '',
-    estimated_start_date: opportunity?.estimated_start_date || '',
+    estimated_value: opportunity?.estimated_value
+      ? Math.round(Number(opportunity.estimated_value)).toString()
+      : '',
+    estimated_start_date: opportunity?.estimated_start_date
+      ? new Date(opportunity.estimated_start_date).toISOString().split('T')[0]
+      : '',
     estimated_duration_days: opportunity?.estimated_duration_days || '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
