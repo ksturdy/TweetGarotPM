@@ -43,23 +43,47 @@ const VistaDataSettings: React.FC = () => {
 
       const details: string[] = [];
       if (data.contracts.total > 0) {
-        details.push(`✓ ${data.contracts.total} contracts (${data.contracts.new} new, ${data.contracts.updated} updated)`);
+        details.push(`Vista: ${data.contracts.total} contracts (${data.contracts.new} new, ${data.contracts.updated} updated)`);
       }
       if (data.workOrders.total > 0) {
-        details.push(`✓ ${data.workOrders.total} work orders (${data.workOrders.new} new, ${data.workOrders.updated} updated)`);
+        details.push(`Vista: ${data.workOrders.total} work orders (${data.workOrders.new} new, ${data.workOrders.updated} updated)`);
       }
       if (data.employees.total > 0) {
-        details.push(`✓ ${data.employees.total} employees (${data.employees.new} new, ${data.employees.updated} updated)`);
+        details.push(`Vista: ${data.employees.total} employees (${data.employees.new} new, ${data.employees.updated} updated)`);
       }
       if (data.customers.total > 0) {
-        details.push(`✓ ${data.customers.total} customers (${data.customers.new} new, ${data.customers.updated} updated)`);
+        details.push(`Vista: ${data.customers.total} customers (${data.customers.new} new, ${data.customers.updated} updated)`);
       }
       if (data.vendors.total > 0) {
-        details.push(`✓ ${data.vendors.total} vendors (${data.vendors.new} new, ${data.vendors.updated} updated)`);
+        details.push(`Vista: ${data.vendors.total} vendors (${data.vendors.new} new, ${data.vendors.updated} updated)`);
+      }
+      // Show auto-import results (Vista → Titan sync)
+      if (data.autoImport) {
+        const ai = data.autoImport;
+        if ((ai.contracts?.imported ?? 0) > 0 || (ai.contracts?.updated ?? 0) > 0) {
+          details.push(`Synced: ${ai.contracts?.imported ?? 0} new projects + ${ai.contracts?.updated ?? 0} updated from contracts`);
+        }
+        if ((ai.workOrders?.imported ?? 0) > 0 || (ai.workOrders?.updated ?? 0) > 0) {
+          details.push(`Synced: ${ai.workOrders?.imported ?? 0} new projects + ${ai.workOrders?.updated ?? 0} updated from work orders`);
+        }
+        if ((ai.employees?.imported ?? 0) > 0) {
+          details.push(`Synced: ${ai.employees?.imported ?? 0} new employees`);
+        }
+        if ((ai.customers?.imported ?? 0) > 0) {
+          details.push(`Synced: ${ai.customers?.imported ?? 0} new customers`);
+        }
+        if ((ai.vendors?.imported ?? 0) > 0) {
+          details.push(`Synced: ${ai.vendors?.imported ?? 0} new vendors`);
+        }
+        if ((ai.departments?.imported ?? 0) > 0) {
+          details.push(`Synced: ${ai.departments?.imported ?? 0} new departments`);
+        }
+        if (ai.error) {
+          details.push(`Warning: Auto-sync had an error: ${ai.error}`);
+        }
       }
       if (data.facilities && data.facilities.total > 0) {
-        details.push(`✓ ${data.facilities.total} facilities (${data.facilities.created} created, ${data.facilities.updated} updated, ${data.facilities.not_found} not found)`);
-        // Store not-found customer names for display
+        details.push(`Facilities: ${data.facilities.total} processed (${data.facilities.created} created, ${data.facilities.updated} updated, ${data.facilities.not_found} not found)`);
         if (data.facilities.not_found_names && data.facilities.not_found_names.length > 0) {
           setNotFoundCustomers(data.facilities.not_found_names);
         } else {
@@ -71,7 +95,7 @@ const VistaDataSettings: React.FC = () => {
 
       setUploadDetails(details);
       setUploadStatus('');
-      showSuccess(`Import complete! Processed ${data.sheetsProcessed?.length || 0} sheets.`);
+      showSuccess(`Import complete! Processed ${data.sheetsProcessed?.length || 0} sheets — all data synced automatically.`);
       setUploading(false);
     },
     onError: (error: any) => {
@@ -165,10 +189,10 @@ const VistaDataSettings: React.FC = () => {
     );
   }
 
-  const totalLinkableRecords = (stats?.total_contracts || 0) + (stats?.total_work_orders || 0);
-  const totalMatched = (stats?.matched_contracts || 0) + (stats?.matched_work_orders || 0);
-  const totalUnmatched = (stats?.unmatched_contracts || 0) + (stats?.unmatched_work_orders || 0);
-  const matchRate = totalLinkableRecords > 0 ? Math.round((totalMatched / totalLinkableRecords) * 100) : 0;
+  const totalVistaRecords = (stats?.total_contracts || 0) + (stats?.total_work_orders || 0);
+  const totalSynced = (stats?.matched_contracts || 0) + (stats?.matched_work_orders || 0);
+  const totalPending = (stats?.unmatched_contracts || 0) + (stats?.unmatched_work_orders || 0);
+  const syncRate = totalVistaRecords > 0 ? Math.round((totalSynced / totalVistaRecords) * 100) : 0;
   const totalReferenceRecords = (stats?.total_employees || 0) + (stats?.total_customers || 0) + (stats?.total_vendors || 0);
 
   return (
@@ -190,13 +214,15 @@ const VistaDataSettings: React.FC = () => {
           >
             Manage Links
           </button>
-          <button
-            className="sales-btn-primary"
-            onClick={() => autoMatchMutation.mutate()}
-            disabled={autoMatchMutation.isPending}
-          >
-            {autoMatchMutation.isPending ? 'Matching...' : 'Run Auto-Match'}
-          </button>
+          {totalPending > 0 && (
+            <button
+              className="sales-btn-primary"
+              onClick={() => autoMatchMutation.mutate()}
+              disabled={autoMatchMutation.isPending}
+            >
+              {autoMatchMutation.isPending ? 'Syncing...' : `Re-sync (${formatNumber(totalPending)} pending)`}
+            </button>
+          )}
         </div>
       </div>
 
@@ -229,17 +255,17 @@ const VistaDataSettings: React.FC = () => {
       {/* Stats Cards */}
       <div className="sales-kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="sales-kpi-card">
-          <div className="sales-kpi-label">Contracts & Work Orders</div>
-          <div className="sales-kpi-value">{formatNumber(totalLinkableRecords)}</div>
+          <div className="sales-kpi-label">Vista Records</div>
+          <div className="sales-kpi-value">{formatNumber(totalVistaRecords)}</div>
           <div className="sales-kpi-sublabel">
             {formatNumber(stats?.total_contracts)} contracts, {formatNumber(stats?.total_work_orders)} work orders
           </div>
         </div>
         <div className="sales-kpi-card">
-          <div className="sales-kpi-label">Match Rate</div>
-          <div className="sales-kpi-value">{matchRate}%</div>
+          <div className="sales-kpi-label">Sync Status</div>
+          <div className="sales-kpi-value">{syncRate}%</div>
           <div className="sales-kpi-sublabel">
-            {formatNumber(totalMatched)} matched, {formatNumber(totalUnmatched)} unmatched
+            {formatNumber(totalSynced)} synced{totalPending > 0 ? `, ${formatNumber(totalPending)} pending` : ''}
           </div>
         </div>
         <div className="sales-kpi-card">
@@ -372,10 +398,10 @@ const VistaDataSettings: React.FC = () => {
         `}</style>
         <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
           <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            <strong>Contracts:</strong> {formatNumber(stats?.total_contracts)} ({formatNumber(stats?.unmatched_contracts)} unmatched)
+            <strong>Contracts:</strong> {formatNumber(stats?.total_contracts)} ({formatNumber(stats?.matched_contracts)} synced)
           </div>
           <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            <strong>Work Orders:</strong> {formatNumber(stats?.total_work_orders)} ({formatNumber(stats?.unmatched_work_orders)} unmatched)
+            <strong>Work Orders:</strong> {formatNumber(stats?.total_work_orders)} ({formatNumber(stats?.matched_work_orders)} synced)
           </div>
           <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
             <strong>Employees:</strong> {formatNumber(stats?.total_employees)} ({formatNumber(stats?.active_employees)} active)
@@ -432,16 +458,25 @@ const VistaDataSettings: React.FC = () => {
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button
             className="sales-btn"
-            onClick={() => navigate('/settings/vista-data/linking?tab=contracts&filter=unmatched')}
+            onClick={() => navigate('/settings/vista-data/linking?tab=contracts')}
           >
-            Review Unmatched Contracts ({formatNumber(stats?.unmatched_contracts)})
+            View Contracts ({formatNumber(stats?.total_contracts)})
           </button>
           <button
             className="sales-btn"
-            onClick={() => navigate('/settings/vista-data/linking?tab=work-orders&filter=unmatched')}
+            onClick={() => navigate('/settings/vista-data/linking?tab=work-orders')}
           >
-            Review Unmatched Work Orders ({formatNumber(stats?.unmatched_work_orders)})
+            View Work Orders ({formatNumber(stats?.total_work_orders)})
           </button>
+          {totalPending > 0 && (
+            <button
+              className="sales-btn"
+              onClick={() => navigate('/settings/vista-data/linking?tab=contracts&filter=unmatched')}
+              style={{ color: '#f59e0b', borderColor: '#f59e0b' }}
+            >
+              Review Pending Sync ({formatNumber(totalPending)})
+            </button>
+          )}
         </div>
       </div>
     </div>

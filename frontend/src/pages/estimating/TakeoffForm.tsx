@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -100,8 +100,10 @@ interface LocalLineItem {
 const TakeoffForm: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
+  const takeoffType = searchParams.get('type') === 'traceover' ? 'traceover' : 'manual';
 
   // Header form
   const [form, setForm] = useState({
@@ -312,7 +314,7 @@ const TakeoffForm: React.FC = () => {
     }
     setSaving(true);
     try {
-      const takeoffData = {
+      const takeoffData: Record<string, any> = {
         name: form.name,
         description: form.description,
         estimate_id: form.estimate_id ? Number(form.estimate_id) : null,
@@ -320,6 +322,9 @@ const TakeoffForm: React.FC = () => {
         notes: form.notes,
         status: form.status,
       };
+      if (!isEdit) {
+        takeoffData.takeoff_type = takeoffType;
+      }
 
       let takeoffId: number;
 
@@ -385,7 +390,13 @@ const TakeoffForm: React.FC = () => {
 
       queryClient.invalidateQueries({ queryKey: ['takeoffs'] });
       queryClient.invalidateQueries({ queryKey: ['takeoff', id] });
-      navigate(`/estimating/takeoffs/${takeoffId}`);
+
+      // Traceover takeoffs go directly to the workspace; manual ones go to the detail page
+      if (!isEdit && takeoffType === 'traceover') {
+        navigate(`/estimating/takeoffs/${takeoffId}/workspace`);
+      } else {
+        navigate(`/estimating/takeoffs/${takeoffId}`);
+      }
     } catch (err) {
       console.error('Failed to save:', err);
       window.alert('Failed to save. Please try again.');
@@ -420,7 +431,7 @@ const TakeoffForm: React.FC = () => {
           <ArrowBackIcon />
         </button>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>
-          {isEdit ? 'Edit Takeoff' : 'New Takeoff'}
+          {isEdit ? 'Edit Takeoff' : takeoffType === 'traceover' ? 'New Traceover Takeoff' : 'New Takeoff'}
         </h1>
       </div>
 
@@ -498,8 +509,25 @@ const TakeoffForm: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick Add Section */}
-      <div style={{
+      {/* Traceover info — no manual quick-add needed */}
+      {takeoffType === 'traceover' && !isEdit && (
+        <div style={{
+          background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 12,
+          padding: '20px 24px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{ fontSize: 24 }}>&#128204;</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e40af', marginBottom: 2 }}>Traceover Takeoff</div>
+            <div style={{ fontSize: 13, color: '#374151' }}>
+              Fill in the name and settings above, then save. You'll be taken to the drawing workspace where you can upload PDFs and trace pipe runs.
+              Takeoff items will be generated automatically from your traceovers.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Section (manual takeoffs only) */}
+      {(takeoffType === 'manual' || isEdit) && <div style={{
         background: '#fff', border: '2px solid #3b82f6', borderRadius: 12,
         padding: 16, marginBottom: 16,
       }}>
@@ -676,10 +704,10 @@ const TakeoffForm: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* Items List */}
-      {lineItems.length > 0 ? (
+      {/* Items List (manual takeoffs only) */}
+      {(takeoffType === 'manual' || isEdit) && (lineItems.length > 0 ? (
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', marginBottom: 16 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -813,7 +841,7 @@ const TakeoffForm: React.FC = () => {
         }}>
           No items added yet. Use the quick add above to start building your takeoff.
         </div>
-      )}
+      ))}
 
       {/* Save Actions */}
       <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

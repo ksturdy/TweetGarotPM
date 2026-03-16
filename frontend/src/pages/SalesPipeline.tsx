@@ -67,7 +67,7 @@ const SalesPipeline: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('all');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
-  const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Lost', 'Passed']));
+  const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
 
@@ -734,7 +734,7 @@ const SalesPipeline: React.FC = () => {
       {/* Compact Header */}
       <div className="sales-page-header">
         <div className="sales-page-title">
-          <h1>Sales Pipeline</h1>
+          <h1>Sales Opportunities</h1>
         </div>
         <div className="sales-header-actions">
           <div className="sales-view-toggle">

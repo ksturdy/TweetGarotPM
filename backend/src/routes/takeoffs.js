@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { tenantContext, requireFeature } = require('../middleware/tenant');
 const Takeoff = require('../models/Takeoff');
 const ProductivityRate = require('../models/ProductivityRate');
+const ProjectSystem = require('../models/ProjectSystem');
 
 const router = express.Router();
 
@@ -80,7 +81,7 @@ router.get('/:id', async (req, res, next) => {
 // Create takeoff
 router.post('/', async (req, res, next) => {
   try {
-    const { name, description, estimate_id, performance_factor, notes } = req.body;
+    const { name, description, estimate_id, performance_factor, notes, takeoff_type, pipe_spec_id } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
     }
@@ -95,6 +96,8 @@ router.post('/', async (req, res, next) => {
       performanceFactor: performance_factor || 0,
       notes,
       createdBy: req.user.id,
+      takeoffType: takeoff_type,
+      pipeSpecId: pipe_spec_id,
     });
 
     res.status(201).json(takeoff);
@@ -225,6 +228,58 @@ router.delete('/:id/items/:itemId', async (req, res, next) => {
   try {
     await Takeoff.deleteItem(req.params.itemId);
     res.json({ message: 'Item deleted' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Project Systems (per-takeoff) ───
+
+router.get('/:id/systems', async (req, res, next) => {
+  try {
+    const systems = await ProjectSystem.findByTakeoff(req.params.id, req.tenantId);
+    res.json(systems);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/systems', async (req, res, next) => {
+  try {
+    const takeoff = await Takeoff.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!takeoff) {
+      return res.status(404).json({ error: 'Takeoff not found' });
+    }
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const system = await ProjectSystem.create(req.params.id, req.tenantId, req.body);
+    res.status(201).json(system);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/:id/systems/:sysId', async (req, res, next) => {
+  try {
+    const system = await ProjectSystem.update(req.params.sysId, req.tenantId, req.body);
+    if (!system) {
+      return res.status(404).json({ error: 'Project system not found' });
+    }
+    res.json(system);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id/systems/:sysId', async (req, res, next) => {
+  try {
+    const deleted = await ProjectSystem.delete(req.params.sysId, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Project system not found' });
+    }
+    res.json({ message: 'Project system deleted' });
   } catch (error) {
     next(error);
   }

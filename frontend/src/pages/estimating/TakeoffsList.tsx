@@ -5,12 +5,14 @@ import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { takeoffsApi, Takeoff } from '../../services/takeoffs';
+import NewTakeoffDialog from '../../components/estimates/NewTakeoffDialog';
 
 const TakeoffsList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNewDialog, setShowNewDialog] = useState(false);
 
   const { data: takeoffs = [], isLoading } = useQuery({
     queryKey: ['takeoffs', statusFilter, searchQuery],
@@ -32,7 +34,15 @@ const TakeoffsList: React.FC = () => {
     return { padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, ...(styles[status] || styles.draft) };
   };
 
+  const getTypeBadgeStyle = (type: string): React.CSSProperties => {
+    if (type === 'traceover') {
+      return { padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, background: '#f5f3ff', color: '#7c3aed' };
+    }
+    return { padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, background: '#eff6ff', color: '#1e40af' };
+  };
+
   const formatStatus = (status: string) => status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const formatType = (type: string) => type === 'traceover' ? 'Traceover' : 'Manual';
 
   const formatHours = (val: number) => {
     const n = Number(val || 0);
@@ -41,13 +51,22 @@ const TakeoffsList: React.FC = () => {
 
   const totalBaseHours = takeoffs.reduce((sum: number, t: Takeoff) => sum + Number(t.total_base_hours || 0), 0);
   const totalAdjustedHours = takeoffs.reduce((sum: number, t: Takeoff) => sum + Number(t.total_adjusted_hours || 0), 0);
-  const draftCount = takeoffs.filter((t: Takeoff) => t.status === 'draft').length;
   const completeCount = takeoffs.filter((t: Takeoff) => t.status === 'complete').length;
 
   const handleDelete = (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     if (window.confirm('Delete this takeoff?')) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleNewTakeoff = (type: 'manual' | 'traceover') => {
+    setShowNewDialog(false);
+    if (type === 'manual') {
+      navigate('/estimating/takeoffs/new');
+    } else {
+      // Traceover workspace — will navigate to workspace in Phase 4
+      navigate('/estimating/takeoffs/new?type=traceover');
     }
   };
 
@@ -60,7 +79,7 @@ const TakeoffsList: React.FC = () => {
           <p style={{ color: '#6b7280', margin: '4px 0 0', fontSize: 14 }}>Piping labor hour takeoffs with productivity rates</p>
         </div>
         <button
-          onClick={() => navigate('/estimating/takeoffs/new')}
+          onClick={() => setShowNewDialog(true)}
           style={{
             display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
             background: '#1a56db', color: '#fff', border: 'none', borderRadius: 8,
@@ -129,7 +148,7 @@ const TakeoffsList: React.FC = () => {
           <div style={{ fontSize: 18, fontWeight: 600, color: '#374151', marginBottom: 4 }}>No takeoffs yet</div>
           <div style={{ color: '#6b7280', marginBottom: 16 }}>Create your first piping takeoff to start estimating labor hours.</div>
           <button
-            onClick={() => navigate('/estimating/takeoffs/new')}
+            onClick={() => setShowNewDialog(true)}
             style={{
               padding: '10px 24px', background: '#1a56db', color: '#fff', border: 'none',
               borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',
@@ -145,6 +164,7 @@ const TakeoffsList: React.FC = () => {
               <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                 <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>TO #</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Name</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Type</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Items</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Base Hrs</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Adj Hrs</th>
@@ -166,6 +186,9 @@ const TakeoffsList: React.FC = () => {
                 >
                   <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{t.takeoff_number}</td>
                   <td style={{ padding: '12px 16px', fontSize: 14, fontWeight: 500, color: '#111827' }}>{t.name}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    <span style={getTypeBadgeStyle(t.takeoff_type || 'manual')}>{formatType(t.takeoff_type || 'manual')}</span>
+                  </td>
                   <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: 13, color: '#6b7280' }}>{t.total_items}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#374151' }}>{formatHours(t.total_base_hours)}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#10b981' }}>{formatHours(t.total_adjusted_hours)}</td>
@@ -195,6 +218,12 @@ const TakeoffsList: React.FC = () => {
           </table>
         </div>
       )}
+
+      <NewTakeoffDialog
+        open={showNewDialog}
+        onClose={() => setShowNewDialog(false)}
+        onSelect={handleNewTakeoff}
+      />
     </div>
   );
 };

@@ -7,6 +7,8 @@ export interface Takeoff {
   name: string;
   description: string;
   estimate_id: number | null;
+  pipe_spec_id: number | null;
+  takeoff_type: 'manual' | 'traceover';
   performance_factor: number;
   total_base_hours: number;
   total_adjusted_hours: number;

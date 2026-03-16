@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { takeoffsApi, Takeoff, TakeoffItem } from '../../services/takeoffs';
 
 const FITTING_LABELS: Record<string, string> = {
@@ -50,6 +51,7 @@ const TakeoffDetail: React.FC = () => {
     return <div style={{ padding: 40, textAlign: 'center', color: '#ef4444' }}>Takeoff not found.</div>;
   }
 
+  const isTraceover = takeoff.takeoff_type === 'traceover';
   const items: TakeoffItem[] = takeoff.items || [];
   const totalBaseHours = items.reduce((sum, i) => sum + Number(i.base_hours_total || 0), 0);
   const totalAdjustedHours = items.reduce((sum, i) => sum + Number(i.adjusted_hours || 0), 0);
@@ -80,11 +82,26 @@ const TakeoffDetail: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: '#1e40af' }}>{takeoff.takeoff_number}</span>
               <span style={getStatusBadgeStyle(takeoff.status)}>{formatStatus(takeoff.status)}</span>
+              {isTraceover && (
+                <span style={{ padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, background: '#f5f3ff', color: '#7c3aed' }}>
+                  Traceover
+                </span>
+              )}
             </div>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: '4px 0 0' }}>{takeoff.name}</h1>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {isTraceover && (
+            <button onClick={() => navigate(`/estimating/takeoffs/${id}/workspace`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
+                border: '1px solid #93c5fd', borderRadius: 8, background: '#eff6ff',
+                color: '#1e40af', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}>
+              <OpenInNewIcon style={{ fontSize: 16 }} /> Open Workspace
+            </button>
+          )}
           <button onClick={() => navigate(`/estimating/takeoffs/${id}/edit`)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
@@ -218,7 +235,9 @@ const TakeoffDetail: React.FC = () => {
           textAlign: 'center', padding: '40px 20px', background: '#fff',
           borderRadius: 12, border: '1px solid #e5e7eb', color: '#9ca3af', fontSize: 14,
         }}>
-          No items in this takeoff.
+          {isTraceover
+            ? 'No items generated yet. Open the workspace to trace pipe runs.'
+            : 'No items in this takeoff.'}
         </div>
       )}
     </div>

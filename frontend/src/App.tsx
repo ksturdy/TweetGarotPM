@@ -146,6 +146,8 @@ import FieldFavoriteVendors from './pages/field/vendors/FieldFavoriteVendors';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
+// Traceover module (lazy-loaded)
+const TraceoverWorkspace = React.lazy(() => import('./modules/traceover/pages/TraceoverWorkspace'));
 // Platform Admin pages
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantList from './pages/platform/TenantList';
@@ -319,6 +321,18 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/more" element={<FieldMoreHome />} />
           <Route path="projects/:projectId/more/vendors" element={<FieldFavoriteVendors />} />
         </Route>
+
+        {/* Traceover workspace — standalone layout (no main Layout wrapper) */}
+        <Route
+          path="/estimating/takeoffs/:id/workspace"
+          element={
+            <PrivateRoute>
+              <React.Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a1628', color: '#7a9ab5' }}>Loading workspace...</div>}>
+                <TraceoverWorkspace />
+              </React.Suspense>
+            </PrivateRoute>
+          }
+        />
 
         {/* Protected app routes */}
         <Route

@@ -1,0 +1,45 @@
+-- Restore grooved, threaded, and soldered pipe rates that were deleted by migration 131
+-- Source: Piping Productivity Rates.xlsx
+
+INSERT INTO piping_productivity_rates (tenant_id, fitting_type, join_type, pipe_diameter, hours_per_unit, unit) VALUES
+-- Grooved Pipe
+(1, 'pipe', 'grooved', '3/4"', 0.08, 'LF'),
+(1, 'pipe', 'grooved', '1"', 0.09, 'LF'),
+(1, 'pipe', 'grooved', '1-1/4"', 0.10, 'LF'),
+(1, 'pipe', 'grooved', '1-1/2"', 0.10, 'LF'),
+(1, 'pipe', 'grooved', '2"', 0.12, 'LF'),
+(1, 'pipe', 'grooved', '2-1/2"', 0.16, 'LF'),
+(1, 'pipe', 'grooved', '3"', 0.19, 'LF'),
+(1, 'pipe', 'grooved', '4"', 0.25, 'LF'),
+(1, 'pipe', 'grooved', '5"', 0.30, 'LF'),
+(1, 'pipe', 'grooved', '6"', 0.34, 'LF'),
+(1, 'pipe', 'grooved', '8"', 0.42, 'LF'),
+(1, 'pipe', 'grooved', '10"', 0.52, 'LF'),
+(1, 'pipe', 'grooved', '12"', 0.59, 'LF'),
+(1, 'pipe', 'grooved', '14"', 0.60, 'LF'),
+(1, 'pipe', 'grooved', '16"', 0.62, 'LF'),
+-- Threaded Pipe
+(1, 'pipe', 'threaded', '1/2"', 0.07, 'LF'),
+(1, 'pipe', 'threaded', '3/4"', 0.08, 'LF'),
+(1, 'pipe', 'threaded', '1"', 0.09, 'LF'),
+(1, 'pipe', 'threaded', '1-1/4"', 0.10, 'LF'),
+(1, 'pipe', 'threaded', '1-1/2"', 0.11, 'LF'),
+(1, 'pipe', 'threaded', '2"', 0.13, 'LF'),
+(1, 'pipe', 'threaded', '2-1/2"', 0.18, 'LF'),
+(1, 'pipe', 'threaded', '3"', 0.22, 'LF'),
+(1, 'pipe', 'threaded', '4"', 0.29, 'LF'),
+(1, 'pipe', 'threaded', '5"', 0.38, 'LF'),
+(1, 'pipe', 'threaded', '6"', 0.44, 'LF'),
+(1, 'pipe', 'threaded', '8"', 0.55, 'LF'),
+(1, 'pipe', 'threaded', '10"', 0.69, 'LF'),
+(1, 'pipe', 'threaded', '12"', 0.80, 'LF'),
+-- Soldered Pipe (Copper)
+(1, 'pipe', 'soldered', '1/2"', 0.06, 'LF'),
+(1, 'pipe', 'soldered', '3/4"', 0.06, 'LF'),
+(1, 'pipe', 'soldered', '1"', 0.07, 'LF'),
+(1, 'pipe', 'soldered', '1-1/4"', 0.08, 'LF'),
+(1, 'pipe', 'soldered', '1-1/2"', 0.08, 'LF'),
+(1, 'pipe', 'soldered', '2"', 0.09, 'LF'),
+(1, 'pipe', 'soldered', '2-1/2"', 0.12, 'LF'),
+(1, 'pipe', 'soldered', '3"', 0.14, 'LF'),
+(1, 'pipe', 'soldered', '4"', 0.18, 'LF');

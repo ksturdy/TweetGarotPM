@@ -2200,11 +2200,30 @@ const VistaData = {
     }
   },
 
+  // Map Vista contract status to valid Titan project status
+  // Valid: 'active', 'on_hold', 'completed', 'cancelled', 'Open', 'Soft-Closed', 'Hard-Closed'
+  _mapVistaStatusToProjectStatus(vistaStatus) {
+    if (!vistaStatus || vistaStatus.trim() === '') return 'Open';
+    const s = vistaStatus.trim().toLowerCase();
+    // Exact matches (case-insensitive)
+    if (s === 'open' || s === '1' || s === '1-open') return 'Open';
+    if (s === 'soft-closed' || s === 'soft closed' || s === '2' || s === '2-soft closed' || s === 'softclosed') return 'Soft-Closed';
+    if (s === 'hard-closed' || s === 'hard closed' || s === '3' || s === '3-hard closed' || s === 'hardclosed' || s === 'closed') return 'Hard-Closed';
+    if (s === 'active') return 'Open';
+    if (s === 'on_hold' || s === 'on hold') return 'on_hold';
+    if (s === 'completed' || s === 'complete') return 'completed';
+    if (s === 'cancelled' || s === 'canceled') return 'cancelled';
+    // Fallback — anything unrecognized defaults to Open
+    return 'Open';
+  },
+
   // Import unmatched VP contracts as new Titan projects
   async importUnmatchedContractsToTitan(tenantId, userId) {
     const client = await db.getClient();
     let imported = 0;
+    let updated = 0;
     const results = [];
+    const errors = [];
 
     try {
       await client.query('BEGIN');
@@ -2221,72 +2240,91 @@ const VistaData = {
       );
 
       for (const vpContract of unlinked.rows) {
-        // Look up the employee by employee_number to set as project manager
-        // First check employees table directly, then fall back to vp_employees link
-        let managerId = null;
-        if (vpContract.employee_number) {
-          const employeeResult = await client.query(
-            `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
-            [tenantId, String(vpContract.employee_number)]
-          );
-          if (employeeResult.rows.length > 0) {
-            managerId = employeeResult.rows[0].id;
-          } else {
-            // Fall back to vp_employees linked_employee_id
-            const vpEmpResult = await client.query(
-              `SELECT linked_employee_id FROM vp_employees
-               WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
-              [Number(vpContract.employee_number)]
+        try {
+          // Look up the employee by employee_number to set as project manager
+          let managerId = null;
+          if (vpContract.employee_number) {
+            const employeeResult = await client.query(
+              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
+              [tenantId, String(vpContract.employee_number)]
             );
-            if (vpEmpResult.rows.length > 0) {
-              managerId = vpEmpResult.rows[0].linked_employee_id;
+            if (employeeResult.rows.length > 0) {
+              managerId = employeeResult.rows[0].id;
+            } else {
+              // Fall back to vp_employees linked_employee_id
+              const vpEmpResult = await client.query(
+                `SELECT linked_employee_id FROM vp_employees
+                 WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
+                [Number(vpContract.employee_number)]
+              );
+              if (vpEmpResult.rows.length > 0) {
+                managerId = vpEmpResult.rows[0].linked_employee_id;
+              }
             }
           }
+
+          // Map VP status to valid Titan project status
+          const projectStatus = this._mapVistaStatusToProjectStatus(vpContract.status);
+
+          // Create or update Titan project — ON CONFLICT updates if number already exists
+          const newProject = await client.query(
+            `INSERT INTO projects (
+              tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (tenant_id, number) DO UPDATE SET
+              name = EXCLUDED.name,
+              client = EXCLUDED.client,
+              status = EXCLUDED.status,
+              manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
+              department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING id, (xmax = 0) as is_new`,
+            [
+              tenantId,
+              vpContract.contract_number || '',
+              vpContract.description || vpContract.contract_number || 'Imported Contract',
+              vpContract.customer_name || 'Unknown Client',
+              projectStatus,
+              managerId,
+              vpContract.linked_department_id || null
+            ]
+          );
+
+          const projectId = newProject.rows[0].id;
+          const isNew = newProject.rows[0].is_new;
+
+          // Link the VP contract to the Titan project
+          await client.query(
+            `UPDATE vp_contracts SET
+              linked_project_id = $1,
+              link_status = 'auto_matched',
+              link_confidence = 1.0,
+              linked_at = CURRENT_TIMESTAMP,
+              linked_by = $2
+            WHERE id = $3`,
+            [projectId, userId, vpContract.id]
+          );
+
+          if (isNew) {
+            imported++;
+          } else {
+            updated++;
+          }
+          results.push({
+            vp_id: vpContract.id,
+            titan_id: projectId,
+            name: vpContract.description || vpContract.contract_number,
+            action: isNew ? 'created' : 'updated'
+          });
+        } catch (rowError) {
+          // Log per-row errors but continue processing remaining contracts
+          console.error(`[Vista Import] Failed to import contract ${vpContract.contract_number}: ${rowError.message}`);
+          errors.push({ contract_number: vpContract.contract_number, error: rowError.message });
         }
-
-        // Map VP status to Titan status (default to 'Open' if empty)
-        const projectStatus = vpContract.status && vpContract.status.trim() !== ''
-          ? vpContract.status
-          : 'Open';
-
-        // Create new Titan project with manager_id, department_id, and VP status
-        const newProject = await client.query(
-          `INSERT INTO projects (
-            tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          RETURNING id`,
-          [
-            tenantId,
-            vpContract.contract_number || '',
-            vpContract.description || vpContract.contract_number || 'Imported Contract',
-            vpContract.customer_name || 'Unknown Client',
-            projectStatus,
-            managerId,
-            vpContract.linked_department_id || null
-          ]
-        );
-
-        // Link the VP contract to the new Titan project
-        await client.query(
-          `UPDATE vp_contracts SET
-            linked_project_id = $1,
-            link_status = 'manual_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [newProject.rows[0].id, userId, vpContract.id]
-        );
-
-        imported++;
-        results.push({
-          vp_id: vpContract.id,
-          titan_id: newProject.rows[0].id,
-          name: vpContract.description || vpContract.contract_number
-        });
       }
 
       await client.query('COMMIT');
-      return { imported, total: unlinked.rows.length, results };
+      return { imported, updated, total: unlinked.rows.length, results, errors };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -2299,7 +2337,9 @@ const VistaData = {
   async importUnmatchedWorkOrdersToTitan(tenantId, userId) {
     const client = await db.getClient();
     let imported = 0;
+    let updated = 0;
     const results = [];
+    const errors = [];
 
     try {
       await client.query('BEGIN');
@@ -2315,71 +2355,88 @@ const VistaData = {
       );
 
       for (const vpWorkOrder of unlinked.rows) {
-        // Look up the employee by employee_number to set as project manager
-        // First check employees table directly, then fall back to vp_employees link
-        let managerId = null;
-        if (vpWorkOrder.employee_number) {
-          const employeeResult = await client.query(
-            `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
-            [tenantId, String(vpWorkOrder.employee_number)]
-          );
-          if (employeeResult.rows.length > 0) {
-            managerId = employeeResult.rows[0].id;
-          } else {
-            // Fall back to vp_employees linked_employee_id
-            const vpEmpResult = await client.query(
-              `SELECT linked_employee_id FROM vp_employees
-               WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
-              [Number(vpWorkOrder.employee_number)]
+        try {
+          // Look up the employee by employee_number to set as project manager
+          let managerId = null;
+          if (vpWorkOrder.employee_number) {
+            const employeeResult = await client.query(
+              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
+              [tenantId, String(vpWorkOrder.employee_number)]
             );
-            if (vpEmpResult.rows.length > 0) {
-              managerId = vpEmpResult.rows[0].linked_employee_id;
+            if (employeeResult.rows.length > 0) {
+              managerId = employeeResult.rows[0].id;
+            } else {
+              const vpEmpResult = await client.query(
+                `SELECT linked_employee_id FROM vp_employees
+                 WHERE employee_number = $1 AND linked_employee_id IS NOT NULL LIMIT 1`,
+                [Number(vpWorkOrder.employee_number)]
+              );
+              if (vpEmpResult.rows.length > 0) {
+                managerId = vpEmpResult.rows[0].linked_employee_id;
+              }
             }
           }
+
+          // Map VP status to valid Titan project status
+          const projectStatus = this._mapVistaStatusToProjectStatus(vpWorkOrder.status);
+
+          // Create or update Titan project with WO- prefix, ON CONFLICT handles duplicates
+          const newProject = await client.query(
+            `INSERT INTO projects (
+              tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (tenant_id, number) DO UPDATE SET
+              name = EXCLUDED.name,
+              client = EXCLUDED.client,
+              status = EXCLUDED.status,
+              manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
+              department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING id, (xmax = 0) as is_new`,
+            [
+              tenantId,
+              'WO-' + (vpWorkOrder.work_order_number || ''),
+              vpWorkOrder.description || 'Work Order ' + (vpWorkOrder.work_order_number || 'Imported'),
+              vpWorkOrder.customer_name || 'Unknown Client',
+              projectStatus,
+              managerId,
+              vpWorkOrder.linked_department_id || null
+            ]
+          );
+
+          const projectId = newProject.rows[0].id;
+          const isNew = newProject.rows[0].is_new;
+
+          // Link the VP work order to the Titan project
+          await client.query(
+            `UPDATE vp_work_orders SET
+              link_status = 'auto_matched',
+              link_confidence = 1.0,
+              linked_at = CURRENT_TIMESTAMP,
+              linked_by = $1
+            WHERE id = $2`,
+            [userId, vpWorkOrder.id]
+          );
+
+          if (isNew) {
+            imported++;
+          } else {
+            updated++;
+          }
+          results.push({
+            vp_id: vpWorkOrder.id,
+            titan_id: projectId,
+            name: vpWorkOrder.description || vpWorkOrder.work_order_number,
+            action: isNew ? 'created' : 'updated'
+          });
+        } catch (rowError) {
+          console.error(`[Vista Import] Failed to import work order ${vpWorkOrder.work_order_number}: ${rowError.message}`);
+          errors.push({ work_order_number: vpWorkOrder.work_order_number, error: rowError.message });
         }
-
-        // Map VP status to Titan status (default to 'Open' if empty)
-        const projectStatus = vpWorkOrder.status && vpWorkOrder.status.trim() !== ''
-          ? vpWorkOrder.status
-          : 'Open';
-
-        // Create new Titan project with WO- prefix
-        const newProject = await client.query(
-          `INSERT INTO projects (
-            tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          RETURNING id`,
-          [
-            tenantId,
-            'WO-' + (vpWorkOrder.work_order_number || ''),
-            vpWorkOrder.description || 'Work Order ' + vpWorkOrder.work_order_number || 'Imported Work Order',
-            vpWorkOrder.customer_name || 'Unknown Client',
-            projectStatus,
-            managerId,
-            vpWorkOrder.linked_department_id || null
-          ]
-        );
-
-        // Link the VP work order to the new Titan project (we'll use a new column or just mark as manual_matched)
-        await client.query(
-          `UPDATE vp_work_orders SET
-            link_status = 'manual_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $1
-          WHERE id = $2`,
-          [userId, vpWorkOrder.id]
-        );
-
-        imported++;
-        results.push({
-          vp_id: vpWorkOrder.id,
-          titan_id: newProject.rows[0].id,
-          name: vpWorkOrder.description || vpWorkOrder.work_order_number
-        });
       }
 
       await client.query('COMMIT');
-      return { imported, total: unlinked.rows.length, results };
+      return { imported, updated, total: unlinked.rows.length, results, errors };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

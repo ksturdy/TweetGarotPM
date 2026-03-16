@@ -744,7 +744,15 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log('[Vista Import] Auto-importing contracts as projects...');
         const contractResult = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
         autoImport.contracts = contractResult;
-        console.log(`[Vista Import] Auto-imported ${contractResult.imported} contracts as projects`);
+        console.log(`[Vista Import] Auto-imported ${contractResult.imported} contracts as projects (${contractResult.updated || 0} updated, ${(contractResult.errors || []).length} errors)`);
+      }
+
+      // Auto-import work orders as projects (only those NOT already linked)
+      if (results.workOrders.total > 0) {
+        console.log('[Vista Import] Auto-importing work orders as projects...');
+        const woResult = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id);
+        autoImport.workOrders = woResult;
+        console.log(`[Vista Import] Auto-imported ${woResult.imported} work orders as projects (${woResult.updated || 0} updated, ${(woResult.errors || []).length} errors)`);
       }
 
       // Auto-import customers (only those not linked)
@@ -784,8 +792,8 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${vendorResult.imported} vendors`);
       }
     } catch (autoImportError) {
-      console.error('[Vista Import] Auto-import error:', autoImportError.message);
-      // Don't fail the whole upload if auto-import fails
+      console.error('[Vista Import] Auto-import error:', autoImportError.message, autoImportError.stack);
+      autoImport.error = autoImportError.message;
     }
 
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -817,16 +825,43 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
   }
 });
 
-// POST /api/vista/import/auto-match - Run auto-matching on unmatched records
+// POST /api/vista/import/auto-match - Re-sync: auto-link + auto-import any remaining unmatched records
 router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
   try {
-    const contractResults = await VistaData.autoMatchContracts(req.tenantId);
-    const workOrderResults = await VistaData.autoMatchWorkOrders(req.tenantId);
+    // Step 1: Auto-link exact matches
+    const contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
+    const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
+    const employeeLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
+    const vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
+
+    // Step 2: Auto-import anything still unmatched
+    const contractImport = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
+    const woImport = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id);
+    const customerImport = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
+    const deptImport = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id);
+    const deptLinkResult = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id);
+    const employeeImport = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id);
+    const vendorImport = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);
 
     res.json({
-      message: 'Auto-matching completed',
-      contracts: contractResults,
-      workOrders: workOrderResults
+      message: 'Re-sync completed',
+      linked: {
+        contracts: contractLinkResult.contracts_linked || 0,
+        customers: customerLinkResult.customers_linked || 0,
+        employees: employeeLinkResult.employees_linked || 0,
+        vendors: vendorLinkResult.vendors_linked || 0,
+        departments: deptLinkResult.codes_linked || 0,
+      },
+      imported: {
+        contracts: contractImport.imported || 0,
+        workOrders: woImport.imported || 0,
+        customers: customerImport.imported || 0,
+        employees: employeeImport.imported || 0,
+        vendors: vendorImport.imported || 0,
+        departments: deptImport.imported || 0,
+      },
+      contracts: { matched: (contractLinkResult.contracts_linked || 0) + (contractImport.imported || 0) },
+      workOrders: { matched: (woImport.imported || 0) }
     });
   } catch (error) {
     next(error);

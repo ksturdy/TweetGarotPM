@@ -88,6 +88,12 @@ const projectAssignmentRoutes = require('./routes/projectAssignments');
 const fieldIssueRoutes = require('./routes/fieldIssues');
 const notificationRoutes = require('./routes/notifications');
 const takeoffRoutes = require('./routes/takeoffs');
+const pipeSpecRoutes = require('./routes/pipeSpecs');
+const rateTableRoutes = require('./routes/rateTables');
+const pipingServiceRoutes = require('./routes/pipingServices');
+const traceoverDocumentRoutes = require('./routes/traceoverDocuments');
+const traceoverRunRoutes = require('./routes/traceoverRuns');
+const { templateRouter: assemblyTemplateRoutes, instanceRouter: assemblyInstanceRoutes } = require('./routes/assemblyTemplates');
 const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
 
@@ -209,6 +215,13 @@ app.use('/api/project-assignments', projectAssignmentRoutes);
 app.use('/api/field-issues', fieldIssueRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/takeoffs', takeoffRoutes);
+app.use('/api/takeoffs/:takeoffId/documents', traceoverDocumentRoutes);
+app.use('/api/takeoffs/:takeoffId/runs', traceoverRunRoutes);
+app.use('/api/takeoffs/:takeoffId/assemblies', assemblyInstanceRoutes);
+app.use('/api/assembly-templates', assemblyTemplateRoutes);
+app.use('/api/pipe-specs', pipeSpecRoutes);
+app.use('/api/rate-tables', rateTableRoutes);
+app.use('/api/piping-services', pipingServiceRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
 

@@ -228,6 +228,22 @@ export interface ImportResult {
   customers: { total: number; new: number; updated: number; batch_id: number | null };
   vendors: { total: number; new: number; updated: number; batch_id: number | null };
   facilities?: { total: number; created: number; updated: number; not_found: number; not_found_names?: string[] };
+  autoImport?: {
+    contracts?: { imported: number; updated?: number; errors?: { contract_number: string; error: string }[] };
+    workOrders?: { imported: number; updated?: number; errors?: { work_order_number: string; error: string }[] };
+    employees?: { imported: number };
+    customers?: { imported: number };
+    vendors?: { imported: number };
+    departments?: { imported: number };
+    error?: string;
+  };
+  autoLink?: {
+    contracts?: { contracts_linked: number };
+    customers?: { customers_linked: number };
+    employees?: { employees_linked: number };
+    vendors?: { vendors_linked: number };
+    departments?: { codes_linked: number };
+  };
   sheetsFound: string[];
   sheetsProcessed: string[];
 }
