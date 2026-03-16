@@ -1532,54 +1532,62 @@ const VistaData = {
       );
 
       for (const vpEmp of unlinked.rows) {
-        // Generate email as firstname.lastname@tweetgarot.com
-        const firstName = (vpEmp.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const lastName = (vpEmp.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        let email = `${firstName}.${lastName}@tweetgarot.com`;
+        await client.query('SAVEPOINT import_emp_row');
+        try {
+          // Generate email as firstname.lastname@tweetgarot.com
+          const firstName = (vpEmp.first_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+          const lastName = (vpEmp.last_name || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+          let email = `${firstName}.${lastName}@tweetgarot.com`;
 
-        // Check for duplicate email and append employee number if needed
-        const existing = await client.query(
-          `SELECT id FROM employees WHERE email = $1 AND tenant_id = $2`,
-          [email, tenantId]
-        );
-        if (existing.rows.length > 0) {
-          email = `${firstName}.${lastName}${vpEmp.employee_number || vpEmp.id}@tweetgarot.com`;
+          // Check for duplicate email and append employee number if needed
+          const existing = await client.query(
+            `SELECT id FROM employees WHERE email = $1 AND tenant_id = $2`,
+            [email, tenantId]
+          );
+          if (existing.rows.length > 0) {
+            email = `${firstName}.${lastName}${vpEmp.employee_number || vpEmp.id}@tweetgarot.com`;
+          }
+
+          // Create new Titan employee
+          const newEmployee = await client.query(
+            `INSERT INTO employees (
+              tenant_id, employee_number, first_name, last_name, email, hire_date, employment_status, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id`,
+            [
+              tenantId,
+              vpEmp.employee_number ? String(vpEmp.employee_number) : null,
+              vpEmp.first_name || '',
+              vpEmp.last_name || '',
+              email,
+              vpEmp.hire_date,
+              vpEmp.active ? 'active' : 'inactive'
+            ]
+          );
+
+          // Link the VP employee to the new Titan employee
+          await client.query(
+            `UPDATE vp_employees SET
+              linked_employee_id = $1,
+              link_status = 'manual_matched',
+              linked_at = CURRENT_TIMESTAMP,
+              linked_by = $2
+            WHERE id = $3`,
+            [newEmployee.rows[0].id, userId, vpEmp.id]
+          );
+
+          await client.query('RELEASE SAVEPOINT import_emp_row');
+
+          imported++;
+          results.push({
+            vp_id: vpEmp.id,
+            titan_id: newEmployee.rows[0].id,
+            name: `${vpEmp.first_name} ${vpEmp.last_name}`.trim()
+          });
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT import_emp_row');
+          console.error(`[Vista Import] Failed to import employee ${vpEmp.first_name} ${vpEmp.last_name}: ${rowError.message}`);
         }
-
-        // Create new Titan employee
-        const newEmployee = await client.query(
-          `INSERT INTO employees (
-            tenant_id, employee_number, first_name, last_name, email, hire_date, employment_status, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          RETURNING id`,
-          [
-            tenantId,
-            vpEmp.employee_number ? String(vpEmp.employee_number) : null,
-            vpEmp.first_name || '',
-            vpEmp.last_name || '',
-            email,
-            vpEmp.hire_date,
-            vpEmp.active ? 'active' : 'inactive'
-          ]
-        );
-
-        // Link the VP employee to the new Titan employee
-        await client.query(
-          `UPDATE vp_employees SET
-            linked_employee_id = $1,
-            link_status = 'manual_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [newEmployee.rows[0].id, userId, vpEmp.id]
-        );
-
-        imported++;
-        results.push({
-          vp_id: vpEmp.id,
-          titan_id: newEmployee.rows[0].id,
-          name: `${vpEmp.first_name} ${vpEmp.last_name}`.trim()
-        });
       }
 
       await client.query('COMMIT');
@@ -1610,40 +1618,48 @@ const VistaData = {
       );
 
       for (const vpCust of unlinked.rows) {
-        // Create new Titan customer (using VP name as customer_owner - facility/location comes from separate import)
-        const newCustomer = await client.query(
-          `INSERT INTO customers (
-            tenant_id, customer_owner, customer_facility, address, city, state, zip_code, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          RETURNING id`,
-          [
-            tenantId,
-            vpCust.name || 'Unknown',
-            null, // Facility/location populated via separate facilities import
-            vpCust.address || '',
-            vpCust.city || '',
-            vpCust.state || '',
-            vpCust.zip || ''
-          ]
-        );
+        await client.query('SAVEPOINT import_cust_row');
+        try {
+          // Create new Titan customer (using VP name as customer_owner - facility/location comes from separate import)
+          const newCustomer = await client.query(
+            `INSERT INTO customers (
+              tenant_id, customer_owner, customer_facility, address, city, state, zip_code, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            RETURNING id`,
+            [
+              tenantId,
+              vpCust.name || 'Unknown',
+              null, // Facility/location populated via separate facilities import
+              vpCust.address || '',
+              vpCust.city || '',
+              vpCust.state || '',
+              vpCust.zip || ''
+            ]
+          );
 
-        // Link the VP customer to the new Titan customer
-        await client.query(
-          `UPDATE vp_customers SET
-            linked_customer_id = $1,
-            link_status = 'manual_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [newCustomer.rows[0].id, userId, vpCust.id]
-        );
+          // Link the VP customer to the new Titan customer
+          await client.query(
+            `UPDATE vp_customers SET
+              linked_customer_id = $1,
+              link_status = 'manual_matched',
+              linked_at = CURRENT_TIMESTAMP,
+              linked_by = $2
+            WHERE id = $3`,
+            [newCustomer.rows[0].id, userId, vpCust.id]
+          );
 
-        imported++;
-        results.push({
-          vp_id: vpCust.id,
-          titan_id: newCustomer.rows[0].id,
-          name: vpCust.name
-        });
+          await client.query('RELEASE SAVEPOINT import_cust_row');
+
+          imported++;
+          results.push({
+            vp_id: vpCust.id,
+            titan_id: newCustomer.rows[0].id,
+            name: vpCust.name
+          });
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT import_cust_row');
+          console.error(`[Vista Import] Failed to import customer ${vpCust.name}: ${rowError.message}`);
+        }
       }
 
       await client.query('COMMIT');
@@ -2152,42 +2168,50 @@ const VistaData = {
       );
 
       for (const vpVendor of unlinked.rows) {
-        // Create new Titan vendor
-        const newVendor = await client.query(
-          `INSERT INTO vendors (
-            vendor_name, company_name, address_line1, address_line2, city, state, zip_code, status, created_at, updated_at, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9)
-          RETURNING id`,
-          [
-            vpVendor.name || 'Unknown',
-            vpVendor.name || 'Unknown',
-            vpVendor.address || '',
-            vpVendor.address2 || '',
-            vpVendor.city || '',
-            vpVendor.state || '',
-            vpVendor.zip || '',
-            vpVendor.active ? 'active' : 'inactive',
-            userId
-          ]
-        );
+        await client.query('SAVEPOINT import_vendor_row');
+        try {
+          // Create new Titan vendor
+          const newVendor = await client.query(
+            `INSERT INTO vendors (
+              vendor_name, company_name, address_line1, address_line2, city, state, zip_code, status, created_at, updated_at, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $9)
+            RETURNING id`,
+            [
+              vpVendor.name || 'Unknown',
+              vpVendor.name || 'Unknown',
+              vpVendor.address || '',
+              vpVendor.address2 || '',
+              vpVendor.city || '',
+              vpVendor.state || '',
+              vpVendor.zip || '',
+              vpVendor.active ? 'active' : 'inactive',
+              userId
+            ]
+          );
 
-        // Link the VP vendor to the new Titan vendor
-        await client.query(
-          `UPDATE vp_vendors SET
-            linked_vendor_id = $1,
-            link_status = 'manual_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [newVendor.rows[0].id, userId, vpVendor.id]
-        );
+          // Link the VP vendor to the new Titan vendor
+          await client.query(
+            `UPDATE vp_vendors SET
+              linked_vendor_id = $1,
+              link_status = 'manual_matched',
+              linked_at = CURRENT_TIMESTAMP,
+              linked_by = $2
+            WHERE id = $3`,
+            [newVendor.rows[0].id, userId, vpVendor.id]
+          );
 
-        imported++;
-        results.push({
-          vp_id: vpVendor.id,
-          titan_id: newVendor.rows[0].id,
-          name: vpVendor.name
-        });
+          await client.query('RELEASE SAVEPOINT import_vendor_row');
+
+          imported++;
+          results.push({
+            vp_id: vpVendor.id,
+            titan_id: newVendor.rows[0].id,
+            name: vpVendor.name
+          });
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT import_vendor_row');
+          console.error(`[Vista Import] Failed to import vendor ${vpVendor.name}: ${rowError.message}`);
+        }
       }
 
       await client.query('COMMIT');
@@ -2231,7 +2255,8 @@ const VistaData = {
       // Get all unlinked VP contracts (including orphaned auto_matched ones without actual project links)
       const unlinked = await client.query(
         `SELECT id, contract_number, description, customer_name, department_code,
-                contract_amount, status, employee_number, project_manager_name, linked_department_id
+                contract_amount, gross_profit_percent, backlog,
+                status, employee_number, project_manager_name, linked_department_id, link_status
          FROM vp_contracts
          WHERE tenant_id = $1 AND linked_project_id IS NULL
            AND (link_status = 'unmatched' OR link_status = 'auto_matched')
@@ -2239,7 +2264,14 @@ const VistaData = {
         [tenantId]
       );
 
+      console.log(`[Vista Import] Found ${unlinked.rows.length} unlinked contracts to auto-import`);
+      if (unlinked.rows.length > 0) {
+        console.log(`[Vista Import] Contract numbers: ${unlinked.rows.map(r => r.contract_number).join(', ')}`);
+      }
+
       for (const vpContract of unlinked.rows) {
+        // Use SAVEPOINT so a single row failure doesn't abort the entire transaction
+        await client.query('SAVEPOINT import_contract_row');
         try {
           // Look up the employee by employee_number to set as project manager
           let managerId = null;
@@ -2266,27 +2298,40 @@ const VistaData = {
           // Map VP status to valid Titan project status
           const projectStatus = this._mapVistaStatusToProjectStatus(vpContract.status);
 
+          // Truncate strings to fit VARCHAR constraints
+          const projectNumber = (vpContract.contract_number || '').substring(0, 50);
+          const projectName = (vpContract.description || vpContract.contract_number || 'Imported Contract').substring(0, 255);
+          const projectClient = (vpContract.customer_name || 'Unknown Client').substring(0, 255);
+
           // Create or update Titan project — ON CONFLICT updates if number already exists
           const newProject = await client.query(
             `INSERT INTO projects (
-              tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              tenant_id, number, name, client, status, manager_id, department_id,
+              contract_value, gross_margin_percent, backlog,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
               status = EXCLUDED.status,
               manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
               department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
+              contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
+              gross_margin_percent = COALESCE(EXCLUDED.gross_margin_percent, projects.gross_margin_percent),
+              backlog = COALESCE(EXCLUDED.backlog, projects.backlog),
               updated_at = CURRENT_TIMESTAMP
             RETURNING id, (xmax = 0) as is_new`,
             [
               tenantId,
-              vpContract.contract_number || '',
-              vpContract.description || vpContract.contract_number || 'Imported Contract',
-              vpContract.customer_name || 'Unknown Client',
+              projectNumber,
+              projectName,
+              projectClient,
               projectStatus,
               managerId,
-              vpContract.linked_department_id || null
+              vpContract.linked_department_id || null,
+              vpContract.contract_amount || null,
+              vpContract.gross_profit_percent || null,
+              vpContract.backlog || null
             ]
           );
 
@@ -2305,6 +2350,8 @@ const VistaData = {
             [projectId, userId, vpContract.id]
           );
 
+          await client.query('RELEASE SAVEPOINT import_contract_row');
+
           if (isNew) {
             imported++;
           } else {
@@ -2317,7 +2364,8 @@ const VistaData = {
             action: isNew ? 'created' : 'updated'
           });
         } catch (rowError) {
-          // Log per-row errors but continue processing remaining contracts
+          // Rollback to savepoint so the transaction stays valid for remaining rows
+          await client.query('ROLLBACK TO SAVEPOINT import_contract_row');
           console.error(`[Vista Import] Failed to import contract ${vpContract.contract_number}: ${rowError.message}`);
           errors.push({ contract_number: vpContract.contract_number, error: rowError.message });
         }
@@ -2347,7 +2395,8 @@ const VistaData = {
       // Get all unlinked VP work orders
       const unlinked = await client.query(
         `SELECT id, work_order_number, description, customer_name, department_code,
-                contract_amount, status, employee_number, project_manager_name, linked_department_id
+                contract_amount, gross_profit_percent, backlog,
+                status, employee_number, project_manager_name, linked_department_id
          FROM vp_work_orders
          WHERE tenant_id = $1 AND link_status = 'unmatched'
          ORDER BY work_order_number`,
@@ -2355,6 +2404,8 @@ const VistaData = {
       );
 
       for (const vpWorkOrder of unlinked.rows) {
+        // Use SAVEPOINT so a single row failure doesn't abort the entire transaction
+        await client.query('SAVEPOINT import_wo_row');
         try {
           // Look up the employee by employee_number to set as project manager
           let managerId = null;
@@ -2380,27 +2431,40 @@ const VistaData = {
           // Map VP status to valid Titan project status
           const projectStatus = this._mapVistaStatusToProjectStatus(vpWorkOrder.status);
 
+          // Truncate strings to fit VARCHAR constraints
+          const projectNumber = ('WO-' + (vpWorkOrder.work_order_number || '')).substring(0, 50);
+          const projectName = (vpWorkOrder.description || 'Work Order ' + (vpWorkOrder.work_order_number || 'Imported')).substring(0, 255);
+          const projectClient = (vpWorkOrder.customer_name || 'Unknown Client').substring(0, 255);
+
           // Create or update Titan project with WO- prefix, ON CONFLICT handles duplicates
           const newProject = await client.query(
             `INSERT INTO projects (
-              tenant_id, number, name, client, status, manager_id, department_id, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              tenant_id, number, name, client, status, manager_id, department_id,
+              contract_value, gross_margin_percent, backlog,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
               status = EXCLUDED.status,
               manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
               department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
+              contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
+              gross_margin_percent = COALESCE(EXCLUDED.gross_margin_percent, projects.gross_margin_percent),
+              backlog = COALESCE(EXCLUDED.backlog, projects.backlog),
               updated_at = CURRENT_TIMESTAMP
             RETURNING id, (xmax = 0) as is_new`,
             [
               tenantId,
-              'WO-' + (vpWorkOrder.work_order_number || ''),
-              vpWorkOrder.description || 'Work Order ' + (vpWorkOrder.work_order_number || 'Imported'),
-              vpWorkOrder.customer_name || 'Unknown Client',
+              projectNumber,
+              projectName,
+              projectClient,
               projectStatus,
               managerId,
-              vpWorkOrder.linked_department_id || null
+              vpWorkOrder.linked_department_id || null,
+              vpWorkOrder.contract_amount || null,
+              vpWorkOrder.gross_profit_percent || null,
+              vpWorkOrder.backlog || null
             ]
           );
 
@@ -2418,6 +2482,8 @@ const VistaData = {
             [userId, vpWorkOrder.id]
           );
 
+          await client.query('RELEASE SAVEPOINT import_wo_row');
+
           if (isNew) {
             imported++;
           } else {
@@ -2430,6 +2496,8 @@ const VistaData = {
             action: isNew ? 'created' : 'updated'
           });
         } catch (rowError) {
+          // Rollback to savepoint so the transaction stays valid for remaining rows
+          await client.query('ROLLBACK TO SAVEPOINT import_wo_row');
           console.error(`[Vista Import] Failed to import work order ${vpWorkOrder.work_order_number}: ${rowError.message}`);
           errors.push({ work_order_number: vpWorkOrder.work_order_number, error: rowError.message });
         }
@@ -2470,29 +2538,37 @@ const VistaData = {
       );
 
       for (const vpDept of unlinked.rows) {
-        // Create new Titan department (skip if already exists due to unique constraint)
-        const newDepartment = await client.query(
-          `INSERT INTO departments (
-            tenant_id, department_number, name, created_at, updated_at
-          ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          ON CONFLICT (department_number) DO UPDATE SET
-            updated_at = CURRENT_TIMESTAMP
-          RETURNING id, (xmax = 0) as is_new`,
-          [
-            tenantId,
-            vpDept.department_code,
-            `Department ${vpDept.department_code}` // Can be renamed later
-          ]
-        );
+        await client.query('SAVEPOINT import_dept_row');
+        try {
+          // Create new Titan department (skip if already exists due to unique constraint)
+          const newDepartment = await client.query(
+            `INSERT INTO departments (
+              tenant_id, department_number, name, created_at, updated_at
+            ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (department_number) DO UPDATE SET
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING id, (xmax = 0) as is_new`,
+            [
+              tenantId,
+              vpDept.department_code,
+              `Department ${vpDept.department_code}` // Can be renamed later
+            ]
+          );
 
-        // Only count as imported if it was actually a new record
-        if (newDepartment.rows[0]?.is_new) {
-          imported++;
+          await client.query('RELEASE SAVEPOINT import_dept_row');
+
+          // Only count as imported if it was actually a new record
+          if (newDepartment.rows[0]?.is_new) {
+            imported++;
+          }
+          results.push({
+            titan_id: newDepartment.rows[0].id,
+            department_code: vpDept.department_code
+          });
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT import_dept_row');
+          console.error(`[Vista Import] Failed to import department ${vpDept.department_code}: ${rowError.message}`);
         }
-        results.push({
-          titan_id: newDepartment.rows[0].id,
-          department_code: vpDept.department_code
-        });
       }
 
       await client.query('COMMIT');
@@ -2880,6 +2956,7 @@ const VistaData = {
 
       // Find Vista contracts that match Titan projects by contract_number = project.number
       // Only link contracts that aren't already linked
+      // Use TRIM on both sides to handle whitespace differences
       const result = await client.query(
         `UPDATE vp_contracts vc SET
           linked_project_id = p.id,
@@ -2888,13 +2965,15 @@ const VistaData = {
           linked_at = CURRENT_TIMESTAMP,
           linked_by = $2
          FROM projects p
-         WHERE vc.contract_number = p.number
+         WHERE TRIM(vc.contract_number) = TRIM(p.number)
            AND vc.tenant_id = $1
            AND p.tenant_id = $1
            AND vc.linked_project_id IS NULL
          RETURNING vc.id, vc.contract_number, p.id as titan_id, p.name as titan_name`,
         [tenantId, userId]
       );
+
+      console.log(`[Auto-link] Matched ${result.rowCount} contracts by exact number`);
 
       await client.query('COMMIT');
       return {

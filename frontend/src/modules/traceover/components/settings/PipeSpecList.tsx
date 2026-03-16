@@ -1,6 +1,6 @@
 import { Trash2, Copy, Plus } from 'lucide-react';
 import type { PipeSpec } from '../../types/pipingSystem';
-import { JOINT_METHOD_LABELS, PIPE_SCHEDULE_LABELS } from '../../types/pipingSystem';
+import { JOINT_METHOD_LABELS, SYSTEM_MATERIAL_LABELS } from '../../types/pipingSystem';
 
 interface PipeSpecListProps {
   specs: PipeSpec[];
@@ -63,7 +63,7 @@ export default function PipeSpecList({
                   {spec.name}
                 </p>
                 <p style={{ fontSize: 10, color: '#4a6a88', marginTop: 2, margin: 0 }}>
-                  {JOINT_METHOD_LABELS[spec.jointMethod]} · {PIPE_SCHEDULE_LABELS[spec.schedule]}
+                  {JOINT_METHOD_LABELS[spec.jointMethod]} · {SYSTEM_MATERIAL_LABELS[spec.material]}
                 </p>
               </div>
               <div style={{ display: 'flex', flexShrink: 0, gap: 2 }}>

@@ -828,23 +828,58 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 // POST /api/vista/import/auto-match - Re-sync: auto-link + auto-import any remaining unmatched records
 router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
   try {
-    // Step 1: Auto-link exact matches
-    const contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
-    const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
-    const employeeLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
-    const vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
+    const errors = [];
 
-    // Step 2: Auto-import anything still unmatched
-    const contractImport = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
-    const woImport = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id);
-    const customerImport = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
-    const deptImport = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id);
-    const deptLinkResult = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id);
-    const employeeImport = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id);
-    const vendorImport = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);
+    // Step 1: Auto-link exact matches
+    let contractLinkResult = { contracts_linked: 0 };
+    let customerLinkResult = { customers_linked: 0 };
+    let employeeLinkResult = { employees_linked: 0 };
+    let vendorLinkResult = { vendors_linked: 0 };
+    let deptLinkResult = { codes_linked: 0 };
+
+    try { contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Contract link error:', e.message); errors.push(`Contract link: ${e.message}`); }
+
+    try { customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Customer link error:', e.message); errors.push(`Customer link: ${e.message}`); }
+
+    try { employeeLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Employee link error:', e.message); errors.push(`Employee link: ${e.message}`); }
+
+    try { vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Vendor link error:', e.message); errors.push(`Vendor link: ${e.message}`); }
+
+    // Step 2: Auto-import anything still unmatched (each wrapped so one failure doesn't block the rest)
+    let contractImport = { imported: 0, errors: [] };
+    let woImport = { imported: 0, errors: [] };
+    let customerImport = { imported: 0 };
+    let deptImport = { imported: 0 };
+    let employeeImport = { imported: 0 };
+    let vendorImport = { imported: 0 };
+
+    try { contractImport = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Contract import error:', e.message); errors.push(`Contract import: ${e.message}`); }
+
+    try { woImport = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Work order import error:', e.message); errors.push(`WO import: ${e.message}`); }
+
+    try { customerImport = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Customer import error:', e.message); errors.push(`Customer import: ${e.message}`); }
+
+    try { deptImport = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Dept import error:', e.message); errors.push(`Dept import: ${e.message}`); }
+
+    try { deptLinkResult = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Dept link error:', e.message); errors.push(`Dept link: ${e.message}`); }
+
+    try { employeeImport = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Employee import error:', e.message); errors.push(`Employee import: ${e.message}`); }
+
+    try { vendorImport = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Vendor import error:', e.message); errors.push(`Vendor import: ${e.message}`); }
 
     res.json({
-      message: 'Re-sync completed',
+      message: errors.length > 0 ? `Re-sync completed with ${errors.length} error(s)` : 'Re-sync completed',
       linked: {
         contracts: contractLinkResult.contracts_linked || 0,
         customers: customerLinkResult.customers_linked || 0,
@@ -861,7 +896,9 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
         departments: deptImport.imported || 0,
       },
       contracts: { matched: (contractLinkResult.contracts_linked || 0) + (contractImport.imported || 0) },
-      workOrders: { matched: (woImport.imported || 0) }
+      workOrders: { matched: (woImport.imported || 0) },
+      errors: errors.length > 0 ? errors : undefined,
+      contractErrors: contractImport.errors?.length > 0 ? contractImport.errors : undefined,
     });
   } catch (error) {
     next(error);

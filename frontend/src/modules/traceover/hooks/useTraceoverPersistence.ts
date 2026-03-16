@@ -35,7 +35,8 @@ import {
 } from '../../../services/pipingServices';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import type { PipeSpec, PipingService, ProjectSystem, ServiceSizeRule, RateTable, RateTableColumn } from '../types/pipingSystem';
-import type { JointType, PipeMaterial, PipeServiceType } from '../types/piping';
+import { JOINT_METHOD_TO_JOINT_TYPE, materialToTraceover } from '../types/pipingSystem';
+import type { PipeServiceType } from '../types/piping';
 
 // ─── ID mapping between client UUIDs and server integer IDs ───
 
@@ -74,10 +75,10 @@ function specToApiMeta(spec: PipeSpec) {
     name: spec.name,
     joint_method: spec.jointMethod,
     material: spec.material,
-    schedule: spec.schedule,
+    schedule: 'STD',  // derived; DB requires NOT NULL but spec no longer stores this
     stock_pipe_length: spec.stockPipeLength,
-    joint_type: spec.jointType,
-    pipe_material: spec.pipeMaterial,
+    joint_type: JOINT_METHOD_TO_JOINT_TYPE[spec.jointMethod],
+    pipe_material: materialToTraceover(spec.material),
     is_default: spec.isDefault,
   };
 }
@@ -132,10 +133,7 @@ function mapApiPipeSpec(s: ApiPipeSpec): PipeSpec {
     name: s.name,
     jointMethod: s.joint_method,
     material: s.material as any,
-    schedule: s.schedule as any,
     stockPipeLength: s.stock_pipe_length,
-    jointType: s.joint_type as JointType,
-    pipeMaterial: s.pipe_material as PipeMaterial,
     pipeRates: Object.fromEntries((s.pipe_rates ?? []).map((r) => [r.pipe_size, r.hours_per_foot])),
     fittingRates: (s.fitting_rates ?? []).reduce<Record<string, Record<string, number>>>((acc, r) => {
       if (!acc[r.fitting_type]) acc[r.fitting_type] = {};
@@ -700,9 +698,8 @@ export function useTraceoverPersistence(takeoffId: number | null) {
         // Capture which fields changed before the timer fires
         const metaChanged =
           prev.name !== spec.name || prev.jointMethod !== spec.jointMethod ||
-          prev.material !== spec.material || prev.schedule !== spec.schedule ||
-          prev.stockPipeLength !== spec.stockPipeLength || prev.jointType !== spec.jointType ||
-          prev.pipeMaterial !== spec.pipeMaterial || prev.isDefault !== spec.isDefault;
+          prev.material !== spec.material ||
+          prev.stockPipeLength !== spec.stockPipeLength || prev.isDefault !== spec.isDefault;
         const pipeRatesChanged = prev.pipeRates !== spec.pipeRates;
         const fittingRatesChanged = prev.fittingRates !== spec.fittingRates;
         const reducingRatesChanged = prev.reducingFittingRates !== spec.reducingFittingRates;

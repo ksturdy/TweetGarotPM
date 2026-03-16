@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useTraceoverStore } from '../../stores/useTraceoverStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import type { PipeMaterial, PipeServiceType } from '../../types/piping';
-import { resolveSpecIdForSize, SYSTEM_PRESETS } from '../../types/pipingSystem';
+import { resolveSpecIdForSize, specPipeMaterial, SYSTEM_PRESETS } from '../../types/pipingSystem';
 import {
   PIPE_SIZES,
   MATERIAL_LABELS,
@@ -152,7 +152,7 @@ export default function TraceoverConfigPanel() {
     : null;
 
   // Keep material in sync with resolved spec
-  const resolvedMaterial = resolvedSpec?.pipeMaterial;
+  const resolvedMaterial = resolvedSpec ? specPipeMaterial(resolvedSpec) : undefined;
   useEffect(() => {
     if (resolvedMaterial && resolvedMaterial !== config.material) {
       setConfig({ material: resolvedMaterial });
@@ -187,7 +187,7 @@ export default function TraceoverConfigPanel() {
                   color: system.color,
                   serviceType: service?.serviceCategory ?? config.serviceType,
                   label: system.abbreviation || config.label,
-                  ...(spec ? { material: spec.pipeMaterial } : {}),
+                  ...(spec ? { material: specPipeMaterial(spec) } : {}),
                 });
               } else {
                 setConfig({ projectSystemId: null });
@@ -246,7 +246,7 @@ export default function TraceoverConfigPanel() {
                   setConfig({
                     color: service.color,
                     serviceType: service.serviceCategory as any,
-                    ...(spec ? { material: spec.pipeMaterial } : {}),
+                    ...(spec ? { material: specPipeMaterial(spec) } : {}),
                   });
                 }
               }}
@@ -420,7 +420,7 @@ export default function TraceoverConfigPanel() {
               const specId = resolveSpecIdForSize(selectedService, size.nominalInches);
               const spec = pipeSpecs.find((s) => s.id === specId);
               if (spec) {
-                updates.material = spec.pipeMaterial;
+                updates.material = specPipeMaterial(spec);
               }
             }
             setConfig(updates as Parameters<typeof setConfig>[0]);

@@ -74,6 +74,9 @@ const Project = {
              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+             COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+             COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+             COALESCE(vc.backlog, p.backlog) as backlog,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                ELSE NULL
@@ -113,6 +116,9 @@ const Project = {
              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+             COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+             COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+             COALESCE(vc.backlog, p.backlog) as backlog,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                ELSE NULL

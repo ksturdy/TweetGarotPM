@@ -16,7 +16,7 @@ import { defaultJointTypeForMaterial } from '../lib/piping/productivityLookup';
 import { distance } from '../lib/measurement/geometry';
 import { pixelsToReal } from '../lib/measurement/scale';
 import { PIPE_SIZES, SERVICE_TYPE_COLORS } from '../lib/piping/referenceData';
-import { resolveSpecIdForSize } from '../types/pipingSystem';
+import { resolveSpecIdForSize, specJointType } from '../types/pipingSystem';
 import { useSettingsStore } from './useSettingsStore';
 
 const EMPTY_FITTING_COUNTS: Record<FittingType, number> = {
@@ -154,7 +154,7 @@ export const useTraceoverStore = create<TraceoverState>()((set, get) => ({
         if (service) {
           const specId = resolveSpecIdForSize(service, activeTraceover.config.pipeSize.nominalInches);
           const spec = pipeSpecs.find((s) => s.id === specId);
-          if (spec) jointType = spec.jointType;
+          if (spec) jointType = specJointType(spec);
         }
       }
     } else if (activeTraceover.config.pipingServiceId) {
@@ -162,7 +162,7 @@ export const useTraceoverStore = create<TraceoverState>()((set, get) => ({
       if (service) {
         const specId = resolveSpecIdForSize(service, activeTraceover.config.pipeSize.nominalInches);
         const spec = pipeSpecs.find((s) => s.id === specId);
-        if (spec) jointType = spec.jointType;
+        if (spec) jointType = specJointType(spec);
       }
     } else if (activeTraceover.config.jointSpecFamilyId) {
       jointType = resolveJointType(activeTraceover.config.pipeSize, null)

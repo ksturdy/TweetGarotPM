@@ -116,11 +116,18 @@ const VistaDataSettings: React.FC = () => {
 
   const autoMatchMutation = useMutation({
     mutationFn: vistaDataService.triggerAutoMatch,
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['vista-stats'] });
       queryClient.invalidateQueries({ queryKey: ['vista-contracts'] });
       queryClient.invalidateQueries({ queryKey: ['vista-work-orders'] });
-      showSuccess(`Auto-matched ${data.contracts.matched} contracts and ${data.workOrders.matched} work orders`);
+      let msg = `Auto-matched ${data.contracts?.matched || 0} contracts and ${data.workOrders?.matched || 0} work orders`;
+      if (data.imported?.contracts > 0) msg += ` (${data.imported.contracts} new projects created)`;
+      if (data.errors?.length > 0) msg += ` — ${data.errors.length} error(s), check console`;
+      if (data.contractErrors?.length > 0) msg += ` — ${data.contractErrors.length} contract(s) failed`;
+      showSuccess(msg);
+      if (data.errors?.length > 0 || data.contractErrors?.length > 0) {
+        console.warn('[Re-sync errors]', data.errors, data.contractErrors);
+      }
     },
     onError: (error: any) => {
       showError(error.response?.data?.message || 'Auto-matching failed');

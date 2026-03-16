@@ -11,6 +11,28 @@ export const JOINT_METHOD_LABELS: Record<JointMethod, string> = {
   CU: 'Copper Solder (CU)',
 };
 
+/** Auto-derive the traceover JointType from the spec's JointMethod */
+export const JOINT_METHOD_TO_JOINT_TYPE: Record<JointMethod, JointType> = {
+  BW: 'welded',
+  GRV: 'grooved',
+  THD: 'threaded',
+  CU: 'soldered_9505',
+};
+
+/** Auto-derive the traceover PipeMaterial from the spec's SystemMaterial */
+export function materialToTraceover(mat: SystemMaterial): PipeMaterial {
+  switch (mat) {
+    case 'carbon_steel': return 'carbon_steel';
+    case 'stainless_steel': return 'stainless_steel';
+    case 'copper': return 'copper_type_l';
+    case 'pvc': return 'pvc_sch40';
+    case 'cpvc': return 'cpvc';
+    case 'cast_iron': return 'cast_iron';
+    case 'ductile_iron': return 'ductile_iron';
+    default: return 'carbon_steel';
+  }
+}
+
 // ─── Pipe Schedule / Weight ───
 
 export type PipeSchedule =
@@ -184,10 +206,7 @@ export interface PipeSpec {
   name: string;
   jointMethod: JointMethod;
   material: SystemMaterial;
-  schedule: PipeSchedule;
   stockPipeLength: number;
-  jointType: JointType;
-  pipeMaterial: PipeMaterial;
   pipeRates: Record<string, number>;
   fittingRates: Record<string, Record<string, number>>;
   reducingFittingRates: Partial<Record<ReducingFittingType, Record<string, number>>>;
@@ -196,6 +215,16 @@ export interface PipeSpec {
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Derive the traceover JointType from a spec */
+export function specJointType(spec: PipeSpec): JointType {
+  return JOINT_METHOD_TO_JOINT_TYPE[spec.jointMethod];
+}
+
+/** Derive the traceover PipeMaterial from a spec */
+export function specPipeMaterial(spec: PipeSpec): PipeMaterial {
+  return materialToTraceover(spec.material);
 }
 
 // ─── Service Size Rule ───
