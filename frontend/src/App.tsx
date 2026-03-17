@@ -102,6 +102,8 @@ import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
 import ExecutiveReport from './pages/reports/ExecutiveReport';
+import OpportunityProjectedRevenue from './pages/opportunities/OpportunityProjectedRevenue';
+import BacklogFitAnalysis from './pages/reports/BacklogFitAnalysis';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -345,6 +347,7 @@ const App: React.FC = () => {
                   <Route path="/" element={<Dashboard />} />
                 <Route path="/sales" element={<SalesPipeline />} />
                 <Route path="/sales/mobile" element={<MobileSales />} />
+                <Route path="/sales/projected-revenue" element={<OpportunityProjectedRevenue />} />
                 <Route path="/sales/opportunity-search" element={<OpportunitySearch />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
@@ -416,6 +419,7 @@ const App: React.FC = () => {
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
                 <Route path="/executive-report" element={<ExecutiveReport />} />
+                <Route path="/reports/backlog-fit" element={<BacklogFitAnalysis />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />

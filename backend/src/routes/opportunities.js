@@ -147,6 +147,26 @@ router.put('/:id',
   }
 );
 
+// Update projection overrides for revenue grid
+router.patch('/:id/projection', async (req, res, next) => {
+  try {
+    const { contour_type, user_adjusted_start_date, user_adjusted_duration_months } = req.body;
+    const opportunity = await opportunities.updateProjectionOverrides(
+      req.params.id,
+      { contour_type, user_adjusted_start_date, user_adjusted_duration_months },
+      req.tenantId
+    );
+
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+
+    res.json(opportunity);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Move opportunity to different stage
 router.patch('/:id/stage',
   [body('stage_id').isInt().withMessage('Valid stage_id required')],

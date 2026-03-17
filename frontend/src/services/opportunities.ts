@@ -33,6 +33,10 @@ export interface Opportunity {
   facility_name?: string;
   facility_customer_id?: number;
   facility_customer_name?: string;
+  contour_type?: string;
+  user_adjusted_start_date?: string;
+  user_adjusted_duration_months?: number;
+  estimated_end_date?: string;
   converted_to_project_id?: number;
   converted_project_name?: string;
   converted_at?: string;
@@ -183,6 +187,19 @@ const opportunitiesService = {
   // Get pipeline trend data
   async getTrend(months: number = 7): Promise<PipelineTrendData[]> {
     const response = await api.get(`/opportunities/trend?months=${months}`);
+    return response.data;
+  },
+
+  // Update projection overrides (for revenue grid)
+  async updateProjectionOverrides(
+    id: number,
+    overrides: {
+      contour_type?: string | null;
+      user_adjusted_start_date?: string | null;
+      user_adjusted_duration_months?: number | null;
+    }
+  ): Promise<Opportunity> {
+    const response = await api.patch(`/opportunities/${id}/projection`, overrides);
     return response.data;
   },
 

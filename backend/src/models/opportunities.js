@@ -192,6 +192,7 @@ const opportunities = {
   async create(opportunityData, userId, tenantId) {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      estimated_end_date,
       construction_type, project_type, location, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id
@@ -203,15 +204,17 @@ const opportunities = {
     const query = `
       INSERT INTO opportunities (
         title, description, estimated_value, estimated_start_date, estimated_duration_days,
+        estimated_end_date,
         construction_type, project_type, location, stage_id, priority, assigned_to, source,
         market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
         facility_name, facility_customer_id, created_by, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      estimated_end_date || null,
       typeValue, typeValue, location, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id || null, gc_customer_id || null,
       facility_name, facility_customer_id || null, userId, tenantId
@@ -226,6 +229,7 @@ const opportunities = {
   async update(id, opportunityData, tenantId) {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      estimated_end_date,
       construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id
@@ -241,31 +245,33 @@ const opportunities = {
         estimated_value = COALESCE($3, estimated_value),
         estimated_start_date = COALESCE($4, estimated_start_date),
         estimated_duration_days = COALESCE($5, estimated_duration_days),
-        construction_type = COALESCE($6, construction_type),
-        project_type = COALESCE($7, project_type),
-        location = COALESCE($8, location),
-        stage_id = COALESCE($9, stage_id),
-        priority = COALESCE($10, priority),
-        assigned_to = COALESCE($11, assigned_to),
-        probability = COALESCE($12, probability),
-        lost_reason = COALESCE($13, lost_reason),
-        market = COALESCE($14, market),
-        owner = COALESCE($15, owner),
-        general_contractor = COALESCE($16, general_contractor),
-        architect = COALESCE($17, architect),
-        engineer = COALESCE($18, engineer),
-        campaign_id = $19,
-        customer_id = $20,
-        gc_customer_id = $21,
-        facility_name = COALESCE($22, facility_name),
-        facility_customer_id = $23,
+        estimated_end_date = $6,
+        construction_type = COALESCE($7, construction_type),
+        project_type = COALESCE($8, project_type),
+        location = COALESCE($9, location),
+        stage_id = COALESCE($10, stage_id),
+        priority = COALESCE($11, priority),
+        assigned_to = COALESCE($12, assigned_to),
+        probability = COALESCE($13, probability),
+        lost_reason = COALESCE($14, lost_reason),
+        market = COALESCE($15, market),
+        owner = COALESCE($16, owner),
+        general_contractor = COALESCE($17, general_contractor),
+        architect = COALESCE($18, architect),
+        engineer = COALESCE($19, engineer),
+        campaign_id = $20,
+        customer_id = $21,
+        gc_customer_id = $22,
+        facility_name = COALESCE($23, facility_name),
+        facility_customer_id = $24,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $24 AND tenant_id = $25
+      WHERE id = $25 AND tenant_id = $26
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
+      estimated_end_date || null,
       typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id, id, tenantId
@@ -399,6 +405,43 @@ const opportunities = {
 
     const result = await pool.query(query, [customerId, tenantId]);
     return result.rows;
+  },
+
+  /**
+   * Update projection overrides for opportunity revenue grid
+   */
+  async updateProjectionOverrides(id, overrides, tenantId) {
+    const sets = [];
+    const params = [];
+    let paramCount = 1;
+
+    if (overrides.contour_type !== undefined) {
+      sets.push(`contour_type = $${paramCount++}`);
+      params.push(overrides.contour_type);
+    }
+    if (overrides.user_adjusted_start_date !== undefined) {
+      sets.push(`user_adjusted_start_date = $${paramCount++}`);
+      params.push(overrides.user_adjusted_start_date);
+    }
+    if (overrides.user_adjusted_duration_months !== undefined) {
+      sets.push(`user_adjusted_duration_months = $${paramCount++}`);
+      params.push(overrides.user_adjusted_duration_months);
+    }
+
+    if (sets.length === 0) return null;
+
+    sets.push('updated_at = CURRENT_TIMESTAMP');
+
+    const query = `
+      UPDATE opportunities
+      SET ${sets.join(', ')}
+      WHERE id = $${paramCount++} AND tenant_id = $${paramCount}
+      RETURNING *
+    `;
+    params.push(id, tenantId);
+
+    const result = await pool.query(query, params);
+    return result.rows[0];
   },
 
   /**

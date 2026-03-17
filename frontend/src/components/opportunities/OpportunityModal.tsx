@@ -35,6 +35,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       ? new Date(opportunity.estimated_start_date).toISOString().split('T')[0]
       : '',
     estimated_duration_days: opportunity?.estimated_duration_days || '',
+    estimated_end_date: opportunity?.estimated_end_date
+      ? new Date(opportunity.estimated_end_date).toISOString().split('T')[0]
+      : '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
     stage_id: opportunity?.stage_id || 1,
@@ -193,6 +196,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.construction_type) cleanedData.construction_type = formData.construction_type;
     if (formData.location) cleanedData.location = formData.location;
     if (formData.estimated_start_date) cleanedData.estimated_start_date = formData.estimated_start_date;
+    if (formData.estimated_end_date) cleanedData.estimated_end_date = formData.estimated_end_date;
     if (formData.source) cleanedData.source = formData.source;
     if (formData.market) cleanedData.market = formData.market;
     if (formData.owner) cleanedData.owner = formData.owner;
@@ -564,28 +568,77 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Row 6: Start Date, Duration, Assign To, Campaign */}
-                  <div className="form-row-4">
+                  {/* Row 6: Start Date, End Date, Duration, Assign To, Campaign */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
                     <div className="form-group">
-                      <label htmlFor="estimated_start_date">Est. Start Date</label>
+                      <label htmlFor="estimated_start_date">Est. Start Date *</label>
                       <input
                         type="date"
                         id="estimated_start_date"
                         name="estimated_start_date"
                         value={formData.estimated_start_date}
-                        onChange={handleChange}
+                        onChange={(e) => {
+                          handleChange(e);
+                          // Auto-calculate end date if duration is set
+                          if (formData.estimated_duration_days && e.target.value) {
+                            const start = new Date(e.target.value);
+                            const months = Math.round(Number(formData.estimated_duration_days) / 30);
+                            if (months > 0) {
+                              const end = new Date(start);
+                              end.setMonth(end.getMonth() + months);
+                              setFormData(prev => ({ ...prev, estimated_start_date: e.target.value, estimated_end_date: end.toISOString().split('T')[0] }));
+                            }
+                          }
+                        }}
+                        required
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="estimated_duration_days">Duration (months)</label>
+                      <label htmlFor="estimated_end_date">Est. End Date</label>
+                      <input
+                        type="date"
+                        id="estimated_end_date"
+                        name="estimated_end_date"
+                        value={formData.estimated_end_date}
+                        onChange={(e) => {
+                          handleChange(e);
+                          // Auto-calculate duration from start and end dates
+                          if (formData.estimated_start_date && e.target.value) {
+                            const start = new Date(formData.estimated_start_date);
+                            const end = new Date(e.target.value);
+                            const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                            if (diffDays > 0) {
+                              setFormData(prev => ({ ...prev, estimated_end_date: e.target.value, estimated_duration_days: diffDays.toString() as any }));
+                            }
+                          }
+                        }}
+                        min={formData.estimated_start_date || undefined}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="estimated_duration_days">Duration (days)</label>
                       <input
                         type="number"
                         id="estimated_duration_days"
                         name="estimated_duration_days"
                         value={formData.estimated_duration_days}
-                        onChange={handleChange}
-                        placeholder="3"
+                        onChange={(e) => {
+                          handleChange(e);
+                          // Auto-calculate end date from start + duration
+                          if (formData.estimated_start_date && e.target.value) {
+                            const start = new Date(formData.estimated_start_date);
+                            const days = Number(e.target.value);
+                            if (days > 0) {
+                              const end = new Date(start);
+                              end.setDate(end.getDate() + days);
+                              setFormData(prev => ({ ...prev, estimated_duration_days: e.target.value as any, estimated_end_date: end.toISOString().split('T')[0] }));
+                            }
+                          }
+                        }}
+                        placeholder="90"
+                        min="1"
                       />
                     </div>
 
@@ -619,6 +672,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                 </div>
 
                 {/* Right column: Description */}
+
                 <div className="opportunity-form-right">
                   <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <label htmlFor="description">Description / Details</label>

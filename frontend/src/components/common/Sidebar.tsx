@@ -80,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       icon: <TrendingUpIcon />,
       children: [
         { label: 'Opportunities', path: '/sales' },
+        { label: 'Revenue Forecast', path: '/sales/projected-revenue' },
         { label: 'Campaigns', path: '/campaigns' },
         { label: 'Marketing', path: '/marketing' },
       ],
@@ -127,9 +128,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       icon: <GavelIcon />,
     },
     {
-      label: 'Executive Report',
-      path: '/executive-report',
+      label: 'Reports',
       icon: <AssessmentIcon />,
+      children: [
+        { label: 'Executive Report', path: '/executive-report' },
+        { label: 'Backlog Fit', path: '/reports/backlog-fit' },
+      ],
     },
   ];
 
