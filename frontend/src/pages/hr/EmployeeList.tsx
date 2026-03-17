@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { employeesApi, EmployeeFilters } from '../../services/employees';
 import { departmentsApi } from '../../services/departments';
 import { officeLocationsApi } from '../../services/officeLocations';
@@ -25,9 +25,10 @@ const EmployeeList: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { data: employees, isLoading } = useQuery({
+  const { data: employees, isLoading, isFetching } = useQuery({
     queryKey: ['employees', filters],
     queryFn: () => employeesApi.getAll(filters).then((res) => res.data.data),
+    placeholderData: keepPreviousData,
   });
 
   const { data: departments } = useQuery({
@@ -124,7 +125,7 @@ const EmployeeList: React.FC = () => {
       {/* Table Section */}
       <div className="sales-table-section">
         <div className="sales-table-header">
-          <div className="sales-table-title">All Employees</div>
+          <div className="sales-table-title">All Employees{isFetching && !isLoading ? <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>updating...</span> : ''}</div>
           <div className="sales-table-controls">
             <div className="sales-search-box">
               <span>🔍</span>

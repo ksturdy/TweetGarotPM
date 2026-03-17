@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
+import { getForecastRules, saveForecastRules } from '../../services/tenant';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 
@@ -88,11 +89,40 @@ const OpportunityProjectedRevenue: React.FC = () => {
   // Track whether we've initialized overrides from DB data
   const [overridesInitialized, setOverridesInitialized] = useState(false);
 
-  // Settings
+  // Settings — loaded from tenant API
   const [pursuitRules, setPursuitRules] = useState<DurationRule[]>(defaultPursuitRules);
   const [workDurationRules, setWorkDurationRules] = useState<DurationRule[]>(defaultWorkDurationRules);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'pursuit' | 'duration'>('pursuit');
+  const [savingRules, setSavingRules] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Load saved forecast rules from tenant settings
+  const { data: savedForecastRules } = useQuery({
+    queryKey: ['forecastRules'],
+    queryFn: getForecastRules,
+  });
+
+  // Apply saved rules once loaded
+  useEffect(() => {
+    if (savedForecastRules) {
+      if (savedForecastRules.pursuitRules?.length) setPursuitRules(savedForecastRules.pursuitRules);
+      if (savedForecastRules.workDurationRules?.length) setWorkDurationRules(savedForecastRules.workDurationRules);
+    }
+  }, [savedForecastRules]);
+
+  const saveRules = useCallback(async () => {
+    setSavingRules(true);
+    try {
+      await saveForecastRules({ pursuitRules, workDurationRules });
+      queryClient.invalidateQueries({ queryKey: ['forecastRules'] });
+      setShowSettings(false);
+    } catch (err) {
+      console.error('Failed to save forecast rules:', err);
+    } finally {
+      setSavingRules(false);
+    }
+  }, [pursuitRules, workDurationRules, queryClient]);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<'name' | 'value' | 'probability' | 'start'>('value');
@@ -425,16 +455,29 @@ const OpportunityProjectedRevenue: React.FC = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
         <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#92400e', margin: 0 }}>{title}</h3>
-        <button
-          onClick={() => setRules(defaults)}
-          style={{
-            padding: '0.25rem 0.5rem', fontSize: '0.7rem',
-            background: '#fef3c7', border: '1px solid #fcd34d',
-            borderRadius: '4px', cursor: 'pointer', color: '#92400e'
-          }}
-        >
-          Reset to Defaults
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={saveRules}
+            disabled={savingRules}
+            style={{
+              padding: '0.25rem 0.75rem', fontSize: '0.7rem',
+              background: savingRules ? '#86efac' : '#16a34a', border: '1px solid #15803d',
+              borderRadius: '4px', cursor: savingRules ? 'default' : 'pointer', color: '#fff', fontWeight: 500
+            }}
+          >
+            {savingRules ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={() => setRules(defaults)}
+            style={{
+              padding: '0.25rem 0.5rem', fontSize: '0.7rem',
+              background: '#fef3c7', border: '1px solid #fcd34d',
+              borderRadius: '4px', cursor: 'pointer', color: '#92400e'
+            }}
+          >
+            Reset to Defaults
+          </button>
+        </div>
       </div>
       <p style={{ fontSize: '0.7rem', color: '#78716c', margin: '0 0 0.75rem 0' }}>{description}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>

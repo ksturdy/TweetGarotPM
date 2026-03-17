@@ -209,6 +209,45 @@ router.delete(
 );
 
 // =====================================================
+// FORECAST RULES (global, any authenticated user)
+// =====================================================
+
+/**
+ * Get forecast rules (pursuit-to-award & work duration)
+ * GET /api/tenant/forecast-rules
+ */
+router.get('/forecast-rules', async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.tenantId);
+    res.json(tenant?.settings?.forecastRules || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Save forecast rules
+ * PUT /api/tenant/forecast-rules
+ */
+router.put('/forecast-rules', async (req, res, next) => {
+  try {
+    const { pursuitRules, workDurationRules } = req.body;
+
+    if (!pursuitRules || !workDurationRules) {
+      return res.status(400).json({ error: 'Both pursuitRules and workDurationRules are required' });
+    }
+
+    const tenant = await Tenant.updateSettings(req.tenantId, {
+      forecastRules: { pursuitRules, workDurationRules },
+    });
+
+    res.json(tenant.settings.forecastRules);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =====================================================
 // USER MANAGEMENT WITHIN TENANT
 // =====================================================
 

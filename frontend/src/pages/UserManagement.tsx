@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useDeferredValue } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
@@ -182,20 +182,26 @@ const UserManagement: React.FC = () => {
     return 'awarded';
   };
 
+  // Defer search value so typing stays responsive while filtering catches up
+  const deferredSearch = useDeferredValue(searchName);
+
   // Filter users based on search and status
-  const filteredUsers = users.filter((user: User) => {
-    const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
-    const nameMatch = fullName.includes(searchName.toLowerCase());
+  const filteredUsers = useMemo(() => {
+    const search = deferredSearch.toLowerCase();
+    return users.filter((user: User) => {
+      const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
+      const nameMatch = !search || fullName.includes(search);
 
-    let statusMatch = true;
-    if (statusFilter === 'active') {
-      statusMatch = user.is_active === true || user.is_active === undefined;
-    } else if (statusFilter === 'inactive') {
-      statusMatch = user.is_active === false;
-    }
+      let statusMatch = true;
+      if (statusFilter === 'active') {
+        statusMatch = user.is_active === true || user.is_active === undefined;
+      } else if (statusFilter === 'inactive') {
+        statusMatch = user.is_active === false;
+      }
 
-    return nameMatch && statusMatch;
-  });
+      return nameMatch && statusMatch;
+    });
+  }, [users, deferredSearch, statusFilter]);
 
   const handleSort = (field: 'name' | 'last_login' | 'created') => {
     if (sortField === field) {
@@ -206,7 +212,7 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const sortedUsers = [...filteredUsers].sort((a: User, b: User) => {
+  const sortedUsers = useMemo(() => [...filteredUsers].sort((a: User, b: User) => {
     const dir = sortDirection === 'asc' ? 1 : -1;
     switch (sortField) {
       case 'name': {
@@ -227,16 +233,18 @@ const UserManagement: React.FC = () => {
       default:
         return 0;
     }
-  });
+  }), [filteredUsers, sortField, sortDirection]);
 
   const getSortIndicator = (field: 'name' | 'last_login' | 'created') => {
     if (sortField !== field) return ' ↕';
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   };
 
-  const activeUsers = users.filter((u: User) => u.is_active === true || u.is_active === undefined);
-  const adminUsers = users.filter((u: User) => u.role === 'admin');
-  const twoFAEnabled = users.filter((u: User) => (u as any).two_factor_enabled);
+  const { activeUsers, adminUsers, twoFAEnabled } = useMemo(() => ({
+    activeUsers: users.filter((u: User) => u.is_active === true || u.is_active === undefined),
+    adminUsers: users.filter((u: User) => u.role === 'admin'),
+    twoFAEnabled: users.filter((u: User) => (u as any).two_factor_enabled),
+  }), [users]);
 
   if (isLoading) {
     return (

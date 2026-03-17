@@ -1,5 +1,17 @@
 import api from './api';
 
+export interface ForecastDurationRule {
+  minValue: number;
+  maxValue: number;
+  months: number;
+  label: string;
+}
+
+export interface ForecastRules {
+  pursuitRules: ForecastDurationRule[];
+  workDurationRules: ForecastDurationRule[];
+}
+
 export interface TenantSettings {
   branding?: {
     logo_url?: string | null;
@@ -14,6 +26,7 @@ export interface TenantSettings {
     timezone?: string;
     date_format?: string;
   };
+  forecastRules?: ForecastRules;
 }
 
 export interface TenantInfo {
@@ -90,6 +103,22 @@ export const uploadLogo = async (file: File): Promise<{ logoUrl: string; tenant:
  */
 export const deleteLogo = async (): Promise<{ message: string; tenant: TenantInfo }> => {
   const response = await api.delete('/tenant/logo');
+  return response.data;
+};
+
+/**
+ * Get forecast rules (global, tenant-wide)
+ */
+export const getForecastRules = async (): Promise<ForecastRules | null> => {
+  const response = await api.get('/tenant/forecast-rules');
+  return response.data;
+};
+
+/**
+ * Save forecast rules (global, tenant-wide)
+ */
+export const saveForecastRules = async (rules: ForecastRules): Promise<ForecastRules> => {
+  const response = await api.put('/tenant/forecast-rules', rules);
   return response.data;
 };
 
