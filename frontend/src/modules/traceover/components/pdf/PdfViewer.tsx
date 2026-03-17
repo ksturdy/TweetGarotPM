@@ -676,8 +676,7 @@ export default function PdfViewer() {
   const pageHasScale = useMemo(() => {
     if (!activeDocumentId) return false;
     return getCalibrationForPage(activeDocumentId, activePageNumber) !== null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDocumentId, activePageNumber, calibrations]);
+  }, [activeDocumentId, activePageNumber, calibrations, getCalibrationForPage]);
 
   const pageTraceoverRuns = useMemo(() => {
     if (!activeDocumentId) return [];
