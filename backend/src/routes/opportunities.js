@@ -2,9 +2,36 @@ const express = require('express');
 const router = express.Router();
 const opportunities = require('../models/opportunities');
 const opportunityActivities = require('../models/opportunityActivities');
+const OpportunityComment = require('../models/OpportunityComment');
+const OpportunityFollower = require('../models/OpportunityFollower');
+const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
 const { body, validationResult } = require('express-validator');
+
+// Helper: notify followers of an opportunity event (fire-and-forget)
+async function notifyFollowers(opportunityId, tenantId, excludeUserId, { eventType, title, message, link }) {
+  try {
+    const followerIds = await OpportunityFollower.getFollowerUserIds(opportunityId, tenantId);
+    for (const userId of followerIds) {
+      if (userId === excludeUserId) continue;
+      await Notification.create({
+        tenantId,
+        userId,
+        entityType: 'opportunity',
+        entityId: opportunityId,
+        eventType,
+        title,
+        message,
+        link: link || '/sales-pipeline',
+        createdBy: excludeUserId,
+        emailSent: false,
+      });
+    }
+  } catch (err) {
+    console.error('Error sending opportunity notifications:', err);
+  }
+}
 
 // Apply authentication and tenant context to all routes
 router.use(authenticate);
@@ -134,10 +161,34 @@ router.put('/:id',
         return res.status(400).json({ errors: errors.array() });
       }
 
+      // Fetch old opportunity to detect stage change
+      const oldOpportunity = req.body.stage_id
+        ? await opportunities.findByIdAndTenant(req.params.id, req.tenantId)
+        : null;
+
       const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      // Notify followers if stage changed
+      if (oldOpportunity && String(oldOpportunity.stage_id) !== String(req.body.stage_id)) {
+        const pool = require('../config/database');
+        const stageResult = await pool.query(
+          'SELECT id, name FROM pipeline_stages WHERE id IN ($1, $2) AND tenant_id = $3',
+          [oldOpportunity.stage_id, req.body.stage_id, req.tenantId]
+        );
+        const stageMap = {};
+        stageResult.rows.forEach(s => { stageMap[s.id] = s.name; });
+        const oldName = stageMap[oldOpportunity.stage_id] || 'Unknown';
+        const newName = stageMap[req.body.stage_id] || 'Unknown';
+
+        notifyFollowers(opportunity.id, req.tenantId, req.user.id, {
+          eventType: 'stage_changed',
+          title: 'Opportunity Stage Changed',
+          message: `"${opportunity.title}" moved from ${oldName} to ${newName}`,
+        });
       }
 
       res.json(opportunity);
@@ -177,10 +228,35 @@ router.patch('/:id/stage',
         return res.status(400).json({ errors: errors.array() });
       }
 
+      // Fetch old opportunity to detect stage change for notifications
+      const oldOpportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+      if (!oldOpportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
       const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id, req.tenantId);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      // Notify followers if stage actually changed
+      if (String(oldOpportunity.stage_id) !== String(req.body.stage_id)) {
+        const pool = require('../config/database');
+        const stageResult = await pool.query(
+          'SELECT id, name FROM pipeline_stages WHERE id IN ($1, $2) AND tenant_id = $3',
+          [oldOpportunity.stage_id, req.body.stage_id, req.tenantId]
+        );
+        const stageMap = {};
+        stageResult.rows.forEach(s => { stageMap[s.id] = s.name; });
+        const oldName = stageMap[oldOpportunity.stage_id] || 'Unknown';
+        const newName = stageMap[req.body.stage_id] || 'Unknown';
+
+        notifyFollowers(opportunity.id, req.tenantId, req.user.id, {
+          eventType: 'stage_changed',
+          title: 'Opportunity Stage Changed',
+          message: `"${opportunity.title}" moved from ${oldName} to ${newName}`,
+        });
       }
 
       res.json(opportunity);
@@ -374,6 +450,120 @@ router.get('/activities/overdue', async (req, res, next) => {
   try {
     const activities = await opportunityActivities.findOverdue(req.user.id);
     res.json(activities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Comment Routes =====
+
+// Get all comments for an opportunity
+router.get('/:id/comments', async (req, res, next) => {
+  try {
+    const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    const comments = await OpportunityComment.findByOpportunityId(req.params.id, req.tenantId);
+    res.json(comments);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Add a comment to an opportunity
+router.post('/:id/comments',
+  [body('comment').trim().notEmpty().withMessage('Comment is required')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      const comment = await OpportunityComment.create(
+        req.params.id, req.user.id, req.tenantId, req.body.comment
+      );
+
+      // Auto-follow the commenter (unless explicitly opted out)
+      if (req.body.auto_follow !== false) {
+        await OpportunityFollower.follow(req.params.id, req.user.id, req.tenantId);
+      }
+
+      // Notify other followers about the new comment
+      notifyFollowers(Number(req.params.id), req.tenantId, req.user.id, {
+        eventType: 'comment_added',
+        title: 'New Comment on Opportunity',
+        message: `New comment on "${opportunity.title}"`,
+      });
+
+      res.status(201).json(comment);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update own comment
+router.put('/:id/comments/:commentId', async (req, res, next) => {
+  try {
+    const comment = await OpportunityComment.update(
+      req.params.commentId, req.user.id, req.body.comment
+    );
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found or not authorized' });
+    }
+    res.json(comment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete own comment
+router.delete('/:id/comments/:commentId', async (req, res, next) => {
+  try {
+    const comment = await OpportunityComment.delete(req.params.commentId, req.user.id);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found or not authorized' });
+    }
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Follow Routes =====
+
+// Check if current user follows this opportunity
+router.get('/:id/follow', async (req, res, next) => {
+  try {
+    const following = await OpportunityFollower.isFollowing(req.params.id, req.user.id);
+    res.json({ following });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Follow an opportunity
+router.post('/:id/follow', async (req, res, next) => {
+  try {
+    await OpportunityFollower.follow(req.params.id, req.user.id, req.tenantId);
+    res.json({ following: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Unfollow an opportunity
+router.delete('/:id/follow', async (req, res, next) => {
+  try {
+    await OpportunityFollower.unfollow(req.params.id, req.user.id);
+    res.json({ following: false });
   } catch (error) {
     next(error);
   }

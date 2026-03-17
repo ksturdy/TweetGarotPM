@@ -105,6 +105,18 @@ export interface OpportunityFilters {
   search?: string;
 }
 
+export interface OpportunityComment {
+  id: number;
+  opportunity_id: number;
+  user_id: number;
+  tenant_id: number;
+  comment: string;
+  commenter_name: string;
+  commenter_email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const opportunitiesService = {
   // Get all opportunities
   async getAll(filters?: OpportunityFilters): Promise<Opportunity[]> {
@@ -245,7 +257,46 @@ const opportunitiesService = {
   async getOverdueActivities(): Promise<OpportunityActivity[]> {
     const response = await api.get('/opportunities/activities/overdue');
     return response.data;
-  }
+  },
+
+  // ===== Comments =====
+
+  async getComments(opportunityId: number): Promise<OpportunityComment[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/comments`);
+    return response.data;
+  },
+
+  async addComment(opportunityId: number, comment: string, autoFollow: boolean = true): Promise<OpportunityComment> {
+    const response = await api.post(`/opportunities/${opportunityId}/comments`, {
+      comment,
+      auto_follow: autoFollow,
+    });
+    return response.data;
+  },
+
+  async updateComment(opportunityId: number, commentId: number, comment: string): Promise<OpportunityComment> {
+    const response = await api.put(`/opportunities/${opportunityId}/comments/${commentId}`, { comment });
+    return response.data;
+  },
+
+  async deleteComment(opportunityId: number, commentId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/comments/${commentId}`);
+  },
+
+  // ===== Follow =====
+
+  async getFollowStatus(opportunityId: number): Promise<{ following: boolean }> {
+    const response = await api.get(`/opportunities/${opportunityId}/follow`);
+    return response.data;
+  },
+
+  async follow(opportunityId: number): Promise<void> {
+    await api.post(`/opportunities/${opportunityId}/follow`);
+  },
+
+  async unfollow(opportunityId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/follow`);
+  },
 };
 
 export default opportunitiesService;

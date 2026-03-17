@@ -6,6 +6,8 @@ import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../SearchableSelect';
 import ActivityTimeline from './ActivityTimeline';
+import CommentThread from './CommentThread';
+import FollowButton from './FollowButton';
 import { MARKETS } from '../../constants/markets';
 import '../../styles/OpportunityModal.css';
 
@@ -258,7 +260,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
         {/* Modal Header */}
         <div className="modal-header">
           <h2>{isEditMode ? 'Edit Opportunity' : 'New Opportunity'}</h2>
-          <button className="btn-close" onClick={onClose}>×</button>
+          <div className="modal-header-actions">
+            {isEditMode && <FollowButton opportunityId={opportunity!.id} />}
+            <button className="btn-close" onClick={onClose}>×</button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -669,12 +674,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </select>
                     </div>
                   </div>
-                </div>
 
-                {/* Right column: Description */}
-
-                <div className="opportunity-form-right">
-                  <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  {/* Description / Details - full width below form fields */}
+                  <div className="form-group">
                     <label htmlFor="description">Description / Details</label>
                     <textarea
                       id="description"
@@ -682,10 +684,17 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       value={formData.description}
                       onChange={handleChange}
                       placeholder="Describe the project scope, requirements, etc."
-                      style={{ flex: 1 }}
+                      className="description-textarea"
                     />
                   </div>
                 </div>
+
+                {/* Right column: Comments only */}
+                {isEditMode && (
+                  <div className="opportunity-form-right">
+                    <CommentThread opportunityId={opportunity!.id} />
+                  </div>
+                )}
               </div>
 
               {/* Form Actions */}
