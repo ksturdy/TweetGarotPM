@@ -38,6 +38,7 @@ const DEFAULT_CONFIG: TraceoverConfig = {
   jointSpecFamilyId: null,
   pipingServiceId: null,
   projectSystemId: null,
+  pipeSpecId: null,
   color: SERVICE_TYPE_COLORS.heating_water,
   label: '',
   startingElevation: 12,
@@ -143,11 +144,15 @@ export const useTraceoverStore = create<TraceoverState>()((set, get) => ({
       angleFromPrevious = result.turnAngleDeg;
     }
 
-    // Resolve joint type via projectSystem → service → spec
+    // Resolve joint type — prefer direct pipeSpecId, then system chain, then legacy
     let jointType = defaultJointTypeForMaterial(activeTraceover.config.material);
     const settingsState = useSettingsStore.getState();
 
-    if (activeTraceover.config.projectSystemId) {
+    if (activeTraceover.config.pipeSpecId) {
+      // Direct spec reference (new path)
+      const spec = pipeSpecs.find((s) => s.id === activeTraceover.config.pipeSpecId);
+      if (spec) jointType = specJointType(spec);
+    } else if (activeTraceover.config.projectSystemId) {
       const system = settingsState.getSystem(activeTraceover.config.projectSystemId);
       if (system) {
         const service = settingsState.getService(system.serviceId);

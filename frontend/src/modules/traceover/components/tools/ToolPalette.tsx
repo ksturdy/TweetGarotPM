@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   MousePointer2,
   Hand,
@@ -18,6 +18,8 @@ import IconButton from '../ui/IconButton';
 import { useToolStore } from '../../stores/useToolStore';
 import { useViewportStore } from '../../stores/useViewportStore';
 import { useUiStore } from '../../stores/useUiStore';
+import { usePdfStore } from '../../stores/usePdfStore';
+import { useMeasurementStore } from '../../stores/useMeasurementStore';
 import type { ToolType } from '../../types';
 
 interface ToolDefinition {
@@ -50,6 +52,16 @@ const shortcutMap = new Map<string, ToolType>(
     .map((d) => [d.shortcut!, d.tool]),
 );
 
+/** Tools that require a scale calibration before they can be activated. */
+const SCALE_REQUIRED_TOOLS: ReadonlySet<ToolType> = new Set([
+  'traceover',
+  'linear',
+  'area',
+  'place_piping_item',
+  'place_equipment',
+  'place_assembly',
+]);
+
 export default function ToolPalette() {
   const activeTool = useToolStore((s) => s.activeTool);
   const setTool = useToolStore((s) => s.setTool);
@@ -67,6 +79,33 @@ export default function ToolPalette() {
     (s) => s.type === 'traceover_run' || s.type === 'takeoff_item',
   );
 
+  const activeDocumentId = usePdfStore((s) => s.activeDocumentId);
+  const activePageNumber = usePdfStore((s) => s.activePageNumber);
+  const getCalibrationForPage = useMeasurementStore((s) => s.getCalibrationForPage);
+
+  const [scaleWarning, setScaleWarning] = useState<string | null>(null);
+
+  /** Check whether the current page has a scale calibration. */
+  const hasScale = useCallback((): boolean => {
+    if (!activeDocumentId) return false;
+    return getCalibrationForPage(activeDocumentId, activePageNumber) !== null;
+  }, [activeDocumentId, activePageNumber, getCalibrationForPage]);
+
+  /** Try to set the tool, blocking scale-dependent tools when no calibration exists. */
+  const trySetTool = useCallback(
+    (tool: ToolType) => {
+      if (SCALE_REQUIRED_TOOLS.has(tool) && !hasScale()) {
+        setScaleWarning('Set the page scale (S) before using this tool.');
+        setTimeout(() => setScaleWarning(null), 4000);
+        setTool('calibrate');
+        return;
+      }
+      setScaleWarning(null);
+      setTool(tool);
+    },
+    [hasScale, setTool],
+  );
+
   const handleToolClick = (tool: ToolType) => {
     if (tool === 'zoom_in') {
       zoomIn();
@@ -76,7 +115,7 @@ export default function ToolPalette() {
       zoomOut();
       return;
     }
-    setTool(tool);
+    trySetTool(tool);
   };
 
   // Keyboard shortcuts
@@ -105,16 +144,27 @@ export default function ToolPalette() {
       const tool = shortcutMap.get(e.key.toLowerCase());
       if (tool) {
         e.preventDefault();
-        setTool(tool);
+        trySetTool(tool);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setTool, togglePipingPalette, toggleEquipmentPalette, toggleAssemblyPalette]);
+  }, [trySetTool, togglePipingPalette, toggleEquipmentPalette, toggleAssemblyPalette]);
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {/* Scale warning toast */}
+      {scaleWarning && (
+        <div style={{
+          width: '100%', borderRadius: 4, border: '1px solid rgba(202,138,4,0.4)',
+          backgroundColor: 'rgba(113,63,18,0.9)', padding: '4px 8px',
+          fontSize: 11, fontWeight: 500, color: '#fde68a',
+        }}>
+          {scaleWarning}
+        </div>
+      )}
+
       {drawingTools.map(({ tool, icon, tooltip }) => (
         <IconButton
           key={tool}

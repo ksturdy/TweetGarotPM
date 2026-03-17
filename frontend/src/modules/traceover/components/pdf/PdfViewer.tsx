@@ -88,11 +88,17 @@ const SCROLL_SPEED = 1;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the PipeSpec for a traceover run via its system → service → spec chain. */
+/** Resolve the PipeSpec for a traceover run via its config. */
 function resolveSpecForRun(run: TraceoverRun): PipeSpec | undefined {
   const settings = useSettingsStore.getState();
 
-  // New path: projectSystemId → global service → spec
+  // Direct spec reference (new path — set when user picks a spec or system resolves one)
+  if (run.config.pipeSpecId) {
+    const spec = settings.getPipeSpec(run.config.pipeSpecId);
+    if (spec) return spec;
+  }
+
+  // System → service → spec chain
   if (run.config.projectSystemId) {
     const system = settings.getSystem(run.config.projectSystemId);
     if (system) {
@@ -574,6 +580,7 @@ export default function PdfViewer() {
   const clearSelection = useToolStore((s) => s.clearSelection);
 
   const measurements = useMeasurementStore((s) => s.measurements);
+  const calibrations = useMeasurementStore((s) => s.calibrations);
   const addMeasurement = useMeasurementStore((s) => s.addMeasurement);
   const removeMeasurement = useMeasurementStore((s) => s.removeMeasurement);
   const getCalibrationForPage = useMeasurementStore((s) => s.getCalibrationForPage);
@@ -665,6 +672,12 @@ export default function PdfViewer() {
     () => pageMeasurements.filter((m) => m.type === 'count'),
     [pageMeasurements],
   );
+
+  const pageHasScale = useMemo(() => {
+    if (!activeDocumentId) return false;
+    return getCalibrationForPage(activeDocumentId, activePageNumber) !== null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId, activePageNumber, calibrations]);
 
   const pageTraceoverRuns = useMemo(() => {
     if (!activeDocumentId) return [];
@@ -1960,6 +1973,19 @@ export default function PdfViewer() {
         cursor: cursorStyle,
       }}
     >
+      {/* Persistent "No Scale" indicator */}
+      {activeDocumentId && !pageHasScale && (
+        <div style={{
+          pointerEvents: 'none', position: 'absolute', right: 16, top: 16, zIndex: 50,
+          display: 'flex', alignItems: 'center', gap: 8, borderRadius: 6,
+          border: '1px solid rgba(220,38,38,0.5)', backgroundColor: 'rgba(127,29,29,0.9)',
+          padding: '6px 12px', fontSize: 11, fontWeight: 600, color: '#fca5a5',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        }}>
+          No Scale Set — Press S to calibrate
+        </div>
+      )}
+
       {containerSize.width > 0 && containerSize.height > 0 && (
         <Stage
           ref={stageRef}

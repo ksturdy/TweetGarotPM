@@ -115,6 +115,8 @@ export interface TraceoverConfig {
   pipingServiceId: string | null;
   /** ID of the ProjectSystem (per-project) driving this config */
   projectSystemId: string | null;
+  /** Direct reference to a PipeSpec (rate table). Set when the user picks a spec or a system resolves one. */
+  pipeSpecId: string | null;
   color: string;
   label: string;
   startingElevation: number;

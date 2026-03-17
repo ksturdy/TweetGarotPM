@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTraceoverStore } from '../../stores/useTraceoverStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
-import type { PipeMaterial, PipeServiceType } from '../../types/piping';
-import { resolveSpecIdForSize, specPipeMaterial, SYSTEM_PRESETS } from '../../types/pipingSystem';
+import type { PipeServiceType } from '../../types/piping';
+import { resolveSpecIdForSize, specPipeMaterial, JOINT_METHOD_LABELS } from '../../types/pipingSystem';
+import type { JointMethod } from '../../types/pipingSystem';
 import {
   PIPE_SIZES,
   MATERIAL_LABELS,
@@ -133,7 +134,6 @@ export default function TraceoverConfigPanel() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [colorOpen]);
 
-  const materialEntries = Object.entries(MATERIAL_LABELS) as [PipeMaterial, string][];
   const serviceEntries = Object.entries(SERVICE_TYPE_LABELS) as [PipeServiceType, string][];
 
   const selectedSystem = config.projectSystemId
@@ -144,20 +144,21 @@ export default function TraceoverConfigPanel() {
     ? globalServices.find((s) => s.id === selectedSystem.serviceId)
     : null;
 
-  const resolvedSpec = selectedService
-    ? (() => {
-        const specId = resolveSpecIdForSize(selectedService, config.pipeSize.nominalInches);
-        return pipeSpecs.find((s) => s.id === specId) ?? null;
-      })()
+  // The active spec — either directly selected or resolved from system
+  const activeSpec = config.pipeSpecId
+    ? pipeSpecs.find((s) => s.id === config.pipeSpecId) ?? null
     : null;
 
-  // Keep material in sync with resolved spec
-  const resolvedMaterial = resolvedSpec ? specPipeMaterial(resolvedSpec) : undefined;
-  useEffect(() => {
-    if (resolvedMaterial && resolvedMaterial !== config.material) {
-      setConfig({ material: resolvedMaterial });
+  // Group pipe specs by jointMethod for the dropdown
+  const specsByMethod = useMemo(() => {
+    const groups = new Map<JointMethod, typeof pipeSpecs>();
+    for (const spec of pipeSpecs) {
+      const list = groups.get(spec.jointMethod) ?? [];
+      list.push(spec);
+      groups.set(spec.jointMethod, list);
     }
-  }, [resolvedMaterial, config.material, setConfig]);
+    return groups;
+  }, [pipeSpecs]);
 
   return (
     <div style={{ fontSize: 12 }}>
@@ -184,13 +185,14 @@ export default function TraceoverConfigPanel() {
                   projectSystemId: systemId,
                   pipingServiceId: null,
                   jointSpecFamilyId: null,
+                  pipeSpecId: specId,
                   color: system.color,
                   serviceType: service?.serviceCategory ?? config.serviceType,
                   label: system.abbreviation || config.label,
                   ...(spec ? { material: specPipeMaterial(spec) } : {}),
                 });
               } else {
-                setConfig({ projectSystemId: null });
+                setConfig({ projectSystemId: null, pipeSpecId: null });
               }
             }}
             style={{ ...selectStyle, flex: 1 }}
@@ -242,8 +244,9 @@ export default function TraceoverConfigPanel() {
                 useSettingsStore.getState().updateSystem(selectedSystem.id, { serviceId: e.target.value });
                 if (service) {
                   const specId = resolveSpecIdForSize(service, config.pipeSize.nominalInches);
-                  const spec = pipeSpecs.find((s) => s.id === specId);
+                  const spec = specId ? pipeSpecs.find((s) => s.id === specId) : null;
                   setConfig({
+                    pipeSpecId: specId,
                     color: service.color,
                     serviceType: service.serviceCategory as any,
                     ...(spec ? { material: specPipeMaterial(spec) } : {}),
@@ -264,11 +267,6 @@ export default function TraceoverConfigPanel() {
         {selectedService && (
           <p style={{ marginTop: 4, fontSize: 10, color: '#7a9ab5' }}>
             Service: {selectedService.name}
-          </p>
-        )}
-        {resolvedSpec && (
-          <p style={{ marginTop: 2, fontSize: 10, color: '#3b82f6' }}>
-            Spec: {resolvedSpec.name}
           </p>
         )}
 
@@ -386,25 +384,50 @@ export default function TraceoverConfigPanel() {
         )}
       </div>
 
-      {/* Material */}
+      {/* Specification (rate table) — grouped by joint method category */}
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle}>
-          Material
-          {resolvedSpec && (
+          Specification
+          {selectedSystem && activeSpec && (
             <span style={{ marginLeft: 4, textTransform: 'none', letterSpacing: 'normal', color: '#3b82f6' }}>
               (from system)
             </span>
           )}
         </label>
         <select
-          value={config.material}
-          onChange={(e) => setConfig({ material: e.target.value as PipeMaterial })}
+          value={config.pipeSpecId ?? ''}
+          onChange={(e) => {
+            const specId = e.target.value || null;
+            const spec = specId ? pipeSpecs.find((s) => s.id === specId) : null;
+            if (spec) {
+              setConfig({ pipeSpecId: specId, material: specPipeMaterial(spec) });
+            } else {
+              setConfig({ pipeSpecId: null });
+            }
+          }}
           style={selectStyle}
         >
-          {materialEntries.map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+          <option value="">None (no rates)</option>
+          {[...specsByMethod.entries()].map(([method, specs]) => (
+            <optgroup key={method} label={JOINT_METHOD_LABELS[method]}>
+              {specs.map((spec) => (
+                <option key={spec.id} value={spec.id}>
+                  {spec.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
+        {activeSpec && (
+          <p style={{ marginTop: 4, fontSize: 10, color: '#7a9ab5' }}>
+            {MATERIAL_LABELS[specPipeMaterial(activeSpec)]} — {JOINT_METHOD_LABELS[activeSpec.jointMethod]}
+          </p>
+        )}
+        {pipeSpecs.length === 0 && (
+          <p style={{ marginTop: 4, fontSize: 10, color: '#4a6a88' }}>
+            No specs defined. Add them in Settings.
+          </p>
+        )}
       </div>
 
       {/* Pipe Size */}
@@ -418,8 +441,9 @@ export default function TraceoverConfigPanel() {
             const updates: Record<string, unknown> = { pipeSize: size };
             if (selectedService) {
               const specId = resolveSpecIdForSize(selectedService, size.nominalInches);
-              const spec = pipeSpecs.find((s) => s.id === specId);
+              const spec = specId ? pipeSpecs.find((s) => s.id === specId) : null;
               if (spec) {
+                updates.pipeSpecId = specId;
                 updates.material = specPipeMaterial(spec);
               }
             }
