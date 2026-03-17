@@ -7,10 +7,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import ChangePasswordModal from './components/security/ChangePasswordModal';
 import Dashboard from './pages/Dashboard';
-// Public pages
-import LandingPage from './pages/public/LandingPage';
-import SignupPage from './pages/public/SignupPage';
-import PricingPage from './pages/public/PricingPage';
+// Public pages (signup disabled — imports removed)
 import ProjectList from './pages/projects/ProjectList';
 import ProjectForm from './pages/projects/ProjectForm';
 import ProjectDetail from './pages/projects/ProjectDetail';
@@ -232,10 +229,10 @@ const App: React.FC = () => {
   return (
     <>
       <Routes>
-        {/* Public routes */}
-        <Route path="/welcome" element={<LandingPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        {/* Public routes — signup disabled, redirect to login */}
+        <Route path="/welcome" element={<Navigate to="/login" />} />
+        <Route path="/signup" element={<Navigate to="/login" />} />
+        <Route path="/pricing" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />

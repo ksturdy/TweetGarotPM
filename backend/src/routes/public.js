@@ -79,9 +79,16 @@ router.get('/plans', async (req, res, next) => {
 /**
  * Sign up a new tenant with admin user
  * POST /api/public/signup
+ * NOTE: Self-service signup is currently disabled
  */
 router.post(
   '/signup',
+  (_req, res) => res.status(403).json({ error: 'Self-service signup is currently disabled. Please contact an administrator.' })
+);
+
+// Original signup handler (disabled)
+router.post(
+  '/signup-disabled',
   [
     // Company info
     body('companyName').trim().notEmpty().withMessage('Company name is required'),
