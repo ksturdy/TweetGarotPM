@@ -939,31 +939,31 @@ export default function CampaignDetail() {
                           style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('name')}
                         >
-                          Company {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Company {sortConfig?.key === 'name' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th
                           style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('prospectScore')}
                         >
-                          Prospect Score {sortConfig?.key === 'prospectScore' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Prospect Score {sortConfig?.key === 'prospectScore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th
                           style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('tgScore')}
                         >
-                          TG Cust. Score {sortConfig?.key === 'tgScore' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          TG Cust. Score {sortConfig?.key === 'tgScore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th
                           style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('assigned')}
                         >
-                          Assigned {sortConfig?.key === 'assigned' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Assigned {sortConfig?.key === 'assigned' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th
                           style={{ padding: '12px', textAlign: 'left', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('week')}
                         >
-                          Week {sortConfig?.key === 'week' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                          Week {sortConfig?.key === 'week' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Status</th>
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: 600 }}>Action</th>
