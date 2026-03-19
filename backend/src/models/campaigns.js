@@ -104,7 +104,21 @@ const campaigns = {
       tenantId
     ];
     const result = await db.query(query, values);
-    return result.rows[0];
+    const campaign = result.rows[0];
+
+    // Auto-add owner as team member with role='owner'
+    if (campaign.owner_id) {
+      const empResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [campaign.owner_id]);
+      const userId = empResult.rows[0]?.user_id || null;
+      await db.query(
+        `INSERT INTO campaign_team_members (campaign_id, employee_id, user_id, role)
+         VALUES ($1, $2, $3, 'owner')
+         ON CONFLICT (campaign_id, employee_id) DO UPDATE SET role = 'owner'`,
+        [campaign.id, campaign.owner_id, userId]
+      );
+    }
+
+    return campaign;
   },
 
   // Update campaign with tenant check
@@ -145,7 +159,29 @@ const campaigns = {
       data.goal_description
     ];
     const result = await db.query(query, values);
-    return result.rows[0];
+    const campaign = result.rows[0];
+
+    // If owner changed, ensure new owner is on the team as 'owner' and demote old owner to 'member'
+    if (campaign && data.owner_id) {
+      // Demote any existing owner(s) that aren't the new owner
+      await db.query(
+        `UPDATE campaign_team_members SET role = 'member'
+         WHERE campaign_id = $1 AND role = 'owner' AND employee_id != $2`,
+        [id, data.owner_id]
+      );
+
+      // Add/promote new owner
+      const empResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [data.owner_id]);
+      const userId = empResult.rows[0]?.user_id || null;
+      await db.query(
+        `INSERT INTO campaign_team_members (campaign_id, employee_id, user_id, role)
+         VALUES ($1, $2, $3, 'owner')
+         ON CONFLICT (campaign_id, employee_id) DO UPDATE SET role = 'owner'`,
+        [id, data.owner_id, userId]
+      );
+    }
+
+    return campaign;
   },
 
   // Delete campaign with tenant check
@@ -178,8 +214,33 @@ const campaigns = {
     return result.rows[0];
   },
 
-  // Get team members for campaign (joined to employees table)
+  // Get team members for campaign (joined to employees table).
+  // Auto-adds the campaign owner if they have an employee record but aren't on the team yet.
   getTeamMembers: async (campaignId) => {
+    // Check if campaign has an owner_id that isn't on the team yet
+    const ownerCheck = await db.query(
+      `SELECT c.owner_id, e.id as employee_id
+       FROM campaigns c
+       JOIN users u ON c.owner_id = u.id
+       JOIN employees e ON e.user_id = u.id AND e.tenant_id = c.tenant_id
+       WHERE c.id = $1
+         AND c.owner_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM campaign_team_members ctm
+           WHERE ctm.campaign_id = c.id AND ctm.employee_id = e.id
+         )`,
+      [campaignId]
+    );
+    if (ownerCheck.rows.length > 0) {
+      const ownerEmp = ownerCheck.rows[0];
+      await db.query(
+        `INSERT INTO campaign_team_members (campaign_id, employee_id, user_id, role)
+         VALUES ($1, $2, $3, 'owner')
+         ON CONFLICT (campaign_id, employee_id) DO UPDATE SET role = 'owner'`,
+        [campaignId, ownerEmp.employee_id, ownerCheck.rows[0].owner_id]
+      );
+    }
+
     const query = `
       SELECT
         ctm.*,
@@ -195,7 +256,7 @@ const campaigns = {
       LEFT JOIN campaign_companies cc ON cc.campaign_id = ctm.campaign_id AND cc.assigned_to_id = ctm.employee_id
       WHERE ctm.campaign_id = $1
       GROUP BY ctm.id, e.first_name, e.last_name, e.email, e.job_title, d.name
-      ORDER BY ctm.role, e.first_name, e.last_name
+      ORDER BY CASE WHEN ctm.role = 'owner' THEN 0 ELSE 1 END, e.first_name, e.last_name
     `;
     const result = await db.query(query, [campaignId]);
     return result.rows;
@@ -206,6 +267,14 @@ const campaigns = {
     // Look up user_id from the employee record (may be null)
     const empResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [employeeId]);
     const userId = empResult.rows[0]?.user_id || null;
+
+    // Auto-detect owner role: if this employee's user_id matches the campaign's owner_id
+    if (userId && role === 'member') {
+      const campaignResult = await db.query('SELECT owner_id FROM campaigns WHERE id = $1', [campaignId]);
+      if (campaignResult.rows[0]?.owner_id === userId) {
+        role = 'owner';
+      }
+    }
 
     const query = `
       INSERT INTO campaign_team_members (campaign_id, employee_id, user_id, role)
@@ -305,9 +374,10 @@ const campaigns = {
       }
       const totalWeeks = weekNumber - 1;
 
-      // 3. Get team members and companies (ordered by tier then score DESC)
+      // 3. Get team members (owner first) and companies (ordered by tier then score DESC)
       const teamResult = await client.query(
-        'SELECT * FROM campaign_team_members WHERE campaign_id = $1',
+        `SELECT * FROM campaign_team_members WHERE campaign_id = $1
+         ORDER BY CASE WHEN role = 'owner' THEN 0 ELSE 1 END, id`,
         [campaignId]
       );
       const companiesResult = await client.query(
