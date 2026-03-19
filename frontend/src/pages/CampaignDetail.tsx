@@ -18,16 +18,6 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import '../styles/SalesPipeline.css';
 
-const weeks = [
-  { num: 1, start: 'Feb 2', end: 'Feb 8', label: 'Feb 2 - 8' },
-  { num: 2, start: 'Feb 9', end: 'Feb 15', label: 'Feb 9 - 15' },
-  { num: 3, start: 'Feb 16', end: 'Feb 22', label: 'Feb 16 - 22' },
-  { num: 4, start: 'Feb 23', end: 'Mar 1', label: 'Feb 23 - Mar 1' },
-  { num: 5, start: 'Mar 2', end: 'Mar 8', label: 'Mar 2 - 8' },
-  { num: 6, start: 'Mar 9', end: 'Mar 15', label: 'Mar 9 - 15' }
-];
-
-
 const statuses = [
   { key: 'prospect', label: 'Prospect', color: '#6b7280' },
   { key: 'no_interest', label: 'Contacted - No Interest', color: '#ef4444' },
@@ -405,23 +395,6 @@ export default function CampaignDetail() {
   const [reassignTo, setReassignTo] = useState<string>('');
   const [teamLoading, setTeamLoading] = useState(false);
 
-  // Campaign info state
-  const [campaignInfo, setCampaignInfo] = useState(() => load('campaignInfo', {
-    name: 'Phoenix Division',
-    description: '6-Week Sales Campaign targeting industrial and manufacturing prospects in the Phoenix metropolitan area.',
-    startDate: '2025-02-02',
-    endDate: '2025-03-15',
-    goal: 'Contact 40 high-value prospects and generate 5+ new opportunities',
-    targetValue: 500000,
-    assignedTeam: ['Brian Smith', 'Brian Wohlers', 'Cory Wile'],
-    status: 'active',
-    owner: 'Brian Smith'
-  }));
-
-  useEffect(() => {
-    save('campaignInfo', campaignInfo);
-  }, [campaignInfo]);
-
   const activeCampaignInfo = useMemo(() => {
     if (dbCampaign) {
       return {
@@ -436,26 +409,19 @@ export default function CampaignDetail() {
         owner: dbCampaign.owner_name || ''
       };
     }
-    if (isLegacyPhoenix) return campaignInfo;
     return { name: '', description: '', startDate: '', endDate: '', goal: '', targetValue: 0, assignedTeam: [] as string[], status: 'planning', owner: '' };
-  }, [isLegacyPhoenix, campaignInfo, dbCampaign, dbTeam]);
+  }, [dbCampaign, dbTeam]);
 
   const activeLogs = useMemo(() => {
-    if (dbActivity.length > 0) {
-      return dbActivity.map((l: CampaignActivityLog) => ({
-        id: l.id, cid: l.campaign_company_id, text: l.description,
-        time: l.created_at, name: l.company_name || l.user_name || ''
-      }));
-    }
-    if (isLegacyPhoenix) return logs;
-    return [];
-  }, [isLegacyPhoenix, logs, dbActivity]);
+    return dbActivity.map((l: CampaignActivityLog) => ({
+      id: l.id, cid: l.campaign_company_id, text: l.description,
+      time: l.created_at, name: l.company_name || '', user: l.user_name || ''
+    }));
+  }, [dbActivity]);
 
   const activeTeam = useMemo(() => {
-    if (dbTeam.length > 0) return dbTeam.map((t: CampaignTeamMember) => t.name);
-    if (isLegacyPhoenix) return campaignInfo.assignedTeam || team;
-    return [];
-  }, [isLegacyPhoenix, dbTeam, campaignInfo.assignedTeam]);
+    return dbTeam.map((t: CampaignTeamMember) => t.name);
+  }, [dbTeam]);
 
   // Detect orphaned prospects (assigned to someone not on the active team)
   const orphanedProspects = useMemo(() => {
@@ -496,26 +462,13 @@ export default function CampaignDetail() {
       } catch (err) {
         console.error('Failed to reassign orphaned prospects:', err);
       }
-    } else if (isLegacyPhoenix) {
-      setData((d: any) => d.map((c: any) =>
-        c.assignedTo && !activeTeam.includes(c.assignedTo)
-          ? { ...c, assignedTo: orphanReassignTo }
-          : c
-      ));
     }
     setOrphanReassignTo('');
   };
 
-  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: team[0] || '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
+  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
-
-  useEffect(() => {
-    save('data', data);
-    save('logs', logs);
-    save('contacts', contacts);
-    save('estimates', estimates);
-  }, [data, logs, contacts, estimates]);
 
   const stats = useMemo(() => {
     const byStatus: any = {}; statuses.forEach(s => byStatus[s.key] = activeData.filter((c: any) => c.status === s.key).length);
@@ -585,58 +538,34 @@ export default function CampaignDetail() {
   }, [activeData, filter, sortConfig, assessmentsMap]);
 
   const updateField = (companyId: number, field: string, value: string) => {
-    if (isLegacyPhoenix) {
-      setData((d: any) => d.map((c: any) => c.id === companyId ? {...c, [field]: value} : c));
-      const co = data.find((c: any) => c.id === companyId);
-      const label = field === 'assignedTo' ? value : field === 'status' ? statuses.find(s=>s.key===value)?.label : actions.find(a=>a.key===value)?.label;
-      setLogs((l: any) => [{ id: Date.now(), cid: companyId, text: `${field === 'assignedTo' ? 'Reassigned' : field === 'status' ? 'Status' : 'Action'} → ${label}`, time: new Date().toISOString(), name: co?.name }, ...l]);
-    } else {
-      if (field === 'status') {
-        statusMutation.mutate({ companyId, status: value });
-      } else if (field === 'action') {
-        actionMutation.mutate({ companyId, action: value });
-      } else if (field === 'assignedTo') {
-        assignMutation.mutate({ companyId, assignedToId: parseInt(value) });
-      }
+    if (field === 'status') {
+      statusMutation.mutate({ companyId, status: value });
+    } else if (field === 'action') {
+      actionMutation.mutate({ companyId, action: value });
+    } else if (field === 'assignedTo') {
+      assignMutation.mutate({ companyId, assignedToId: parseInt(value) });
     }
   };
 
   const addNote = () => {
     if (!note.trim() || !selected) return;
-    if (isLegacyPhoenix) {
-      setLogs((l: any) => [{ id: Date.now(), cid: selected.id, text: note, time: new Date().toISOString(), name: selected.name }, ...l]);
-    } else {
-      addNoteMutation.mutate({ companyId: selected.id, note: note.trim() });
-    }
+    addNoteMutation.mutate({ companyId: selected.id, note: note.trim() });
     setNote('');
   };
 
   const handleAddCustomer = () => {
     if (!newCustomer.name.trim()) return;
-    if (isLegacyPhoenix) {
-      const newId = Math.max(...data.map((c: any) => c.id)) + 1;
-      const customer = { ...newCustomer, id: newId, status: 'prospect', action: 'none' };
-      setData([...data, customer]);
-      setLogs((l: any) => [{ id: Date.now(), cid: newId, text: 'New prospect added', time: new Date().toISOString(), name: customer.name }, ...l]);
-    } else {
-      // Find the employee_id for the selected team member
-      const selectedMember = activeTeam.find((t: any) =>
-        typeof t === 'string' ? t === newCustomer.assignedTo : t.employee_id === newCustomer.assignedToId
-      );
-      const assignedToId = newCustomer.assignedToId || (typeof selectedMember === 'object' ? selectedMember?.employee_id : null);
-      addProspectMutation.mutate({
-        name: newCustomer.name,
-        sector: newCustomer.sector,
-        address: newCustomer.address,
-        phone: newCustomer.phone,
-        tier: newCustomer.tier,
-        score: newCustomer.score,
-        target_week: newCustomer.targetWeek,
-        assigned_to_id: assignedToId
-      });
-    }
-    const firstTeam = activeTeam[0];
-    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: typeof firstTeam === 'string' ? firstTeam : (firstTeam?.name || ''), assignedToId: typeof firstTeam === 'object' ? firstTeam?.employee_id : null, tier: 'B', score: 70, targetWeek: 1 });
+    addProspectMutation.mutate({
+      name: newCustomer.name,
+      sector: newCustomer.sector,
+      address: newCustomer.address,
+      phone: newCustomer.phone,
+      tier: newCustomer.tier,
+      score: newCustomer.score,
+      target_week: newCustomer.targetWeek,
+      assigned_to_id: newCustomer.assignedToId
+    });
+    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
     setShowNewCustomer(false);
   };
 
@@ -806,8 +735,8 @@ export default function CampaignDetail() {
                 <div style={{ maxHeight: '220px', overflow: 'auto' }}>
                   {activeLogs.slice(0, 12).map((l: any) => (
                     <div key={l.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
-                      <span style={{ fontWeight: 500 }}>{l.name}:</span> <span style={{ color: '#64748b' }}>{l.text}</span>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{new Date(l.time).toLocaleString()}</div>
+                      {l.name && <span style={{ fontWeight: 500 }}>{l.name}: </span>}<span style={{ color: '#64748b' }}>{l.text}</span>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{l.user && <span>{l.user} &middot; </span>}{new Date(l.time).toLocaleString()}</div>
                     </div>
                   ))}
                   {activeLogs.length === 0 && <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px' }}>No activity yet</div>}
@@ -993,15 +922,9 @@ export default function CampaignDetail() {
                               )}
                             </td>
                             <td style={{ padding: '12px', fontSize: '12px' }}>
-                              {isLegacyPhoenix ? (
-                                <select value={c.assignedTo} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
-                                  {activeTeam.map((t: string) => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                              ) : (
-                                <select value={c.assigned_to_id || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
-                                  {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
-                                </select>
-                              )}
+                              <select value={c.assigned_to_id || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                                {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
+                              </select>
                             </td>
                             <td style={{ padding: '12px', fontSize: '12px' }}>{activeWeeks.find((w: any)=>w.num===c.targetWeek)?.label}</td>
                           <td style={{ padding: '12px' }}>
@@ -1214,12 +1137,12 @@ export default function CampaignDetail() {
         )}
 
         {tab === 'goals' && (() => {
-          const goalTouchpoints = isLegacyPhoenix ? 40 : (dbCampaign?.target_touchpoints || activeData.length);
-          const goalOpportunities = isLegacyPhoenix ? 5 : (dbCampaign?.target_opportunities || 0);
-          const goalEstimates = isLegacyPhoenix ? 3 : (dbCampaign?.target_estimates || 0);
-          const goalAwards = isLegacyPhoenix ? 1 : (dbCampaign?.target_awards || 0);
-          const estimateCount = isLegacyPhoenix ? estimates.filter((e: any) => e.status === 'sent' || e.status === 'accepted').length : 0;
-          const awardCount = isLegacyPhoenix ? estimates.filter((e: any) => e.status === 'accepted').length : 0;
+          const goalTouchpoints = dbCampaign?.target_touchpoints || activeData.length;
+          const goalOpportunities = dbCampaign?.target_opportunities || 0;
+          const goalEstimates = dbCampaign?.target_estimates || 0;
+          const goalAwards = dbCampaign?.target_awards || 0;
+          const estimateCount = 0;
+          const awardCount = 0;
           const timelineLabel = activeCampaignInfo.startDate && activeCampaignInfo.endDate
             ? `${new Date(activeCampaignInfo.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(activeCampaignInfo.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
             : '';
@@ -1628,10 +1551,8 @@ export default function CampaignDetail() {
                 <div style={{ display: 'grid', gap: '8px' }}>
                   {activeTeam.map((memberName: string) => {
                     const companyCount = getCompanyCountForMember(memberName);
-                    const isOwner = isLegacyPhoenix
-                      ? memberName === campaignInfo.owner
-                      : dbTeam.find((t: CampaignTeamMember) => t.name === memberName)?.role === 'owner';
-                    const dbMember = !isLegacyPhoenix ? dbTeam.find((t: CampaignTeamMember) => t.name === memberName) : null;
+                    const isOwner = dbTeam.find((t: CampaignTeamMember) => t.name === memberName)?.role === 'owner';
+                    const dbMember = dbTeam.find((t: CampaignTeamMember) => t.name === memberName) || null;
                     const otherMembers = activeTeam.filter((m: string) => m !== memberName);
                     const transferCount = transferCounts[memberName] || 0;
                     const transferTarget = transferTargets[memberName] || '';
@@ -1879,7 +1800,7 @@ export default function CampaignDetail() {
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#111827' }}>Regenerate Weekly Plan</h3>
               </div>
               <p style={{ margin: '0 0 8px', fontSize: '14px', color: '#374151', lineHeight: 1.5 }}>
-                Redistribute all <strong>{activeData.length} prospects</strong> across <strong>{isLegacyPhoenix ? weeks.length : activeWeeks.length} weeks</strong>?
+                Redistribute all <strong>{activeData.length} prospects</strong> across <strong>{activeWeeks.length} weeks</strong>?
               </p>
               <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#6b7280', lineHeight: 1.5 }}>
                 A-tier and high-score prospects will be assigned to earlier weeks. Each team member's prospects will be spread evenly.
@@ -1895,11 +1816,10 @@ export default function CampaignDetail() {
 
       {/* Edit Campaign Modal */}
       {showEditCampaign && (() => {
-        const ef = isLegacyPhoenix ? campaignInfo : editForm;
+        const ef = editForm;
         if (!ef) return null;
         const setEf = (updates: any) => {
-          if (isLegacyPhoenix) setCampaignInfo({ ...campaignInfo, ...updates });
-          else setEditForm({ ...editForm, ...updates });
+          setEditForm({ ...editForm, ...updates });
         };
         const ownerOptions = editEmployees.map(emp => ({
           value: emp.id.toString(),
@@ -1956,68 +1876,35 @@ export default function CampaignDetail() {
                   </div>
                 </div>
 
-                {/* Owner - SearchableSelect for DB campaigns, plain select for legacy */}
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Campaign Owner</label>
-                  {isLegacyPhoenix ? (
-                    <SearchableSelect
-                      options={ownerOptions}
-                      value={editEmployees.find(e => `${e.first_name} ${e.last_name}` === ef.owner)?.id.toString() || ''}
-                      onChange={(val) => {
-                        const emp = editEmployees.find(e => e.id.toString() === val);
-                        if (emp) setEf({ owner: `${emp.first_name} ${emp.last_name}` });
-                      }}
-                      placeholder="Search and select owner..."
-                      style={{ width: '100%' }}
-                    />
-                  ) : (
-                    <SearchableSelect
-                      options={ownerOptions}
-                      value={ef.ownerId?.toString() || ''}
-                      onChange={(val) => setEf({ ownerId: val ? parseInt(val) : null })}
-                      placeholder="Search and select owner..."
-                      style={{ width: '100%' }}
-                    />
-                  )}
+                  <SearchableSelect
+                    options={ownerOptions}
+                    value={ef.ownerId?.toString() || ''}
+                    onChange={(val) => setEf({ ownerId: val ? parseInt(val) : null })}
+                    placeholder="Search and select owner..."
+                    style={{ width: '100%' }}
+                  />
                 </div>
 
-                {!isLegacyPhoenix && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Touchpoints</label>
-                      <input type="number" min="0" value={ef.targetTouchpoints || ''} onChange={e => setEf({ targetTouchpoints: parseInt(e.target.value) || 0 })} style={input} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Opportunities</label>
-                      <input type="number" min="0" value={ef.targetOpportunities || ''} onChange={e => setEf({ targetOpportunities: parseInt(e.target.value) || 0 })} style={input} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Estimates</label>
-                      <input type="number" min="0" value={ef.targetEstimates || ''} onChange={e => setEf({ targetEstimates: parseInt(e.target.value) || 0 })} style={input} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Awards</label>
-                      <input type="number" min="0" value={ef.targetAwards || ''} onChange={e => setEf({ targetAwards: parseInt(e.target.value) || 0 })} style={input} />
-                    </div>
-                  </div>
-                )}
-
-                {isLegacyPhoenix && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned Team Members</label>
-                    <SearchableMultiSelect
-                      options={editEmployees.map(emp => ({
-                        value: `${emp.first_name} ${emp.last_name}`,
-                        label: `${emp.first_name} ${emp.last_name}`,
-                        subtitle: emp.job_title || undefined,
-                        searchText: `${emp.first_name} ${emp.last_name} ${emp.job_title || ''} ${emp.department_name || ''} ${emp.email}`,
-                      }))}
-                      values={ef.assignedTeam || []}
-                      onChange={(selected) => setEf({ assignedTeam: selected })}
-                      placeholder="Search team members..."
-                    />
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Touchpoints</label>
+                    <input type="number" min="0" value={ef.targetTouchpoints || ''} onChange={e => setEf({ targetTouchpoints: parseInt(e.target.value) || 0 })} style={input} />
                   </div>
-                )}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Opportunities</label>
+                    <input type="number" min="0" value={ef.targetOpportunities || ''} onChange={e => setEf({ targetOpportunities: parseInt(e.target.value) || 0 })} style={input} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Estimates</label>
+                    <input type="number" min="0" value={ef.targetEstimates || ''} onChange={e => setEf({ targetEstimates: parseInt(e.target.value) || 0 })} style={input} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Awards</label>
+                    <input type="number" min="0" value={ef.targetAwards || ''} onChange={e => setEf({ targetAwards: parseInt(e.target.value) || 0 })} style={input} />
+                  </div>
+                </div>
 
                 {/* Campaign Summary */}
                 <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', marginTop: '8px' }}>
