@@ -15,7 +15,6 @@ import {
   CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
 } from '../services/campaigns';
 import SearchableSelect from '../components/SearchableSelect';
-import SearchableMultiSelect from '../components/SearchableMultiSelect';
 import '../styles/SalesPipeline.css';
 
 const statuses = [
@@ -105,7 +104,7 @@ export default function CampaignDetail() {
     queryFn: async () => {
       const map: Record<number, number> = {};
       const cid = parseInt(id || '0');
-      const companies = cid > 0 ? dbCompanies : data;
+      const companies = dbCompanies;
       for (const company of companies) {
         try {
           const assessment = await getCampaignCompanyAssessment(cid, company.id);
@@ -470,6 +469,10 @@ export default function CampaignDetail() {
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
 
+  const sectors = useMemo(() => {
+    return [...new Set(activeData.map((c: any) => c.sector).filter(Boolean))].sort();
+  }, [activeData]);
+
   const stats = useMemo(() => {
     const byStatus: any = {}; statuses.forEach(s => byStatus[s.key] = activeData.filter((c: any) => c.status === s.key).length);
     const byAction: any = {}; actions.forEach(a => byAction[a.key] = activeData.filter((c: any) => c.action === a.key).length);
@@ -615,7 +618,7 @@ export default function CampaignDetail() {
   const getCompanyContacts = (companyId: number) => contacts.filter((c: any) => c.companyId === companyId);
   const getCompanyOpportunities = (companyId: number) => opportunities.filter((o: any) => o.companyId === companyId);
   const getCompanyEstimates = (companyId: number) => estimates.filter((e: any) => e.companyId === companyId);
-  const getCompanyLogs = (companyId: number) => logs.filter((l: any) => l.cid === companyId);
+  const getCompanyLogs = (companyId: number) => activeLogs.filter((l: any) => l.cid === companyId);
 
   const modalOverlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 };
   const modal: React.CSSProperties = { background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '95%', maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' };
