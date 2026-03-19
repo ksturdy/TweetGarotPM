@@ -269,6 +269,10 @@ export default function CampaignDetail() {
     mutationFn: (prospectData: any) => createCampaignCompany(campaignId, prospectData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+    },
+    onError: (error: any) => {
+      console.error('Failed to add prospect:', error);
+      alert(error.response?.data?.error || 'Failed to add prospect');
     }
   });
 
@@ -657,7 +661,7 @@ export default function CampaignDetail() {
     setOrphanReassignTo('');
   };
 
-  const [newCustomer, setNewCustomer] = useState({ name: '', sector: '', address: '', phone: '', assignedTo: team[0], tier: 'B', score: 70, targetWeek: 1 });
+  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: team[0] || '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
 
@@ -770,6 +774,11 @@ export default function CampaignDetail() {
       setData([...data, customer]);
       setLogs((l: any) => [{ id: Date.now(), cid: newId, text: 'New prospect added', time: new Date().toISOString(), name: customer.name }, ...l]);
     } else {
+      // Find the employee_id for the selected team member
+      const selectedMember = activeTeam.find((t: any) =>
+        typeof t === 'string' ? t === newCustomer.assignedTo : t.employee_id === newCustomer.assignedToId
+      );
+      const assignedToId = newCustomer.assignedToId || (typeof selectedMember === 'object' ? selectedMember?.employee_id : null);
       addProspectMutation.mutate({
         name: newCustomer.name,
         sector: newCustomer.sector,
@@ -777,10 +786,12 @@ export default function CampaignDetail() {
         phone: newCustomer.phone,
         tier: newCustomer.tier,
         score: newCustomer.score,
-        target_week: newCustomer.targetWeek
+        target_week: newCustomer.targetWeek,
+        assigned_to_id: assignedToId
       });
     }
-    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: activeTeam[0] || '', tier: 'B', score: 70, targetWeek: 1 });
+    const firstTeam = activeTeam[0];
+    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: typeof firstTeam === 'string' ? firstTeam : (firstTeam?.name || ''), assignedToId: typeof firstTeam === 'object' ? firstTeam?.employee_id : null, tier: 'B', score: 70, targetWeek: 1 });
     setShowNewCustomer(false);
   };
 
@@ -1515,11 +1526,24 @@ export default function CampaignDetail() {
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned To</label>
                   <select
-                    value={newCustomer.assignedTo}
-                    onChange={e => setNewCustomer({...newCustomer, assignedTo: e.target.value})}
+                    value={typeof activeTeam[0] === 'string' ? newCustomer.assignedTo : (newCustomer.assignedToId?.toString() || '')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (typeof activeTeam[0] === 'string') {
+                        setNewCustomer({...newCustomer, assignedTo: val});
+                      } else {
+                        const member = activeTeam.find((t: any) => t.employee_id?.toString() === val);
+                        setNewCustomer({...newCustomer, assignedTo: member?.name || '', assignedToId: member ? member.employee_id : null});
+                      }
+                    }}
                     style={input}
                   >
-                    {activeTeam.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                    {activeTeam.map((t: any) => {
+                      const key = typeof t === 'string' ? t : t.employee_id;
+                      const value = typeof t === 'string' ? t : t.employee_id;
+                      const label = typeof t === 'string' ? t : t.name;
+                      return <option key={key} value={value}>{label}</option>;
+                    })}
                   </select>
                 </div>
                 <div>

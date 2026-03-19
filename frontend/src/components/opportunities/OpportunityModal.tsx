@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
-import { employeesApi, Employee } from '../../services/employees';
+import { employeesApi } from '../../services/employees';
 import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../SearchableSelect';
@@ -65,15 +65,15 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const [linkToExistingGC, setLinkToExistingGC] = useState(!!opportunity?.gc_customer_id);
   const [linkToExistingFacility, setLinkToExistingFacility] = useState(!!opportunity?.facility_customer_id);
 
-  // Fetch active employees for assignment
-  const { data: employeesResponse } = useQuery({
-    queryKey: ['employees', 'active'],
-    queryFn: () => employeesApi.getAll({ employmentStatus: 'active' })
+  // Fetch active employees for assignment (lightweight endpoint, no HR access needed)
+  const { data: assignableResponse } = useQuery({
+    queryKey: ['employees', 'assignable'],
+    queryFn: () => employeesApi.getAssignable()
   });
 
-  const employees: Employee[] = (employeesResponse?.data as any)?.data || [];
+  const employees = (assignableResponse?.data as any)?.data || [];
 
-  const employeeOptions = employees.map((emp: Employee) => ({
+  const employeeOptions = employees.map((emp: any) => ({
     value: emp.id,
     label: `${emp.first_name} ${emp.last_name}${emp.job_title ? ` - ${emp.job_title}` : ''}`
   }));
@@ -574,7 +574,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   </div>
 
                   {/* Row 6: Start Date, End Date, Duration, Assign To, Campaign */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+                  <div className="form-row-5">
                     <div className="form-group">
                       <label htmlFor="estimated_start_date">Est. Start Date *</label>
                       <input

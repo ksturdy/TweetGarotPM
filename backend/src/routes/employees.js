@@ -9,6 +9,23 @@ const { tenantContext } = require('../middleware/tenant');
 router.use(authenticate);
 router.use(tenantContext);
 
+// Lightweight employee list for assignment dropdowns - any authenticated user
+router.get('/assignable', async (req, res) => {
+  try {
+    const employees = await Employee.getAll({ employment_status: 'active' }, req.tenantId);
+    const assignable = employees.map(e => ({
+      id: e.id,
+      first_name: e.first_name,
+      last_name: e.last_name,
+      job_title: e.job_title,
+    }));
+    res.json({ data: assignable });
+  } catch (error) {
+    console.error('Error fetching assignable employees:', error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
 // Get all employees with optional filtering - requires HR read access
 router.get('/', authorizeHR('read'), async (req, res) => {
   try {

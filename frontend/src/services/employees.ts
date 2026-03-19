@@ -44,7 +44,16 @@ export interface EmployeeFilters {
   search?: string;
 }
 
+export interface AssignableEmployee {
+  id: number;
+  first_name: string;
+  last_name: string;
+  job_title: string | null;
+}
+
 export const employeesApi = {
+  getAssignable: () => api.get<{ data: AssignableEmployee[] }>('/employees/assignable'),
+
   getAll: (filters?: EmployeeFilters) => {
     const params = new URLSearchParams();
     if (filters?.departmentId) params.append('department_id', filters.departmentId.toString());
