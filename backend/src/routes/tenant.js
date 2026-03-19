@@ -248,6 +248,41 @@ router.put('/forecast-rules', async (req, res, next) => {
 });
 
 // =====================================================
+// BACKLOG FIT SETTINGS (global, any authenticated user)
+// =====================================================
+
+/**
+ * Get backlog fit analysis settings
+ * GET /api/tenant/backlog-fit-settings
+ */
+router.get('/backlog-fit-settings', async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.tenantId);
+    res.json(tenant?.settings?.backlogFitSettings || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Save backlog fit analysis settings
+ * PUT /api/tenant/backlog-fit-settings
+ */
+router.put('/backlog-fit-settings', async (req, res, next) => {
+  try {
+    const { capacityTarget, horizonMonths, comparisonMode, laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth, regionTargets } = req.body;
+
+    const tenant = await Tenant.updateSettings(req.tenantId, {
+      backlogFitSettings: { capacityTarget, horizonMonths, comparisonMode, laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth, regionTargets },
+    });
+
+    res.json(tenant.settings.backlogFitSettings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =====================================================
 // USER MANAGEMENT WITHIN TENANT
 // =====================================================
 

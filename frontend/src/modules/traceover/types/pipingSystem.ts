@@ -201,6 +201,13 @@ export const REDUCING_FITTING_TYPES: ReducingFittingType[] = [
 
 // ─── Pipe Spec (matches database pipe_specs table) ───
 
+/** Filter selections for one EST product category */
+export interface EstCategoryFilter {
+  installType?: string;
+  material?: string;
+  spec?: string;
+}
+
 export interface PipeSpec {
   id: string;
   name: string;
@@ -215,6 +222,17 @@ export interface PipeSpec {
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
+  /** EST catalog install type — maps this spec to EST products for import */
+  estInstallType?: string;
+  /** EST catalog material — maps this spec to EST products for import */
+  estMaterial?: string;
+  /** Per-category EST filter selections */
+  estFilters?: {
+    pipe?: EstCategoryFilter;
+    fittings?: EstCategoryFilter;
+    valves?: EstCategoryFilter;
+    hangers?: EstCategoryFilter;
+  };
 }
 
 /** Derive the traceover JointType from a spec */

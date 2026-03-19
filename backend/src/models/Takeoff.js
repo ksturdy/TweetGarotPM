@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const Takeoff = {
-  async create({ tenantId, takeoffNumber, name, description, estimateId, performanceFactor, notes, createdBy, takeoffType, pipeSpecId }) {
+  async create({ tenantId, takeoffNumber, name, description, estimateId, performanceFactor, notes, createdBy, takeoffType, pipeSpecId, estimatorId }) {
     const result = await db.query(
-      `INSERT INTO takeoffs (tenant_id, takeoff_number, name, description, estimate_id, performance_factor, notes, created_by, status, takeoff_type, pipe_spec_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+      `INSERT INTO takeoffs (tenant_id, takeoff_number, name, description, estimate_id, performance_factor, notes, created_by, status, takeoff_type, pipe_spec_id, estimator_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10, $11)
        RETURNING *`,
-      [tenantId, takeoffNumber, name, description || null, estimateId || null, performanceFactor || 0, notes || null, createdBy, takeoffType || 'manual', pipeSpecId || null]
+      [tenantId, takeoffNumber, name, description || null, estimateId || null, performanceFactor || 0, notes || null, createdBy, takeoffType || 'manual', pipeSpecId || null, estimatorId || null]
     );
     return result.rows[0];
   },
@@ -15,9 +15,11 @@ const Takeoff = {
     const result = await db.query(
       `SELECT t.*,
               u.first_name || ' ' || u.last_name as created_by_name,
+              est_u.first_name || ' ' || est_u.last_name as estimator_name,
               e.estimate_number, e.project_name as estimate_project_name
        FROM takeoffs t
        LEFT JOIN users u ON t.created_by = u.id
+       LEFT JOIN users est_u ON t.estimator_id = est_u.id
        LEFT JOIN estimates e ON t.estimate_id = e.id
        WHERE t.id = $1`,
       [id]
@@ -33,9 +35,11 @@ const Takeoff = {
     const result = await db.query(
       `SELECT t.*,
               u.first_name || ' ' || u.last_name as created_by_name,
+              est_u.first_name || ' ' || est_u.last_name as estimator_name,
               e.estimate_number, e.project_name as estimate_project_name
        FROM takeoffs t
        LEFT JOIN users u ON t.created_by = u.id
+       LEFT JOIN users est_u ON t.estimator_id = est_u.id
        LEFT JOIN estimates e ON t.estimate_id = e.id
        WHERE t.id = $1 AND t.tenant_id = $2`,
       [id, tenantId]
@@ -51,9 +55,11 @@ const Takeoff = {
     let query = `
       SELECT t.*,
              u.first_name || ' ' || u.last_name as created_by_name,
+             est_u.first_name || ' ' || est_u.last_name as estimator_name,
              e.estimate_number, e.project_name as estimate_project_name
       FROM takeoffs t
       LEFT JOIN users u ON t.created_by = u.id
+      LEFT JOIN users est_u ON t.estimator_id = est_u.id
       LEFT JOIN estimates e ON t.estimate_id = e.id
       WHERE t.tenant_id = $1
     `;
@@ -81,7 +87,7 @@ const Takeoff = {
   },
 
   async update(id, updates, tenantId) {
-    const allowedFields = ['name', 'description', 'estimate_id', 'performance_factor', 'status', 'notes', 'takeoff_type', 'pipe_spec_id'];
+    const allowedFields = ['name', 'description', 'estimate_id', 'performance_factor', 'status', 'notes', 'takeoff_type', 'pipe_spec_id', 'estimator_id'];
     const fields = [];
     const values = [];
     let paramCount = 1;

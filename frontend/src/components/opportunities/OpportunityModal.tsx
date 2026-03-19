@@ -228,7 +228,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     // Add optional number fields if they have values
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
     if (formData.estimated_duration_days) cleanedData.estimated_duration_days = Number(formData.estimated_duration_days);
-    if (formData.assigned_to) cleanedData.assigned_to = Number(formData.assigned_to);
+    // Always include assigned_to so it can be cleared (null = unassigned)
+    cleanedData.assigned_to = formData.assigned_to ? Number(formData.assigned_to) : null;
     if (formData.probability) cleanedData.probability = formData.probability;
     // Always include campaign_id (even if empty string, convert to null for clearing)
     if (formData.campaign_id && formData.campaign_id !== '') {

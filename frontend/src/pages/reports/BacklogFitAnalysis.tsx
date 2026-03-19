@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Chart } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -20,6 +20,15 @@ import opportunitiesService, { Opportunity } from '../../services/opportunities'
 import { vistaDataService, VPContract } from '../../services/vistaData';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, getContourMultipliers, getDefaultContour } from '../../utils/contours';
+import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
+import api from '../../services/api';
+
+const REGIONS = [
+  { prefix: '10', label: 'NE Wisconsin', color: '#3b82f6' },
+  { prefix: '20', label: 'Central WI', color: '#8b5cf6' },
+  { prefix: '30', label: 'Western WI', color: '#f59e0b' },
+  { prefix: '40', label: 'Tempe, AZ', color: '#ef4444' },
+];
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, LineController, BarController, Title, Tooltip, Legend, Filler);
 
@@ -98,18 +107,6 @@ interface OpportunityFitScore {
   gapFillPercent: number;
 }
 
-const STORAGE_KEY = 'backlogFitSettings';
-
-interface BacklogFitSettings {
-  capacityTarget: number;
-  horizonMonths: number;
-  comparisonMode: 'revenue' | 'labor';
-  laborCapacityTarget: number;
-  laborPctOfValue: number;
-  avgLaborRate: number;
-  hoursPerPersonPerMonth: number;
-}
-
 const defaultSettings: BacklogFitSettings = {
   capacityTarget: 5000000,
   horizonMonths: 12,
@@ -120,36 +117,100 @@ const defaultSettings: BacklogFitSettings = {
   hoursPerPersonPerMonth: 173,
 };
 
-const loadSettings = (): BacklogFitSettings => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...defaultSettings, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
-  return defaultSettings;
-};
-
 const BacklogFitAnalysis: React.FC = () => {
-  const [saved] = useState(loadSettings);
-  const [capacityTarget, setCapacityTarget] = useState<number>(saved.capacityTarget);
-  const [horizonMonths, setHorizonMonths] = useState<number>(saved.horizonMonths);
+  const queryClient = useQueryClient();
+  const [capacityTarget, setCapacityTarget] = useState<number>(defaultSettings.capacityTarget);
+  const [horizonMonths, setHorizonMonths] = useState<number>(defaultSettings.horizonMonths);
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [stateFilter, setStateFilter] = useState<string>('');
-  const [comparisonMode, setComparisonMode] = useState<'revenue' | 'labor'>(saved.comparisonMode);
-  const [laborCapacityTarget, setLaborCapacityTarget] = useState<number>(saved.laborCapacityTarget);
-  const [laborPctOfValue, setLaborPctOfValue] = useState<number>(saved.laborPctOfValue);
-  const [avgLaborRate, setAvgLaborRate] = useState<number>(saved.avgLaborRate);
-  const [hoursPerPersonPerMonth, setHoursPerPersonPerMonth] = useState<number>(saved.hoursPerPersonPerMonth);
+  const [comparisonMode, setComparisonMode] = useState<'revenue' | 'labor'>(defaultSettings.comparisonMode);
+  const [laborCapacityTarget, setLaborCapacityTarget] = useState<number>(defaultSettings.laborCapacityTarget);
+  const [laborPctOfValue, setLaborPctOfValue] = useState<number>(defaultSettings.laborPctOfValue);
+  const [avgLaborRate, setAvgLaborRate] = useState<number>(defaultSettings.avgLaborRate);
+  const [hoursPerPersonPerMonth, setHoursPerPersonPerMonth] = useState<number>(defaultSettings.hoursPerPersonPerMonth);
+  const [regionTargets, setRegionTargets] = useState<{ [prefix: string]: RegionTarget }>({});
+  const [showRegionTargets, setShowRegionTargets] = useState(false);
+  const settingsLoaded = useRef(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [emlLoading, setEmlLoading] = useState(false);
 
-  // Persist settings to localStorage
-  const saveSettings = useCallback(() => {
-    const settings: BacklogFitSettings = {
-      capacityTarget, horizonMonths, comparisonMode,
-      laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  }, [capacityTarget, horizonMonths, comparisonMode, laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth]);
+  const handlePdfDownload = useCallback(async () => {
+    setPdfLoading(true);
+    try {
+      const response = await api.get('/backlog-report/pdf-download', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Backlog-Fit-Report-${new Date().toISOString().split('T')[0]}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, []);
 
-  useEffect(() => { saveSettings(); }, [saveSettings]);
+  const handleEmailDraft = useCallback(async () => {
+    setEmlLoading(true);
+    try {
+      const response = await api.get('/backlog-report/email-draft', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'message/rfc822' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Backlog-Fit-Report-${new Date().toISOString().split('T')[0]}.eml`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Email draft failed:', err);
+    } finally {
+      setEmlLoading(false);
+    }
+  }, []);
+
+  // Load settings from tenant API
+  const { data: savedSettings, fetchStatus } = useQuery({
+    queryKey: ['backlogFitSettings'],
+    queryFn: getBacklogFitSettings,
+  });
+
+  // Apply loaded settings to state once after a FRESH fetch completes (not stale cache)
+  useEffect(() => {
+    if (fetchStatus !== 'idle' || settingsLoaded.current) return;
+    settingsLoaded.current = true;
+    if (savedSettings) {
+      if (savedSettings.capacityTarget != null) setCapacityTarget(savedSettings.capacityTarget);
+      if (savedSettings.horizonMonths != null) setHorizonMonths(savedSettings.horizonMonths);
+      if (savedSettings.comparisonMode) setComparisonMode(savedSettings.comparisonMode);
+      if (savedSettings.laborCapacityTarget != null) setLaborCapacityTarget(savedSettings.laborCapacityTarget);
+      if (savedSettings.laborPctOfValue != null) setLaborPctOfValue(savedSettings.laborPctOfValue);
+      if (savedSettings.avgLaborRate != null) setAvgLaborRate(savedSettings.avgLaborRate);
+      if (savedSettings.hoursPerPersonPerMonth != null) setHoursPerPersonPerMonth(savedSettings.hoursPerPersonPerMonth);
+      if (savedSettings.regionTargets) setRegionTargets(savedSettings.regionTargets);
+    }
+  }, [fetchStatus, savedSettings]);
+
+  // Save settings to tenant API (debounced via mutation)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveMutation = useMutation({
+    mutationFn: saveBacklogFitSettings,
+    onSuccess: (data) => {
+      // Keep query cache in sync so navigating away/back preserves saved values
+      queryClient.setQueryData(['backlogFitSettings'], data);
+    },
+  });
+
+  const saveSettings = useCallback((overrides: Partial<BacklogFitSettings> = {}) => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveMutation.mutate({
+        capacityTarget, horizonMonths, comparisonMode,
+        laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth,
+        regionTargets,
+        ...overrides,
+      });
+    }, 600);
+  }, [capacityTarget, horizonMonths, comparisonMode, laborCapacityTarget, laborPctOfValue, avgLaborRate, hoursPerPersonPerMonth, regionTargets, saveMutation]);
 
   // Fetch data
   const { data: contracts, isLoading: contractsLoading } = useQuery({
@@ -592,6 +653,30 @@ const BacklogFitAnalysis: React.FC = () => {
             Comparing project {comparisonMode === 'revenue' ? 'backlog' : 'labor curve'} vs. opportunity pipeline to identify capacity gaps
           </div>
         </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={handlePdfDownload}
+            disabled={pdfLoading}
+            style={{
+              padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#3b82f6', color: '#fff',
+              border: 'none', borderRadius: '4px', cursor: pdfLoading ? 'wait' : 'pointer',
+              opacity: pdfLoading ? 0.6 : 1, whiteSpace: 'nowrap',
+            }}
+          >
+            {pdfLoading ? 'Generating...' : 'Download Report'}
+          </button>
+          <button
+            onClick={handleEmailDraft}
+            disabled={emlLoading}
+            style={{
+              padding: '0.4rem 0.75rem', fontSize: '0.75rem', background: '#f8fafc', color: '#334155',
+              border: '1px solid #e2e8f0', borderRadius: '4px', cursor: emlLoading ? 'wait' : 'pointer',
+              opacity: emlLoading ? 0.6 : 1, whiteSpace: 'nowrap',
+            }}
+          >
+            {emlLoading ? 'Generating...' : 'Email Draft'}
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -664,7 +749,7 @@ const BacklogFitAnalysis: React.FC = () => {
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Compare By</label>
             <div style={{ display: 'flex', gap: '0' }}>
               <button
-                onClick={() => setComparisonMode('revenue')}
+                onClick={() => { setComparisonMode('revenue'); saveSettings({ comparisonMode: 'revenue' }); }}
                 style={{
                   padding: '0.35rem 0.75rem', fontSize: '0.8rem',
                   background: comparisonMode === 'revenue' ? '#3b82f6' : '#f1f5f9',
@@ -675,7 +760,7 @@ const BacklogFitAnalysis: React.FC = () => {
                 Revenue
               </button>
               <button
-                onClick={() => setComparisonMode('labor')}
+                onClick={() => { setComparisonMode('labor'); saveSettings({ comparisonMode: 'labor' }); }}
                 style={{
                   padding: '0.35rem 0.75rem', fontSize: '0.8rem',
                   background: comparisonMode === 'labor' ? '#8b5cf6' : '#f1f5f9',
@@ -697,7 +782,13 @@ const BacklogFitAnalysis: React.FC = () => {
                 <input
                   type="number"
                   value={capacityTarget / 1000000}
-                  onChange={(e) => setCapacityTarget(parseFloat(e.target.value || '0') * 1000000)}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) {
+                      setCapacityTarget(val * 1000000);
+                      saveSettings({ capacityTarget: val * 1000000 });
+                    }
+                  }}
                   step={0.5}
                   min={0}
                   style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '80px' }}
@@ -716,7 +807,13 @@ const BacklogFitAnalysis: React.FC = () => {
                   <input
                     type="number"
                     value={laborCapacityTarget}
-                    onChange={(e) => setLaborCapacityTarget(Math.max(1, parseInt(e.target.value) || 150))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1) {
+                        setLaborCapacityTarget(val);
+                        saveSettings({ laborCapacityTarget: val });
+                      }
+                    }}
                     min={1}
                     style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '70px' }}
                   />
@@ -729,7 +826,13 @@ const BacklogFitAnalysis: React.FC = () => {
                   <input
                     type="number"
                     value={laborPctOfValue}
-                    onChange={(e) => setLaborPctOfValue(Math.max(1, Math.min(100, parseInt(e.target.value) || 60)))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1 && val <= 100) {
+                        setLaborPctOfValue(val);
+                        saveSettings({ laborPctOfValue: val });
+                      }
+                    }}
                     min={1} max={100}
                     style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '55px' }}
                   />
@@ -743,7 +846,13 @@ const BacklogFitAnalysis: React.FC = () => {
                   <input
                     type="number"
                     value={avgLaborRate}
-                    onChange={(e) => setAvgLaborRate(Math.max(1, parseInt(e.target.value) || 85))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1) {
+                        setAvgLaborRate(val);
+                        saveSettings({ avgLaborRate: val });
+                      }
+                    }}
                     min={1}
                     style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '60px' }}
                   />
@@ -755,7 +864,13 @@ const BacklogFitAnalysis: React.FC = () => {
                 <input
                   type="number"
                   value={hoursPerPersonPerMonth}
-                  onChange={(e) => setHoursPerPersonPerMonth(Math.max(100, Math.min(220, parseInt(e.target.value) || 173)))}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val) && val >= 100 && val <= 220) {
+                      setHoursPerPersonPerMonth(val);
+                      saveSettings({ hoursPerPersonPerMonth: val });
+                    }
+                  }}
                   min={100} max={220}
                   style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '60px' }}
                 />
@@ -767,7 +882,7 @@ const BacklogFitAnalysis: React.FC = () => {
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Horizon</label>
             <select
               value={horizonMonths}
-              onChange={(e) => setHorizonMonths(parseInt(e.target.value))}
+              onChange={(e) => { const val = parseInt(e.target.value); setHorizonMonths(val); saveSettings({ horizonMonths: val }); }}
               style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
             >
               <option value={12}>12 months</option>
@@ -800,6 +915,108 @@ const BacklogFitAnalysis: React.FC = () => {
             </select>
           </div>
         </div>
+      </div>
+
+      {/* Regional Targets (collapsible) */}
+      <div className="card" style={{ padding: '0', marginBottom: '1rem', overflow: 'hidden' }}>
+        <button
+          onClick={() => setShowRegionTargets(!showRegionTargets)}
+          style={{
+            width: '100%', padding: '0.6rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#374151',
+          }}
+        >
+          <span>Regional Targets (PDF Report)</span>
+          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{showRegionTargets ? '\u25B2' : '\u25BC'}</span>
+        </button>
+        {showRegionTargets && (
+          <div style={{ padding: '0 0.75rem 0.75rem', borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
+              Set revenue and labor targets per region for the PDF report's regional comparison pages. Defaults to global target divided evenly.
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '0.4rem 0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>Region</th>
+                  <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0' }}>Revenue Target ($/mo)</th>
+                  <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0' }}>Labor Target (people)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {REGIONS.map(r => {
+                  const rt = regionTargets[r.prefix];
+                  const defaultRevTarget = Math.round(capacityTarget / REGIONS.length);
+                  const defaultLabTarget = Math.round(laborCapacityTarget / REGIONS.length);
+                  return (
+                    <tr key={r.prefix} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.4rem 0.5rem' }}>
+                        <span style={{
+                          display: 'inline-block', width: '10px', height: '10px', background: r.color,
+                          borderRadius: '2px', marginRight: '6px', verticalAlign: 'middle',
+                        }} />
+                        {r.label}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                          <span style={{ color: '#64748b' }}>$</span>
+                          <input
+                            type="number"
+                            value={rt?.revenueTarget != null ? rt.revenueTarget / 1000000 : defaultRevTarget / 1000000}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val)) {
+                                const updated = {
+                                  ...regionTargets,
+                                  [r.prefix]: {
+                                    label: r.label,
+                                    revenueTarget: val * 1000000,
+                                    laborTarget: rt?.laborTarget ?? defaultLabTarget,
+                                  },
+                                };
+                                setRegionTargets(updated);
+                                saveSettings({ regionTargets: updated });
+                              }
+                            }}
+                            step={0.1}
+                            min={0}
+                            style={{ padding: '0.3rem 0.4rem', fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '70px', textAlign: 'right' }}
+                          />
+                          <span style={{ color: '#64748b' }}>M</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                          <input
+                            type="number"
+                            value={rt?.laborTarget ?? defaultLabTarget}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (!isNaN(val) && val >= 0) {
+                                const updated = {
+                                  ...regionTargets,
+                                  [r.prefix]: {
+                                    label: r.label,
+                                    revenueTarget: rt?.revenueTarget ?? defaultRevTarget,
+                                    laborTarget: val,
+                                  },
+                                };
+                                setRegionTargets(updated);
+                                saveSettings({ regionTargets: updated });
+                              }
+                            }}
+                            min={0}
+                            style={{ padding: '0.3rem 0.4rem', fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '55px', textAlign: 'right' }}
+                          />
+                          <span style={{ color: '#64748b' }}>people</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Chart */}

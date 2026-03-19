@@ -144,6 +144,9 @@ export default function TraceoverSettings() {
       reducingTeeRates: {},
       crossReducingRates: {},
       isDefault: false,
+      estInstallType: 'Butt Weld',
+      estMaterial: 'Carbon Steel',
+      estFilters: {},
     });
     setSelectedSpecId(newId);
   };

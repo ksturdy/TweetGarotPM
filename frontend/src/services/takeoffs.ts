@@ -18,6 +18,8 @@ export interface Takeoff {
   notes: string;
   created_by: number;
   created_by_name?: string;
+  estimator_id: number | null;
+  estimator_name?: string;
   estimate_number?: string;
   estimate_project_name?: string;
   created_at: string;

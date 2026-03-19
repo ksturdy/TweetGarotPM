@@ -53,7 +53,6 @@ import BudgetGenerator from './pages/estimating/BudgetGenerator';
 import TakeoffsList from './pages/estimating/TakeoffsList';
 import TakeoffForm from './pages/estimating/TakeoffForm';
 import TakeoffDetail from './pages/estimating/TakeoffDetail';
-import AccountManagementList from './pages/accountManagement/AccountManagementList';
 import AccountManagementContacts from './pages/accountManagement/AccountManagementContacts';
 import CustomerList from './pages/accountManagement/CustomerList';
 import VendorList from './pages/accountManagement/VendorList';
@@ -144,6 +143,7 @@ import FieldMoreHome from './pages/field/FieldMoreHome';
 import FieldFavoriteVendors from './pages/field/vendors/FieldFavoriteVendors';
 import VistaDataSettings from './pages/settings/VistaDataSettings';
 import VistaLinkingManager from './pages/settings/VistaLinkingManager';
+import EstProductSettings from './pages/settings/EstProductSettings';
 import BuildQuestionnaire from './pages/BuildQuestionnaire';
 // Traceover module (lazy-loaded)
 const TraceoverWorkspace = React.lazy(() => import('./modules/traceover/pages/TraceoverWorkspace'));
@@ -377,7 +377,7 @@ const App: React.FC = () => {
                 <Route path="/estimating/takeoffs/new" element={<TakeoffForm />} />
                 <Route path="/estimating/takeoffs/:id" element={<TakeoffDetail />} />
                 <Route path="/estimating/takeoffs/:id/edit" element={<TakeoffForm />} />
-                <Route path="/account-management" element={<AccountManagementList />} />
+                <Route path="/account-management" element={<Navigate to="/account-management/customers" />} />
                 <Route path="/account-management/contacts" element={<AccountManagementContacts />} />
                 <Route path="/account-management/customers" element={<CustomerList />} />
                 <Route path="/account-management/vendors" element={<VendorList />} />
@@ -404,6 +404,7 @@ const App: React.FC = () => {
                 <Route path="/settings" element={<TenantSettings />} />
                 <Route path="/settings/vista-data" element={<VistaDataSettings />} />
                 <Route path="/settings/vista-data/linking" element={<VistaLinkingManager />} />
+                <Route path="/settings/est-products" element={<EstProductSettings />} />
                 <Route path="/settings/service-offerings" element={<ServiceOfferingList />} />
 
                 {/* HR Routes */}

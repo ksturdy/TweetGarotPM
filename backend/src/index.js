@@ -96,6 +96,8 @@ const traceoverRunRoutes = require('./routes/traceoverRuns');
 const { templateRouter: assemblyTemplateRoutes, instanceRouter: assemblyInstanceRoutes } = require('./routes/assemblyTemplates');
 const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
+const backlogReportRoutes = require('./routes/backlogReport');
+const estProductRoutes = require('./routes/estProducts');
 
 const app = express();
 
@@ -224,6 +226,8 @@ app.use('/api/rate-tables', rateTableRoutes);
 app.use('/api/piping-services', pipingServiceRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
+app.use('/api/backlog-report', backlogReportRoutes);
+app.use('/api/est-products', estProductRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

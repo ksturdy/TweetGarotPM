@@ -171,7 +171,8 @@ const VistaData = {
         e.first_name || ' ' || e.last_name as linked_employee_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
-        d.name as linked_department_name
+        d.name as linked_department_name,
+        d.department_number as linked_department_number
       FROM vp_contracts vc
       LEFT JOIN projects p ON vc.linked_project_id = p.id
       LEFT JOIN employees e ON vc.linked_employee_id = e.id

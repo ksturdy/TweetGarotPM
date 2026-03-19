@@ -123,6 +123,39 @@ export const saveForecastRules = async (rules: ForecastRules): Promise<ForecastR
 };
 
 /**
+ * Get backlog fit analysis settings (global, tenant-wide)
+ */
+export interface RegionTarget {
+  label: string;
+  revenueTarget: number;
+  laborTarget: number;
+}
+
+export interface BacklogFitSettings {
+  capacityTarget: number;
+  horizonMonths: number;
+  comparisonMode: 'revenue' | 'labor';
+  laborCapacityTarget: number;
+  laborPctOfValue: number;
+  avgLaborRate: number;
+  hoursPerPersonPerMonth: number;
+  regionTargets?: { [prefix: string]: RegionTarget };
+}
+
+export const getBacklogFitSettings = async (): Promise<BacklogFitSettings | null> => {
+  const response = await api.get('/tenant/backlog-fit-settings');
+  return response.data;
+};
+
+/**
+ * Save backlog fit analysis settings (global, tenant-wide)
+ */
+export const saveBacklogFitSettings = async (settings: BacklogFitSettings): Promise<BacklogFitSettings> => {
+  const response = await api.put('/tenant/backlog-fit-settings', settings);
+  return response.data;
+};
+
+/**
  * Get tenant usage statistics
  */
 export const getTenantUsage = async (): Promise<{

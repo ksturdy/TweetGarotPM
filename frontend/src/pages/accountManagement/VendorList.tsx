@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { vendorsService, Vendor } from '../../services/vendors';
 import { PlacesSearch } from '../../components/PlacesSearch';
 import { Place } from '../../services/places';
@@ -210,9 +209,6 @@ const VendorList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/account-management" className="breadcrumb-link" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
-              &larr; Back to Account Management
-            </Link>
             <h1>🏗️ Vendors & Subcontractors</h1>
             <div className="sales-subtitle">Accounts Payable</div>
           </div>

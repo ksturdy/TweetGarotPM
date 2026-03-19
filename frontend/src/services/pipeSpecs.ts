@@ -15,6 +15,10 @@ export interface PipeSpec {
   is_default: boolean;
   created_at: string;
   updated_at: string;
+  // EST catalog filter selections
+  est_install_type?: string | null;
+  est_material?: string | null;
+  est_filters?: Record<string, any> | null;
   // Populated when fetching by ID
   pipe_rates?: PipeSpecPipeRate[];
   fitting_rates?: PipeSpecFittingRate[];

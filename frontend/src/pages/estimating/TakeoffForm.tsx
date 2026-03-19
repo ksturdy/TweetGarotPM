@@ -10,6 +10,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import { takeoffsApi, Takeoff, TakeoffItem } from '../../services/takeoffs';
 import { estimatesApi, Estimate } from '../../services/estimates';
+import { usersApi, User } from '../../services/users';
 
 const FITTING_TYPES = [
   { value: '90', label: '90\u00B0 Elbow', rateKey: '90_elbow' },
@@ -110,6 +111,7 @@ const TakeoffForm: React.FC = () => {
     name: '',
     description: '',
     estimate_id: '' as string | number,
+    estimator_id: '' as string | number,
     performance_factor: 0,
     notes: '',
     status: 'draft',
@@ -143,6 +145,7 @@ const TakeoffForm: React.FC = () => {
         name: takeoff.name || '',
         description: takeoff.description || '',
         estimate_id: takeoff.estimate_id || '',
+        estimator_id: takeoff.estimator_id || '',
         performance_factor: Number(takeoff.performance_factor) || 0,
         notes: takeoff.notes || '',
         status: takeoff.status || 'draft',
@@ -171,6 +174,12 @@ const TakeoffForm: React.FC = () => {
   const { data: estimates = [] } = useQuery({
     queryKey: ['estimates-for-takeoff'],
     queryFn: () => estimatesApi.getAll().then(res => res.data),
+  });
+
+  // Fetch users for the estimator dropdown
+  const { data: users = [] } = useQuery({
+    queryKey: ['users-for-takeoff'],
+    queryFn: () => usersApi.getAll().then(res => res.data),
   });
 
   // Auto-focus quantity input
@@ -318,6 +327,7 @@ const TakeoffForm: React.FC = () => {
         name: form.name,
         description: form.description,
         estimate_id: form.estimate_id ? Number(form.estimate_id) : null,
+        estimator_id: form.estimator_id ? Number(form.estimator_id) : null,
         performance_factor: form.performance_factor,
         notes: form.notes,
         status: form.status,
@@ -470,6 +480,19 @@ const TakeoffForm: React.FC = () => {
               <option value="draft">Draft</option>
               <option value="in_progress">In Progress</option>
               <option value="complete">Complete</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Estimator</label>
+            <select
+              style={{ ...inputStyle, background: '#fff' }}
+              value={form.estimator_id}
+              onChange={(e) => setForm(prev => ({ ...prev, estimator_id: e.target.value }))}
+            >
+              <option value="">Select Estimator</option>
+              {(users as User[]).filter(u => u.is_active).map((u: User) => (
+                <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+              ))}
             </select>
           </div>
           <div>

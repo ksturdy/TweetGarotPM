@@ -146,9 +146,15 @@ const TakeoffDetail: React.FC = () => {
             </div>
           </div>
           <div>
+            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>Estimator</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#374151' }}>{takeoff.estimator_name || <span style={{ color: '#9ca3af' }}>Unassigned</span>}</div>
+          </div>
+          <div>
             <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>Created By</div>
             <div style={{ fontSize: 14, color: '#374151' }}>{takeoff.created_by_name || '-'}</div>
           </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px 20px', marginTop: 12 }}>
           <div>
             <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>Last Updated</div>
             <div style={{ fontSize: 14, color: '#374151' }}>{new Date(takeoff.updated_at).toLocaleDateString()}</div>

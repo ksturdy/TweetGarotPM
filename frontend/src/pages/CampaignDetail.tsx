@@ -27,69 +27,6 @@ const weeks = [
   { num: 6, start: 'Mar 9', end: 'Mar 15', label: 'Mar 9 - 15' }
 ];
 
-const initCompanies = [
-  { id: 1, name: "SK Food Group", sector: "Food Processing", score: 90, tier: "A", assignedTo: "Brian Smith", address: "790 S. 75th Ave, Tolleson, AZ 85353", phone: "(206) 935-8100", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 2, name: "United Dairymen of Arizona", sector: "Dairy Processing", score: 90, tier: "A", assignedTo: "Brian Smith", address: "2008 S. Hardy Dr, Tempe, AZ 85282", phone: "(480) 966-7211", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 3, name: "Microchip Technology", sector: "Semiconductor", score: 88, tier: "A", assignedTo: "Brian Smith", address: "2355 W. Chandler Blvd, Chandler, AZ 85224", phone: "(480) 792-7200", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 4, name: "Shamrock Foods", sector: "Dairy/Food", score: 88, tier: "A", assignedTo: "Brian Smith", address: "2540 N. 29th Ave, Phoenix, AZ 85009", phone: "(602) 233-6400", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 5, name: "Northrop Grumman SMF", sector: "Satellite Mfg", score: 88, tier: "A", assignedTo: "Cory Wile", address: "1575 N. Voyager Ave, Gilbert, AZ 85234", phone: "(480) 425-6000", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 6, name: "Footprint LLC", sector: "Sustainable Packaging", score: 87, tier: "A", assignedTo: "Brian Wohlers", address: "250 E. Germann Rd, Gilbert, AZ 85297", phone: "(480) 456-9000", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 7, name: "Swire Coca-Cola", sector: "Beverage Bottling", score: 86, tier: "A", assignedTo: "Cory Wile", address: "1850 E. University Dr, Tempe, AZ 85281", phone: "(480) 775-7000", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 8, name: "Stryker Sustainability", sector: "Medical Device", score: 85, tier: "A", assignedTo: "Brian Wohlers", address: "2681 S. Alma School Rd, Chandler, AZ 85286", phone: "(480) 792-1450", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 9, name: "Boeing Mesa", sector: "Aerospace Mfg", score: 85, tier: "A", assignedTo: "Cory Wile", address: "5000 E. McDowell Rd, Mesa, AZ 85215", phone: "(480) 891-3000", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 10, name: "Benchmark Electronics", sector: "Electronics", score: 85, tier: "A", assignedTo: "Brian Wohlers", address: "3201 S. 38th St, Tempe, AZ 85282", phone: "(480) 634-5700", status: "prospect", action: "none", targetWeek: 1 },
-  { id: 11, name: "Honeywell Aerospace HQ", sector: "Aerospace", score: 84, tier: "A", assignedTo: "Brian Smith", address: "1944 E. Sky Harbor Circle, Phoenix, AZ 85034", phone: "(602) 365-3099", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 12, name: "SanTan Brewing", sector: "Beverage Production", score: 82, tier: "A", assignedTo: "Cory Wile", address: "495 E. Warner Rd, Chandler, AZ 85225", phone: "(480) 534-7041", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 13, name: "XNRGY Climate Solutions", sector: "HVAC Mfg", score: 82, tier: "A", assignedTo: "Cory Wile", address: "8501 E. Raintree Dr, Mesa, AZ 85212", phone: "(480) 830-0800", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 14, name: "Meyer Burger", sector: "Solar Mfg", score: 82, tier: "A", assignedTo: "Brian Wohlers", address: "16701 W. Commerce Dr, Goodyear, AZ 85338", phone: "(623) 386-7700", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 15, name: "Amkor Technology", sector: "Semiconductor", score: 82, tier: "A", assignedTo: "Brian Wohlers", address: "2045 E. Innovation Circle, Tempe, AZ 85284", phone: "(480) 821-5000", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 16, name: "First Solar", sector: "Solar Mfg", score: 80, tier: "A", assignedTo: "Cory Wile", address: "350 W. Washington St #600, Tempe, AZ 85281", phone: "(602) 414-9300", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 17, name: "Precision Aerospace", sector: "Aerospace", score: 80, tier: "A", assignedTo: "Cory Wile", address: "4020 E. Cotton Center Blvd, Phoenix, AZ 85040", phone: "(602) 243-1500", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 18, name: "Capistrano's Bakery", sector: "Bakery Mfg", score: 78, tier: "B", assignedTo: "Cory Wile", address: "2635 S. 24th St, Phoenix, AZ 85034", phone: "(480) 968-0468", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 19, name: "Honeywell (Tempe)", sector: "Aerospace", score: 78, tier: "B", assignedTo: "Brian Wohlers", address: "1300 W. Warner Rd, Tempe, AZ 85284", phone: "(480) 592-3000", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 20, name: "Edwards Vacuum", sector: "Semiconductor Equip", score: 78, tier: "B", assignedTo: "Brian Wohlers", address: "301 S. Roosevelt Ave, Chandler, AZ 85226", phone: "(480) 961-4000", status: "prospect", action: "none", targetWeek: 2 },
-  { id: 21, name: "AZ Wilderness Brewing", sector: "Brewery", score: 77, tier: "B", assignedTo: "Cory Wile", address: "721 N. Arizona Ave, Gilbert, AZ 85233", phone: "(480) 284-9863", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 22, name: "Liberty Paper Products", sector: "Paper Products", score: 76, tier: "B", assignedTo: "Brian Wohlers", address: "2701 E. Chambers St, Phoenix, AZ 85040", phone: "(602) 276-2891", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 23, name: "JX Nippon Mining", sector: "Electronics Materials", score: 76, tier: "B", assignedTo: "Brian Wohlers", address: "1235 S. Power Rd, Mesa, AZ 85206", phone: "(480) 832-9950", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 24, name: "Arizona Foods Group", sector: "Food Mfg", score: 76, tier: "B", assignedTo: "Cory Wile", address: "2111 W. Camelback Rd, Phoenix, AZ 85015", phone: "(602) 242-0808", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 25, name: "General Dynamics C4", sector: "Defense", score: 75, tier: "B", assignedTo: "Brian Wohlers", address: "8220 E. Roosevelt St, Scottsdale, AZ 85257", phone: "(480) 441-4000", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 26, name: "Phoenix Defense", sector: "Aerospace", score: 75, tier: "B", assignedTo: "Cory Wile", address: "1455 N. Greenfield Rd, Gilbert, AZ 85234", phone: "(480) 503-7600", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 27, name: "Cytec Engineered", sector: "Composites", score: 75, tier: "B", assignedTo: "Cory Wile", address: "1300 E. University Dr, Tempe, AZ 85281", phone: "(480) 730-2000", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 28, name: "Stern Produce", sector: "Food Distribution", score: 75, tier: "B", assignedTo: "Cory Wile", address: "2640 S. 19th Ave, Phoenix, AZ 85009", phone: "(602) 253-3328", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 29, name: "Lineage Logistics", sector: "Cold Storage", score: 74, tier: "B", assignedTo: "Brian Wohlers", address: "17651 W. Yuma Rd, Waddell, AZ 85355", phone: "(623) 535-8600", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 30, name: "Romac Industries", sector: "Pipeline Mfg", score: 74, tier: "B", assignedTo: "Cory Wile", address: "1501 N. Litchfield Rd, Goodyear, AZ 85338", phone: "(623) 932-3777", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 31, name: "Modern Industries", sector: "Aerospace", score: 74, tier: "B", assignedTo: "Brian Wohlers", address: "4302 E. Elwood St, Phoenix, AZ 85040", phone: "(602) 268-7773", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 32, name: "Innovia Manufacturing", sector: "Metal Fabrication", score: 74, tier: "B", assignedTo: "Cory Wile", address: "4330 W. Chandler Blvd, Chandler, AZ 85226", phone: "(480) 785-4400", status: "prospect", action: "none", targetWeek: 3 },
-  { id: 33, name: "Danzeisen Dairy", sector: "Dairy Processing", score: 73, tier: "B", assignedTo: "Cory Wile", address: "3625 W. Dobbins Rd, Laveen, AZ 85339", phone: "(602) 237-3565", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 34, name: "Verigon Electronics", sector: "Contract Mfg", score: 72, tier: "B", assignedTo: "Brian Wohlers", address: "2133 W. University Dr, Tempe, AZ 85281", phone: "(480) 921-0600", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 35, name: "GTI Energy", sector: "Manufacturing", score: 72, tier: "B", assignedTo: "Cory Wile", address: "16920 W. Roosevelt St, Goodyear, AZ 85338", phone: "(623) 932-0600", status: "prospect", action: "none", targetWeek: 5 },
-  { id: 36, name: "Arcadia Cold Storage", sector: "Cold Storage", score: 72, tier: "B", assignedTo: "Cory Wile", address: "14450 W. Olive Ave, El Mirage, AZ 85335", phone: "(623) 935-3400", status: "prospect", action: "none", targetWeek: 4 },
-  { id: 37, name: "TurbineAero", sector: "Aerospace MRO", score: 72, tier: "B", assignedTo: "Brian Wohlers", address: "1651 E. Northrop Blvd, Chandler, AZ 85286", phone: "(480) 659-7800", status: "prospect", action: "none", targetWeek: 5 },
-  { id: 38, name: "Huss Brewing", sector: "Brewery", score: 72, tier: "B", assignedTo: "Brian Wohlers", address: "100 E. Camelback Rd, Tempe, AZ 85281", phone: "(480) 264-4844", status: "prospect", action: "none", targetWeek: 5 },
-  { id: 39, name: "La Canasta Mexican", sector: "Food Mfg", score: 71, tier: "B", assignedTo: "Cory Wile", address: "3715 W. McDowell Rd, Phoenix, AZ 85009", phone: "(602) 269-9210", status: "prospect", action: "none", targetWeek: 5 },
-  { id: 40, name: "Sub-Zero Group", sector: "Appliance Mfg", score: 70, tier: "B", assignedTo: "Brian Wohlers", address: "16651 W. Yuma Rd, Goodyear, AZ 85338", phone: "(623) 935-6800", status: "prospect", action: "none", targetWeek: 5 }
-];
-
-const initContacts = [
-  { id: 1, companyId: 1, name: "Michael Chen", title: "Plant Manager", email: "mchen@skfood.com", phone: "(206) 935-8101", isPrimary: true },
-  { id: 2, companyId: 1, name: "Sarah Johnson", title: "Operations Director", email: "sjohnson@skfood.com", phone: "(206) 935-8102", isPrimary: false },
-  { id: 3, companyId: 2, name: "Robert Garcia", title: "Facilities Manager", email: "rgarcia@uda.com", phone: "(480) 966-7212", isPrimary: true },
-  { id: 4, companyId: 3, name: "Jennifer Lee", title: "VP Operations", email: "jlee@microchip.com", phone: "(480) 792-7201", isPrimary: true },
-  { id: 5, companyId: 3, name: "David Miller", title: "Procurement Manager", email: "dmiller@microchip.com", phone: "(480) 792-7203", isPrimary: false },
-  { id: 6, companyId: 4, name: "Amanda White", title: "Plant Director", email: "awhite@shamrock.com", phone: "(602) 233-6401", isPrimary: true },
-  { id: 7, companyId: 5, name: "James Wilson", title: "Facilities Director", email: "jwilson@ngc.com", phone: "(480) 425-6001", isPrimary: true },
-  { id: 8, companyId: 6, name: "Lisa Anderson", title: "Operations Manager", email: "landerson@footprint.com", phone: "(480) 456-9001", isPrimary: true },
-  { id: 9, companyId: 7, name: "Thomas Brown", title: "Maintenance Director", email: "tbrown@swirecc.com", phone: "(480) 775-7001", isPrimary: true },
-  { id: 10, companyId: 8, name: "Emily Davis", title: "Engineering Manager", email: "edavis@stryker.com", phone: "(480) 792-1451", isPrimary: true }
-];
-
-
-const initEstimates = [
-  { id: 1, companyId: 3, oppId: 2, number: "EST-2025-001", name: "Cleanroom HVAC - Phase 1", amount: 275000, status: "sent", sentDate: "2025-02-01", validUntil: "2025-03-01" },
-  { id: 2, companyId: 3, oppId: 2, number: "EST-2025-002", name: "Cleanroom HVAC - Full Scope", amount: 450000, status: "pending", sentDate: null, validUntil: null },
-  { id: 3, companyId: 5, oppId: 3, number: "EST-2025-003", name: "Testing Chamber Controls", amount: 280000, status: "sent", sentDate: "2025-01-28", validUntil: "2025-02-28" },
-  { id: 4, companyId: 1, oppId: 1, number: "EST-2025-004", name: "Freezer System - Budget", amount: 95000, status: "draft", sentDate: null, validUntil: null }
-];
 
 const statuses = [
   { key: 'prospect', label: 'Prospect', color: '#6b7280' },
@@ -114,20 +51,13 @@ const estimateStatuses = [
   { key: 'declined', label: 'Declined', color: '#ef4444' }
 ];
 
-const team = ['Brian Smith', 'Brian Wohlers', 'Cory Wile'];
-const sectors = [...new Set(initCompanies.map(c => c.sector))].sort();
-
-const save = (k: string, v: any) => { try { localStorage.setItem('phx3_' + k, JSON.stringify(v)); } catch(e){} };
-const load = (k: string, d: any) => { try { const v = localStorage.getItem('phx3_' + k); return v ? JSON.parse(v) : d; } catch(e) { return d; } };
 
 export default function CampaignDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [data, setData] = useState(() => load('data', initCompanies));
-  const [contacts, setContacts] = useState(() => load('contacts', initContacts));
-  const [estimates, setEstimates] = useState(() => load('estimates', initEstimates));
-  const [logs, setLogs] = useState<any[]>(() => load('logs', []));
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [estimates, setEstimates] = useState<any[]>([]);
 
   // Fetch pipeline stages from database
   const { data: pipelineStages = [] } = useQuery({
@@ -198,46 +128,30 @@ export default function CampaignDetail() {
       }
       return map;
     },
-    enabled: !!id && (data.length > 0 || dbCompanies.length > 0),
+    enabled: !!id && dbCompanies.length > 0,
     staleTime: 30000,
   });
 
-  // Determine if this is the legacy Phoenix campaign (localStorage-based) or a DB campaign
-  const isLegacyPhoenix = useMemo(() => {
-    try {
-      const saved = localStorage.getItem('phx3_data');
-      return saved !== null && (dbCampaign?.name?.includes('Phoenix') || !dbCampaign);
-    } catch { return false; }
-  }, [dbCampaign]);
-
   // Unified data accessors
   const activeData = useMemo(() => {
-    if (dbCompanies.length > 0) {
-      return dbCompanies.map((c: CampaignCompany) => ({
-        id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
-        assignedTo: c.assigned_to_name || 'Unassigned', assigned_to_id: c.assigned_to_id,
-        address: c.address || '', phone: c.phone || '',
-        status: c.status, action: c.next_action, targetWeek: c.target_week
-      }));
-    }
-    if (isLegacyPhoenix) return data;
-    return [];
-  }, [isLegacyPhoenix, data, dbCompanies]);
+    return dbCompanies.map((c: CampaignCompany) => ({
+      id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
+      assignedTo: c.assigned_to_name || 'Unassigned', assigned_to_id: c.assigned_to_id,
+      address: c.address || '', phone: c.phone || '',
+      status: c.status, action: c.next_action, targetWeek: c.target_week
+    }));
+  }, [dbCompanies]);
 
   const activeWeeks = useMemo(() => {
-    if (dbWeeks.length > 0) {
-      return dbWeeks.map((w: CampaignWeek) => ({
-        num: w.week_number,
-        start: new Date(w.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        label: w.label || `Week ${w.week_number}`
-      }));
-    }
-    if (isLegacyPhoenix) return weeks;
-    return [];
-  }, [isLegacyPhoenix, dbWeeks]);
+    return dbWeeks.map((w: CampaignWeek) => ({
+      num: w.week_number,
+      start: new Date(w.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      label: w.label || `Week ${w.week_number}`
+    }));
+  }, [dbWeeks]);
 
-  // DB mutations for non-legacy campaigns
+  // DB mutations
   const statusMutation = useMutation({
     mutationFn: ({ companyId, status }: { companyId: number; status: string }) =>
       updateCampaignCompanyStatus(campaignId, companyId, status),
@@ -302,42 +216,35 @@ export default function CampaignDetail() {
   const [editForm, setEditForm] = useState<any>(null);
 
   const openEditModal = () => {
-    if (isLegacyPhoenix) {
-      // Legacy: edit campaignInfo directly
-      setShowEditCampaign(true);
-    } else {
-      // DB campaign: populate edit form from DB data
-      setEditForm({
-        name: dbCampaign?.name || '',
-        description: dbCampaign?.description || '',
-        startDate: dbCampaign?.start_date?.slice(0, 10) || '',
-        endDate: dbCampaign?.end_date?.slice(0, 10) || '',
-        goal: dbCampaign?.goal_description || '',
-        targetValue: dbCampaign?.target_pipeline_value || 0,
-        status: dbCampaign?.status || 'planning',
-        ownerId: dbCampaign?.owner_id || null,
-        targetTouchpoints: dbCampaign?.target_touchpoints || 0,
-        targetOpportunities: dbCampaign?.target_opportunities || 0,
-        targetEstimates: dbCampaign?.target_estimates || 0,
-        targetAwards: dbCampaign?.target_awards || 0,
-      });
-      setShowEditCampaign(true);
-    }
+    setEditForm({
+      name: dbCampaign?.name || '',
+      description: dbCampaign?.description || '',
+      startDate: dbCampaign?.start_date?.slice(0, 10) || '',
+      endDate: dbCampaign?.end_date?.slice(0, 10) || '',
+      goal: dbCampaign?.goal_description || '',
+      targetValue: dbCampaign?.target_pipeline_value || 0,
+      status: dbCampaign?.status || 'planning',
+      ownerId: dbCampaign?.owner_id || null,
+      targetTouchpoints: dbCampaign?.target_touchpoints || 0,
+      targetOpportunities: dbCampaign?.target_opportunities || 0,
+      targetEstimates: dbCampaign?.target_estimates || 0,
+      targetAwards: dbCampaign?.target_awards || 0,
+    });
+    setShowEditCampaign(true);
   };
 
   const saveEditCampaign = async (andRegenerateWeeks = false) => {
-    const ef = isLegacyPhoenix ? campaignInfo : editForm;
+    const ef = editForm;
     if (!ef) return;
 
     try {
-      // Always persist to DB (campaign ID from URL)
       await updateCampaignMutation.mutateAsync({
         name: ef.name,
         description: ef.description,
-        start_date: isLegacyPhoenix ? ef.startDate : ef.startDate,
-        end_date: isLegacyPhoenix ? ef.endDate : ef.endDate,
+        start_date: ef.startDate,
+        end_date: ef.endDate,
         status: ef.status || 'planning',
-        owner_id: ef.ownerId || editEmployees.find(e => `${e.first_name} ${e.last_name}` === ef.owner)?.id || undefined,
+        owner_id: ef.ownerId || undefined,
         goal_description: ef.goal,
         target_pipeline_value: ef.targetValue,
         target_touchpoints: ef.targetTouchpoints || 0,
@@ -361,24 +268,14 @@ export default function CampaignDetail() {
 
   // Team management handlers
   const handleAddTeamMember = async (emp: TeamEligibleEmployee) => {
-    const empName = `${emp.first_name} ${emp.last_name}`;
-    if (isLegacyPhoenix) {
-      // Legacy: add name to assignedTeam and save
-      const currentTeam = campaignInfo.assignedTeam || [];
-      if (!currentTeam.includes(empName)) {
-        setCampaignInfo({ ...campaignInfo, assignedTeam: [...currentTeam, empName] });
-      }
-    } else {
-      // DB campaign: call API
-      try {
-        setTeamLoading(true);
-        await addTeamMember(campaignId, emp.id, 'member');
-        queryClient.invalidateQueries({ queryKey: ['campaign-team', campaignId] });
-      } catch (err) {
-        console.error('Failed to add team member:', err);
-      } finally {
-        setTeamLoading(false);
-      }
+    try {
+      setTeamLoading(true);
+      await addTeamMember(campaignId, emp.id, 'member');
+      queryClient.invalidateQueries({ queryKey: ['campaign-team', campaignId] });
+    } catch (err) {
+      console.error('Failed to add team member:', err);
+    } finally {
+      setTeamLoading(false);
     }
     setTeamSearch('');
   };
@@ -388,23 +285,9 @@ export default function CampaignDetail() {
     const { name, employeeId } = removingMember;
     const targetName = reassignTo;
 
-    if (isLegacyPhoenix) {
-      // Legacy: reassign companies to new person, then remove from team
-      if (targetName) {
-        setData((d: any) => d.map((c: any) =>
-          c.assignedTo === name ? { ...c, assignedTo: targetName } : c
-        ));
-      }
-      // Use functional updater to avoid stale closure
-      setCampaignInfo((prev: any) => ({
-        ...prev,
-        assignedTeam: (prev.assignedTeam || []).filter((m: string) => m !== name)
-      }));
-    } else if (employeeId) {
-      // DB campaign: reassign then remove
+    if (employeeId) {
       try {
         setTeamLoading(true);
-        // Find the employee_id for the reassign target (check dbTeam first, then editEmployees)
         const reassignMember = dbTeam.find((t: CampaignTeamMember) => t.name === targetName);
         const reassignEmployeeId = reassignMember?.employee_id
           || editEmployees.find(e => `${e.first_name} ${e.last_name}` === targetName)?.id;
@@ -473,12 +356,6 @@ export default function CampaignDetail() {
       } catch (err: any) {
         setTransferMessage(`Error: ${err?.response?.data?.error || err?.message || 'Transfer failed'}`);
       }
-    } else if (isLegacyPhoenix) {
-      const idSet = new Set(transferIds);
-      setData((d: any) => d.map((c: any) =>
-        idSet.has(c.id) ? { ...c, assignedTo: toName } : c
-      ));
-      setTransferMessage(`Transferred ${transferIds.length} prospects from ${fromName} to ${toName}`);
     }
     // Clear the transfer inputs for this member
     setTransferCounts(prev => ({ ...prev, [fromName]: 0 }));
@@ -489,50 +366,18 @@ export default function CampaignDetail() {
   const [regenMessage, setRegenMessage] = useState('');
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const handleRegenerateWeeks = () => {
-    const totalWeeks = isLegacyPhoenix ? weeks.length : activeWeeks.length;
-    if (totalWeeks === 0) return;
+    if (activeWeeks.length === 0) return;
     setShowRegenConfirm(true);
   };
   const executeRegenerateWeeks = async () => {
     setShowRegenConfirm(false);
-    if (dbCompanies.length > 0) {
-      // DB campaign: call backend to regenerate weeks
-      try {
-        const result = await regenerateCampaignWeeks(campaignId);
-        queryClient.invalidateQueries({ queryKey: ['campaign-weeks', campaignId] });
-        queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
-        setRegenMessage(`Redistributed ${result.companies} prospects across ${result.weeks} weeks`);
-      } catch (err) {
-        console.error('Failed to regenerate weeks:', err);
-      }
-    } else if (isLegacyPhoenix) {
-      const totalWeeks = weeks.length;
-      // Sort all prospects by tier/score (best first), then distribute evenly across weeks
-      const sorted = [...data].sort((a: any, b: any) => {
-        const tierOrder: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2 };
-        const tierDiff = (tierOrder[a.tier] || 1) - (tierOrder[b.tier] || 1);
-        if (tierDiff !== 0) return tierDiff;
-        return (b.score || 0) - (a.score || 0);
-      });
-
-      const weekAssignments: Record<number, number> = {};
-      sorted.forEach((c: any, i: number) => {
-        weekAssignments[c.id] = Math.floor(i * totalWeeks / sorted.length) + 1;
-      });
-
-      // Build summary
-      const weekBreakdown = Array.from({ length: totalWeeks }, (_, i) => {
-        return sorted.filter((c: any) => weekAssignments[c.id] === i + 1).length;
-      });
-      const weekLabels = weeks.map((w, i) => `Wk${w.num}: ${weekBreakdown[i]}`).join(', ');
-      const summary = `Distributed ${sorted.length} prospects: ${weekLabels}`;
-
-      setData((d: any) => d.map((c: any) => ({
-        ...c,
-        targetWeek: weekAssignments[c.id] !== undefined ? weekAssignments[c.id] : c.targetWeek
-      })));
-
-      setRegenMessage(summary);
+    try {
+      const result = await regenerateCampaignWeeks(campaignId);
+      queryClient.invalidateQueries({ queryKey: ['campaign-weeks', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      setRegenMessage(`Redistributed ${result.companies} prospects across ${result.weeks} weeks`);
+    } catch (err) {
+      console.error('Failed to regenerate weeks:', err);
     }
   };
 
@@ -1306,7 +1151,7 @@ export default function CampaignDetail() {
                       ];
                       const iconGradient = iconGradients[o.id % iconGradients.length];
                       const icon = o.title ? o.title.charAt(0).toUpperCase() : '?';
-                      const salespersonName = o.assigned_to_name || o.owner || 'Unassigned';
+                      const salespersonName = o.assigned_to_name || 'Unassigned';
 
                       return (
                         <tr

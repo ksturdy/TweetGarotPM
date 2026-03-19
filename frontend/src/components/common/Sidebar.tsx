@@ -99,7 +99,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       label: 'Accounts',
       icon: <PeopleIcon />,
       children: [
-        { label: 'Overview', path: '/account-management' },
         { label: 'Customers', path: '/account-management/customers' },
         { label: 'Contacts', path: '/account-management/contacts' },
         { label: 'Vendors', path: '/account-management/vendors' },
@@ -174,6 +173,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       children: [
         { label: 'General', path: '/settings' },
         { label: 'Vista Data', path: '/settings/vista-data' },
+        { label: 'EST Products', path: '/settings/est-products' },
       ],
     },
   ];

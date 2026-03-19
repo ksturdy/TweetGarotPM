@@ -348,9 +348,6 @@ const CustomerList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/account-management" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Account Management
-            </Link>
             <h1>👥 Customers</h1>
             <div className="sales-subtitle">Accounts Receivable</div>
           </div>

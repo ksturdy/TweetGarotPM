@@ -170,6 +170,7 @@ const TakeoffsList: React.FC = () => {
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Adj Hrs</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Perf Factor</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Status</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Estimator</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Estimate</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Updated</th>
                 <th style={{ padding: '12px 8px', width: 40 }}></th>
@@ -197,6 +198,9 @@ const TakeoffsList: React.FC = () => {
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                     <span style={getStatusBadgeStyle(t.status)}>{formatStatus(t.status)}</span>
+                  </td>
+                  <td style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, color: '#374151' }}>
+                    {t.estimator_name || <span style={{ color: '#9ca3af' }}>-</span>}
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: 12, color: '#6b7280' }}>
                     {t.estimate_number || '-'}

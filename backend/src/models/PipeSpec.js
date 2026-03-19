@@ -29,11 +29,12 @@ const PipeSpec = {
 
   async create(tenantId, data) {
     const result = await db.query(
-      `INSERT INTO pipe_specs (tenant_id, name, joint_method, material, schedule, stock_pipe_length, joint_type, pipe_material, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO pipe_specs (tenant_id, name, joint_method, material, schedule, stock_pipe_length, joint_type, pipe_material, is_default, est_install_type, est_material, est_filters)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [tenantId, data.name, data.joint_method, data.material, data.schedule,
-       data.stock_pipe_length || 21, data.joint_type, data.pipe_material, data.is_default || false]
+       data.stock_pipe_length || 21, data.joint_type, data.pipe_material, data.is_default || false,
+       data.est_install_type || null, data.est_material || null, data.est_filters ? JSON.stringify(data.est_filters) : '{}']
     );
     return result.rows[0];
   },
@@ -43,12 +44,17 @@ const PipeSpec = {
     const params = [id, tenantId];
     let paramIdx = 3;
 
-    const allowed = ['name', 'joint_method', 'material', 'schedule', 'stock_pipe_length', 'joint_type', 'pipe_material', 'is_default'];
+    const allowed = ['name', 'joint_method', 'material', 'schedule', 'stock_pipe_length', 'joint_type', 'pipe_material', 'is_default', 'est_install_type', 'est_material'];
     for (const field of allowed) {
       if (data[field] !== undefined) {
         fields.push(`${field} = $${paramIdx++}`);
         params.push(data[field]);
       }
+    }
+    // Handle est_filters separately (JSONB)
+    if (data.est_filters !== undefined) {
+      fields.push(`est_filters = $${paramIdx++}`);
+      params.push(JSON.stringify(data.est_filters));
     }
 
     if (fields.length === 0) return this.findById(id, tenantId);
@@ -81,6 +87,9 @@ const PipeSpec = {
       joint_type: source.joint_type,
       pipe_material: source.pipe_material,
       is_default: false,
+      est_install_type: source.est_install_type,
+      est_material: source.est_material,
+      est_filters: source.est_filters,
     });
 
     // Copy all rates

@@ -81,7 +81,7 @@ router.get('/:id', async (req, res, next) => {
 // Create takeoff
 router.post('/', async (req, res, next) => {
   try {
-    const { name, description, estimate_id, performance_factor, notes, takeoff_type, pipe_spec_id } = req.body;
+    const { name, description, estimate_id, performance_factor, notes, takeoff_type, pipe_spec_id, estimator_id } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
     }
@@ -98,6 +98,7 @@ router.post('/', async (req, res, next) => {
       createdBy: req.user.id,
       takeoffType: takeoff_type,
       pipeSpecId: pipe_spec_id,
+      estimatorId: estimator_id,
     });
 
     res.status(201).json(takeoff);

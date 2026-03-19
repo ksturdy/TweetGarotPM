@@ -510,9 +510,6 @@ const AccountManagementContacts: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/account-management" className="breadcrumb-link" style={{ color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '14px' }}>
-              &larr; Back to Account Management
-            </Link>
             <h1>📇 Contacts</h1>
             <div className="sales-subtitle">Manage all customer contacts</div>
           </div>

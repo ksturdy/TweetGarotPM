@@ -80,6 +80,9 @@ function specToApiMeta(spec: PipeSpec) {
     joint_type: JOINT_METHOD_TO_JOINT_TYPE[spec.jointMethod],
     pipe_material: materialToTraceover(spec.material),
     is_default: spec.isDefault,
+    est_install_type: spec.estInstallType || null,
+    est_material: spec.estMaterial || null,
+    est_filters: spec.estFilters || null,
   };
 }
 
@@ -104,7 +107,7 @@ function reducingRatesToApi(rates: PipeSpec['reducingFittingRates']) {
   const result: { fitting_type: string; main_size: string; reducing_size: string; hours_per_unit: number }[] = [];
   for (const [ft, sizeRates] of Object.entries(rates)) {
     for (const [key, rate] of Object.entries(sizeRates as Record<string, number>)) {
-      const [mainSize, reducingSize] = key.split('x');
+      const [mainSize, reducingSize] = key.split('|');
       result.push({ fitting_type: ft, main_size: mainSize, reducing_size: reducingSize, hours_per_unit: rate });
     }
   }
@@ -113,14 +116,14 @@ function reducingRatesToApi(rates: PipeSpec['reducingFittingRates']) {
 
 function reducingTeeRatesToApi(rates: Record<string, number>) {
   return Object.entries(rates).map(([key, rate]) => {
-    const [mainSize, branchSize] = key.split('x');
+    const [mainSize, branchSize] = key.split('|');
     return { main_size: mainSize, branch_size: branchSize, hours_per_unit: rate };
   });
 }
 
 function crossReducingRatesToApi(rates: Record<string, number>) {
   return Object.entries(rates).map(([key, rate]) => {
-    const [mainSize, reducingSize] = key.split('x');
+    const [mainSize, reducingSize] = key.split('|');
     return { main_size: mainSize, reducing_size: reducingSize, hours_per_unit: rate };
   });
 }
@@ -142,18 +145,21 @@ function mapApiPipeSpec(s: ApiPipeSpec): PipeSpec {
     }, {}),
     reducingFittingRates: (s.reducing_rates ?? []).reduce<Record<string, Record<string, number>>>((acc, r) => {
       if (!acc[r.fitting_type]) acc[r.fitting_type] = {};
-      acc[r.fitting_type][`${r.main_size}x${r.reducing_size}`] = r.hours_per_unit;
+      acc[r.fitting_type][`${r.main_size}|${r.reducing_size}`] = r.hours_per_unit;
       return acc;
     }, {}) as PipeSpec['reducingFittingRates'],
     reducingTeeRates: Object.fromEntries(
-      (s.reducing_tee_rates ?? []).map((r) => [`${r.main_size}x${r.branch_size}`, r.hours_per_unit]),
+      (s.reducing_tee_rates ?? []).map((r) => [`${r.main_size}|${r.branch_size}`, r.hours_per_unit]),
     ),
     crossReducingRates: Object.fromEntries(
-      (s.cross_reducing_rates ?? []).map((r) => [`${r.main_size}x${r.reducing_size}`, r.hours_per_unit]),
+      (s.cross_reducing_rates ?? []).map((r) => [`${r.main_size}|${r.reducing_size}`, r.hours_per_unit]),
     ),
     isDefault: s.is_default,
     createdAt: s.created_at,
     updatedAt: s.updated_at,
+    estInstallType: s.est_install_type || undefined,
+    estMaterial: s.est_material || undefined,
+    estFilters: s.est_filters || {},
   };
 }
 
@@ -699,7 +705,9 @@ export function useTraceoverPersistence(takeoffId: number | null) {
         const metaChanged =
           prev.name !== spec.name || prev.jointMethod !== spec.jointMethod ||
           prev.material !== spec.material ||
-          prev.stockPipeLength !== spec.stockPipeLength || prev.isDefault !== spec.isDefault;
+          prev.stockPipeLength !== spec.stockPipeLength || prev.isDefault !== spec.isDefault ||
+          prev.estInstallType !== spec.estInstallType || prev.estMaterial !== spec.estMaterial ||
+          prev.estFilters !== spec.estFilters;
         const pipeRatesChanged = prev.pipeRates !== spec.pipeRates;
         const fittingRatesChanged = prev.fittingRates !== spec.fittingRates;
         const reducingRatesChanged = prev.reducingFittingRates !== spec.reducingFittingRates;
