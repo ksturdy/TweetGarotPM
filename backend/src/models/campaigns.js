@@ -318,20 +318,38 @@ const campaigns = {
       const teamMembers = teamResult.rows;
       const companies = companiesResult.rows;
 
-      // 4. Round-robin distribute unassigned companies to team members across weeks
+      // 4. Distribute unassigned companies evenly across team members AND weeks
+      // Uses a grid approach: each (week, member) cell gets roughly equal prospects
       if (teamMembers.length > 0 && companies.length > 0) {
-        let memberIdx = 0;
-        const companiesPerWeek = Math.ceil(companies.length / totalWeeks);
+        const unassigned = companies.filter(c => !c.assigned_to_id);
+        const numMembers = teamMembers.length;
+        const N = unassigned.length;
 
-        for (let i = 0; i < companies.length; i++) {
-          const company = companies[i];
-          if (!company.assigned_to_id) {
-            const targetWeek = Math.min(Math.floor(i / companiesPerWeek) + 1, totalWeeks);
-            await client.query(
-              'UPDATE campaign_companies SET assigned_to_id = $1, target_week = $2 WHERE id = $3',
-              [teamMembers[memberIdx % teamMembers.length].employee_id, targetWeek, company.id]
-            );
-            memberIdx++;
+        // Build a 2D grid: grid[week][member] = number of prospects for that slot
+        const totalCells = totalWeeks * numMembers;
+        const basePerCell = Math.floor(N / totalCells);
+        let extras = N % totalCells;
+
+        const grid = [];
+        for (let w = 0; w < totalWeeks; w++) {
+          grid[w] = [];
+          for (let m = 0; m < numMembers; m++) {
+            grid[w][m] = basePerCell + (extras > 0 ? 1 : 0);
+            if (extras > 0) extras--;
+          }
+        }
+
+        // Assign companies according to the grid (highest-priority first)
+        let idx = 0;
+        for (let w = 0; w < totalWeeks; w++) {
+          for (let m = 0; m < numMembers; m++) {
+            for (let c = 0; c < grid[w][m]; c++) {
+              await client.query(
+                'UPDATE campaign_companies SET assigned_to_id = $1, target_week = $2 WHERE id = $3',
+                [teamMembers[m].employee_id, w + 1, unassigned[idx].id]
+              );
+              idx++;
+            }
           }
         }
 
@@ -404,24 +422,52 @@ const campaigns = {
       }
       const totalWeeks = weekNumber - 1;
 
-      // Redistribute target_week for all companies sorted by tier/score (best first)
+      // Get all prospects sorted by tier/score (best first)
       const companiesResult = await client.query(
-        'SELECT id FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
+        'SELECT id, assigned_to_id FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
         [campaignId]
       );
-      const companies = companiesResult.rows;
+      const allCompanies = companiesResult.rows;
 
-      // Assign sequentially: highest-priority prospects go to earliest weeks, evenly distributed
-      for (let i = 0; i < companies.length; i++) {
-        const targetWeek = Math.floor(i * totalWeeks / companies.length) + 1;
-        await client.query(
-          'UPDATE campaign_companies SET target_week = $1 WHERE id = $2',
-          [targetWeek, companies[i].id]
-        );
+      // Get team members for this campaign
+      const teamResult = await client.query(
+        'SELECT employee_id FROM campaign_team_members WHERE campaign_id = $1 ORDER BY role, id',
+        [campaignId]
+      );
+      const teamMembers = teamResult.rows.map(t => t.employee_id);
+
+      // If team members exist, rebalance prospects across them evenly (round-robin by tier/score)
+      if (teamMembers.length > 0) {
+        for (let i = 0; i < allCompanies.length; i++) {
+          const assignedToId = teamMembers[i % teamMembers.length];
+          await client.query(
+            'UPDATE campaign_companies SET assigned_to_id = $1 WHERE id = $2',
+            [assignedToId, allCompanies[i].id]
+          );
+          allCompanies[i].assigned_to_id = assignedToId;
+        }
+      }
+
+      // Group companies by assigned member, then spread each member's prospects across weeks
+      const byMember = {};
+      for (const company of allCompanies) {
+        const key = company.assigned_to_id || 'unassigned';
+        if (!byMember[key]) byMember[key] = [];
+        byMember[key].push(company);
+      }
+
+      for (const memberCompanies of Object.values(byMember)) {
+        for (let i = 0; i < memberCompanies.length; i++) {
+          const targetWeek = Math.floor(i * totalWeeks / memberCompanies.length) + 1;
+          await client.query(
+            'UPDATE campaign_companies SET target_week = $1 WHERE id = $2',
+            [targetWeek, memberCompanies[i].id]
+          );
+        }
       }
 
       await client.query('COMMIT');
-      return { weeks: totalWeeks, companies: companies.length };
+      return { weeks: totalWeeks, companies: allCompanies.length };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
