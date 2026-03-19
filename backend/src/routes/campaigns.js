@@ -236,7 +236,8 @@ router.post('/:id/regenerate-weeks', async (req, res, next) => {
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const result = await campaigns.regenerateWeeks(req.params.id, req.tenantId);
+    const targetCounts = req.body.targetCounts || null;
+    const result = await campaigns.regenerateWeeks(req.params.id, req.tenantId, targetCounts);
     res.json(result);
   } catch (error) {
     next(error);

@@ -374,8 +374,8 @@ export const generateCampaign = async (campaignId: number): Promise<{ weeks: num
   return response.data;
 };
 
-export const regenerateCampaignWeeks = async (campaignId: number): Promise<{ weeks: number; companies: number }> => {
-  const response = await api.post(`/campaigns/${campaignId}/regenerate-weeks`);
+export const regenerateCampaignWeeks = async (campaignId: number, targetCounts?: Record<number, number>): Promise<{ weeks: number; companies: number }> => {
+  const response = await api.post(`/campaigns/${campaignId}/regenerate-weeks`, { targetCounts });
   return response.data;
 };
 

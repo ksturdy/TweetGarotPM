@@ -306,6 +306,36 @@ export default function CampaignDetail() {
   const [transferTargets, setTransferTargets] = useState<Record<string, string>>({});
   const [transferMessage, setTransferMessage] = useState('');
 
+  // Target prospect counts per team member for redistribution
+  const [memberTargetCounts, setMemberTargetCounts] = useState<Record<number, number>>({});
+  const [redistributing, setRedistributing] = useState(false);
+
+  // Initialize target counts from DB when team loads
+  useEffect(() => {
+    if (dbTeam.length > 0) {
+      const counts: Record<number, number> = {};
+      dbTeam.forEach((t: CampaignTeamMember) => {
+        counts[t.employee_id] = t.target_count || 0;
+      });
+      setMemberTargetCounts(counts);
+    }
+  }, [dbTeam]);
+
+  const handleRedistribute = async () => {
+    setRedistributing(true);
+    try {
+      const result = await regenerateCampaignWeeks(campaignId, memberTargetCounts);
+      queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-weeks', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-team', campaignId] });
+      setTransferMessage(`Redistributed ${result.companies} prospects across ${result.weeks} weeks`);
+    } catch (err: any) {
+      setTransferMessage(`Error: ${err?.response?.data?.error || err?.message || 'Redistribution failed'}`);
+    } finally {
+      setRedistributing(false);
+    }
+  };
+
   const handleTransferProspects = async (fromName: string) => {
     const count = transferCounts[fromName] || 0;
     const toName = transferTargets[fromName] || '';
@@ -1691,6 +1721,48 @@ export default function CampaignDetail() {
                   })}
                 </div>
               </div>
+
+              {/* Redistribute Prospects */}
+              {activeTeam.length > 0 && (
+                <div style={{ marginBottom: '24px', padding: '16px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#0369a1', marginBottom: '4px' }}>Redistribute Prospects</div>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>
+                    Set how many prospects each member should get. The owner gets the highest-scoring prospects first.
+                  </p>
+                  <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
+                    {dbTeam.map((member: CampaignTeamMember) => (
+                      <div key={member.employee_id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#374151', minWidth: '140px' }}>
+                          {member.name}
+                          {member.role === 'owner' && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#1d4ed8' }}>(owner)</span>}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={activeData.length}
+                          value={memberTargetCounts[member.employee_id] || ''}
+                          onChange={e => setMemberTargetCounts(prev => ({ ...prev, [member.employee_id]: parseInt(e.target.value) || 0 }))}
+                          style={{ ...input, width: '70px', padding: '4px 8px', fontSize: '13px', textAlign: 'center' as const }}
+                          placeholder="0"
+                        />
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>prospects</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                      onClick={handleRedistribute}
+                      disabled={redistributing}
+                      style={{ ...btn, fontSize: '13px', padding: '8px 16px', opacity: redistributing ? 0.6 : 1 }}
+                    >
+                      {redistributing ? 'Redistributing...' : 'Redistribute & Regenerate Weeks'}
+                    </button>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      Total: {Object.values(memberTargetCounts).reduce((sum, c) => sum + c, 0)} / {activeData.length} prospects
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Remove Confirmation */}
               {removingMember && (

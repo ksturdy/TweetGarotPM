@@ -382,8 +382,10 @@ const campaigns = {
     }
   },
 
-  // Regenerate weeks: delete old, create new from dates, redistribute target_week (keep assignments)
-  regenerateWeeks: async (campaignId, tenantId) => {
+  // Regenerate weeks and redistribute prospects across team members and weeks.
+  // targetCounts: optional { employee_id: count } map for how many prospects each member should get.
+  // Owner (first team member by role) gets highest-scoring prospects first.
+  regenerateWeeks: async (campaignId, tenantId, targetCounts = null) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
@@ -422,29 +424,72 @@ const campaigns = {
       }
       const totalWeeks = weekNumber - 1;
 
-      // Get all prospects sorted by tier/score (best first)
+      // Get all prospects sorted by tier/score (best first = A-tier, highest score)
       const companiesResult = await client.query(
         'SELECT id, assigned_to_id FROM campaign_companies WHERE campaign_id = $1 ORDER BY tier ASC, score DESC',
         [campaignId]
       );
       const allCompanies = companiesResult.rows;
 
-      // Get team members for this campaign
+      // Get team members ordered by role (owner first), then id
       const teamResult = await client.query(
-        'SELECT employee_id FROM campaign_team_members WHERE campaign_id = $1 ORDER BY role, id',
+        `SELECT ctm.employee_id, ctm.role, ctm.id as member_id
+         FROM campaign_team_members ctm
+         WHERE ctm.campaign_id = $1
+         ORDER BY CASE WHEN ctm.role = 'owner' THEN 0 ELSE 1 END, ctm.id`,
         [campaignId]
       );
-      const teamMembers = teamResult.rows.map(t => t.employee_id);
+      const teamMembers = teamResult.rows;
 
-      // If team members exist, rebalance prospects across them evenly (round-robin by tier/score)
       if (teamMembers.length > 0) {
-        for (let i = 0; i < allCompanies.length; i++) {
-          const assignedToId = teamMembers[i % teamMembers.length];
+        // Build allocation: how many prospects each member gets
+        const allocation = []; // [{ employeeId, count }]
+
+        if (targetCounts && Object.keys(targetCounts).length > 0) {
+          // Use specified target counts — owner first, then others in order
+          for (const member of teamMembers) {
+            const count = targetCounts[member.employee_id] || 0;
+            allocation.push({ employeeId: member.employee_id, count, memberId: member.member_id });
+          }
+          // If specified counts don't cover all prospects, distribute remainder to members with 0
+          const totalAllocated = allocation.reduce((sum, a) => sum + a.count, 0);
+          if (totalAllocated < allCompanies.length) {
+            // Distribute remaining evenly across all members
+            let remaining = allCompanies.length - totalAllocated;
+            let idx = 0;
+            while (remaining > 0) {
+              allocation[idx % allocation.length].count++;
+              remaining--;
+              idx++;
+            }
+          }
+        } else {
+          // No target counts — distribute evenly (round-robin)
+          const base = Math.floor(allCompanies.length / teamMembers.length);
+          let extras = allCompanies.length % teamMembers.length;
+          for (const member of teamMembers) {
+            const count = base + (extras > 0 ? 1 : 0);
+            if (extras > 0) extras--;
+            allocation.push({ employeeId: member.employee_id, count, memberId: member.member_id });
+          }
+        }
+
+        // Assign prospects: owner gets top-scoring first, then next member, etc.
+        let companyIdx = 0;
+        for (const alloc of allocation) {
+          for (let i = 0; i < alloc.count && companyIdx < allCompanies.length; i++) {
+            await client.query(
+              'UPDATE campaign_companies SET assigned_to_id = $1 WHERE id = $2',
+              [alloc.employeeId, allCompanies[companyIdx].id]
+            );
+            allCompanies[companyIdx].assigned_to_id = alloc.employeeId;
+            companyIdx++;
+          }
+          // Update target_count on the team member record
           await client.query(
-            'UPDATE campaign_companies SET assigned_to_id = $1 WHERE id = $2',
-            [assignedToId, allCompanies[i].id]
+            'UPDATE campaign_team_members SET target_count = $1 WHERE id = $2',
+            [alloc.count, alloc.memberId]
           );
-          allCompanies[i].assigned_to_id = assignedToId;
         }
       }
 
