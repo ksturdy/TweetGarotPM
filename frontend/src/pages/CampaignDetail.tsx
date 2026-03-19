@@ -821,6 +821,58 @@ export default function CampaignDetail() {
                   </div>
                 );
               })}
+              {/* Render prospects not matching any team member (unassigned or team not set up) */}
+              {(() => {
+                const unmatchedProspects = activeData.filter((c: any) =>
+                  c.targetWeek === currentWeek && !activeTeam.includes(c.assignedTo)
+                );
+                if (unmatchedProspects.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 12px', background: '#fef3c7', borderRadius: '6px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '14px' }}>{activeTeam.length === 0 ? 'All Prospects' : 'Unassigned / Other'}</span>
+                      <span style={{ fontSize: '12px', color: '#92400e' }}>({unmatchedProspects.length} prospects)</span>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ background: '#fafafa' }}>
+                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Company</th>
+                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Sector</th>
+                          <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Score</th>
+                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Assigned To</th>
+                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Status</th>
+                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unmatchedProspects.map((c: any) => (
+                          <tr key={c.id} style={{ borderTop: '1px solid #e5e7eb' }}>
+                            <td style={{ padding: '10px' }}>
+                              <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={() => openDetail(c)}>{c.name}</div>
+                              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.address}</div>
+                            </td>
+                            <td style={{ padding: '10px', color: '#64748b' }}>{c.sector}</td>
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
+                            </td>
+                            <td style={{ padding: '10px', color: '#64748b' }}>{c.assignedTo}</td>
+                            <td style={{ padding: '10px' }}>
+                              <select value={c.status} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', color: statuses.find(s=>s.key===c.status)?.color, width: 'auto' }}>
+                                {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding: '10px' }}>
+                              <select value={c.action} onChange={e => updateField(c.id, 'action', e.target.value)} style={{ ...input, fontSize: '11px', color: actions.find(a=>a.key===c.action)?.color, width: 'auto' }}>
+                                {actions.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
               {activeData.filter((c: any) => c.targetWeek === currentWeek).length === 0 && (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No prospects scheduled for this week</div>
               )}
