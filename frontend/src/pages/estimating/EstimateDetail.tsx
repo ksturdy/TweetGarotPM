@@ -41,10 +41,10 @@ const EstimateDetail: React.FC = () => {
     queryFn: () => customersApi.getAll(),
   });
 
-  // Fetch employees for estimator dropdown
+  // Fetch employees for estimator dropdown (no HR access needed)
   const { data: employeesData } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => employeesApi.getAll(),
+    queryKey: ['employees', 'assignable'],
+    queryFn: () => employeesApi.getAssignable(),
   });
 
   // Fetch all takeoffs for import picker

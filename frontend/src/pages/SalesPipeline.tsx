@@ -111,11 +111,11 @@ const SalesPipeline: React.FC = () => {
   });
   const officeLocations = Array.isArray(officeLocationsData) ? officeLocationsData : [];
 
-  // Fetch employees to get office location mapping
+  // Fetch employees for office location mapping (no HR access needed)
   const { data: employeesData } = useQuery({
-    queryKey: ['employees'],
+    queryKey: ['employees', 'assignable'],
     queryFn: async () => {
-      const response = await employeesApi.getAll();
+      const response = await employeesApi.getAssignable();
       return response.data?.data || [];
     }
   });

@@ -18,6 +18,7 @@ router.get('/assignable', async (req, res) => {
       first_name: e.first_name,
       last_name: e.last_name,
       job_title: e.job_title,
+      office_location_id: e.office_location_id,
     }));
     res.json({ data: assignable });
   } catch (error) {

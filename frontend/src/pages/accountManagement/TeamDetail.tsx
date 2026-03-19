@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams';
-import { employeesApi, Employee } from '../../services/employees';
+import { employeesApi, AssignableEmployee } from '../../services/employees';
 import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
 import '../../styles/SalesPipeline.css';
@@ -80,18 +80,18 @@ const TeamDetailPage: React.FC = () => {
     enabled: !!teamId && activeTab === 'estimates',
   });
 
-  // Fetch all employees for adding members
+  // Fetch all employees for adding members (no HR access needed)
   const { data: allEmployees = [] } = useQuery({
-    queryKey: ['employees'],
+    queryKey: ['employees', 'assignable'],
     queryFn: async () => {
-      const response = await employeesApi.getAll();
-      return response.data.data as Employee[];
+      const response = await employeesApi.getAssignable();
+      return response.data.data as AssignableEmployee[];
     },
   });
 
   // Filter out employees already in the team
   const availableEmployees = allEmployees.filter(
-    (emp: Employee) => !members.some((m: TeamMember) => m.employee_id === emp.id)
+    (emp: AssignableEmployee) => !members.some((m: TeamMember) => m.employee_id === emp.id)
   );
 
   // Add member mutation
@@ -625,7 +625,7 @@ const TeamDetailPage: React.FC = () => {
                 }}
               >
                 <option value="">Select an employee</option>
-                {availableEmployees.map((emp: Employee) => (
+                {availableEmployees.map((emp: AssignableEmployee) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.first_name} {emp.last_name} {emp.job_title ? `- ${emp.job_title}` : ''}
                   </option>

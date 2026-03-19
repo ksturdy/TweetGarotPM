@@ -19,10 +19,10 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
   const isEditing = !!customer;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Fetch active employees for account manager dropdown
+  // Fetch active employees for account manager dropdown (no HR access needed)
   const { data: employeesData } = useQuery({
-    queryKey: ['employees', { employmentStatus: 'active' }],
-    queryFn: () => employeesApi.getAll({ employmentStatus: 'active' }),
+    queryKey: ['employees', 'assignable'],
+    queryFn: () => employeesApi.getAssignable(),
   });
   const employees = employeesData?.data?.data || [];
 

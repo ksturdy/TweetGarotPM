@@ -49,6 +49,7 @@ export interface AssignableEmployee {
   first_name: string;
   last_name: string;
   job_title: string | null;
+  office_location_id: number | null;
 }
 
 export const employeesApi = {

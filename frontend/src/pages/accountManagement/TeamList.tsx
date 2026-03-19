@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { teamsApi, Team } from '../../services/teams';
-import { employeesApi, Employee } from '../../services/employees';
+import { employeesApi, AssignableEmployee } from '../../services/employees';
 import '../../styles/SalesPipeline.css';
 
 const TeamList: React.FC = () => {
@@ -33,11 +33,11 @@ const TeamList: React.FC = () => {
     },
   });
 
-  // Fetch employees for team lead selection
+  // Fetch employees for team lead selection (no HR access needed)
   const { data: employees = [] } = useQuery({
-    queryKey: ['employees'],
-    queryFn: async (): Promise<Employee[]> => {
-      const response = await employeesApi.getAll();
+    queryKey: ['employees', 'assignable'],
+    queryFn: async (): Promise<AssignableEmployee[]> => {
+      const response = await employeesApi.getAssignable();
       return response.data.data;
     },
   });
@@ -208,9 +208,6 @@ const TeamList: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/account-management" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Account Management
-            </Link>
             <h1>👥 Teams</h1>
             <div className="sales-subtitle">Manage sales and project teams</div>
           </div>
@@ -534,7 +531,7 @@ const TeamList: React.FC = () => {
                   }}
                 >
                   <option value="">Select team lead</option>
-                  {employees.map((emp: Employee) => (
+                  {employees.map((emp: AssignableEmployee) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.first_name} {emp.last_name} {emp.job_title ? `- ${emp.job_title}` : ''}
                     </option>
