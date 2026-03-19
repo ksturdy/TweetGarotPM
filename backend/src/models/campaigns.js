@@ -217,27 +217,26 @@ const campaigns = {
   // Get team members for campaign (joined to employees table).
   // Auto-adds the campaign owner if they have an employee record but aren't on the team yet.
   getTeamMembers: async (campaignId) => {
-    // Check if campaign has an owner_id that isn't on the team yet
+    // Check if campaign has an owner (owner_id references employees.id) that isn't on the team yet
     const ownerCheck = await db.query(
-      `SELECT c.owner_id, e.id as employee_id
+      `SELECT c.owner_id as employee_id, e.user_id
        FROM campaigns c
-       JOIN users u ON c.owner_id = u.id
-       JOIN employees e ON e.user_id = u.id AND e.tenant_id = c.tenant_id
+       JOIN employees e ON e.id = c.owner_id
        WHERE c.id = $1
          AND c.owner_id IS NOT NULL
          AND NOT EXISTS (
            SELECT 1 FROM campaign_team_members ctm
-           WHERE ctm.campaign_id = c.id AND ctm.employee_id = e.id
+           WHERE ctm.campaign_id = c.id AND ctm.employee_id = c.owner_id
          )`,
       [campaignId]
     );
     if (ownerCheck.rows.length > 0) {
-      const ownerEmp = ownerCheck.rows[0];
+      const owner = ownerCheck.rows[0];
       await db.query(
         `INSERT INTO campaign_team_members (campaign_id, employee_id, user_id, role)
          VALUES ($1, $2, $3, 'owner')
          ON CONFLICT (campaign_id, employee_id) DO UPDATE SET role = 'owner'`,
-        [campaignId, ownerEmp.employee_id, ownerCheck.rows[0].owner_id]
+        [campaignId, owner.employee_id, owner.user_id]
       );
     }
 
