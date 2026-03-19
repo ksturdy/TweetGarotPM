@@ -1297,24 +1297,17 @@ export default function CampaignDetail() {
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Assigned To</label>
                   <select
-                    value={typeof activeTeam[0] === 'string' ? newCustomer.assignedTo : (newCustomer.assignedToId?.toString() || '')}
+                    value={newCustomer.assignedToId?.toString() || ''}
                     onChange={e => {
                       const val = e.target.value;
-                      if (typeof activeTeam[0] === 'string') {
-                        setNewCustomer({...newCustomer, assignedTo: val});
-                      } else {
-                        const member = activeTeam.find((t: any) => t.employee_id?.toString() === val);
-                        setNewCustomer({...newCustomer, assignedTo: member?.name || '', assignedToId: member ? member.employee_id : null});
-                      }
+                      const member = dbTeam.find((t: CampaignTeamMember) => t.employee_id?.toString() === val);
+                      setNewCustomer({...newCustomer, assignedTo: member?.name || '', assignedToId: member ? member.employee_id : null});
                     }}
                     style={input}
                   >
-                    {activeTeam.map((t: any) => {
-                      const key = typeof t === 'string' ? t : t.employee_id;
-                      const value = typeof t === 'string' ? t : t.employee_id;
-                      const label = typeof t === 'string' ? t : t.name;
-                      return <option key={key} value={value}>{label}</option>;
-                    })}
+                    {dbTeam.map((t: CampaignTeamMember) => (
+                      <option key={t.employee_id} value={t.employee_id}>{t.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
