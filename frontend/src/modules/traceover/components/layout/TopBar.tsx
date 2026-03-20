@@ -78,15 +78,29 @@ export default function TopBar() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [takeoffData, setTakeoffData] = useState<Takeoff | null>(null);
+  const [laborRate, setLaborRate] = useState<string>('');
+  const laborRateSaveRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!takeoffId) return;
     takeoffsApi.getById(Number(takeoffId)).then(({ data }) => {
       setTakeoffData(data);
+      setLaborRate(data.labor_rate_per_hour ? String(data.labor_rate_per_hour) : '');
     }).catch(() => {});
   }, [takeoffId]);
 
+  const handleLaborRateChange = useCallback((value: string) => {
+    setLaborRate(value);
+    if (laborRateSaveRef.current) clearTimeout(laborRateSaveRef.current);
+    laborRateSaveRef.current = setTimeout(() => {
+      if (!takeoffId) return;
+      const num = parseFloat(value) || 0;
+      takeoffsApi.update(Number(takeoffId), { labor_rate_per_hour: num } as any).catch(() => {});
+    }, 600);
+  }, [takeoffId]);
+
   const takeoffName = takeoffData?.name || '';
+  const laborRateNum = parseFloat(laborRate) || 0;
 
   const projectMetadata: ProjectMetadata | null = takeoffData
     ? {
@@ -99,6 +113,7 @@ export default function TopBar() {
           : undefined,
         estimatorName: takeoffData.created_by_name || undefined,
         tenantLogoUrl: tenant?.settings?.branding?.logo_url || undefined,
+        laborRatePerHour: laborRateNum || undefined,
       }
     : null;
 
@@ -185,6 +200,36 @@ export default function TopBar() {
         <button type="button" title="Fit to page" onClick={resetZoom} style={iconBtnStyle}>
           <Maximize size={16} />
         </button>
+
+        <div style={{ width: 1, height: 24, backgroundColor: '#1f3450', margin: '0 8px' }} />
+
+        {/* Labor rate input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label
+            style={{ fontSize: 11, color: '#7a9ab5', whiteSpace: 'nowrap' }}
+          >
+            $/Hr
+          </label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={laborRate}
+            onChange={(e) => handleLaborRateChange(e.target.value)}
+            placeholder="0.00"
+            style={{
+              width: 64,
+              height: 28,
+              padding: '0 6px',
+              fontSize: 12,
+              borderRadius: 4,
+              border: '1px solid #1f3450',
+              backgroundColor: '#131f33',
+              color: '#d4e3f3',
+              textAlign: 'right',
+              outline: 'none',
+            }}
+          />
+        </div>
 
         <div style={{ width: 1, height: 24, backgroundColor: '#1f3450', margin: '0 8px' }} />
 

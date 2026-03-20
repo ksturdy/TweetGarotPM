@@ -287,10 +287,22 @@ function drawSystemTable(
   systemLaborHrs: number,
   systemMaterialCost: number,
   startY: number,
+  laborRate = 0,
 ): number {
   const hasCost = aggregated.some((line) => line.materialCost > 0);
+  const hasLaborCost = laborRate > 0;
+
+  // Column order: Description, Size, Material, Qty, Unit,
+  //   [$/Unit], Hrs/Unit, [Mat'l $], Total Hrs, [Labor $], [Line Total]
+  // Groups per-unit rates together, then totals together.
+  // "Line Total" = material cost + labor cost per line (only when both exist).
+  const hasLineTotal = hasCost && hasLaborCost;
+  const systemLaborCostTotal = Math.round(systemLaborHrs * laborRate * 100) / 100;
 
   const body = aggregated.map((line) => {
+    const lineLaborCost = Math.round(line.laborHours * laborRate * 100) / 100;
+    const lineTotal = Math.round((line.materialCost + lineLaborCost) * 100) / 100;
+
     const row: string[] = [
       line.description, line.size, line.material,
       fmtQty(line.quantity), line.unit,
@@ -299,23 +311,37 @@ function drawSystemTable(
       row.push(
         line.materialCost > 0 && line.quantity > 0
           ? fmtDollar(line.materialCost / line.quantity) : '',
-        line.materialCost > 0 ? fmtDollar(line.materialCost) : '',
       );
     }
     row.push(
       line.laborHours > 0 && line.quantity > 0
         ? (line.laborHours / line.quantity).toFixed(2) : '',
-      line.laborHours > 0 ? fmtHrs(line.laborHours) : '',
     );
+    if (hasCost) {
+      row.push(line.materialCost > 0 ? fmtDollar(line.materialCost) : '');
+    }
+    row.push(line.laborHours > 0 ? fmtHrs(line.laborHours) : '');
+    if (hasLaborCost) {
+      row.push(line.laborHours > 0 ? fmtDollar(lineLaborCost) : '');
+    }
+    if (hasLineTotal) {
+      row.push(lineTotal > 0 ? fmtDollar(lineTotal) : '');
+    }
     return row;
   });
 
-  const headers = ['Description', 'Size', 'Material', 'Qty', 'Unit'];
-  if (hasCost) headers.push('$/Unit', 'Total $');
-  headers.push('Hrs/Unit', 'Total Hrs');
+  const headers: string[] = ['Description', 'Size', 'Material', 'Qty', 'Unit'];
+  if (hasCost) headers.push('$/Unit');
+  headers.push('Hrs/Unit');
+  if (hasCost) headers.push("Mat'l $");
+  headers.push('Total Hrs');
+  if (hasLaborCost) headers.push('Labor $');
+  if (hasLineTotal) headers.push('Line Total');
 
+  // Subtotal footer — spans the first columns then shows totals
   const footCells: any[] = [];
-  const labelColSpan = hasCost ? 6 : 5;
+  // labelColSpan covers: Description through Unit (5), +$/Unit if hasCost (6), +Hrs/Unit (+1)
+  const labelColSpan = 5 + (hasCost ? 1 : 0) + 1; // always include Hrs/Unit in span
   footCells.push({
     content: `${systemLabel} SUBTOTAL`,
     colSpan: labelColSpan,
@@ -328,49 +354,43 @@ function drawSystemTable(
   if (hasCost) {
     footCells.push({
       content: systemMaterialCost > 0 ? fmtDollar(systemMaterialCost) : '',
-      styles: {
-        halign: 'right' as const,
-        fontStyle: 'bold' as const,
-        fillColor: C.subtotalBg,
-      },
+      styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: C.subtotalBg },
     });
   }
   footCells.push({
-    content: '', // Hrs/Unit column — no subtotal
-    styles: {
-      fillColor: C.subtotalBg,
-    },
-  });
-  footCells.push({
     content: systemLaborHrs > 0 ? fmtHrs(systemLaborHrs) : '',
-    styles: {
-      halign: 'right' as const,
-      fontStyle: 'bold' as const,
-      fillColor: C.subtotalBg,
-    },
+    styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: C.subtotalBg },
   });
+  if (hasLaborCost) {
+    footCells.push({
+      content: systemLaborCostTotal > 0 ? fmtDollar(systemLaborCostTotal) : '',
+      styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: C.subtotalBg },
+    });
+  }
+  if (hasLineTotal) {
+    const systemTotal = Math.round((systemMaterialCost + systemLaborCostTotal) * 100) / 100;
+    footCells.push({
+      content: systemTotal > 0 ? fmtDollar(systemTotal) : '',
+      styles: { halign: 'right' as const, fontStyle: 'bold' as const, fillColor: C.subtotalBg },
+    });
+  }
 
-  const colStyles: Record<number, any> = hasCost
-    ? {
-        0: { cellWidth: 'auto' },
-        1: { cellWidth: 14 },
-        2: { cellWidth: 26 },
-        3: { cellWidth: 14, halign: 'right' as const },
-        4: { cellWidth: 10 },
-        5: { cellWidth: 18, halign: 'right' as const },
-        6: { cellWidth: 20, halign: 'right' as const },
-        7: { cellWidth: 16, halign: 'right' as const },
-        8: { cellWidth: 18, halign: 'right' as const },
-      }
-    : {
-        0: { cellWidth: 'auto' },
-        1: { cellWidth: 18 },
-        2: { cellWidth: 32 },
-        3: { cellWidth: 18, halign: 'right' as const },
-        4: { cellWidth: 14 },
-        5: { cellWidth: 20, halign: 'right' as const },
-        6: { cellWidth: 22, halign: 'right' as const },
-      };
+  // Build column styles dynamically.
+  const dense = hasCost || hasLaborCost;
+  const colStyles: Record<number, any> = { 0: { cellWidth: 'auto' } };
+  let ci = 1;
+  colStyles[ci++] = { cellWidth: dense ? 12 : 18 };                          // Size
+  colStyles[ci++] = { cellWidth: dense ? 22 : 32 };                          // Material
+  colStyles[ci++] = { cellWidth: dense ? 11 : 18, halign: 'right' as const }; // Qty
+  colStyles[ci++] = { cellWidth: dense ? 8 : 14 };                           // Unit
+  if (hasCost) colStyles[ci++] = { cellWidth: 14, halign: 'right' as const }; // $/Unit
+  colStyles[ci++] = { cellWidth: 13, halign: 'right' as const };              // Hrs/Unit
+  if (hasCost) colStyles[ci++] = { cellWidth: 16, halign: 'right' as const }; // Mat'l $
+  colStyles[ci++] = { cellWidth: 14, halign: 'right' as const };              // Total Hrs
+  if (hasLaborCost) colStyles[ci++] = { cellWidth: 16, halign: 'right' as const }; // Labor $
+  if (hasLineTotal) colStyles[ci++] = { cellWidth: 18, halign: 'right' as const }; // Line Total
+
+  const smallFont = hasCost || hasLaborCost;
 
   autoTable(doc, {
     startY,
@@ -379,7 +399,7 @@ function drawSystemTable(
     foot: [footCells],
     theme: 'grid',
     styles: {
-      fontSize: hasCost ? 6.5 : 7, cellPadding: 1.5,
+      fontSize: smallFont ? 6.5 : 7, cellPadding: 1.5,
       lineColor: C.border, lineWidth: 0.15,
     },
     headStyles: {
@@ -391,7 +411,7 @@ function drawSystemTable(
     footStyles: {
       fillColor: C.subtotalBg,
       textColor: C.body,
-      fontStyle: 'bold', fontSize: hasCost ? 6.5 : 7,
+      fontStyle: 'bold', fontSize: smallFont ? 6.5 : 7,
     },
     alternateRowStyles: { fillColor: C.altRow },
     columnStyles: colStyles,
@@ -408,14 +428,19 @@ function drawGrandTotal(
   totalLaborHrs: number,
   totalMaterialCost: number,
   startY: number,
+  laborRate = 0,
 ): number {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const boxW = pageW - MARGIN.left - MARGIN.right;
+  const totalLaborCost = Math.round(totalLaborHrs * laborRate * 100) / 100;
 
   const unitEntries = Array.from(totalsByUnit.entries()).sort();
   const hasCost = totalMaterialCost > 0;
-  const summaryLines = (hasCost ? 1 : 0) + (totalLaborHrs > 0 ? 1 : 0);
+  const hasLaborCost = totalLaborCost > 0;
+  const hasProjectTotal = hasCost && hasLaborCost;
+  const projectGrandTotal = Math.round((totalMaterialCost + totalLaborCost) * 100) / 100;
+  const summaryLines = (hasCost ? 1 : 0) + (totalLaborHrs > 0 ? 1 : 0) + (hasLaborCost ? 1 : 0) + (hasProjectTotal ? 1 : 0);
   const lines = unitEntries.length + (summaryLines > 0 ? summaryLines + 1 : 0); // +1 for divider
   const boxH = 9 + lines * 5.5 + 4;
 
@@ -452,7 +477,7 @@ function drawGrandTotal(
     y += 5.5;
   }
 
-  if (hasCost || totalLaborHrs > 0) {
+  if (hasCost || totalLaborHrs > 0 || hasLaborCost) {
     y += 0.5;
     doc.setDrawColor(...C.sectionHdr);
     doc.setLineWidth(0.3);
@@ -474,6 +499,24 @@ function drawGrandTotal(
       doc.setTextColor(...C.sectionHdr);
       doc.text('TOTAL LABOR HOURS:', MARGIN.left + 6, y);
       doc.text(fmtHrs(totalLaborHrs), valueX, y);
+      y += 5.5;
+    }
+
+    if (hasLaborCost) {
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...C.sectionHdr);
+      doc.text('TOTAL LABOR COST:', MARGIN.left + 6, y);
+      doc.text(`${fmtDollar(totalLaborCost)}  @  ${fmtDollar(laborRate)}/hr`, valueX, y);
+      y += 5.5;
+    }
+
+    if (hasProjectTotal) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...C.brandDark);
+      doc.text('PROJECT TOTAL:', MARGIN.left + 6, y);
+      doc.text(fmtDollar(projectGrandTotal), valueX, y);
     }
   }
 
@@ -579,6 +622,7 @@ export async function exportBomToPdf(
 
   let currentY = drawHeader(doc, shieldImage, tenantLogo);
   currentY = drawProjectInfo(doc, metadata, currentY);
+  const laborRate = metadata?.laborRatePerHour ?? 0;
 
   for (const key of sortedKeys) {
     const group = systemGroups.get(key)!;
@@ -598,7 +642,7 @@ export async function exportBomToPdf(
     }
 
     currentY = drawSystemHeader(doc, group.label, pages, currentY);
-    currentY = drawSystemTable(doc, aggregated, group.label, systemLaborHrs, systemMaterialCost, currentY);
+    currentY = drawSystemTable(doc, aggregated, group.label, systemLaborHrs, systemMaterialCost, currentY, laborRate);
     currentY += 4;
     addToProjectTotals(aggregated);
   }
@@ -618,12 +662,12 @@ export async function exportBomToPdf(
     }
 
     currentY = drawSystemHeader(doc, 'Other Items', [], currentY);
-    currentY = drawSystemTable(doc, aggregated, 'Other Items', otherLaborHrs, otherMaterialCost, currentY);
+    currentY = drawSystemTable(doc, aggregated, 'Other Items', otherLaborHrs, otherMaterialCost, currentY, laborRate);
     currentY += 4;
     addToProjectTotals(aggregated);
   }
 
-  drawGrandTotal(doc, projectTotalQtyByUnit, projectTotalLaborHrs, projectTotalMaterialCost, currentY);
+  drawGrandTotal(doc, projectTotalQtyByUnit, projectTotalLaborHrs, projectTotalMaterialCost, currentY, laborRate);
 
   const projectName = metadata?.projectName || 'Untitled Project';
   drawFooters(doc, projectName);

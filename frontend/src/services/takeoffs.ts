@@ -14,6 +14,7 @@ export interface Takeoff {
   total_adjusted_hours: number;
   total_material_cost: number;
   total_items: number;
+  labor_rate_per_hour: number;
   status: string;
   notes: string;
   created_by: number;

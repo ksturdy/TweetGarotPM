@@ -7,12 +7,14 @@ import { MATERIAL_LABELS, SERVICE_TYPE_LABELS } from '../piping/referenceData';
 import { migrateServiceType } from '../../types/piping';
 import { enrichItemsWithCurrentCosts } from './costEnrichment';
 
-const COLUMNS = [
+const BASE_COLUMNS = [
   'System', 'Page', 'Category', 'Type', 'Description',
   'Size', 'Material', 'Quantity', 'Unit',
   '$/Unit', 'Total $',
   'Labor Hrs/Unit', 'Total Labor Hrs',
 ] as const;
+
+const LABOR_COST_COLUMN = 'Labor $' as const;
 
 interface AggregatedLine {
   description: string;
@@ -118,6 +120,11 @@ export function exportBomToXlsx(
 
   const data: (string | number)[][] = [];
   const boldRows = new Set<number>();
+  const laborRate = metadata?.laborRatePerHour ?? 0;
+  const hasLaborCost = laborRate > 0;
+  const COLUMNS: string[] = [...BASE_COLUMNS];
+  if (hasLaborCost) COLUMNS.push(LABOR_COST_COLUMN);
+  const emptyRow = COLUMNS.map(() => '' as string | number);
 
   const projectName = metadata?.projectName || 'Untitled Project';
   data.push([projectName]);
@@ -126,6 +133,7 @@ export function exportBomToXlsx(
   if (metadata?.projectNumber) data.push([`Project #: ${metadata.projectNumber}`]);
   if (metadata?.date) data.push([`Date: ${metadata.date}`]);
   if (metadata?.estimatorName) data.push([`Estimator: ${metadata.estimatorName}`]);
+  if (hasLaborCost) data.push([`Labor Rate: $${laborRate}/hr`]);
   data.push([`Generated: ${new Date().toLocaleDateString()}`]);
   data.push([]);
 
@@ -155,7 +163,7 @@ export function exportBomToXlsx(
     const aggregated = aggregateItems(group.items);
 
     const sysHeaderIdx = data.length;
-    data.push([group.label, `Page ${pagesStr}`, '', '', '', '', '', '', '', '', '', '', '']);
+    data.push([...emptyRow].map((_, i) => i === 0 ? group.label : i === 1 ? `Page ${pagesStr}` : ''));
     boldRows.add(sysHeaderIdx);
 
     let systemLaborHrs = 0;
@@ -163,7 +171,7 @@ export function exportBomToXlsx(
     for (const line of aggregated) {
       systemLaborHrs += line.laborHours;
       systemMaterialCost += line.materialCost;
-      data.push([
+      const row: (string | number)[] = [
         group.label, pagesStr, line.category, line.type, line.description,
         line.size, line.material,
         Math.round(line.quantity * 100) / 100, line.unit,
@@ -173,17 +181,24 @@ export function exportBomToXlsx(
         line.laborHours > 0 && line.quantity > 0
           ? Math.round((line.laborHours / line.quantity) * 100) / 100 : '',
         line.laborHours > 0 ? Math.round(line.laborHours * 10) / 10 : '',
-      ]);
+      ];
+      if (hasLaborCost) {
+        row.push(line.laborHours > 0 ? Math.round(line.laborHours * laborRate * 100) / 100 : '');
+      }
+      data.push(row);
     }
 
-    const subtotalIdx = data.length;
-    data.push([
+    const systemLaborCost = Math.round(systemLaborHrs * laborRate * 100) / 100;
+    const subtotalRow: (string | number)[] = [
       group.label, '', '', '', `${group.label} SUBTOTAL`,
       '', '', '', '', '',
       systemMaterialCost > 0 ? Math.round(systemMaterialCost * 100) / 100 : '',
       '',
       systemLaborHrs > 0 ? Math.round(systemLaborHrs * 10) / 10 : '',
-    ]);
+    ];
+    if (hasLaborCost) subtotalRow.push(systemLaborCost > 0 ? systemLaborCost : '');
+    const subtotalIdx = data.length;
+    data.push(subtotalRow);
     boldRows.add(subtotalIdx);
     data.push([]);
     addToProjectTotals(aggregated);
@@ -192,7 +207,7 @@ export function exportBomToXlsx(
   if (otherItems.length > 0) {
     const aggregated = aggregateItems(otherItems);
     const otherHeaderIdx = data.length;
-    data.push(['Other Items', '', '', '', '', '', '', '', '', '', '', '', '']);
+    data.push([...emptyRow].map((_, i) => i === 0 ? 'Other Items' : ''));
     boldRows.add(otherHeaderIdx);
 
     let otherLaborHrs = 0;
@@ -200,7 +215,7 @@ export function exportBomToXlsx(
     for (const line of aggregated) {
       otherLaborHrs += line.laborHours;
       otherMaterialCost += line.materialCost;
-      data.push([
+      const row: (string | number)[] = [
         'Other', '', line.category, line.type, line.description,
         line.size, line.material,
         Math.round(line.quantity * 100) / 100, line.unit,
@@ -210,42 +225,69 @@ export function exportBomToXlsx(
         line.laborHours > 0 && line.quantity > 0
           ? Math.round((line.laborHours / line.quantity) * 100) / 100 : '',
         line.laborHours > 0 ? Math.round(line.laborHours * 10) / 10 : '',
-      ]);
+      ];
+      if (hasLaborCost) {
+        row.push(line.laborHours > 0 ? Math.round(line.laborHours * laborRate * 100) / 100 : '');
+      }
+      data.push(row);
     }
 
-    const otherSubIdx = data.length;
-    data.push([
+    const otherLaborCost = Math.round(otherLaborHrs * laborRate * 100) / 100;
+    const otherSubRow: (string | number)[] = [
       '', '', '', '', 'Other Items SUBTOTAL',
       '', '', '', '', '',
       otherMaterialCost > 0 ? Math.round(otherMaterialCost * 100) / 100 : '',
       '',
       otherLaborHrs > 0 ? Math.round(otherLaborHrs * 10) / 10 : '',
-    ]);
+    ];
+    if (hasLaborCost) otherSubRow.push(otherLaborCost > 0 ? otherLaborCost : '');
+    const otherSubIdx = data.length;
+    data.push(otherSubRow);
     boldRows.add(otherSubIdx);
     data.push([]);
     addToProjectTotals(aggregated);
   }
 
   const totalHeaderIdx = data.length;
-  data.push(['PROJECT TOTAL', '', '', '', '', '', '', '', '', '', '', '', '']);
+  data.push([...emptyRow].map((_, i) => i === 0 ? 'PROJECT TOTAL' : ''));
   boldRows.add(totalHeaderIdx);
 
   for (const [unit, qty] of Array.from(projectTotalQtyByUnit.entries()).sort()) {
+    const totalLineRow: (string | number)[] = [...emptyRow];
+    totalLineRow[4] = `Total ${unit}`;
+    totalLineRow[7] = Math.round(qty * 100) / 100;
+    totalLineRow[8] = unit;
     const totalLineIdx = data.length;
-    data.push(['', '', '', '', `Total ${unit}`, '', '', Math.round(qty * 100) / 100, unit, '', '', '', '']);
+    data.push(totalLineRow);
     boldRows.add(totalLineIdx);
   }
 
   if (projectTotalMaterialCost > 0) {
+    const costRow: (string | number)[] = [...emptyRow];
+    costRow[4] = 'TOTAL MATERIAL COST';
+    costRow[10] = Math.round(projectTotalMaterialCost * 100) / 100;
     const costTotalIdx = data.length;
-    data.push(['', '', '', '', 'TOTAL MATERIAL COST', '', '', '', '', '', Math.round(projectTotalMaterialCost * 100) / 100, '', '']);
+    data.push(costRow);
     boldRows.add(costTotalIdx);
   }
 
   if (projectTotalLaborHrs > 0) {
+    const laborRow: (string | number)[] = [...emptyRow];
+    laborRow[4] = 'TOTAL LABOR HOURS';
+    laborRow[12] = Math.round(projectTotalLaborHrs * 10) / 10;
     const laborTotalIdx = data.length;
-    data.push(['', '', '', '', 'TOTAL LABOR HOURS', '', '', '', '', '', '', '', Math.round(projectTotalLaborHrs * 10) / 10]);
+    data.push(laborRow);
     boldRows.add(laborTotalIdx);
+  }
+
+  if (hasLaborCost && projectTotalLaborHrs > 0) {
+    const totalLaborCost = Math.round(projectTotalLaborHrs * laborRate * 100) / 100;
+    const laborCostRow: (string | number)[] = [...emptyRow];
+    laborCostRow[4] = `TOTAL LABOR COST  @  $${laborRate}/hr`;
+    laborCostRow[13] = totalLaborCost;
+    const laborCostIdx = data.length;
+    data.push(laborCostRow);
+    boldRows.add(laborCostIdx);
   }
 
   const ws = XLSX.utils.aoa_to_sheet(data);

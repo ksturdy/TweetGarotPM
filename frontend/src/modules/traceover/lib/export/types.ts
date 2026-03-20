@@ -8,4 +8,5 @@ export interface ProjectMetadata {
   date?: string;
   estimatorName?: string;
   tenantLogoUrl?: string;
+  laborRatePerHour?: number;
 }
