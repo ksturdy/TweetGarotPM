@@ -50,16 +50,18 @@ export default function TraceoverAnnotation({
   const runLabel = config.label || sizeLabel;
 
   // Total length label (horizontal + vertical)
+  // Coerce to number — values may arrive as strings from DB/JSON hydration
   const hasCalibration = segments.some((s) => s.unit !== 'px');
-  const horizontalLength = hasCalibration
+  const horizontalLength = Number(hasCalibration
     ? run.totalScaledLength
-    : run.totalPixelLength;
-  const totalLength = horizontalLength + run.verticalPipeLength;
+    : run.totalPixelLength) || 0;
+  const vertPipe = Number(run.verticalPipeLength) || 0;
+  const totalLength = horizontalLength + vertPipe;
   const unit = hasCalibration
     ? (segments.find((s) => s.unit !== 'px')?.unit ?? 'ft')
     : 'px';
-  const lengthText = run.verticalPipeLength > 0
-    ? `${totalLength.toFixed(1)} ${unit} (+${run.verticalPipeLength.toFixed(1)} vert)`
+  const lengthText = vertPipe > 0
+    ? `${totalLength.toFixed(1)} ${unit} (+${vertPipe.toFixed(1)} vert)`
     : `${totalLength.toFixed(1)} ${unit}`;
 
   return (

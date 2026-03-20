@@ -17,24 +17,33 @@ const PipeSpec = {
     const spec = result.rows[0];
     if (!spec) return null;
 
-    // Attach all rate sub-tables
-    spec.pipe_rates = await this.getPipeRates(id);
-    spec.fitting_rates = await this.getFittingRates(id);
-    spec.reducing_rates = await this.getReducingRates(id);
-    spec.reducing_tee_rates = await this.getReducingTeeRates(id);
-    spec.cross_reducing_rates = await this.getCrossReducingRates(id);
+    // Attach all rate sub-tables (parallel)
+    const [pipeRates, fittingRates, reducingRates, reducingTeeRates, crossReducingRates] = await Promise.all([
+      this.getPipeRates(id),
+      this.getFittingRates(id),
+      this.getReducingRates(id),
+      this.getReducingTeeRates(id),
+      this.getCrossReducingRates(id),
+    ]);
+    spec.pipe_rates = pipeRates;
+    spec.fitting_rates = fittingRates;
+    spec.reducing_rates = reducingRates;
+    spec.reducing_tee_rates = reducingTeeRates;
+    spec.cross_reducing_rates = crossReducingRates;
 
     return spec;
   },
 
   async create(tenantId, data) {
     const result = await db.query(
-      `INSERT INTO pipe_specs (tenant_id, name, joint_method, material, schedule, stock_pipe_length, joint_type, pipe_material, is_default, est_install_type, est_material, est_filters)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO pipe_specs (tenant_id, name, joint_method, material, schedule, stock_pipe_length, joint_type, pipe_material, is_default, est_install_type, est_material, est_filters, cost_maps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [tenantId, data.name, data.joint_method, data.material, data.schedule,
        data.stock_pipe_length || 21, data.joint_type, data.pipe_material, data.is_default || false,
-       data.est_install_type || null, data.est_material || null, data.est_filters ? JSON.stringify(data.est_filters) : '{}']
+       data.est_install_type || null, data.est_material || null,
+       data.est_filters ? JSON.stringify(data.est_filters) : '{}',
+       data.cost_maps ? JSON.stringify(data.cost_maps) : '{}']
     );
     return result.rows[0];
   },
@@ -51,10 +60,14 @@ const PipeSpec = {
         params.push(data[field]);
       }
     }
-    // Handle est_filters separately (JSONB)
+    // Handle JSONB fields separately
     if (data.est_filters !== undefined) {
       fields.push(`est_filters = $${paramIdx++}`);
       params.push(JSON.stringify(data.est_filters));
+    }
+    if (data.cost_maps !== undefined) {
+      fields.push(`cost_maps = $${paramIdx++}`);
+      params.push(JSON.stringify(data.cost_maps));
     }
 
     if (fields.length === 0) return this.findById(id, tenantId);

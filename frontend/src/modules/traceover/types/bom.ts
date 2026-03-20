@@ -15,6 +15,8 @@ export interface BOMEntry {
   laborHoursPerUnit?: number;
   totalLaborHours?: number;
   laborHoursError?: string;
+  materialCostPerUnit?: number;
+  totalMaterialCost?: number;
   fittingType?: FittingType;
   reducingSize?: string;
   jointType?: JointType;

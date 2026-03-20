@@ -72,6 +72,8 @@ export interface TakeoffItem {
   reducingSize?: string;
   laborHours?: number;
   laborHoursError?: string;
+  materialCost?: number;
+  materialCostTotal?: number;
   alternateId?: string | null;
   addendumId?: string | null;
   createdAt: Date;

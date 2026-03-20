@@ -2,8 +2,56 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, requireFeature } = require('../middleware/tenant');
 const PipeSpec = require('../models/PipeSpec');
+const EstProduct = require('../models/EstProduct');
 
 const router = express.Router();
+
+// ── EST auto-detection: derive install_type + material from pipe spec fields ──
+
+const JOINT_METHOD_TO_INSTALL_TYPES = {
+  BW: ['Butt Weld', 'Butt Welded', 'Buttweld'],
+  GRV: ['Grooved', 'Grooved Coupling'],
+  THD: ['Threaded'],
+  CU: ['Soldered', 'Solder'],
+};
+
+const MATERIAL_TO_EST_KEYWORDS = {
+  carbon_steel: ['Carbon Steel'],
+  stainless_steel: ['Stainless Steel', '304 Stainless Steel', '316L Stainless Steel', '316 Stainless Steel'],
+  copper: ['Copper', 'Wrot Copper'],
+  pvc: ['PVC'],
+  cpvc: ['CPVC'],
+  cast_iron: ['Cast Iron'],
+  ductile_iron: ['Ductile Iron'],
+};
+
+/**
+ * Find the best matching EST install_type from available values in the database.
+ */
+async function resolveEstInstallType(tenantId, jointMethod) {
+  const aliases = JOINT_METHOD_TO_INSTALL_TYPES[jointMethod];
+  if (!aliases) return null;
+  const result = await EstProduct.getDistinctInstallTypes(tenantId);
+  for (const alias of aliases) {
+    const match = result.find(v => v.toLowerCase() === alias.toLowerCase());
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * Find the best matching EST material from available values in the database.
+ */
+async function resolveEstMaterial(tenantId, specMaterial) {
+  const keywords = MATERIAL_TO_EST_KEYWORDS[specMaterial];
+  if (!keywords) return null;
+  const result = await EstProduct.getDistinctMaterials(tenantId);
+  for (const keyword of keywords) {
+    const match = result.find(v => v.toLowerCase() === keyword.toLowerCase());
+    if (match) return match;
+  }
+  return null;
+}
 
 router.use(authenticate);
 router.use(tenantContext);
@@ -14,13 +62,45 @@ router.get('/', async (req, res, next) => {
   try {
     const specs = await PipeSpec.findAll(req.tenantId);
     if (req.query.include === 'rates') {
-      for (const spec of specs) {
-        spec.pipe_rates = await PipeSpec.getPipeRates(spec.id);
-        spec.fitting_rates = await PipeSpec.getFittingRates(spec.id);
-        spec.reducing_rates = await PipeSpec.getReducingRates(spec.id);
-        spec.reducing_tee_rates = await PipeSpec.getReducingTeeRates(spec.id);
-        spec.cross_reducing_rates = await PipeSpec.getCrossReducingRates(spec.id);
-      }
+      await Promise.all(specs.map(async (spec) => {
+        const [pipeRates, fittingRates, reducingRates, reducingTeeRates, crossReducingRates] = await Promise.all([
+          PipeSpec.getPipeRates(spec.id),
+          PipeSpec.getFittingRates(spec.id),
+          PipeSpec.getReducingRates(spec.id),
+          PipeSpec.getReducingTeeRates(spec.id),
+          PipeSpec.getCrossReducingRates(spec.id),
+        ]);
+        spec.pipe_rates = pipeRates;
+        spec.fitting_rates = fittingRates;
+        spec.reducing_rates = reducingRates;
+        spec.reducing_tee_rates = reducingTeeRates;
+        spec.cross_reducing_rates = crossReducingRates;
+
+        // Auto-populate cost_maps from est_products using the product_id
+        // linkage (MapProd → Cost). This ensures report exports always
+        // reflect the latest EST catalog pricing without requiring a
+        // manual import step.
+        let installType = spec.est_install_type;
+        let material = spec.est_material;
+
+        // Auto-detect EST filters from spec's joint_method + material
+        // if the user hasn't manually configured them yet
+        if (!installType) {
+          installType = await resolveEstInstallType(req.tenantId, spec.joint_method);
+        }
+        if (!material) {
+          material = await resolveEstMaterial(req.tenantId, spec.material);
+        }
+
+        if (installType && material) {
+          const liveCosts = await EstProduct.buildCostMapsForSpec(
+            req.tenantId, installType, material, spec.est_filters
+          );
+          if (liveCosts) {
+            spec.cost_maps = liveCosts;
+          }
+        }
+      }));
     }
     res.json(specs);
   } catch (error) {
@@ -34,6 +114,23 @@ router.get('/:id', async (req, res, next) => {
     const spec = await PipeSpec.findById(req.params.id, req.tenantId);
     if (!spec) {
       return res.status(404).json({ error: 'Pipe spec not found' });
+    }
+    // Auto-populate cost_maps from est_products
+    let installType = spec.est_install_type;
+    let material = spec.est_material;
+    if (!installType) {
+      installType = await resolveEstInstallType(req.tenantId, spec.joint_method);
+    }
+    if (!material) {
+      material = await resolveEstMaterial(req.tenantId, spec.material);
+    }
+    if (installType && material) {
+      const liveCosts = await EstProduct.buildCostMapsForSpec(
+        req.tenantId, installType, material, spec.est_filters
+      );
+      if (liveCosts) {
+        spec.cost_maps = liveCosts;
+      }
     }
     res.json(spec);
   } catch (error) {

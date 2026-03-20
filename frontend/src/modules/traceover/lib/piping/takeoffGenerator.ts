@@ -13,6 +13,8 @@ import { generateId } from '../utils/idGen';
 import {
   lookupPipeRateFromSpec,
   lookupFittingRateFromSpec,
+  lookupPipeCostFromSpec,
+  lookupFittingCostFromSpec,
 } from './productivityLookup';
 
 /**
@@ -69,11 +71,26 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
     prevElevation = seg.elevation;
   }
 
+  // ── Pipe cost lookup ──
+  const pipeCost = spec
+    ? lookupPipeCostFromSpec(spec, sizeLabel)
+    : { found: false as const };
+
   function pipeHoursFields(qty: number): Pick<TakeoffItem, 'laborHours' | 'laborHoursError'> {
     if (pipeRate.found) {
       return { laborHours: Math.round(pipeRate.hours * qty * 1000) / 1000 };
     }
     return { laborHoursError: pipeRate.error };
+  }
+
+  function pipeCostFields(qty: number): Pick<TakeoffItem, 'materialCost' | 'materialCostTotal'> {
+    if (pipeCost.found) {
+      return {
+        materialCost: pipeCost.cost,
+        materialCostTotal: Math.round(pipeCost.cost * qty * 100) / 100,
+      };
+    }
+    return {};
   }
 
   // ── Emit pipe items ──
@@ -103,6 +120,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
         jointType: jointType ?? undefined,
         pipeMaterial: run.config.material,
         ...pipeHoursFields(qty),
+        ...pipeCostFields(qty),
         createdAt: now,
         updatedAt: now,
       });
@@ -129,6 +147,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
         jointType: jointType ?? undefined,
         pipeMaterial: run.config.material,
         ...pipeHoursFields(qty),
+        ...pipeCostFields(qty),
         createdAt: now,
         updatedAt: now,
       });
@@ -150,6 +169,14 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
       laborFields = { laborHoursError: fResult.error };
     }
 
+    let costFields: Pick<TakeoffItem, 'materialCost' | 'materialCostTotal'> = {};
+    const fCost = spec
+      ? lookupFittingCostFromSpec(spec, seg.fitting, sizeLabel)
+      : { found: false as const };
+    if (fCost.found) {
+      costFields = { materialCost: fCost.cost, materialCostTotal: fCost.cost };
+    }
+
     items.push({
       id: generateId(),
       documentId: run.documentId,
@@ -169,6 +196,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
       fittingType: seg.fitting,
       pipeMaterial: run.config.material,
       ...laborFields,
+      ...costFields,
       createdAt: now,
       updatedAt: now,
     });
@@ -185,6 +213,14 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
       laborFields = { laborHours: elbowResult.hours };
     } else {
       laborFields = { laborHoursError: elbowResult.error };
+    }
+
+    let elbowCostFields: Pick<TakeoffItem, 'materialCost' | 'materialCostTotal'> = {};
+    const elbowCost = spec
+      ? lookupFittingCostFromSpec(spec, 'elbow_90', sizeLabel)
+      : { found: false as const };
+    if (elbowCost.found) {
+      elbowCostFields = { materialCost: elbowCost.cost, materialCostTotal: elbowCost.cost };
     }
 
     for (let i = 0; i < 2; i++) {
@@ -207,6 +243,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
         fittingType: 'elbow_90',
         pipeMaterial: run.config.material,
         ...laborFields,
+        ...elbowCostFields,
         createdAt: now,
         updatedAt: now,
       });
@@ -218,6 +255,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
     let fittingLabel: string;
     let teeSize = sizeLabel;
     let laborFields: Pick<TakeoffItem, 'laborHours' | 'laborHoursError'> = {};
+    let teeCostFields: Pick<TakeoffItem, 'materialCost' | 'materialCostTotal'> = {};
 
     if (run.branchParentPipeSize) {
       const parentSize = run.branchParentPipeSize.displayLabel;
@@ -234,6 +272,13 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
       } else {
         laborFields = { laborHoursError: redTeeResult.error };
       }
+
+      const redTeeCost = spec
+        ? lookupFittingCostFromSpec(spec, 'tee', parentSize, sizeLabel)
+        : { found: false as const };
+      if (redTeeCost.found) {
+        teeCostFields = { materialCost: redTeeCost.cost, materialCostTotal: redTeeCost.cost };
+      }
     } else {
       fittingLabel = FITTING_TYPE_LABELS.tee;
       const stdTeeResult = spec
@@ -243,6 +288,13 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
         laborFields = { laborHours: stdTeeResult.hours };
       } else {
         laborFields = { laborHoursError: stdTeeResult.error };
+      }
+
+      const stdTeeCost = spec
+        ? lookupFittingCostFromSpec(spec, 'tee', sizeLabel)
+        : { found: false as const };
+      if (stdTeeCost.found) {
+        teeCostFields = { materialCost: stdTeeCost.cost, materialCostTotal: stdTeeCost.cost };
       }
     }
 
@@ -267,6 +319,7 @@ export function generateTakeoffItems(run: TraceoverRun, spec?: PipeSpec): Takeof
         pipeMaterial: run.config.material,
         reducingSize: run.branchParentPipeSize ? sizeLabel : undefined,
         ...laborFields,
+        ...teeCostFields,
         createdAt: now,
         updatedAt: now,
       });

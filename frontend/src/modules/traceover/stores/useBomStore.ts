@@ -24,6 +24,8 @@ import { generateId } from '../lib/utils/idGen';
 import {
   lookupPipeRateFromSpec,
   lookupFittingRateFromSpec,
+  lookupPipeCostFromSpec,
+  lookupFittingCostFromSpec,
 } from '../lib/piping/productivityLookup';
 
 interface BomState {
@@ -47,6 +49,8 @@ function bomGroupKey(item: TakeoffItem): string {
     item.componentType,
     item.size ?? '',
     item.material ?? '',
+    item.fittingType ?? '',
+    item.reducingSize ?? '',
   ].join('|');
 }
 
@@ -129,7 +133,7 @@ export const useBomStore = create<BomState>()((set, get) => ({
           jointType: group.jointType,
         };
 
-        // PipeSpec-based rate lookup at BOM level
+        // PipeSpec-based rate + cost lookup at BOM level
         if (spec && group.size) {
           if (group.componentType === 'pipe_segment') {
             const result = lookupPipeRateFromSpec(spec, group.size);
@@ -138,6 +142,11 @@ export const useBomStore = create<BomState>()((set, get) => ({
               entry.totalLaborHours = Math.round(result.hours * group.quantity * 1000) / 1000;
             } else {
               entry.laborHoursError = result.error;
+            }
+            const costResult = lookupPipeCostFromSpec(spec, group.size);
+            if (costResult.found) {
+              entry.materialCostPerUnit = costResult.cost;
+              entry.totalMaterialCost = Math.round(costResult.cost * group.quantity * 100) / 100;
             }
           } else if (group.componentType === 'pipe_fitting' && group.fittingType) {
             const result = group.reducingSize
@@ -148,6 +157,13 @@ export const useBomStore = create<BomState>()((set, get) => ({
               entry.totalLaborHours = Math.round(result.hours * group.quantity * 1000) / 1000;
             } else {
               entry.laborHoursError = result.error;
+            }
+            const costResult = group.reducingSize
+              ? lookupFittingCostFromSpec(spec, group.fittingType, group.size, group.reducingSize)
+              : lookupFittingCostFromSpec(spec, group.fittingType, group.size);
+            if (costResult.found) {
+              entry.materialCostPerUnit = costResult.cost;
+              entry.totalMaterialCost = Math.round(costResult.cost * group.quantity * 100) / 100;
             }
           }
         }

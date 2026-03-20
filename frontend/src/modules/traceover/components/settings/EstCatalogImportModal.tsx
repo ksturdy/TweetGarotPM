@@ -227,6 +227,7 @@ export default function EstCatalogImportModal({ open, onClose, spec, onImportCom
     // Import pipe rates (filtered by schedule if selected)
     if (includePipeRates && data.pipeRates.length > 0) {
       const pipeRates: Record<string, number> = { ...spec.pipeRates };
+      const pipeCosts: Record<string, number> = { ...(spec.pipeCosts || {}) };
       const pipesToImport = selectedSchedule === 'ALL'
         ? data.pipeRates
         : data.pipeRates.filter(r => {
@@ -236,10 +237,16 @@ export default function EstCatalogImportModal({ open, onClose, spec, onImportCom
       for (const rate of pipesToImport) {
         if (rate.size_normalized) {
           pipeRates[rate.size_normalized] = rate.labor_time;
+          if (rate.cost != null) {
+            pipeCosts[rate.size_normalized] = rate.cost;
+          }
         }
       }
       if (Object.keys(pipeRates).length > 0) {
         updates.pipeRates = pipeRates;
+      }
+      if (Object.keys(pipeCosts).length > 0) {
+        updates.pipeCosts = pipeCosts;
       }
     }
 
@@ -249,6 +256,7 @@ export default function EstCatalogImportModal({ open, onClose, spec, onImportCom
     );
     if (includedFittings.length > 0) {
       const fittingRates: Record<string, Record<string, number>> = { ...spec.fittingRates };
+      const fittingCosts: Record<string, Record<string, number>> = { ...(spec.fittingCosts || {}) };
       for (const m of includedFittings) {
         const ft = m.fittingType as SystemFittingType;
         if (!fittingRates[ft]) {
@@ -256,18 +264,30 @@ export default function EstCatalogImportModal({ open, onClose, spec, onImportCom
         } else {
           fittingRates[ft] = { ...fittingRates[ft] };
         }
+        if (!fittingCosts[ft]) {
+          fittingCosts[ft] = {};
+        } else {
+          fittingCosts[ft] = { ...fittingCosts[ft] };
+        }
         const size = m.product.size_normalized;
         if (size) {
           fittingRates[ft][size] = m.product.labor_time;
+          if (m.product.cost != null) {
+            fittingCosts[ft][size] = m.product.cost;
+          }
         }
       }
       updates.fittingRates = fittingRates;
+      if (Object.keys(fittingCosts).length > 0) {
+        updates.fittingCosts = fittingCosts;
+      }
     }
 
     // Import reducing fitting rates
     const includedReducing = reducingItems.filter(m => m.included);
     if (includedReducing.length > 0) {
       const reducingFittingRates = { ...spec.reducingFittingRates };
+      const reducingFittingCosts = { ...(spec.reducingFittingCosts || {}) };
       for (const m of includedReducing) {
         const detected = detectFittingType(m.product);
         if (detected.kind === 'reducing') {
@@ -277,26 +297,44 @@ export default function EstCatalogImportModal({ open, onClose, spec, onImportCom
           } else {
             reducingFittingRates[rt] = { ...reducingFittingRates[rt] };
           }
+          if (!reducingFittingCosts[rt]) {
+            reducingFittingCosts[rt] = {};
+          } else {
+            reducingFittingCosts[rt] = { ...reducingFittingCosts[rt] };
+          }
           const size = m.product.size_normalized;
           if (size) {
             reducingFittingRates[rt]![size] = m.product.labor_time;
+            if (m.product.cost != null) {
+              reducingFittingCosts[rt]![size] = m.product.cost;
+            }
           }
         }
       }
       updates.reducingFittingRates = reducingFittingRates;
+      if (Object.keys(reducingFittingCosts).length > 0) {
+        updates.reducingFittingCosts = reducingFittingCosts;
+      }
     }
 
     // Import reducing tee rates
     const includedReducingTees = reducingTees.filter(m => m.included);
     if (includedReducingTees.length > 0) {
       const reducingTeeRates = { ...spec.reducingTeeRates };
+      const reducingTeeCosts: Record<string, number> = { ...(spec.reducingTeeCosts || {}) };
       for (const m of includedReducingTees) {
         const size = m.product.size_normalized;
         if (size) {
           reducingTeeRates[size] = m.product.labor_time;
+          if (m.product.cost != null) {
+            reducingTeeCosts[size] = m.product.cost;
+          }
         }
       }
       updates.reducingTeeRates = reducingTeeRates;
+      if (Object.keys(reducingTeeCosts).length > 0) {
+        updates.reducingTeeCosts = reducingTeeCosts;
+      }
     }
 
     onImportComplete(updates);

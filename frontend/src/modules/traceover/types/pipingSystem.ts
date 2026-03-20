@@ -233,6 +233,11 @@ export interface PipeSpec {
     valves?: EstCategoryFilter;
     hangers?: EstCategoryFilter;
   };
+  /** Material cost maps (populated from EST catalog import) */
+  pipeCosts?: Record<string, number>;
+  fittingCosts?: Record<string, Record<string, number>>;
+  reducingFittingCosts?: Partial<Record<ReducingFittingType, Record<string, number>>>;
+  reducingTeeCosts?: Record<string, number>;
 }
 
 /** Derive the traceover JointType from a spec */

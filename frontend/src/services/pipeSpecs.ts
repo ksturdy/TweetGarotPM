@@ -19,6 +19,8 @@ export interface PipeSpec {
   est_install_type?: string | null;
   est_material?: string | null;
   est_filters?: Record<string, any> | null;
+  // Material cost maps (from EST catalog import)
+  cost_maps?: Record<string, any> | null;
   // Populated when fetching by ID
   pipe_rates?: PipeSpecPipeRate[];
   fitting_rates?: PipeSpecFittingRate[];

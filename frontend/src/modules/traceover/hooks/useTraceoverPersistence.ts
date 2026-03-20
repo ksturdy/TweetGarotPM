@@ -34,6 +34,8 @@ import {
   type ProjectSystem as ApiProjectSystem,
 } from '../../../services/pipingServices';
 import { useSettingsStore } from '../stores/useSettingsStore';
+import { useTakeoffStore } from '../stores/useTakeoffStore';
+import { useBomStore } from '../stores/useBomStore';
 import type { PipeSpec, PipingService, ProjectSystem, ServiceSizeRule, RateTable, RateTableColumn } from '../types/pipingSystem';
 import { JOINT_METHOD_TO_JOINT_TYPE, materialToTraceover } from '../types/pipingSystem';
 import type { PipeServiceType } from '../types/piping';
@@ -83,6 +85,12 @@ function specToApiMeta(spec: PipeSpec) {
     est_install_type: spec.estInstallType || null,
     est_material: spec.estMaterial || null,
     est_filters: spec.estFilters || null,
+    cost_maps: {
+      pipeCosts: spec.pipeCosts || {},
+      fittingCosts: spec.fittingCosts || {},
+      reducingFittingCosts: spec.reducingFittingCosts || {},
+      reducingTeeCosts: spec.reducingTeeCosts || {},
+    },
   };
 }
 
@@ -160,6 +168,11 @@ function mapApiPipeSpec(s: ApiPipeSpec): PipeSpec {
     estInstallType: s.est_install_type || undefined,
     estMaterial: s.est_material || undefined,
     estFilters: s.est_filters || {},
+    // Cost maps from EST catalog (persisted as JSONB)
+    pipeCosts: s.cost_maps?.pipeCosts || undefined,
+    fittingCosts: s.cost_maps?.fittingCosts || undefined,
+    reducingFittingCosts: s.cost_maps?.reducingFittingCosts || undefined,
+    reducingTeeCosts: s.cost_maps?.reducingTeeCosts || undefined,
   };
 }
 
@@ -224,12 +237,26 @@ export function useTraceoverPersistence(takeoffId: number | null) {
   const ids = useRef(createIdMaps());
   const hydrating = useRef(false);   // guard to prevent double-run
   const hydrated = useRef(false);    // true only AFTER data is loaded into stores
+  const prevTakeoffId = useRef<number | null>(null);
 
   // ─── 1. Hydrate stores from server on mount ───
 
   useEffect(() => {
     if (!takeoffId || hydrating.current) return;
     hydrating.current = true;
+
+    // Clear all stores when switching to a new takeoff (or on first load)
+    // to prevent stale data from a previous session leaking through
+    if (prevTakeoffId.current !== takeoffId) {
+      usePdfStore.getState().clearAll();
+      useTraceoverStore.getState().clearAll();
+      useMeasurementStore.getState().clearAll();
+      usePageMetadataStore.getState().clearAll();
+      useTakeoffStore.getState().clearAll();
+      useBomStore.getState().clearAll();
+      ids.current = createIdMaps();
+      prevTakeoffId.current = takeoffId;
+    }
 
     (async () => {
       try {
@@ -281,138 +308,156 @@ export function useTraceoverPersistence(takeoffId: number | null) {
         // Mark hydration complete — subscriptions can now process changes
         hydrated.current = true;
 
-        // Fetch documents
-        const { data: serverDocs } = await traceoverDocumentsApi.getByTakeoff(takeoffId);
+        // Fetch documents (separate try/catch so failures don't block runs)
+        let serverDocs: any[] = [];
+        try {
+          const { data } = await traceoverDocumentsApi.getByTakeoff(takeoffId);
+          serverDocs = data;
+        } catch (docErr) {
+          console.warn('[Persistence] Failed to fetch documents, continuing with runs:', docErr);
+        }
 
         for (const serverDoc of serverDocs) {
-          const clientId = generateId();
-          ids.current.docServerToClient.set(serverDoc.id, clientId);
-          ids.current.docClientToServer.set(clientId, serverDoc.id);
+          try {
+            const clientId = generateId();
+            ids.current.docServerToClient.set(serverDoc.id, clientId);
+            ids.current.docClientToServer.set(clientId, serverDoc.id);
 
-          // Stream the PDF binary through authenticated fetch
-          const streamUrl = traceoverDocumentsApi.getFileStreamUrl(takeoffId, serverDoc.id);
-          const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-          // streamUrl is "/api/takeoffs/…", so strip /api from baseUrl
-          const origin = baseUrl.replace(/\/api\/?$/, '');
-          const fullUrl = `${origin}${streamUrl}`;
-          const token = localStorage.getItem('token');
+            // Stream the PDF binary through authenticated fetch
+            const streamUrl = traceoverDocumentsApi.getFileStreamUrl(takeoffId, serverDoc.id);
+            const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+            // streamUrl is "/api/takeoffs/…", so strip /api from baseUrl
+            const origin = baseUrl.replace(/\/api\/?$/, '');
+            const fullUrl = `${origin}${streamUrl}`;
+            const token = localStorage.getItem('token');
 
-          const resp = await fetch(fullUrl, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-          if (!resp.ok) {
-            console.error(`[Persistence] Failed to stream doc ${serverDoc.id}: ${resp.status}`);
-            continue;
+            const resp = await fetch(fullUrl, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!resp.ok) {
+              console.error(`[Persistence] Failed to stream doc ${serverDoc.id}: ${resp.status}`);
+              continue;
+            }
+
+            const arrayBuffer = await resp.arrayBuffer();
+            const proxy = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+            const pdfDoc: PdfDocument = {
+              id: clientId,
+              fileName: serverDoc.original_name,
+              fileSize: serverDoc.file_size,
+              pageCount: proxy.numPages,
+              serverId: serverDoc.id,
+              loadedAt: new Date(serverDoc.created_at),
+            };
+            addDocumentFromProxy(pdfDoc, proxy);
+
+            // Hydrate page metadata
+            if (serverDoc.pages && serverDoc.pages.length > 0) {
+              const metaStore = usePageMetadataStore.getState();
+              for (const p of serverDoc.pages) {
+                metaStore.setPageMeta(clientId, p.page_number, {
+                  name: p.name || '',
+                  drawingNumber: p.drawing_number || '',
+                  revision: p.revision || '',
+                });
+              }
+            }
+
+            // Hydrate calibrations
+            if (serverDoc.calibrations && serverDoc.calibrations.length > 0) {
+              const measStore = useMeasurementStore.getState();
+              for (const c of serverDoc.calibrations) {
+                const cal: ScaleCalibration = {
+                  id: generateId(),
+                  documentId: clientId,
+                  pageNumber: c.page_number,
+                  startPoint: c.start_point,
+                  endPoint: c.end_point,
+                  pixelDistance: c.pixel_distance,
+                  realDistance: c.real_distance,
+                  unit: c.unit,
+                  pixelsPerUnit: c.pixels_per_unit,
+                  createdAt: new Date(c.created_at),
+                };
+                measStore.setCalibration(cal);
+              }
+            }
+          } catch (docLoadErr) {
+            console.warn(`[Persistence] Failed to load doc ${serverDoc.id}, skipping:`, docLoadErr);
           }
+        }
 
-          const arrayBuffer = await resp.arrayBuffer();
-          const proxy = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        // Fetch runs (separate try/catch)
+        try {
+          const { data: serverRuns } = await traceoverRunsApi.getByTakeoff(takeoffId);
+          const clientRuns: TraceoverRun[] = serverRuns.map((sr) => {
+            const clientDocId = sr.document_id
+              ? ids.current.docServerToClient.get(sr.document_id) ?? ''
+              : '';
+            const clientId = generateId();
+            ids.current.runClientToServer.set(clientId, sr.id);
 
-          const pdfDoc: PdfDocument = {
-            id: clientId,
-            fileName: serverDoc.original_name,
-            fileSize: serverDoc.file_size,
-            pageCount: proxy.numPages,
-            serverId: serverDoc.id,
-            loadedAt: new Date(serverDoc.created_at),
-          };
-          addDocumentFromProxy(pdfDoc, proxy);
+            return {
+              id: clientId,
+              serverId: sr.id,
+              documentId: clientDocId,
+              pageNumber: sr.page_number ?? 0,
+              config: sr.config as any,
+              segments: sr.segments as any,
+              branches: sr.branches as any,
+              isComplete: sr.is_complete,
+              totalPixelLength: Number(sr.total_pixel_length) || 0,
+              totalScaledLength: Number(sr.total_scaled_length) || 0,
+              verticalPipeLength: Number(sr.vertical_pipe_length) || 0,
+              fittingCounts: sr.fitting_counts as any,
+              generatedTakeoffItemIds: (sr.generated_takeoff_item_ids ?? []).map(String),
+              branchParentPipeSize: sr.branch_parent_pipe_size as any,
+              createdAt: new Date(sr.created_at),
+              updatedAt: new Date(sr.updated_at),
+            };
+          });
+          if (clientRuns.length > 0) {
+            useTraceoverStore.getState().restoreState(clientRuns);
+          }
+        } catch (runErr) {
+          console.warn('[Persistence] Failed to fetch runs:', runErr);
+        }
 
-          // Hydrate page metadata
-          if (serverDoc.pages && serverDoc.pages.length > 0) {
-            const metaStore = usePageMetadataStore.getState();
-            for (const p of serverDoc.pages) {
-              metaStore.setPageMeta(clientId, p.page_number, {
-                name: p.name || '',
-                drawingNumber: p.drawing_number || '',
-                revision: p.revision || '',
+        // Fetch measurements for each document (separate try/catch)
+        for (const serverDoc of serverDocs) {
+          try {
+            const clientDocId = ids.current.docServerToClient.get(serverDoc.id);
+            if (!clientDocId) continue;
+            const { data: serverMeasurements } = await traceoverMeasurementsApi.getByDocument(
+              takeoffId,
+              serverDoc.id,
+            );
+            const measStore = useMeasurementStore.getState();
+            for (const sm of serverMeasurements) {
+              const mId = generateId();
+              ids.current.measClientToServer.set(mId, sm.id);
+              measStore.addMeasurement({
+                id: mId,
+                serverId: sm.id,
+                documentId: clientDocId,
+                pageNumber: sm.page_number,
+                type: sm.measurement_type as Measurement['type'],
+                points: sm.points as any,
+                label: sm.label,
+                color: sm.color,
+                pixelValue: sm.pixel_value,
+                scaledValue: sm.scaled_value,
+                unit: sm.unit,
+                createdAt: new Date(sm.created_at),
               });
             }
-          }
-
-          // Hydrate calibrations
-          if (serverDoc.calibrations && serverDoc.calibrations.length > 0) {
-            const measStore = useMeasurementStore.getState();
-            for (const c of serverDoc.calibrations) {
-              const cal: ScaleCalibration = {
-                id: generateId(),
-                documentId: clientId,
-                pageNumber: c.page_number,
-                startPoint: c.start_point,
-                endPoint: c.end_point,
-                pixelDistance: c.pixel_distance,
-                realDistance: c.real_distance,
-                unit: c.unit,
-                pixelsPerUnit: c.pixels_per_unit,
-                createdAt: new Date(c.created_at),
-              };
-              measStore.setCalibration(cal);
-            }
-          }
-        }
-
-        // Fetch runs
-        const { data: serverRuns } = await traceoverRunsApi.getByTakeoff(takeoffId);
-        const clientRuns: TraceoverRun[] = serverRuns.map((sr) => {
-          const clientDocId = sr.document_id
-            ? ids.current.docServerToClient.get(sr.document_id) ?? ''
-            : '';
-          const clientId = generateId();
-          ids.current.runClientToServer.set(clientId, sr.id);
-
-          return {
-            id: clientId,
-            serverId: sr.id,
-            documentId: clientDocId,
-            pageNumber: sr.page_number ?? 0,
-            config: sr.config as any,
-            segments: sr.segments as any,
-            branches: sr.branches as any,
-            isComplete: sr.is_complete,
-            totalPixelLength: sr.total_pixel_length,
-            totalScaledLength: sr.total_scaled_length,
-            verticalPipeLength: sr.vertical_pipe_length,
-            fittingCounts: sr.fitting_counts as any,
-            generatedTakeoffItemIds: (sr.generated_takeoff_item_ids ?? []).map(String),
-            branchParentPipeSize: sr.branch_parent_pipe_size as any,
-            createdAt: new Date(sr.created_at),
-            updatedAt: new Date(sr.updated_at),
-          };
-        });
-        if (clientRuns.length > 0) {
-          useTraceoverStore.getState().restoreState(clientRuns);
-        }
-
-        // Fetch measurements for each document
-        for (const serverDoc of serverDocs) {
-          const clientDocId = ids.current.docServerToClient.get(serverDoc.id);
-          if (!clientDocId) continue;
-          const { data: serverMeasurements } = await traceoverMeasurementsApi.getByDocument(
-            takeoffId,
-            serverDoc.id,
-          );
-          const measStore = useMeasurementStore.getState();
-          for (const sm of serverMeasurements) {
-            const mId = generateId();
-            ids.current.measClientToServer.set(mId, sm.id);
-            measStore.addMeasurement({
-              id: mId,
-              serverId: sm.id,
-              documentId: clientDocId,
-              pageNumber: sm.page_number,
-              type: sm.measurement_type as Measurement['type'],
-              points: sm.points as any,
-              label: sm.label,
-              color: sm.color,
-              pixelValue: sm.pixel_value,
-              scaledValue: sm.scaled_value,
-              unit: sm.unit,
-              createdAt: new Date(sm.created_at),
-            });
+          } catch (measErr) {
+            console.warn(`[Persistence] Failed to fetch measurements for doc ${serverDoc.id}:`, measErr);
           }
         }
       } catch (err) {
-        console.error('[Persistence] Failed to hydrate:', err);
+        console.error('[Persistence] Failed to hydrate settings:', err);
       }
     })();
   }, [takeoffId, addDocumentFromProxy]);
@@ -707,7 +752,9 @@ export function useTraceoverPersistence(takeoffId: number | null) {
           prev.material !== spec.material ||
           prev.stockPipeLength !== spec.stockPipeLength || prev.isDefault !== spec.isDefault ||
           prev.estInstallType !== spec.estInstallType || prev.estMaterial !== spec.estMaterial ||
-          prev.estFilters !== spec.estFilters;
+          prev.estFilters !== spec.estFilters ||
+          prev.pipeCosts !== spec.pipeCosts || prev.fittingCosts !== spec.fittingCosts ||
+          prev.reducingFittingCosts !== spec.reducingFittingCosts || prev.reducingTeeCosts !== spec.reducingTeeCosts;
         const pipeRatesChanged = prev.pipeRates !== spec.pipeRates;
         const fittingRatesChanged = prev.fittingRates !== spec.fittingRates;
         const reducingRatesChanged = prev.reducingFittingRates !== spec.reducingFittingRates;

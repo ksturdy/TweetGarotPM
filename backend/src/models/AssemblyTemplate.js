@@ -3,7 +3,7 @@ const pool = require('../config/database');
 class AssemblyTemplate {
   // ─── Find all templates for a tenant ───
   static async findAll(tenantId, { category } = {}) {
-    let query = `SELECT at.*, u.name as created_by_name
+    let query = `SELECT at.*, u.first_name || ' ' || u.last_name as created_by_name
        FROM assembly_templates at
        LEFT JOIN users u ON at.created_by = u.id
        WHERE at.tenant_id = $1`;
@@ -22,7 +22,7 @@ class AssemblyTemplate {
   // ─── Find by ID ───
   static async findById(id) {
     const result = await pool.query(
-      `SELECT at.*, u.name as created_by_name
+      `SELECT at.*, u.first_name || ' ' || u.last_name as created_by_name
        FROM assembly_templates at
        LEFT JOIN users u ON at.created_by = u.id
        WHERE at.id = $1`,

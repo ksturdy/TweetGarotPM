@@ -171,6 +171,88 @@ export function lookupFittingRateFromSpec(
   return { found: true, hours };
 }
 
+// ─── Cost lookups (material pricing from EST catalog) ────
+
+export type CostLookupResult =
+  | { found: true; cost: number }
+  | { found: false };
+
+/**
+ * Look up pipe material cost from a PipeSpec ($/linear foot).
+ */
+export function lookupPipeCostFromSpec(
+  spec: PipeSpec,
+  size: string,
+): CostLookupResult {
+  if (!spec.pipeCosts) return { found: false };
+  const normSize = normalizeSize(size);
+  const cost = spec.pipeCosts[normSize];
+  if (cost === undefined) return { found: false };
+  return { found: true, cost };
+}
+
+/**
+ * Look up fitting material cost from a PipeSpec ($/each).
+ * Handles standard fittings, reducing fittings, and reducing tees.
+ */
+export function lookupFittingCostFromSpec(
+  spec: PipeSpec,
+  fittingType: FittingType,
+  size: string,
+  reducingSize?: string,
+): CostLookupResult {
+  const normSize = normalizeSize(size);
+
+  // Reducing fitting
+  if (reducingSize) {
+    const normReducing = normalizeSize(reducingSize);
+
+    if (fittingType === 'tee') {
+      const key = `${normSize}|${normReducing}`;
+      const cost = spec.reducingTeeCosts?.[key];
+      if (cost === undefined) return { found: false };
+      return { found: true, cost };
+    }
+
+    if (fittingType === 'elbow_90') {
+      const table = spec.reducingFittingCosts?.elbow_90_reducing;
+      if (!table) return { found: false };
+      const key = `${normSize}|${normReducing}`;
+      const cost = table[key];
+      if (cost === undefined) return { found: false };
+      return { found: true, cost };
+    }
+
+    if (fittingType === 'reducer') {
+      const concentric = spec.reducingFittingCosts?.reducer_concentric;
+      if (concentric) {
+        const key = `${normSize}|${normReducing}`;
+        const cost = concentric[key];
+        if (cost !== undefined) return { found: true, cost };
+      }
+      const eccentric = spec.reducingFittingCosts?.reducer_eccentric;
+      if (eccentric) {
+        const key = `${normSize}|${normReducing}`;
+        const cost = eccentric[key];
+        if (cost !== undefined) return { found: true, cost };
+      }
+      return { found: false };
+    }
+
+    return { found: false };
+  }
+
+  // Standard fitting
+  if (!spec.fittingCosts) return { found: false };
+  const sysType = fittingTypeToSystemType(fittingType);
+  if (!sysType) return { found: false };
+  const table = spec.fittingCosts[sysType];
+  if (!table) return { found: false };
+  const cost = table[normSize];
+  if (cost === undefined) return { found: false };
+  return { found: true, cost };
+}
+
 // ─── Alternative fitting suggestions ─────────────────────
 
 export interface TeeReducerCombo {

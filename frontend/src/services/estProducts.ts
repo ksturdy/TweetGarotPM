@@ -183,7 +183,7 @@ export const estProductService = {
     manufacturer?: string;
     product?: string;
   }): Promise<{
-    pipeRates: { size: string; size_normalized: string; labor_time: number; product_id: string; product: string; description: string }[];
+    pipeRates: { size: string; size_normalized: string; labor_time: number; product_id: string; product: string; description: string; cost?: number | null }[];
     fittingProducts: { size: string; size_normalized: string; labor_time: number; product_id: string; product: string; description: string; group_name?: string; cost?: number | null }[];
     schedules: string[];
     summary: { total: number; perFt: number; perEach: number };

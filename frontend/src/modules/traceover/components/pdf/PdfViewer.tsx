@@ -26,8 +26,9 @@ import { pointInRect, segmentIntersectsRect } from '../../lib/utils/geometry';
 import { generateId } from '../../lib/utils/idGen';
 import { generateTakeoffItems } from '../../lib/piping/takeoffGenerator';
 import { useSettingsStore } from '../../stores/useSettingsStore';
-import { resolveSpecIdForSize, type PipeSpec } from '../../types/pipingSystem';
+import type { PipeSpec } from '../../types/pipingSystem';
 import type { TraceoverRun } from '../../types/piping';
+import { resolveSpecForRun } from '../../lib/piping/specResolver';
 import { findNearestRunPoint } from '../../lib/piping/branchDetection';
 import { getCompanionItems } from '../../lib/piping/connectionRules';
 import { MATERIAL_LABELS } from '../../lib/piping/referenceData';
@@ -88,39 +89,7 @@ const SCROLL_SPEED = 1;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Resolve the PipeSpec for a traceover run via its config. */
-function resolveSpecForRun(run: TraceoverRun): PipeSpec | undefined {
-  const settings = useSettingsStore.getState();
-
-  // Direct spec reference (new path — set when user picks a spec or system resolves one)
-  if (run.config.pipeSpecId) {
-    const spec = settings.getPipeSpec(run.config.pipeSpecId);
-    if (spec) return spec;
-  }
-
-  // System → service → spec chain
-  if (run.config.projectSystemId) {
-    const system = settings.getSystem(run.config.projectSystemId);
-    if (system) {
-      const service = settings.getService(system.serviceId);
-      if (service) {
-        const specId = resolveSpecIdForSize(service, run.config.pipeSize.nominalInches);
-        return settings.getPipeSpec(specId);
-      }
-    }
-  }
-
-  // Legacy fallback: old runs with pipingServiceId pointing directly to a service
-  if (run.config.pipingServiceId) {
-    const service = settings.getService(run.config.pipingServiceId);
-    if (service) {
-      const specId = resolveSpecIdForSize(service, run.config.pipeSize.nominalInches);
-      return settings.getPipeSpec(specId);
-    }
-  }
-
-  return undefined;
-}
+// resolveSpecForRun imported from '../../lib/piping/specResolver'
 
 /**
  * Computes the centroid of a polygon defined by an array of points.
@@ -700,6 +669,22 @@ export default function PdfViewer() {
       replaceRunItems(run.id, items);
     }
   }, [traceoverRuns, replaceRunItems]);
+
+  // ---- Regenerate takeoff items when PipeSpec rates/costs change (e.g. after EST import) ----
+  const specTimestamps = useSettingsStore((s) =>
+    s.pipeSpecs.map((p) => p.updatedAt).join(','),
+  );
+  const prevSpecTimestampsRef = useRef(specTimestamps);
+  useEffect(() => {
+    // Skip the initial render — the one-time refresh above handles that
+    if (prevSpecTimestampsRef.current === specTimestamps) return;
+    prevSpecTimestampsRef.current = specTimestamps;
+    if (traceoverRuns.length === 0) return;
+    for (const run of traceoverRuns) {
+      const items = generateTakeoffItems(run, resolveSpecForRun(run));
+      replaceRunItems(run.id, items);
+    }
+  }, [specTimestamps, traceoverRuns, replaceRunItems]);
 
   // ---- Container size measurement via ResizeObserver ----
   useEffect(() => {

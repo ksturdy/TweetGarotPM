@@ -5,10 +5,13 @@ import type { ProjectMetadata } from './types';
 import { CATEGORY_LABELS } from '../../types/takeoff';
 import { MATERIAL_LABELS, SERVICE_TYPE_LABELS } from '../piping/referenceData';
 import { migrateServiceType } from '../../types/piping';
+import { enrichItemsWithCurrentCosts } from './costEnrichment';
 
 const COLUMNS = [
   'System', 'Page', 'Category', 'Type', 'Description',
-  'Size', 'Material', 'Quantity', 'Unit', 'Labor Hrs/Unit', 'Total Labor Hrs',
+  'Size', 'Material', 'Quantity', 'Unit',
+  '$/Unit', 'Total $',
+  'Labor Hrs/Unit', 'Total Labor Hrs',
 ] as const;
 
 interface AggregatedLine {
@@ -20,10 +23,11 @@ interface AggregatedLine {
   quantity: number;
   unit: string;
   laborHours: number;
+  materialCost: number;
 }
 
 function itemGroupKey(item: TakeoffItem): string {
-  return [item.componentType, item.size ?? '', item.material ?? ''].join('|');
+  return [item.componentType, item.size ?? '', item.material ?? '', item.fittingType ?? '', item.reducingSize ?? ''].join('|');
 }
 
 function aggregateItems(items: TakeoffItem[]): AggregatedLine[] {
@@ -35,6 +39,7 @@ function aggregateItems(items: TakeoffItem[]): AggregatedLine[] {
     if (existing) {
       existing.quantity += item.quantity;
       existing.laborHours += item.laborHours ?? 0;
+      existing.materialCost += item.materialCostTotal ?? 0;
     } else {
       map.set(key, {
         description: item.label,
@@ -45,6 +50,7 @@ function aggregateItems(items: TakeoffItem[]): AggregatedLine[] {
         quantity: item.quantity,
         unit: item.unit,
         laborHours: item.laborHours ?? 0,
+        materialCost: item.materialCostTotal ?? 0,
       });
     }
   }
@@ -63,6 +69,9 @@ export function exportBomToXlsx(
   runs: TraceoverRun[],
   metadata: ProjectMetadata | null,
 ): void {
+  // Re-lookup costs from current PipeSpec data so exports reflect the latest
+  // EST catalog imports, even if items were generated before costs were imported.
+  const enrichedItems = enrichItemsWithCurrentCosts(items, runs);
   const runMap = new Map(runs.map((r) => [r.id, r]));
 
   function systemKey(run: TraceoverRun): string {
@@ -81,7 +90,7 @@ export function exportBomToXlsx(
   const systemGroups = new Map<string, { label: string; pages: Set<number>; items: TakeoffItem[] }>();
   const otherItems: TakeoffItem[] = [];
 
-  for (const item of items) {
+  for (const item of enrichedItems) {
     const run = item.traceoverRunId ? runMap.get(item.traceoverRunId) : undefined;
     if (run) {
       const key = systemKey(run);
@@ -126,6 +135,7 @@ export function exportBomToXlsx(
 
   const projectTotalQtyByUnit = new Map<string, number>();
   let projectTotalLaborHrs = 0;
+  let projectTotalMaterialCost = 0;
 
   function addToProjectTotals(aggregated: AggregatedLine[]) {
     for (const line of aggregated) {
@@ -134,6 +144,7 @@ export function exportBomToXlsx(
         (projectTotalQtyByUnit.get(line.unit) ?? 0) + line.quantity,
       );
       projectTotalLaborHrs += line.laborHours;
+      projectTotalMaterialCost += line.materialCost;
     }
   }
 
@@ -144,16 +155,21 @@ export function exportBomToXlsx(
     const aggregated = aggregateItems(group.items);
 
     const sysHeaderIdx = data.length;
-    data.push([group.label, `Page ${pagesStr}`, '', '', '', '', '', '', '', '', '']);
+    data.push([group.label, `Page ${pagesStr}`, '', '', '', '', '', '', '', '', '', '', '']);
     boldRows.add(sysHeaderIdx);
 
     let systemLaborHrs = 0;
+    let systemMaterialCost = 0;
     for (const line of aggregated) {
       systemLaborHrs += line.laborHours;
+      systemMaterialCost += line.materialCost;
       data.push([
         group.label, pagesStr, line.category, line.type, line.description,
         line.size, line.material,
         Math.round(line.quantity * 100) / 100, line.unit,
+        line.materialCost > 0 && line.quantity > 0
+          ? Math.round((line.materialCost / line.quantity) * 100) / 100 : '',
+        line.materialCost > 0 ? Math.round(line.materialCost * 100) / 100 : '',
         line.laborHours > 0 && line.quantity > 0
           ? Math.round((line.laborHours / line.quantity) * 100) / 100 : '',
         line.laborHours > 0 ? Math.round(line.laborHours * 10) / 10 : '',
@@ -164,6 +180,8 @@ export function exportBomToXlsx(
     data.push([
       group.label, '', '', '', `${group.label} SUBTOTAL`,
       '', '', '', '', '',
+      systemMaterialCost > 0 ? Math.round(systemMaterialCost * 100) / 100 : '',
+      '',
       systemLaborHrs > 0 ? Math.round(systemLaborHrs * 10) / 10 : '',
     ]);
     boldRows.add(subtotalIdx);
@@ -174,16 +192,21 @@ export function exportBomToXlsx(
   if (otherItems.length > 0) {
     const aggregated = aggregateItems(otherItems);
     const otherHeaderIdx = data.length;
-    data.push(['Other Items', '', '', '', '', '', '', '', '', '', '']);
+    data.push(['Other Items', '', '', '', '', '', '', '', '', '', '', '', '']);
     boldRows.add(otherHeaderIdx);
 
     let otherLaborHrs = 0;
+    let otherMaterialCost = 0;
     for (const line of aggregated) {
       otherLaborHrs += line.laborHours;
+      otherMaterialCost += line.materialCost;
       data.push([
         'Other', '', line.category, line.type, line.description,
         line.size, line.material,
         Math.round(line.quantity * 100) / 100, line.unit,
+        line.materialCost > 0 && line.quantity > 0
+          ? Math.round((line.materialCost / line.quantity) * 100) / 100 : '',
+        line.materialCost > 0 ? Math.round(line.materialCost * 100) / 100 : '',
         line.laborHours > 0 && line.quantity > 0
           ? Math.round((line.laborHours / line.quantity) * 100) / 100 : '',
         line.laborHours > 0 ? Math.round(line.laborHours * 10) / 10 : '',
@@ -194,6 +217,8 @@ export function exportBomToXlsx(
     data.push([
       '', '', '', '', 'Other Items SUBTOTAL',
       '', '', '', '', '',
+      otherMaterialCost > 0 ? Math.round(otherMaterialCost * 100) / 100 : '',
+      '',
       otherLaborHrs > 0 ? Math.round(otherLaborHrs * 10) / 10 : '',
     ]);
     boldRows.add(otherSubIdx);
@@ -202,18 +227,24 @@ export function exportBomToXlsx(
   }
 
   const totalHeaderIdx = data.length;
-  data.push(['PROJECT TOTAL', '', '', '', '', '', '', '', '', '', '']);
+  data.push(['PROJECT TOTAL', '', '', '', '', '', '', '', '', '', '', '', '']);
   boldRows.add(totalHeaderIdx);
 
   for (const [unit, qty] of Array.from(projectTotalQtyByUnit.entries()).sort()) {
     const totalLineIdx = data.length;
-    data.push(['', '', '', '', `Total ${unit}`, '', '', Math.round(qty * 100) / 100, unit, '', '']);
+    data.push(['', '', '', '', `Total ${unit}`, '', '', Math.round(qty * 100) / 100, unit, '', '', '', '']);
     boldRows.add(totalLineIdx);
+  }
+
+  if (projectTotalMaterialCost > 0) {
+    const costTotalIdx = data.length;
+    data.push(['', '', '', '', 'TOTAL MATERIAL COST', '', '', '', '', '', Math.round(projectTotalMaterialCost * 100) / 100, '', '']);
+    boldRows.add(costTotalIdx);
   }
 
   if (projectTotalLaborHrs > 0) {
     const laborTotalIdx = data.length;
-    data.push(['', '', '', '', 'TOTAL LABOR HOURS', '', '', '', '', '', Math.round(projectTotalLaborHrs * 10) / 10]);
+    data.push(['', '', '', '', 'TOTAL LABOR HOURS', '', '', '', '', '', '', '', Math.round(projectTotalLaborHrs * 10) / 10]);
     boldRows.add(laborTotalIdx);
   }
 

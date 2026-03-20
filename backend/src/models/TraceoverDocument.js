@@ -4,7 +4,7 @@ class TraceoverDocument {
   // ─── Find all documents for a takeoff ───
   static async findByTakeoff(takeoffId) {
     const result = await pool.query(
-      `SELECT td.*, u.name as uploaded_by_name,
+      `SELECT td.*, u.first_name || ' ' || u.last_name as uploaded_by_name,
               (SELECT COUNT(*) FROM traceover_runs tr WHERE tr.document_id = td.id) as run_count,
               (SELECT COUNT(*) FROM traceover_calibrations tc WHERE tc.document_id = td.id) as calibrated_pages
        FROM traceover_documents td
@@ -19,7 +19,7 @@ class TraceoverDocument {
   // ─── Find by ID with page metadata ───
   static async findById(id) {
     const docResult = await pool.query(
-      `SELECT td.*, u.name as uploaded_by_name
+      `SELECT td.*, u.first_name || ' ' || u.last_name as uploaded_by_name
        FROM traceover_documents td
        LEFT JOIN users u ON td.uploaded_by = u.id
        WHERE td.id = $1`,
