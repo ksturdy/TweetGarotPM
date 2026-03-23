@@ -2257,7 +2257,8 @@ const VistaData = {
       const unlinked = await client.query(
         `SELECT id, contract_number, description, customer_name, department_code,
                 contract_amount, gross_profit_percent, backlog,
-                status, employee_number, project_manager_name, linked_department_id, link_status
+                status, employee_number, project_manager_name, linked_department_id, link_status,
+                start_month
          FROM vp_contracts
          WHERE tenant_id = $1 AND linked_project_id IS NULL
            AND (link_status = 'unmatched' OR link_status = 'auto_matched')
@@ -2308,9 +2309,9 @@ const VistaData = {
           const newProject = await client.query(
             `INSERT INTO projects (
               tenant_id, number, name, client, status, manager_id, department_id,
-              contract_value, gross_margin_percent, backlog,
+              contract_value, gross_margin_percent, backlog, start_date,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
@@ -2320,6 +2321,7 @@ const VistaData = {
               contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
               gross_margin_percent = COALESCE(EXCLUDED.gross_margin_percent, projects.gross_margin_percent),
               backlog = COALESCE(EXCLUDED.backlog, projects.backlog),
+              start_date = COALESCE(EXCLUDED.start_date, projects.start_date),
               updated_at = CURRENT_TIMESTAMP
             RETURNING id, (xmax = 0) as is_new`,
             [
@@ -2332,7 +2334,8 @@ const VistaData = {
               vpContract.linked_department_id || null,
               vpContract.contract_amount || null,
               vpContract.gross_profit_percent || null,
-              vpContract.backlog || null
+              vpContract.backlog || null,
+              vpContract.start_month || null
             ]
           );
 
@@ -2391,13 +2394,16 @@ const VistaData = {
     try {
       await client.query('BEGIN');
 
-      // Get all linked contracts where Vista status differs from Titan project status
+      // Get all linked contracts and compare key fields with Titan projects
       const linked = await client.query(
         `SELECT vc.id AS vp_id, vc.contract_number, vc.status AS vista_status,
                 vc.description, vc.customer_name, vc.contract_amount,
                 vc.gross_profit_percent, vc.backlog, vc.employee_number,
-                vc.linked_department_id,
-                p.id AS project_id, p.status AS titan_status, p.name AS titan_name
+                vc.linked_department_id, vc.start_month,
+                p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
+                p.department_id AS titan_dept, p.start_date AS titan_start,
+                p.client AS titan_client, p.contract_value AS titan_contract_value,
+                p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog
          FROM vp_contracts vc
          JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
          WHERE vc.tenant_id = $1
@@ -2408,8 +2414,14 @@ const VistaData = {
       for (const row of linked.rows) {
         const mappedStatus = this._mapVistaStatusToProjectStatus(row.vista_status);
 
-        // Check if status actually changed
-        if (mappedStatus === row.titan_status) continue;
+        // Check if ANY field actually changed
+        const statusChanged = mappedStatus !== row.titan_status;
+        const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
+        const startChanged = row.start_month && new Date(row.start_month).toISOString() !== (row.titan_start ? new Date(row.titan_start).toISOString() : null);
+        const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
+        const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
+
+        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged) continue;
 
         await client.query('SAVEPOINT sync_contract_row');
         try {
@@ -2435,8 +2447,9 @@ const VistaData = {
               backlog = COALESCE($6, backlog),
               manager_id = COALESCE($7, manager_id),
               department_id = COALESCE($8, department_id),
+              start_date = COALESCE($9, start_date),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = $9 AND tenant_id = $10`,
+            WHERE id = $10 AND tenant_id = $11`,
             [
               mappedStatus,
               row.description ? row.description.substring(0, 255) : null,
@@ -2446,6 +2459,7 @@ const VistaData = {
               row.backlog || null,
               managerId,
               row.linked_department_id || null,
+              row.start_month || null,
               row.project_id,
               tenantId
             ]
@@ -2453,14 +2467,18 @@ const VistaData = {
 
           await client.query('RELEASE SAVEPOINT sync_contract_row');
           synced++;
+          const changedFields = [];
+          if (statusChanged) changedFields.push(`status: ${row.titan_status} → ${mappedStatus}`);
+          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${row.linked_department_id}`);
+          if (startChanged) changedFields.push(`start_date updated`);
+          if (nameChanged) changedFields.push(`name updated`);
+          if (clientChanged) changedFields.push(`client updated`);
           changes.push({
             contract_number: row.contract_number,
             project_id: row.project_id,
-            field: 'status',
-            from: row.titan_status,
-            to: mappedStatus
+            fields: changedFields
           });
-          console.log(`[Vista Sync] Contract ${row.contract_number}: status ${row.titan_status} → ${mappedStatus}`);
+          console.log(`[Vista Sync] Contract ${row.contract_number}: ${changedFields.join(', ')}`);
         } catch (rowError) {
           await client.query('ROLLBACK TO SAVEPOINT sync_contract_row');
           console.error(`[Vista Sync] Failed to sync contract ${row.contract_number}: ${rowError.message}`);
@@ -2491,7 +2509,8 @@ const VistaData = {
                 vw.description, vw.customer_name, vw.contract_amount,
                 vw.gross_profit_percent, vw.backlog, vw.employee_number,
                 vw.linked_department_id,
-                p.id AS project_id, p.status AS titan_status
+                p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
+                p.department_id AS titan_dept, p.client AS titan_client
          FROM vp_work_orders vw
          JOIN projects p ON p.number = 'WO-' || vw.work_order_number AND p.tenant_id = vw.tenant_id
          WHERE vw.tenant_id = $1
@@ -2501,7 +2520,14 @@ const VistaData = {
 
       for (const row of linked.rows) {
         const mappedStatus = this._mapVistaStatusToProjectStatus(row.vista_status);
-        if (mappedStatus === row.titan_status) continue;
+
+        // Check if ANY field actually changed
+        const statusChanged = mappedStatus !== row.titan_status;
+        const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
+        const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
+        const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
+
+        if (!statusChanged && !deptChanged && !nameChanged && !clientChanged) continue;
 
         await client.query('SAVEPOINT sync_wo_row');
         try {
@@ -2544,14 +2570,17 @@ const VistaData = {
 
           await client.query('RELEASE SAVEPOINT sync_wo_row');
           synced++;
+          const changedFields = [];
+          if (statusChanged) changedFields.push(`status: ${row.titan_status} → ${mappedStatus}`);
+          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${row.linked_department_id}`);
+          if (nameChanged) changedFields.push(`name updated`);
+          if (clientChanged) changedFields.push(`client updated`);
           changes.push({
             work_order_number: row.work_order_number,
             project_id: row.project_id,
-            field: 'status',
-            from: row.titan_status,
-            to: mappedStatus
+            fields: changedFields
           });
-          console.log(`[Vista Sync] WO ${row.work_order_number}: status ${row.titan_status} → ${mappedStatus}`);
+          console.log(`[Vista Sync] WO ${row.work_order_number}: ${changedFields.join(', ')}`);
         } catch (rowError) {
           await client.query('ROLLBACK TO SAVEPOINT sync_wo_row');
           console.error(`[Vista Sync] Failed to sync WO ${row.work_order_number}: ${rowError.message}`);
