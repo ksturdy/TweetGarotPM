@@ -739,6 +739,22 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-linked ${vendorLinkResult.vendors_linked} vendors (100% match)`);
       }
 
+      // Sync already-linked contracts (update status, financials, etc. from Vista)
+      if (results.contracts.total > 0) {
+        console.log('[Vista Import] Syncing linked contracts...');
+        const syncResult = await VistaData.syncLinkedContractData(req.tenantId);
+        autoImport.contractSync = syncResult;
+        console.log(`[Vista Import] Synced ${syncResult.synced} linked contracts (${syncResult.total_linked} total linked)`);
+      }
+
+      // Sync already-linked work orders
+      if (results.workOrders.total > 0) {
+        console.log('[Vista Import] Syncing linked work orders...');
+        const woSyncResult = await VistaData.syncLinkedWorkOrderData(req.tenantId);
+        autoImport.workOrderSync = woSyncResult;
+        console.log(`[Vista Import] Synced ${woSyncResult.synced} linked work orders (${woSyncResult.total_linked} total linked)`);
+      }
+
       // Auto-import contracts as projects (only those NOT already linked)
       if (results.contracts.total > 0) {
         console.log('[Vista Import] Auto-importing contracts as projects...');
@@ -849,7 +865,17 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
     try { vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id); }
     catch (e) { console.error('[Re-sync] Vendor link error:', e.message); errors.push(`Vendor link: ${e.message}`); }
 
-    // Step 2: Auto-import anything still unmatched (each wrapped so one failure doesn't block the rest)
+    // Step 2: Sync already-linked records (update status, financials, etc. from Vista)
+    let contractSync = { synced: 0 };
+    let woSync = { synced: 0 };
+
+    try { contractSync = await VistaData.syncLinkedContractData(req.tenantId); }
+    catch (e) { console.error('[Re-sync] Contract sync error:', e.message); errors.push(`Contract sync: ${e.message}`); }
+
+    try { woSync = await VistaData.syncLinkedWorkOrderData(req.tenantId); }
+    catch (e) { console.error('[Re-sync] WO sync error:', e.message); errors.push(`WO sync: ${e.message}`); }
+
+    // Step 3: Auto-import anything still unmatched (each wrapped so one failure doesn't block the rest)
     let contractImport = { imported: 0, errors: [] };
     let woImport = { imported: 0, errors: [] };
     let customerImport = { imported: 0 };
@@ -886,6 +912,12 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
         employees: employeeLinkResult.employees_linked || 0,
         vendors: vendorLinkResult.vendors_linked || 0,
         departments: deptLinkResult.codes_linked || 0,
+      },
+      synced: {
+        contracts: contractSync.synced || 0,
+        workOrders: woSync.synced || 0,
+        contractChanges: contractSync.changes || [],
+        workOrderChanges: woSync.changes || [],
       },
       imported: {
         contracts: contractImport.imported || 0,

@@ -2382,6 +2382,192 @@ const VistaData = {
     }
   },
 
+  // Sync status and key fields from Vista to Titan for already-linked contracts
+  async syncLinkedContractData(tenantId) {
+    const client = await db.getClient();
+    let synced = 0;
+    const changes = [];
+
+    try {
+      await client.query('BEGIN');
+
+      // Get all linked contracts where Vista status differs from Titan project status
+      const linked = await client.query(
+        `SELECT vc.id AS vp_id, vc.contract_number, vc.status AS vista_status,
+                vc.description, vc.customer_name, vc.contract_amount,
+                vc.gross_profit_percent, vc.backlog, vc.employee_number,
+                vc.linked_department_id,
+                p.id AS project_id, p.status AS titan_status, p.name AS titan_name
+         FROM vp_contracts vc
+         JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
+         WHERE vc.tenant_id = $1
+           AND vc.linked_project_id IS NOT NULL`,
+        [tenantId]
+      );
+
+      for (const row of linked.rows) {
+        const mappedStatus = this._mapVistaStatusToProjectStatus(row.vista_status);
+
+        // Check if status actually changed
+        if (mappedStatus === row.titan_status) continue;
+
+        await client.query('SAVEPOINT sync_contract_row');
+        try {
+          // Look up manager
+          let managerId = null;
+          if (row.employee_number) {
+            const empResult = await client.query(
+              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
+              [tenantId, String(row.employee_number)]
+            );
+            if (empResult.rows.length > 0) {
+              managerId = empResult.rows[0].id;
+            }
+          }
+
+          await client.query(
+            `UPDATE projects SET
+              status = $1,
+              name = COALESCE($2, name),
+              client = COALESCE($3, client),
+              contract_value = COALESCE($4, contract_value),
+              gross_margin_percent = COALESCE($5, gross_margin_percent),
+              backlog = COALESCE($6, backlog),
+              manager_id = COALESCE($7, manager_id),
+              department_id = COALESCE($8, department_id),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $9 AND tenant_id = $10`,
+            [
+              mappedStatus,
+              row.description ? row.description.substring(0, 255) : null,
+              row.customer_name ? row.customer_name.substring(0, 255) : null,
+              row.contract_amount || null,
+              row.gross_profit_percent || null,
+              row.backlog || null,
+              managerId,
+              row.linked_department_id || null,
+              row.project_id,
+              tenantId
+            ]
+          );
+
+          await client.query('RELEASE SAVEPOINT sync_contract_row');
+          synced++;
+          changes.push({
+            contract_number: row.contract_number,
+            project_id: row.project_id,
+            field: 'status',
+            from: row.titan_status,
+            to: mappedStatus
+          });
+          console.log(`[Vista Sync] Contract ${row.contract_number}: status ${row.titan_status} → ${mappedStatus}`);
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT sync_contract_row');
+          console.error(`[Vista Sync] Failed to sync contract ${row.contract_number}: ${rowError.message}`);
+        }
+      }
+
+      await client.query('COMMIT');
+      return { synced, total_linked: linked.rows.length, changes };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Sync status and key fields from Vista to Titan for already-linked work orders
+  async syncLinkedWorkOrderData(tenantId) {
+    const client = await db.getClient();
+    let synced = 0;
+    const changes = [];
+
+    try {
+      await client.query('BEGIN');
+
+      const linked = await client.query(
+        `SELECT vw.id AS vp_id, vw.work_order_number, vw.status AS vista_status,
+                vw.description, vw.customer_name, vw.contract_amount,
+                vw.gross_profit_percent, vw.backlog, vw.employee_number,
+                vw.linked_department_id,
+                p.id AS project_id, p.status AS titan_status
+         FROM vp_work_orders vw
+         JOIN projects p ON p.number = 'WO-' || vw.work_order_number AND p.tenant_id = vw.tenant_id
+         WHERE vw.tenant_id = $1
+           AND vw.link_status IN ('auto_matched', 'manual_matched')`,
+        [tenantId]
+      );
+
+      for (const row of linked.rows) {
+        const mappedStatus = this._mapVistaStatusToProjectStatus(row.vista_status);
+        if (mappedStatus === row.titan_status) continue;
+
+        await client.query('SAVEPOINT sync_wo_row');
+        try {
+          let managerId = null;
+          if (row.employee_number) {
+            const empResult = await client.query(
+              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
+              [tenantId, String(row.employee_number)]
+            );
+            if (empResult.rows.length > 0) {
+              managerId = empResult.rows[0].id;
+            }
+          }
+
+          await client.query(
+            `UPDATE projects SET
+              status = $1,
+              name = COALESCE($2, name),
+              client = COALESCE($3, client),
+              contract_value = COALESCE($4, contract_value),
+              gross_margin_percent = COALESCE($5, gross_margin_percent),
+              backlog = COALESCE($6, backlog),
+              manager_id = COALESCE($7, manager_id),
+              department_id = COALESCE($8, department_id),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $9 AND tenant_id = $10`,
+            [
+              mappedStatus,
+              row.description ? row.description.substring(0, 255) : null,
+              row.customer_name ? row.customer_name.substring(0, 255) : null,
+              row.contract_amount || null,
+              row.gross_profit_percent || null,
+              row.backlog || null,
+              managerId,
+              row.linked_department_id || null,
+              row.project_id,
+              tenantId
+            ]
+          );
+
+          await client.query('RELEASE SAVEPOINT sync_wo_row');
+          synced++;
+          changes.push({
+            work_order_number: row.work_order_number,
+            project_id: row.project_id,
+            field: 'status',
+            from: row.titan_status,
+            to: mappedStatus
+          });
+          console.log(`[Vista Sync] WO ${row.work_order_number}: status ${row.titan_status} → ${mappedStatus}`);
+        } catch (rowError) {
+          await client.query('ROLLBACK TO SAVEPOINT sync_wo_row');
+          console.error(`[Vista Sync] Failed to sync WO ${row.work_order_number}: ${rowError.message}`);
+        }
+      }
+
+      await client.query('COMMIT');
+      return { synced, total_linked: linked.rows.length, changes };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Import unmatched VP work orders as new Titan projects
   async importUnmatchedWorkOrdersToTitan(tenantId, userId) {
     const client = await db.getClient();
