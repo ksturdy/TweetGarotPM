@@ -19,6 +19,8 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
   const dead = companies.filter(c => c.status === 'dead').length;
   const prospect = companies.filter(c => c.status === 'prospect').length;
   const totalOppValue = opportunities.reduce((sum, o) => sum + (parseFloat(o.value) || 0), 0);
+  const originalProspects = companies.filter(c => c.source !== 'manual').length;
+  const addedProspects = companies.filter(c => c.source === 'manual').length;
 
   // Status labels
   const statusLabels = {
@@ -307,6 +309,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       <div class="summary-item">
         <div class="summary-label">Total Prospects</div>
         <div class="summary-value">${totalProspects}</div>
+        ${addedProspects > 0 ? `<div style="font-size: 7pt; color: #666; margin-top: 2px;">${originalProspects} original + ${addedProspects} added</div>` : ''}
       </div>
       <div class="summary-item">
         <div class="summary-label">Contacted</div>
@@ -325,6 +328,12 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
         <div class="summary-value" style="color: #ea580c;">${followUp}</div>
       </div>
     </div>
+    ${addedProspects > 0 ? `
+    <div style="padding: 8px 12px; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 4px; margin-bottom: 15px; font-size: 8pt;">
+      <strong style="color: #0e7490;">+${addedProspects} New Prospect${addedProspects !== 1 ? 's' : ''} Discovered During Campaign</strong>
+      <span style="color: #666;"> — Started with ${originalProspects} original targets, team identified ${addedProspects} additional prospect${addedProspects !== 1 ? 's' : ''} through outreach.</span>
+    </div>
+    ` : ''}
 
     <!-- Status Breakdown -->
     <div class="section-title">Status Breakdown</div>
@@ -383,6 +392,12 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
         <div class="goal-actual" style="font-size: 11pt;">${formatCurrency(actualPipelineValue)}</div>
         <div class="goal-target">of ${formatCurrency(targetPipelineValue)} target</div>
         <div class="goal-bar"><div class="goal-bar-fill" style="width: ${Math.min(100, Math.round((actualPipelineValue / targetPipelineValue) * 100))}%"></div></div>
+      </div>` : ''}
+      ${addedProspects > 0 ? `
+      <div class="goal-item" style="border-color: #a5f3fc; background: #ecfeff;">
+        <div class="goal-label">New Prospects</div>
+        <div class="goal-actual" style="color: #0e7490;">+${addedProspects}</div>
+        <div class="goal-target" style="color: #0e7490; font-weight: bold;">BONUS</div>
       </div>` : ''}
     </div>
     ${campaign.goal_description ? `<p style="font-size: 8pt; color: #666; margin-top: -10px; margin-bottom: 15px;"><strong>Goal:</strong> ${campaign.goal_description}</p>` : ''}
@@ -514,20 +529,21 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
 
     <!-- Full Prospect List -->
     <div class="page-break"></div>
-    <div class="section-title">Full Prospect List (${companies.length})</div>
+    <div class="section-title">Full Prospect List (${companies.length}${addedProspects > 0 ? ` — ${originalProspects} original, ${addedProspects} added` : ''})</div>
     <table>
       <thead>
         <tr>
-          <th style="width: 18%;">Company</th>
-          <th style="width: 12%;">Sector</th>
-          <th style="width: 5%;">Tier</th>
+          <th style="width: 17%;">Company</th>
+          <th style="width: 11%;">Sector</th>
+          <th style="width: 4%;">Tier</th>
           <th style="width: 4%;">Score</th>
-          <th style="width: 12%;">Assigned To</th>
-          <th style="width: 5%;">Week</th>
-          <th style="width: 10%;">Status</th>
-          <th style="width: 10%;">Next Action</th>
+          <th style="width: 11%;">Assigned To</th>
+          <th style="width: 4%;">Week</th>
+          <th style="width: 9%;">Status</th>
+          <th style="width: 9%;">Next Action</th>
+          <th style="width: 6%;">Source</th>
           <th style="width: 12%;">Phone</th>
-          <th style="width: 12%;">Address</th>
+          <th style="width: 13%;">Address</th>
         </tr>
       </thead>
       <tbody>
@@ -541,6 +557,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
             <td>${c.target_week || '-'}</td>
             <td><span class="badge badge-${c.status}">${statusLabels[c.status] || c.status}</span></td>
             <td>${actionLabels[c.next_action] || c.next_action || '-'}</td>
+            <td>${c.source === 'manual' ? '<span style="color: #0e7490; font-weight: bold;">Added</span>' : 'Original'}</td>
             <td style="font-size: 7pt;">${c.phone || '-'}</td>
             <td style="font-size: 7pt;">${c.address || '-'}</td>
           </tr>

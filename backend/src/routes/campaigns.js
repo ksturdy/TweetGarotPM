@@ -528,7 +528,7 @@ router.post('/:campaignId/companies/:id/add-to-database', async (req, res, next)
   }
 });
 
-// DELETE campaign company
+// DELETE campaign company (owner only)
 router.delete('/:campaignId/companies/:id', async (req, res, next) => {
   try {
     // Verify campaign belongs to tenant
@@ -536,6 +536,15 @@ router.delete('/:campaignId/companies/:id', async (req, res, next) => {
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
+
+    // Only the campaign owner can delete prospects
+    const db = require('../config/database');
+    const ownerResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [campaign.owner_id]);
+    const ownerUserId = ownerResult.rows[0]?.user_id;
+    if (ownerUserId !== req.user.id) {
+      return res.status(403).json({ error: 'Only the campaign owner can delete prospects' });
+    }
+
     const company = await campaignCompanies.delete(req.params.id);
     if (!company) {
       return res.status(404).json({ error: 'Company not found' });

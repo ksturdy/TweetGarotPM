@@ -122,6 +122,6 @@ export const getCompanyBids = async (id: string) => {
   return response.data;
 };
 export const getCompanyOpportunities = async (id: string) => {
-  const response = await api.get(`/customers/${id}/company-opportunities`);
+  const response = await api.get(`/customers/${id}/opportunities`);
   return response.data;
 };

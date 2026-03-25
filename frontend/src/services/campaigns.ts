@@ -54,6 +54,7 @@ export interface CampaignCompany {
   target_week?: number;
   status: 'prospect' | 'no_interest' | 'follow_up' | 'new_opp' | 'dead';
   next_action: 'none' | 'follow_30' | 'opp_incoming' | 'no_follow';
+  source?: 'seed' | 'manual';
   linked_company_id?: number;
   linked_company_name?: string;
   is_added_to_database: boolean;

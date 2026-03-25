@@ -76,9 +76,9 @@ const campaignCompanies = {
     const query = `
       INSERT INTO campaign_companies (
         campaign_id, name, sector, address, phone, website, tier, score,
-        assigned_to_id, target_week, status, next_action
+        assigned_to_id, target_week, status, next_action, source
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
     const values = [
@@ -93,7 +93,8 @@ const campaignCompanies = {
       data.assigned_to_id,
       data.target_week || null,
       data.status || 'prospect',
-      data.next_action || 'none'
+      data.next_action || 'none',
+      data.source || 'manual'
     ];
     const result = await db.query(query, values);
     return result.rows[0];

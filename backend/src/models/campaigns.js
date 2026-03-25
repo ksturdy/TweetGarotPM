@@ -600,12 +600,12 @@ const campaigns = {
         const result = await client.query(
           `INSERT INTO campaign_companies (
             campaign_id, name, sector, address, phone, website, tier, score,
-            assigned_to_id, target_week, status, next_action
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            assigned_to_id, target_week, status, next_action, source
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
           [campaignId, data.name, data.sector || null, data.address || null, data.phone || null,
            data.website || null, data.tier || 'B', data.score || 70,
            data.assigned_to_id || null, data.target_week || null,
-           'prospect', 'none']
+           'prospect', 'none', 'seed']
         );
         created.push(result.rows[0]);
       }

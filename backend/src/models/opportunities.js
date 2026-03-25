@@ -43,6 +43,7 @@ const opportunities = {
         e.first_name || ' ' || e.last_name as assigned_to_name,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         COALESCE(c.name, c.customer_owner) as customer_name,
+        COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
         COALESCE(fc.name, fc.customer_facility) as facility_customer_name,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id) as activity_count,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
@@ -51,6 +52,7 @@ const opportunities = {
       LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
       LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN customers gc ON o.gc_customer_id = gc.id
       LEFT JOIN customers fc ON o.facility_customer_id = fc.id
       ${whereClause}
       ORDER BY o.last_activity_at DESC

@@ -11,9 +11,10 @@ import {
   createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction, updateCampaignCompanyAssignment,
   addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
-  getCampaignCompanyAssessment,
+  getCampaignCompanyAssessment, deleteCampaignCompany,
   CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
 } from '../services/campaigns';
+import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
 import '../styles/SalesPipeline.css';
 
@@ -44,9 +45,11 @@ const estimateStatuses = [
 export default function CampaignDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [contacts, setContacts] = useState<any[]>([]);
   const [estimates, setEstimates] = useState<any[]>([]);
+  const [deletingProspect, setDeletingProspect] = useState<any>(null);
 
   // Fetch pipeline stages from database
   const { data: pipelineStages = [] } = useQuery({
@@ -127,7 +130,8 @@ export default function CampaignDetail() {
       id: c.id, name: c.name, sector: c.sector || '', score: c.score, tier: c.tier,
       assignedTo: c.assigned_to_name || 'Unassigned', assigned_to_id: c.assigned_to_id,
       address: c.address || '', phone: c.phone || '',
-      status: c.status, action: c.next_action, targetWeek: c.target_week
+      status: c.status, action: c.next_action, targetWeek: c.target_week,
+      source: c.source || 'seed'
     }));
   }, [dbCompanies]);
 
@@ -194,6 +198,23 @@ export default function CampaignDetail() {
       queryClient.invalidateQueries({ queryKey: ['campaign-team', campaignId] });
     }
   });
+
+  const deleteProspectMutation = useMutation({
+    mutationFn: (companyId: number) => deleteCampaignCompany(campaignId, companyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
+      setDeletingProspect(null);
+      setDetailView(null);
+      setSelected(null);
+    }
+  });
+
+  // Check if current user is the campaign owner
+  const isOwner = useMemo(() => {
+    if (!user || !dbTeam.length) return false;
+    return dbTeam.some((t: CampaignTeamMember) => t.role === 'owner' && t.user_id === user.id);
+  }, [user, dbTeam]);
 
   // Fetch employees for team management (all campaigns)
   const { data: editEmployees = [] } = useQuery({
@@ -737,45 +758,232 @@ export default function CampaignDetail() {
         {tab === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-              {[
-                { label: 'Total Prospects', value: activeData.length, color: '#6366f1' },
-                { label: 'Contacted', value: stats.contacted, color: '#3b82f6' },
-                { label: 'New Opportunities', value: stats.opportunities, color: '#10b981' },
-                { label: 'Opportunities Value', value: '$' + stats.totalOppValue.toLocaleString('en-US'), color: '#8b5cf6' },
-                { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' }
-              ].map((k, i) => (
+              {(() => {
+                const originalCount = activeData.filter((c: any) => c.source === 'seed').length;
+                const addedCount = activeData.filter((c: any) => c.source === 'manual').length;
+                return [
+                  { label: 'Total Prospects', value: activeData.length, color: '#6366f1', sub: addedCount > 0 ? `${originalCount} original + ${addedCount} added` : undefined },
+                  { label: 'Contacted', value: stats.contacted, color: '#3b82f6' },
+                  { label: 'New Opportunities', value: stats.opportunities, color: '#10b981' },
+                  { label: 'Opportunities Value', value: '$' + stats.totalOppValue.toLocaleString('en-US'), color: '#8b5cf6' },
+                  { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' },
+                  ...(addedCount > 0 ? [{ label: 'Prospects Added', value: addedCount, color: '#06b6d4', sub: 'Discovered during campaign' }] : [])
+                ];
+              })().map((k: any, i: number) => (
                 <div key={i} style={{ ...card, padding: '16px' }}>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>{k.label}</div>
                   <div style={{ fontSize: '28px', fontWeight: 700, color: k.color }}>{k.value}</div>
+                  {k.sub && <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{k.sub}</div>}
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            {/* Row 1: Status Breakdown (narrow) + Recent Activity (wide) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px' }}>
               <div style={{ ...card, padding: '20px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: '#374151' }}>Status Breakdown</h3>
-                {statuses.map(s => (
-                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: s.color }} />
-                    <span style={{ flex: 1, fontSize: '13px' }}>{s.label}</span>
-                    <span style={{ fontWeight: 600, color: s.color }}>{stats.byStatus[s.key]}</span>
-                  </div>
-                ))}
+                {statuses.map(s => {
+                  const count = stats.byStatus[s.key] || 0;
+                  const pct = activeData.length > 0 ? Math.round((count / activeData.length) * 100) : 0;
+                  return (
+                    <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: '13px' }}>{s.label}</span>
+                      <span style={{ fontWeight: 600, color: s.color, minWidth: '24px', textAlign: 'right' }}>{count}</span>
+                      <div style={{ width: '60px', height: '6px', background: '#f3f4f6', borderRadius: '3px', overflow: 'hidden', flexShrink: 0 }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: s.color, borderRadius: '3px', transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Action breakdown */}
+                <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '20px 0 12px', color: '#374151' }}>Next Actions</h3>
+                {actions.filter(a => a.key !== 'none').map(a => {
+                  const count = stats.byAction[a.key] || 0;
+                  return (
+                    <div key={a.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: a.color, flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: '13px' }}>{a.label}</span>
+                      <span style={{ fontWeight: 600, color: a.color }}>{count}</span>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div style={{ ...card, padding: '20px' }}>
+              <div style={{ ...card, padding: '20px', display: 'flex', flexDirection: 'column' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: '#374151' }}>Recent Activity</h3>
-                <div style={{ maxHeight: '220px', overflow: 'auto' }}>
-                  {activeLogs.slice(0, 12).map((l: any) => (
-                    <div key={l.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
-                      {l.name && <span style={{ fontWeight: 500 }}>{l.name}: </span>}<span style={{ color: '#64748b' }}>{l.text}</span>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{l.user && <span>{l.user} &middot; </span>}{new Date(l.time).toLocaleString()}</div>
+                <div style={{ flex: 1, maxHeight: '420px', overflow: 'auto' }}>
+                  {activeLogs.slice(0, 25).map((l: any) => (
+                    <div key={l.id} style={{ padding: '10px 0', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
+                      {l.name && <span style={{ fontWeight: 500, color: '#2563eb' }}>{l.name}: </span>}<span style={{ color: '#374151' }}>{l.text}</span>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>{l.user && <span>{l.user} &middot; </span>}{new Date(l.time).toLocaleString()}</div>
                     </div>
                   ))}
                   {activeLogs.length === 0 && <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px' }}>No activity yet</div>}
                 </div>
               </div>
             </div>
+
+            {/* Row 2: Upcoming Follow-Ups + Team Leaderboard */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              {/* Upcoming Follow-Ups */}
+              <div style={{ ...card, padding: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: '#374151' }}>Upcoming Follow-Ups</h3>
+                <div style={{ maxHeight: '280px', overflow: 'auto' }}>
+                  {(() => {
+                    const followUps = activeData.filter((c: any) => c.action === 'follow_30' || c.status === 'follow_up');
+                    if (followUps.length === 0) return <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px' }}>No follow-ups pending</div>;
+                    return followUps.slice(0, 10).map((c: any) => (
+                      <div key={c.id} onClick={() => openDetail(c)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 8px', borderBottom: '1px solid #f3f4f6', cursor: 'pointer', borderRadius: '6px', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#d97706' }}>{c.name?.charAt(0) || '?'}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: '13px', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.assignedTo} &middot; {c.sector || 'No sector'}</div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: statuses.find(s => s.key === c.status)?.color === '#f59e0b' ? '#fef3c7' : '#f0fdf4', color: statuses.find(s => s.key === c.status)?.color || '#64748b', fontWeight: 500 }}>
+                            {statuses.find(s => s.key === c.status)?.label || c.status}
+                          </span>
+                          <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                            {actions.find(a => a.key === c.action)?.label || ''}
+                          </span>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              {/* Team Leaderboard */}
+              <div style={{ ...card, padding: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px', color: '#374151' }}>Team Leaderboard</h3>
+                <div style={{ maxHeight: '280px', overflow: 'auto' }}>
+                  {(() => {
+                    const hasManualProspects = activeData.some((c: any) => c.source === 'manual');
+                    const teamStats = activeTeam.map((name: string) => {
+                      const prospects = activeData.filter((c: any) => c.assignedTo === name);
+                      const contacted = prospects.filter((c: any) => c.status !== 'prospect').length;
+                      const opps = prospects.filter((c: any) => c.status === 'new_opp').length;
+                      const followUps = prospects.filter((c: any) => c.status === 'follow_up').length;
+                      const added = prospects.filter((c: any) => c.source === 'manual').length;
+                      const addedContacted = prospects.filter((c: any) => c.source === 'manual' && c.status !== 'prospect').length;
+                      return { name, total: prospects.length, contacted, opps, followUps, added, addedContacted };
+                    }).sort((a, b) => b.contacted - a.contacted);
+                    if (teamStats.length === 0) return <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px' }}>No team members assigned</div>;
+                    return (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                            <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Member</th>
+                            <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Assigned</th>
+                            <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Contacted</th>
+                            <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Opps</th>
+                            <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Follow Up</th>
+                            {hasManualProspects && <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: '#06b6d4', fontSize: '11px', textTransform: 'uppercase' }}>Added</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {teamStats.map((t, i) => {
+                            const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+                            const avatarColor = colors[i % colors.length];
+                            return (
+                              <tr key={t.name} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                <td style={{ padding: '10px 6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 600, fontSize: '11px', flexShrink: 0 }}>
+                                      {t.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                    </div>
+                                    <span style={{ fontWeight: 500 }}>{t.name}</span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '10px 6px', textAlign: 'center', color: '#64748b' }}>{t.total}</td>
+                                <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                                  <span style={{ fontWeight: 600, color: t.contacted > 0 ? '#3b82f6' : '#cbd5e1' }}>{t.contacted}</span>
+                                  {t.total > 0 && <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>({Math.round((t.contacted / t.total) * 100)}%)</span>}
+                                </td>
+                                <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                                  <span style={{ fontWeight: 600, color: t.opps > 0 ? '#10b981' : '#cbd5e1' }}>{t.opps}</span>
+                                </td>
+                                <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                                  <span style={{ fontWeight: 600, color: t.followUps > 0 ? '#f59e0b' : '#cbd5e1' }}>{t.followUps}</span>
+                                </td>
+                                {hasManualProspects && (
+                                  <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                                    {t.added > 0 ? (
+                                      <div>
+                                        <span style={{ fontWeight: 600, color: '#06b6d4' }}>+{t.added}</span>
+                                        <div style={{ fontSize: '10px', color: t.addedContacted === t.added ? '#10b981' : '#94a3b8' }}>
+                                          {t.addedContacted}/{t.added} contacted
+                                        </div>
+                                      </div>
+                                    ) : <span style={{ color: '#cbd5e1' }}>-</span>}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: Top Opportunities Pipeline */}
+            {opportunities.length > 0 && (
+              <div style={{ ...card, padding: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Top Opportunities</h3>
+                  <button onClick={() => setTab('opportunities')} style={{ fontSize: '12px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>View All →</button>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Opportunity</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Customer</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Value</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Stage</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Priority</th>
+                      <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Salesperson</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...opportunities].sort((a: any, b: any) => (parseFloat(b.estimated_value) || 0) - (parseFloat(a.estimated_value) || 0)).slice(0, 5).map((o: any) => {
+                      const priorityColors: Record<string, { bg: string; text: string }> = {
+                        urgent: { bg: '#fef2f2', text: '#dc2626' },
+                        high: { bg: '#fff7ed', text: '#ea580c' },
+                        medium: { bg: '#fefce8', text: '#ca8a04' },
+                        low: { bg: '#f0fdf4', text: '#16a34a' }
+                      };
+                      const pc = priorityColors[o.priority] || priorityColors.medium;
+                      return (
+                        <tr key={o.id} onClick={() => { setSelectedOpportunity(o); setIsOpportunityModalOpen(true); }} style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <td style={{ padding: '10px' }}>
+                            <div style={{ fontWeight: 500, color: '#1e293b' }}>{o.title}</div>
+                          </td>
+                          <td style={{ padding: '10px', color: '#64748b' }}>{o.customer_name || o.owner || '-'}</td>
+                          <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>${Math.round(parseFloat(o.estimated_value) || 0).toLocaleString('en-US')}</td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '4px', background: o.stage_color ? `${o.stage_color}18` : '#f3f4f6', color: o.stage_color || '#64748b', fontWeight: 500 }}>
+                              {o.stage_name || 'Unknown'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '4px', background: pc.bg, color: pc.text, fontWeight: 500, textTransform: 'capitalize' }}>
+                              {o.priority}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px', color: '#64748b' }}>{o.assigned_to_name || 'Unassigned'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -1120,8 +1328,8 @@ export default function CampaignDetail() {
                   <thead>
                     <tr>
                       <th style={{ width: '10%' }}>Date</th>
-                      <th style={{ width: '24%' }}>Project / Opportunity</th>
-                      <th style={{ width: '14%' }}>Owner</th>
+                      <th style={{ width: '24%' }}>Opportunity / Owner</th>
+                      <th style={{ width: '14%' }}>General Contractor</th>
                       <th style={{ width: '10%' }}>Market</th>
                       <th style={{ width: '10%' }}>Value</th>
                       <th style={{ width: '10%' }}>Stage</th>
@@ -1175,11 +1383,11 @@ export default function CampaignDetail() {
                               </div>
                               <div className="sales-project-info">
                                 <h4>{o.title}</h4>
-                                <span>{o.description || 'No description'}</span>
+                                <span>{o.customer_name || o.owner || 'No owner'}</span>
                               </div>
                             </div>
                           </td>
-                          <td>{o.owner || '-'}</td>
+                          <td>{o.gc_customer_name || o.general_contractor || '-'}</td>
                           <td>{o.market || '-'}</td>
                           <td className="sales-value-cell">${Math.round(o.estimated_value || 0).toLocaleString('en-US')}</td>
                           <td>
@@ -1228,6 +1436,8 @@ export default function CampaignDetail() {
           const goalAwards = dbCampaign?.target_awards || 0;
           const estimateCount = 0;
           const awardCount = 0;
+          const originalCount = activeData.filter((c: any) => c.source === 'seed').length;
+          const addedCount = activeData.filter((c: any) => c.source === 'manual').length;
           const timelineLabel = activeCampaignInfo.startDate && activeCampaignInfo.endDate
             ? `${new Date(activeCampaignInfo.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(activeCampaignInfo.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
             : '';
@@ -1235,24 +1445,44 @@ export default function CampaignDetail() {
           const goalCriteria = [
             { text: `${goalTouchpoints} targets contacted`, met: stats.contacted >= goalTouchpoints, current: stats.contacted, target: goalTouchpoints },
             { text: 'Opportunities identified', met: stats.opportunities >= goalOpportunities, current: stats.opportunities, target: goalOpportunities },
+            { text: 'New prospects discovered', met: addedCount > 0, current: addedCount, target: addedCount > 0 ? addedCount : '-' as any, isBonus: true },
             { text: 'Estimates generated', met: estimateCount >= goalEstimates, current: estimateCount, target: goalEstimates },
             { text: 'Awards won', met: awardCount >= goalAwards, current: awardCount, target: goalAwards }
           ];
 
           return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Prospect Source Summary */}
+            {addedCount > 0 && (
+              <div style={{ ...card, padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', background: 'linear-gradient(135deg, #ecfeff, #f0f9ff)', border: '1px solid #a5f3fc' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#06b6d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ color: '#fff', fontWeight: 700, fontSize: '18px' }}>+{addedCount}</span>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#0e7490' }}>
+                    {addedCount} New Prospect{addedCount !== 1 ? 's' : ''} Discovered During Campaign
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                    Started with {originalCount} original targets, team identified {addedCount} additional prospect{addedCount !== 1 ? 's' : ''} through outreach
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div style={{ ...card, padding: '20px' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>Campaign Timeline: {timelineLabel}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(activeWeeks.length, 8)}, 1fr)`, gap: '8px' }}>
                 {activeWeeks.map((w: any) => {
                   const weekProspects = activeData.filter((c: any) => c.targetWeek === w.num);
                   const contacted = weekProspects.filter((c: any) => c.status !== 'prospect').length;
+                  const addedInWeek = weekProspects.filter((c: any) => c.source === 'manual').length;
                   return (
                     <div key={w.num} style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Week {w.num}</div>
                       <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>{w.label}</div>
                       <div style={{ fontSize: '20px', fontWeight: 700, color: weekProspects.length > 0 && contacted === weekProspects.length ? '#16a34a' : '#ea580c' }}>{contacted}/{weekProspects.length}</div>
                       <div style={{ fontSize: '10px', color: '#94a3b8' }}>contacted</div>
+                      {addedInWeek > 0 && <div style={{ fontSize: '10px', color: '#06b6d4', marginTop: '4px', fontWeight: 600 }}>+{addedInWeek} added</div>}
                     </div>
                   );
                 })}
@@ -1262,13 +1492,14 @@ export default function CampaignDetail() {
             <div style={{ ...card, padding: '20px' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>Success Criteria</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-                {goalCriteria.map((c, i) => (
-                  <div key={i} style={{ padding: '14px', background: c.met ? '#dcfce7' : '#f9fafb', borderRadius: '8px', border: '1px solid ' + (c.met ? '#bbf7d0' : '#e5e7eb') }}>
+                {goalCriteria.map((c: any, i: number) => (
+                  <div key={i} style={{ padding: '14px', background: c.met ? (c.isBonus ? '#ecfeff' : '#dcfce7') : '#f9fafb', borderRadius: '8px', border: '1px solid ' + (c.met ? (c.isBonus ? '#a5f3fc' : '#bbf7d0') : '#e5e7eb') }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: c.met ? '#16a34a' : '#d1d5db', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>{c.met ? '✓' : ''}</div>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: c.met ? (c.isBonus ? '#06b6d4' : '#16a34a') : '#d1d5db', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>{c.met ? '✓' : ''}</div>
                       <span style={{ fontSize: '13px', fontWeight: 500 }}>{c.text}</span>
+                      {c.isBonus && <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: '#06b6d4', color: '#fff', fontWeight: 600 }}>BONUS</span>}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#64748b' }}>{c.current} / {c.target}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>{c.current}{c.isBonus ? ' found' : ` / ${c.target}`}</div>
                   </div>
                 ))}
               </div>
@@ -1280,11 +1511,13 @@ export default function CampaignDetail() {
                 const pmData = activeData.filter((c: any) => c.assignedTo === pm);
                 const contacted = pmData.filter((c: any) => c.status !== 'prospect').length;
                 const opps = pmData.filter((c: any) => c.status === 'new_opp').length;
+                const pmAdded = pmData.filter((c: any) => c.source === 'manual').length;
                 return (
                   <div key={pm} style={{ marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
                     <div style={{ fontWeight: 600, marginBottom: '8px' }}>{pm}</div>
                     <div style={{ fontSize: '13px', color: '#64748b' }}>
                       Assigned: {pmData.length} | Contacted: {contacted} | Opportunities: {opps}
+                      {pmAdded > 0 && <span style={{ color: '#06b6d4', fontWeight: 600 }}> | +{pmAdded} added</span>}
                     </div>
                     <div style={{ background: '#e5e7eb', height: '6px', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
                       <div style={{ background: '#ea580c', height: '100%', width: `${pmData.length > 0 ? (contacted / pmData.length) * 100 : 0}%` }} />
@@ -1483,8 +1716,11 @@ export default function CampaignDetail() {
                       <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>{assessmentsMap[detailView.id]}/100</div>
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
                     <button onClick={() => { setAssessmentCustomer(detailView); setShowAssessment(true); }} style={{ ...btn, fontSize: '13px' }}>Score Prospect</button>
+                    {isOwner && (
+                      <button onClick={() => setDeletingProspect(detailView)} style={{ ...btn, fontSize: '13px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Delete Prospect</button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1556,6 +1792,28 @@ export default function CampaignDetail() {
       )}
 
       {/* Assessment Scoring Modal */}
+      {/* Delete Prospect Confirmation */}
+      {deletingProspect && (
+        <div style={modalOverlay} onClick={() => setDeletingProspect(null)}>
+          <div style={{ ...modal, maxWidth: '420px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>Delete Prospect?</h3>
+              <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>
+                Are you sure you want to delete <strong>{deletingProspect.name}</strong>? This will also remove all associated contacts, opportunities, and activity logs. This cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setDeletingProspect(null)} style={{ ...btn, background: '#f1f5f9', color: '#475569' }}>Cancel</button>
+                <button
+                  onClick={() => deleteProspectMutation.mutate(deletingProspect.id)}
+                  disabled={deleteProspectMutation.isPending}
+                  style={{ ...btn, background: '#dc2626', color: '#fff' }}
+                >{deleteProspectMutation.isPending ? 'Deleting...' : 'Delete'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAssessment && assessmentCustomer && (
         <AssessmentScoring
           customerId={assessmentCustomer.id}
