@@ -464,8 +464,8 @@ const CaseStudyForm: React.FC = () => {
   const customerOptions = useMemo(
     () => (customers || []).map((c: Customer) => ({
       value: c.id,
-      label: [c.customer_owner, c.customer_facility].filter(Boolean).join(' — '),
-      searchText: [c.customer_owner, c.customer_facility].filter(Boolean).join(' '),
+      label: (c as any).name || [c.customer_owner, c.customer_facility].filter(Boolean).join(' — '),
+      searchText: [(c as any).name, c.customer_owner, c.customer_facility].filter(Boolean).join(' '),
     })),
     [customers]
   );

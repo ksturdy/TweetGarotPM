@@ -475,7 +475,7 @@ const TeamDetailPage: React.FC = () => {
                       onClick={() => navigate(`/customers/${customer.id}`)}
                       style={{ cursor: 'pointer' }}
                     >
-                      <td style={{ fontWeight: 500 }}>{customer.customer_facility}</td>
+                      <td style={{ fontWeight: 500 }}>{customer.name || customer.customer_facility}</td>
                       <td>{customer.customer_owner || '-'}</td>
                       <td>{customer.account_manager || '-'}</td>
                       <td>{customer.city && customer.state ? `${customer.city}, ${customer.state}` : '-'}</td>

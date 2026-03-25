@@ -96,6 +96,7 @@ export interface VPContract {
   linked_project_name?: string;
   linked_project_number?: string;
   linked_employee_name?: string;
+  linked_customer_name?: string;
   linked_customer_facility?: string;
   linked_customer_owner?: string;
   linked_department_name?: string;
@@ -144,6 +145,7 @@ export interface VPWorkOrder {
   updated_at: string;
   // Joined fields
   linked_employee_name?: string;
+  linked_customer_name?: string;
   linked_customer_facility?: string;
   linked_customer_owner?: string;
   linked_department_name?: string;
@@ -321,6 +323,7 @@ export interface VPCustomer {
   created_at: string;
   updated_at: string;
   // Joined fields
+  linked_customer_name?: string;
   linked_customer_owner?: string;
   linked_customer_facility?: string;
 }

@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import * as XLSX from 'xlsx';
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import CustomerFormModal from '../../components/modals/CustomerFormModal';
@@ -14,14 +13,11 @@ const CustomerList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterState, setFilterState] = useState('all');
   const [filterManager, setFilterManager] = useState('all');
-  const [sortColumn, setSortColumn] = useState<string>('customer_owner');
+  const [sortColumn, setSortColumn] = useState<string>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [hasUserSorted, setHasUserSorted] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [editingCell, setEditingCell] = useState<{ id: number; field: 'market' | 'status' } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   // Get returnTo from URL params for navigation back to estimate
@@ -116,26 +112,6 @@ const CustomerList: React.FC = () => {
     queryFn: customersApi.getStats,
   });
 
-  // Import mutation
-  const importMutation = useMutation({
-    mutationFn: (file: File) => customersApi.importExcel(file, setUploadProgress),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      alert('Customer data imported successfully!');
-    },
-    onError: (error: any) => {
-      setIsUploading(false);
-      setUploadProgress(0);
-      alert(`Import failed: ${error.response?.data?.error || error.message}`);
-    },
-  });
-
   // Update mutation for inline editing with optimistic updates
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<Customer> }) => customersApi.update(id, data),
@@ -188,71 +164,14 @@ const CustomerList: React.FC = () => {
     },
   });
 
-  // Handle file upload
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setIsUploading(true);
-      importMutation.mutate(file);
-    }
-  };
-
-  // Download Excel template
-  const handleDownloadTemplate = () => {
-    const templateData = [
-      {
-        'Customer_Owner-Facility': 'Example Facility Name',
-        'Customer_Owner': 'Example Owner LLC',
-        'Account manager': 'John Smith',
-        'Field Lead(s)': 'Jane Doe',
-        'CustomerNumber': 'CUST-001',
-        'Address': '123 Main Street',
-        'City_Province': 'Dallas',
-        'State_Country': 'TX',
-        'ZipCode_PostalCode': '75001',
-        'Controls': 'BAS',
-        'Department': 'HVAC',
-        'Market': 'Healthcare',
-        'Customer Score': '85',
-        'Active Customer': 'Yes',
-      },
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    worksheet['!cols'] = [
-      { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 15 },
-      { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 12 },
-      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Customers');
-    XLSX.writeFile(workbook, 'Customer_Import_Template.xlsx');
-  };
-
   // Get unique states and managers for filters
   const states = ['all', ...new Set(customers.map(c => c.state).filter(Boolean))];
   const managers = ['all', ...new Set(customers.map(c => c.account_manager).filter(Boolean))];
 
-  // Get unique companies with facility counts (deduplicate by customer_owner)
-  const uniqueCompanies = React.useMemo(() => {
-    const companyMap = new Map<string, Customer & { facility_count: number }>();
-    customers.forEach(customer => {
-      const key = customer.customer_owner || customer.customer_facility || `unknown-${customer.id}`;
-      if (!companyMap.has(key)) {
-        companyMap.set(key, { ...customer, facility_count: 1 });
-      } else {
-        const existing = companyMap.get(key)!;
-        existing.facility_count += 1;
-      }
-    });
-    return Array.from(companyMap.values());
-  }, [customers]);
-
-  // Filter customers (now filtering unique companies)
-  const filteredCustomers = uniqueCompanies.filter(customer => {
+  // Filter customers
+  const filteredCustomers = customers.filter(customer => {
     const matchesSearch = !searchTerm ||
-      customer.customer_owner?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.account_manager?.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -279,13 +198,9 @@ const CustomerList: React.FC = () => {
         aValue = favoritedCustomerSet.has(a.id) ? 1 : 0;
         bValue = favoritedCustomerSet.has(b.id) ? 1 : 0;
         break;
-      case 'customer_owner':
-        aValue = (a.customer_owner || '').toLowerCase();
-        bValue = (b.customer_owner || '').toLowerCase();
-        break;
-      case 'facility_count':
-        aValue = (a as any).facility_count || 0;
-        bValue = (b as any).facility_count || 0;
+      case 'name':
+        aValue = (a.name || '').toLowerCase();
+        bValue = (b.name || '').toLowerCase();
         break;
       case 'account_manager':
         aValue = (a.account_manager || '').toLowerCase();
@@ -386,19 +301,12 @@ const CustomerList: React.FC = () => {
       </div>
 
       {/* Stats Cards - Dynamic based on filtered customers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)', width: '36px', height: '36px', fontSize: '1rem' }}>🏢</div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.length}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Companies</div>
-          </div>
-        </div>
-        <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', width: '36px', height: '36px', fontSize: '1rem' }}>🏗️</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.reduce((sum, c) => sum + ((c as any).facility_count || 1), 0)}</div>
-            <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Facilities</div>
           </div>
         </div>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
@@ -484,28 +392,25 @@ const CustomerList: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('isFavorited')} style={{ width: '50px', textAlign: 'center' }}>
                 <span className="sales-sort-icon">{sortColumn === 'isFavorited' ? (sortDirection === 'asc' ? '↑' : '↓') : '☆'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('customer_owner')}>
-                Company <span className="sales-sort-icon">{sortColumn === 'customer_owner' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              <th className="sales-sortable" onClick={() => handleSort('name')} style={{ width: '28%' }}>
+                Company <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('facility_count')} style={{ textAlign: 'center' }}>
-                Facilities <span className="sales-sort-icon">{sortColumn === 'facility_count' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
-              </th>
-              <th className="sales-sortable" onClick={() => handleSort('market')}>
+              <th className="sales-sortable" onClick={() => handleSort('market')} style={{ width: '12%' }}>
                 Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('city')}>
+              <th className="sales-sortable" onClick={() => handleSort('city')} style={{ width: '12%' }}>
                 City <span className="sales-sort-icon">{sortColumn === 'city' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('state')}>
+              <th className="sales-sortable" onClick={() => handleSort('state')} style={{ width: '7%' }}>
                 State <span className="sales-sort-icon">{sortColumn === 'state' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('status')}>
+              <th className="sales-sortable" onClick={() => handleSort('status')} style={{ width: '10%' }}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('customer_score')}>
+              <th className="sales-sortable" onClick={() => handleSort('customer_score')} style={{ width: '8%' }}>
                 Score <span className="sales-sort-icon">{sortColumn === 'customer_score' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th className="sales-sortable" onClick={() => handleSort('account_manager')}>
+              <th className="sales-sortable" onClick={() => handleSort('account_manager')} style={{ width: '18%' }}>
                 Account Manager <span className="sales-sort-icon">{sortColumn === 'account_manager' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
             </tr>
@@ -549,26 +454,10 @@ const CustomerList: React.FC = () => {
                         {getMarketIcon(customer.market)}
                       </div>
                       <div className="sales-project-info">
-                        <h4>{customer.customer_owner || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
+                        <h4>{customer.name || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
                         <span>{customer.city && customer.state ? `${customer.city}, ${customer.state}` : (customer.city || customer.state || 'No location')}</span>
                       </div>
                     </div>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minWidth: '28px',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      color: '#3b82f6'
-                    }}>
-                      {(customer as any).facility_count}
-                    </span>
                   </td>
                   <td onClick={(e) => { e.stopPropagation(); setEditingCell({ id: customer.id, field: 'market' }); }}>
                     {editingCell?.id === customer.id && editingCell?.field === 'market' ? (
@@ -657,7 +546,7 @@ const CustomerList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       fill="none"

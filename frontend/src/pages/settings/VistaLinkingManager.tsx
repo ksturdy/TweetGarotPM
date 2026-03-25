@@ -938,7 +938,7 @@ const VistaLinkingManager: React.FC = () => {
       }
       case 'facilities': {
         // Facilities are stored in customers table - count customers with facilities
-        const withFacility = customers?.filter((c: any) => c.customer_facility)?.length || 0;
+        const withFacility = customers?.filter((c: any) => c.name || c.customer_facility)?.length || 0;
         const withoutFacility = (customers?.length || 0) - withFacility;
         return {
           vistaCount: withoutFacility,  // Customers needing facility data
@@ -1531,8 +1531,8 @@ const VistaLinkingManager: React.FC = () => {
       );
     }
 
-    const customersWithFacility = customers.filter((c: any) => c.customer_facility);
-    const customersWithoutFacility = customers.filter((c: any) => !c.customer_facility);
+    const customersWithFacility = customers.filter((c: any) => c.name || c.customer_facility);
+    const customersWithoutFacility = customers.filter((c: any) => !c.name && !c.customer_facility);
 
     return (
       <div>
@@ -1585,12 +1585,12 @@ const VistaLinkingManager: React.FC = () => {
             <tbody>
               {customers.map((customer: any) => (
                 <tr key={customer.id}>
-                  <td style={{ fontWeight: 500 }}>{customer.customer_owner || '-'}</td>
+                  <td style={{ fontWeight: 500 }}>{customer.name || customer.customer_owner || '-'}</td>
                   <td>{customer.customer_facility || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Not imported</span>}</td>
                   <td>{customer.city || '-'}</td>
                   <td>{customer.state || '-'}</td>
                   <td>
-                    {customer.customer_facility ? (
+                    {(customer.name || customer.customer_facility) ? (
                       <span style={{
                         padding: '4px 8px',
                         borderRadius: '4px',
@@ -1717,10 +1717,10 @@ const VistaLinkingManager: React.FC = () => {
                 <td>{formatCurrency(record.contract_amount)}</td>
                 <td>{getStatusBadge(record.link_status)}</td>
                 <td style={{ fontSize: '0.8rem' }}>
-                  {record.linked_employee_name || record.linked_customer_facility ? (
+                  {record.linked_employee_name || (record as any).linked_customer_name || record.linked_customer_facility ? (
                     <div>
                       {record.linked_employee_name && <div>PM: {record.linked_employee_name}</div>}
-                      {record.linked_customer_facility && <div>Cust: {record.linked_customer_facility}</div>}
+                      {((record as any).linked_customer_name || record.linked_customer_facility) && <div>Cust: {(record as any).linked_customer_name || record.linked_customer_facility}</div>}
                     </div>
                   ) : (
                     <span style={{ color: 'var(--text-secondary)' }}>No links</span>
@@ -1834,7 +1834,7 @@ const VistaLinkingManager: React.FC = () => {
                 <td>{cust.state || '-'}</td>
                 <td>{getStatusBadge(cust.link_status)}</td>
                 <td style={{ fontSize: '0.8rem' }}>
-                  {cust.linked_customer_owner || <span style={{ color: 'var(--text-secondary)' }}>Not linked</span>}
+                  {(cust as any).linked_customer_name || cust.linked_customer_owner || <span style={{ color: 'var(--text-secondary)' }}>Not linked</span>}
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: '4px' }}>
@@ -2171,7 +2171,7 @@ const VistaLinkingManager: React.FC = () => {
                     >
                       <option value="">-- Select Customer --</option>
                       {customers?.map((c: any) => (
-                        <option key={c.id} value={c.id}>{c.customer_owner} - {c.customer_facility}</option>
+                        <option key={c.id} value={c.id}>{c.name || c.customer_owner || c.customer_facility}</option>
                       ))}
                     </select>
                   </div>
@@ -2220,7 +2220,7 @@ const VistaLinkingManager: React.FC = () => {
                   >
                     <option value="">-- Select Titan Customer --</option>
                     {customers?.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.customer_owner} - {c.customer_facility}</option>
+                      <option key={c.id} value={c.id}>{c.name || c.customer_owner || c.customer_facility}</option>
                     ))}
                   </select>
                 </div>

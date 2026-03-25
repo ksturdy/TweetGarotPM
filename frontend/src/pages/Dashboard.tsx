@@ -583,11 +583,11 @@ const Dashboard: React.FC = () => {
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
-                              {estimate.customer_facility || estimate.facility_name || '-'}
+                              {estimate.customer_name || estimate.facility_name || '-'}
                             </span>
-                            {(estimate.customer_owner || estimate.customer_name) && (
+                            {(estimate.customer_name || estimate.customer_owner) && (
                               <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
-                                {estimate.customer_owner || estimate.customer_name}
+                                {estimate.customer_name || estimate.customer_owner}
                               </span>
                             )}
                           </div>

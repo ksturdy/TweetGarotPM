@@ -566,8 +566,8 @@ class Team {
       SELECT o.*,
              ps.name as stage_name, ps.color as stage_color,
              u.first_name || ' ' || u.last_name as assigned_to_name,
-             c.customer_owner as customer_name,
-             fc.customer_facility as facility_customer_name
+             COALESCE(c.name, c.customer_owner) as customer_name,
+             COALESCE(fc.name, fc.customer_facility) as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN users u ON o.assigned_to = u.id

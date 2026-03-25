@@ -35,8 +35,8 @@ const Estimate = {
               emp.first_name || ' ' || emp.last_name as estimator_full_name,
               u2.first_name || ' ' || u2.last_name as created_by_name,
               u3.first_name || ' ' || u3.last_name as approved_by_name,
-              c.customer_facility,
-              c.customer_owner
+              COALESCE(c.name, c.customer_facility) as customer_facility,
+              COALESCE(c.name, c.customer_owner) as customer_owner
        FROM estimates e
        LEFT JOIN employees emp ON e.estimator_id = emp.id
        LEFT JOIN users u2 ON e.created_by = u2.id
@@ -54,8 +54,8 @@ const Estimate = {
               emp.first_name || ' ' || emp.last_name as estimator_full_name,
               u2.first_name || ' ' || u2.last_name as created_by_name,
               u3.first_name || ' ' || u3.last_name as approved_by_name,
-              c.customer_facility,
-              c.customer_owner
+              COALESCE(c.name, c.customer_facility) as customer_facility,
+              COALESCE(c.name, c.customer_owner) as customer_owner
        FROM estimates e
        LEFT JOIN employees emp ON e.estimator_id = emp.id
        LEFT JOIN users u2 ON e.created_by = u2.id
@@ -71,8 +71,8 @@ const Estimate = {
     let query = `
       SELECT e.*,
              emp.first_name || ' ' || emp.last_name as estimator_full_name,
-             c.customer_facility,
-             c.customer_owner
+             COALESCE(c.name, c.customer_facility) as customer_facility,
+             COALESCE(c.name, c.customer_owner) as customer_owner
       FROM estimates e
       LEFT JOIN employees emp ON e.estimator_id = emp.id
       LEFT JOIN customers c ON e.customer_id = c.id

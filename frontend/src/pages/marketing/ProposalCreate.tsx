@@ -195,7 +195,7 @@ const ProposalCreate: React.FC = () => {
                 <option value="">Select Customer</option>
                 {customers.map((customer: any) => (
                   <option key={customer.id} value={customer.id}>
-                    {customer.customer_facility}
+                    {customer.name || customer.customer_facility}
                   </option>
                 ))}
               </select>

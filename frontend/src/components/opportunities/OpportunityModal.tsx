@@ -100,7 +100,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const uniqueCompanies = React.useMemo(() => {
     const companyMap = new Map<string, Customer>();
     customers.forEach((customer: Customer) => {
-      const companyName = customer.customer_owner || customer.customer_facility;
+      const companyName = customer.name || customer.customer_owner || customer.customer_facility;
       if (companyName && !companyMap.has(companyName)) {
         companyMap.set(companyName, customer);
       }
@@ -397,7 +397,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         <SearchableSelect
                           options={uniqueCompanies.map((customer: Customer) => ({
                             value: customer.id,
-                            label: customer.customer_owner || customer.customer_facility || ''
+                            label: customer.name || customer.customer_owner || customer.customer_facility || ''
                           }))}
                           value={formData.customer_id?.toString() || ''}
                           onChange={(val) => setFormData(prev => ({ ...prev, customer_id: val }))}
@@ -434,7 +434,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         <SearchableSelect
                           options={customers.map((customer: Customer) => ({
                             value: customer.id,
-                            label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
+                            label: customer.name || customer.customer_owner || customer.customer_facility || ''
                           }))}
                           value={formData.gc_customer_id?.toString() || ''}
                           onChange={(val) => setFormData(prev => ({ ...prev, gc_customer_id: val }))}
@@ -474,7 +474,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         <SearchableSelect
                           options={customers.map((customer: Customer) => ({
                             value: customer.id,
-                            label: customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility || ''
+                            label: customer.name || customer.customer_owner || customer.customer_facility || ''
                           }))}
                           value={formData.facility_customer_id?.toString() || ''}
                           onChange={(val) => setFormData(prev => ({ ...prev, facility_customer_id: val }))}

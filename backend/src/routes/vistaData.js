@@ -589,100 +589,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       }
     }
 
-    // Process Facilities (Customer List) - detect by column names
-    // Look for a sheet with Customer_Owner-Facility or Customer_Owner columns
-    let facilitiesSheetName = null;
-    for (const sn of sheetNames) {
-      // Load just first row to check columns
-      const wb = XLSX.readFile(tempFilePath, { sheets: sn, sheetRows: 2 });
-      const testData = XLSX.utils.sheet_to_json(wb.Sheets[sn]);
-      if (testData.length > 0) {
-        const firstRow = testData[0];
-        // Check if this looks like a facilities file (has Customer_Owner-Facility column)
-        if (firstRow.hasOwnProperty('Customer_Owner-Facility') || firstRow.hasOwnProperty('Customer_Owner')) {
-          facilitiesSheetName = sn;
-          break;
-        }
-      }
-    }
-
-    if (facilitiesSheetName) {
-      console.log(`[Vista Import] Processing facilities from ${facilitiesSheetName}...`);
-      results.sheetsFound.push(`${facilitiesSheetName} (Facilities)`);
-      const data = loadSheet(facilitiesSheetName);
-
-      if (data.length > 0) {
-        let createdCount = 0;
-        let updatedCount = 0;
-        let notFoundCount = 0;
-        const notFoundNames = []; // Collect names that don't match
-
-        // Helper function to extract name from SharePoint format "Name;#123" -> "Name"
-        const extractName = (value) => {
-          if (!value) return null;
-          const str = String(value).trim();
-          const match = str.match(/^([^;]+);#\d+$/);
-          return match ? match[1].trim() : str;
-        };
-
-        for (const row of data) {
-          const customerOwner = row['Customer_Owner'] || null;
-          const facility = row['Customer_Owner-Facility'] || null;
-          const accountManager = extractName(row['Account manager']);
-          const fieldLead = extractName(row['Field Lead(s)']);
-          const address = row['Address'] || null;
-          const city = row['City_Province'] || null;
-          const state = row['State_Country'] || null;
-          const zip = row['ZipCode_PostalCode'] || null;
-          const department = row['Department'] || null;
-          const customerScore = row['Customer Score'] || null;
-          const isActive = row['Active Customer'] === 'Yes' || row['Active Customer'] === true;
-
-          if (!customerOwner) continue;
-
-          try {
-            const result = await VistaData.updateCustomerFacility(req.tenantId, {
-              customer_owner: customerOwner,
-              customer_facility: facility,
-              account_manager: accountManager,
-              field_lead: fieldLead,
-              address: address,
-              city: city,
-              state: state,
-              zip: zip,
-              department: department,
-              customer_score: customerScore,
-              is_active: isActive
-            });
-
-            if (result.status === 'created') createdCount++;
-            else if (result.status === 'updated') updatedCount++;
-            else {
-              notFoundCount++;
-              if (notFoundNames.length < 50) {
-                notFoundNames.push(customerOwner);
-              }
-            }
-          } catch (err) {
-            console.error(`[Facilities Import] Error processing ${customerOwner}:`, err.message);
-            notFoundCount++;
-            if (notFoundNames.length < 50) {
-              notFoundNames.push(customerOwner);
-            }
-          }
-        }
-
-        results.facilities = {
-          total: data.length,
-          created: createdCount,
-          updated: updatedCount,
-          not_found: notFoundCount,
-          not_found_names: notFoundNames  // Include first 50 names for debugging
-        };
-        results.sheetsProcessed.push(`${facilitiesSheetName} (Facilities)`);
-        console.log(`[Vista Import] Facilities: ${createdCount} created, ${updatedCount} updated, ${notFoundCount} not found`);
-      }
-    }
+    // Facilities sheet processing removed — customers are now synced directly from TGARCustomers
 
     // Check if any sheets were processed
     if (results.sheetsProcessed.length === 0) {
@@ -721,11 +628,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-linked ${contractLinkResult.contracts_linked} contracts (100% match by number)`);
       }
 
-      if (results.customers.total > 0) {
-        const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
-        autoLink.customers = customerLinkResult;
-        console.log(`[Vista Import] Auto-linked ${customerLinkResult.customers_linked} customers (100% match)`);
-      }
+      // Customer linking is now handled by syncCustomersToTitan below (by customer_number)
 
       if (results.employees.total > 0) {
         const empLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
@@ -771,12 +674,12 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${woResult.imported} work orders as projects (${woResult.updated || 0} updated, ${(woResult.errors || []).length} errors)`);
       }
 
-      // Auto-import customers (only those not linked)
+      // Sync customers from Vista (creates new + updates existing by customer_number)
       if (results.customers.total > 0) {
-        console.log('[Vista Import] Auto-importing customers...');
-        const customerResult = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
+        console.log('[Vista Import] Syncing customers from Vista...');
+        const customerResult = await VistaData.syncCustomersToTitan(req.tenantId, req.user.id);
         autoImport.customers = customerResult;
-        console.log(`[Vista Import] Auto-imported ${customerResult.imported} customers`);
+        console.log(`[Vista Import] Synced customers: ${customerResult.created} created, ${customerResult.updated} updated`);
       }
 
       // Auto-import departments from contract/work order department codes
@@ -856,8 +759,7 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
     try { contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id); }
     catch (e) { console.error('[Re-sync] Contract link error:', e.message); errors.push(`Contract link: ${e.message}`); }
 
-    try { customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id); }
-    catch (e) { console.error('[Re-sync] Customer link error:', e.message); errors.push(`Customer link: ${e.message}`); }
+    // Customer linking is handled by syncCustomersToTitan below
 
     try { employeeLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id); }
     catch (e) { console.error('[Re-sync] Employee link error:', e.message); errors.push(`Employee link: ${e.message}`); }
@@ -889,8 +791,8 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
     try { woImport = await VistaData.importUnmatchedWorkOrdersToTitan(req.tenantId, req.user.id); }
     catch (e) { console.error('[Re-sync] Work order import error:', e.message); errors.push(`WO import: ${e.message}`); }
 
-    try { customerImport = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id); }
-    catch (e) { console.error('[Re-sync] Customer import error:', e.message); errors.push(`Customer import: ${e.message}`); }
+    try { customerImport = await VistaData.syncCustomersToTitan(req.tenantId, req.user.id); }
+    catch (e) { console.error('[Re-sync] Customer sync error:', e.message); errors.push(`Customer sync: ${e.message}`); }
 
     try { deptImport = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id); }
     catch (e) { console.error('[Re-sync] Dept import error:', e.message); errors.push(`Dept import: ${e.message}`); }
@@ -937,115 +839,7 @@ router.post('/import/auto-match', requireAdmin, async (req, res, next) => {
   }
 });
 
-// POST /api/vista/import/facilities - Import customer facilities from Excel
-router.post('/import/facilities', requireAdmin, upload.single('file'), async (req, res, next) => {
-  let tempFilePath = null;
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-
-    tempFilePath = req.file.path;
-    console.log(`[Facilities Import] Starting import of ${req.file.originalname}`);
-
-    // Read sheet names first, then load only the sheet we need
-    const wbStructure = XLSX.readFile(tempFilePath, { sheetRows: 0, bookSheets: true });
-    const sheetName = wbStructure.SheetNames[0];
-    console.log(`[Facilities Import] Using sheet: ${sheetName}`);
-
-    const workbook = XLSX.readFile(tempFilePath, { sheets: sheetName });
-    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-    if (data.length === 0) {
-      return res.status(400).json({ message: 'No data found in Excel file' });
-    }
-
-    console.log(`[Facilities Import] Processing ${data.length} rows`);
-
-    // Helper to extract name from SharePoint format "Name;#123"
-    const extractName = (value) => {
-      if (!value) return null;
-      const str = String(value);
-      const semicolonIdx = str.indexOf(';#');
-      return semicolonIdx > 0 ? str.substring(0, semicolonIdx).trim() : str.trim();
-    };
-
-    let created = 0;
-    let updated = 0;
-    let notFound = [];
-    let errors = [];
-
-    for (const row of data) {
-      try {
-        const customerOwner = row['Customer_Owner'] || row['Customer Owner'];
-        const facilityName = row['Customer_Owner-Facility'] || row['Customer_Owner-Facility'] || row['Facility'];
-
-        if (!customerOwner) {
-          continue; // Skip rows without customer owner
-        }
-
-        // Extract account manager name (strip SharePoint ID)
-        const accountManager = extractName(row['Account manager'] || row['Account Manager']);
-        const fieldLead = extractName(row['Field Lead(s)'] || row['Field Leads']);
-
-        // Find existing customer by customer_owner
-        const result = await VistaData.updateCustomerFacility(req.tenantId, {
-          customerOwner: customerOwner.trim(),
-          facilityName: facilityName ? facilityName.trim() : null,
-          accountManager: accountManager,
-          fieldLead: fieldLead,
-          address: row['Address'] || null,
-          city: row['City_Province'] || row['City'] || null,
-          state: row['State_Country'] || row['State'] || null,
-          zip: row['ZipCode_PostalCode'] || row['Zip'] || null,
-          controls: row['Controls'] || null,
-          department: row['Department'] || null,
-          customerScore: row['Customer Score'] ? parseFloat(row['Customer Score']) : null,
-          activeCustomer: row['Active Customer'] === 'Yes' || row['Active Customer'] === 'TRUE' || row['Active Customer'] === true
-        });
-
-        if (result.status === 'created') {
-          created++;
-        } else if (result.status === 'updated') {
-          updated++;
-        } else if (result.status === 'not_found') {
-          notFound.push(customerOwner);
-        }
-      } catch (rowError) {
-        console.error(`[Facilities Import] Error processing row:`, rowError.message);
-        errors.push({ row: row['Customer_Owner-Facility'], error: rowError.message });
-      }
-    }
-
-    console.log(`[Facilities Import] Complete. Created: ${created}, Updated: ${updated}, Not Found: ${notFound.length}`);
-
-    // Clean up temp file
-    if (tempFilePath) {
-      fs.unlink(tempFilePath, (err) => {
-        if (err) console.error('[Facilities Import] Failed to delete temp file:', err.message);
-      });
-    }
-
-    res.json({
-      message: `Facilities import complete`,
-      total: data.length,
-      created,
-      updated,
-      notFoundCount: notFound.length,
-      notFound: notFound.slice(0, 20), // Only return first 20 for display
-      errors: errors.slice(0, 10)
-    });
-  } catch (error) {
-    console.error('[Facilities Import] Error:', error.message);
-    // Clean up temp file on error
-    if (tempFilePath) {
-      fs.unlink(tempFilePath, (err) => {
-        if (err) console.error('[Facilities Import] Failed to delete temp file:', err.message);
-      });
-    }
-    next(error);
-  }
-});
+// Facilities import route removed — customers are now synced directly from Vista TGARCustomers sheet
 
 // ==================== TITAN-ONLY RECORDS ====================
 
@@ -1490,12 +1284,12 @@ router.post('/import-to-titan/employees', requireAdmin, async (req, res, next) =
   }
 });
 
-// POST /api/vista/import-to-titan/customers - Import unmatched VP customers as new Titan customers
+// POST /api/vista/import-to-titan/customers - Sync VP customers to Titan
 router.post('/import-to-titan/customers', requireAdmin, async (req, res, next) => {
   try {
-    const result = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
+    const result = await VistaData.syncCustomersToTitan(req.tenantId, req.user.id);
     res.json({
-      message: `Successfully imported ${result.imported} customers to Titan`,
+      message: `Synced customers: ${result.created} created, ${result.updated} updated`,
       ...result
     });
   } catch (error) {

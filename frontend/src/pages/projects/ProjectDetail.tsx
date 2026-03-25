@@ -420,7 +420,7 @@ const ProjectDetail: React.FC = () => {
               <div className="form-group" style={{ marginBottom: '0.6rem' }}>
                 <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Customer (GC)</label>
                 <SearchableSelect
-                  options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                  options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
                   value={titanFormData.customer_id}
                   onChange={(value) => setTitanFormData(prev => ({ ...prev, customer_id: value }))}
                   placeholder="-- Select Customer --"
@@ -431,7 +431,7 @@ const ProjectDetail: React.FC = () => {
               <div className="form-group" style={{ marginBottom: '0.6rem' }}>
                 <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Owner</label>
                 <SearchableSelect
-                  options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                  options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
                   value={titanFormData.owner_customer_id}
                   onChange={(value) => setTitanFormData(prev => ({ ...prev, owner_customer_id: value }))}
                   placeholder="-- Select Owner --"

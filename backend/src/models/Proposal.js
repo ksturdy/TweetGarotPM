@@ -7,7 +7,7 @@ class Proposal {
     let query = `
       SELECT
         p.*,
-        c.customer_facility as customer_name,
+        COALESCE(c.name, c.customer_facility) as customer_name,
         u1.first_name || ' ' || u1.last_name as created_by_name,
         u2.first_name || ' ' || u2.last_name as approved_by_name,
         (SELECT COUNT(*) FROM proposal_sections WHERE proposal_id = p.id) as section_count
@@ -63,8 +63,8 @@ class Proposal {
     const query = `
       SELECT
         p.*,
-        c.customer_facility as customer_name,
-        c.customer_owner,
+        COALESCE(c.name, c.customer_facility) as customer_name,
+        COALESCE(c.name, c.customer_owner) as customer_owner,
         c.address as customer_address,
         u1.first_name || ' ' || u1.last_name as created_by_name,
         u2.first_name || ' ' || u2.last_name as approved_by_name,
@@ -102,7 +102,7 @@ class Proposal {
              cs.cost_savings, cs.timeline_improvement_days, cs.quality_score,
              cs.additional_metrics, cs.construction_type, cs.project_size,
              cs.services_provided, cs.customer_logo_url,
-             c.customer_owner as customer_name, c.customer_facility,
+             COALESCE(c.name, c.customer_owner) as customer_name, COALESCE(c.name, c.customer_facility) as customer_facility,
              p.contract_value as project_value, p.name as project_name,
              p.start_date as project_start_date, p.end_date as project_end_date
       FROM proposal_case_studies pcs

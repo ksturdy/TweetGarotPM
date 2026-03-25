@@ -4,23 +4,6 @@ const Customer = require('../models/Customer');
 const opportunities = require('../models/opportunities');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
-const multer = require('multer');
-const xlsx = require('xlsx');
-const path = require('path');
-const fs = require('fs');
-
-// Configure multer for file uploads
-const upload = multer({
-  dest: 'uploads/',
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.xlsx' && ext !== '.xls') {
-      return cb(new Error('Only Excel files are allowed'));
-    }
-    cb(null, true);
-  }
-});
 
 // Apply authentication and tenant context to all routes
 router.use(authenticate);
@@ -100,10 +83,9 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// Get customer metrics (revenue, hit rate, etc.)
+// Get customer metrics
 router.get('/:id/metrics', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -115,95 +97,37 @@ router.get('/:id/metrics', async (req, res, next) => {
   }
 });
 
-// Get enhanced metrics for company (all facilities under same owner)
+// Get enhanced metrics for customer (replaces old company-metrics)
 router.get('/:id/company-metrics', async (req, res, next) => {
   try {
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
-    const metrics = await Customer.getCompanyMetrics(customer.customer_owner, req.tenantId, req.query.facility_id);
+    const metrics = await Customer.getCompanyMetrics(req.params.id, req.tenantId);
     res.json(metrics);
   } catch (error) {
     next(error);
   }
 });
 
-// Get all facilities for a company (same customer_owner)
-router.get('/:id/facilities', async (req, res, next) => {
-  try {
-    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    const facilities = await Customer.getFacilities(customer.customer_owner, req.tenantId);
-    res.json(facilities);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get work orders for a customer (or all facilities with ?all=true)
+// Get work orders for a customer
 router.get('/:id/work-orders', async (req, res, next) => {
   try {
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
-    const includeAll = req.query.all === 'true';
-    const workOrders = await Customer.getWorkOrders(req.params.id, req.tenantId, includeAll);
+    const workOrders = await Customer.getWorkOrders(req.params.id, req.tenantId);
     res.json(workOrders);
   } catch (error) {
     next(error);
   }
 });
 
-// Get projects for company (all facilities)
-router.get('/:id/company-projects', async (req, res, next) => {
-  try {
-    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    const projects = await Customer.getProjectsForCompany(req.params.id, req.tenantId);
-    res.json(projects);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get estimates/bids for company (all facilities)
-router.get('/:id/company-bids', async (req, res, next) => {
-  try {
-    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    const bids = await Customer.getBidsForCompany(req.params.id, req.tenantId);
-    res.json(bids);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get opportunities for company (all facilities)
-router.get('/:id/company-opportunities', async (req, res, next) => {
-  try {
-    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
-    const opportunities = await Customer.getOpportunitiesForCompany(req.params.id, req.tenantId);
-    res.json(opportunities);
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get customer projects
+// Get projects for customer (also serves as company-projects endpoint)
 router.get('/:id/projects', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -215,10 +139,37 @@ router.get('/:id/projects', async (req, res, next) => {
   }
 });
 
-// Get customer bids (historical projects)
+// Backward compat: company-projects redirects to projects
+router.get('/:id/company-projects', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const projects = await Customer.getProjects(req.params.id, req.tenantId);
+    res.json(projects);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get estimates/bids for customer
 router.get('/:id/bids', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const bids = await Customer.getBids(req.params.id, req.tenantId);
+    res.json(bids);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Backward compat: company-bids redirects to bids
+router.get('/:id/company-bids', async (req, res, next) => {
+  try {
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -233,7 +184,6 @@ router.get('/:id/bids', async (req, res, next) => {
 // Get customer touchpoints
 router.get('/:id/touchpoints', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -248,7 +198,6 @@ router.get('/:id/touchpoints', async (req, res, next) => {
 // Create touchpoint for customer
 router.post('/:id/touchpoints', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -266,7 +215,6 @@ router.post('/:id/touchpoints', async (req, res, next) => {
 // Get customer opportunities
 router.get('/:id/opportunities', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -281,7 +229,6 @@ router.get('/:id/opportunities', async (req, res, next) => {
 // Get customer contacts
 router.get('/:id/contacts', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -296,7 +243,6 @@ router.get('/:id/contacts', async (req, res, next) => {
 // Create contact for customer
 router.post('/:id/contacts', async (req, res, next) => {
   try {
-    // Verify customer belongs to tenant first
     const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -311,19 +257,16 @@ router.post('/:id/contacts', async (req, res, next) => {
 // Update contact (standalone route with tenant verification)
 router.put('/contacts/:contactId', async (req, res, next) => {
   try {
-    // Verify contact belongs to tenant
     const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
     if (!existingContact) {
       return res.status(404).json({ error: 'Contact not found' });
     }
-    // If changing customer_id, verify new customer belongs to tenant
     if (req.body.customer_id && req.body.customer_id !== existingContact.customer_id) {
       const customer = await Customer.findByIdAndTenant(req.body.customer_id, req.tenantId);
       if (!customer) {
         return res.status(404).json({ error: 'Customer not found' });
       }
     }
-    // Merge existing customer_id if not provided in update
     const updateData = {
       ...req.body,
       customer_id: req.body.customer_id !== undefined ? req.body.customer_id : existingContact.customer_id
@@ -338,7 +281,6 @@ router.put('/contacts/:contactId', async (req, res, next) => {
 // Delete contact (standalone route with tenant verification)
 router.delete('/contacts/:contactId', async (req, res, next) => {
   try {
-    // Verify contact belongs to tenant
     const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
     if (!existingContact) {
       return res.status(404).json({ error: 'Contact not found' });
@@ -367,14 +309,25 @@ router.put('/:id', async (req, res, next) => {
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
+
+    // For Vista-sourced customers, only allow Titan-editable fields
+    if (customer.source === 'vista') {
+      const vistaOwnedFields = ['name', 'customer_number', 'address', 'city', 'state', 'zip_code', 'active_customer'];
+      const attemptedVistaFields = vistaOwnedFields.filter(f => req.body[f] !== undefined);
+      if (attemptedVistaFields.length > 0) {
+        return res.status(400).json({
+          error: 'Cannot modify Vista-synced fields. These fields are updated automatically from Vista data.',
+          fields: attemptedVistaFields
+        });
+      }
+    }
+
     const updated = await Customer.update(req.params.id, req.body, req.tenantId);
     res.json(updated);
   } catch (error) {
     next(error);
   }
 });
-
-// Note: Favorite functionality moved to /api/favorites endpoints for per-user tracking
 
 // Delete customer
 router.delete('/:id', async (req, res, next) => {
@@ -383,82 +336,12 @@ router.delete('/:id', async (req, res, next) => {
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
+    if (customer.source === 'vista') {
+      return res.status(400).json({ error: 'Cannot delete Vista-synced customers. They will be updated on the next Vista data upload.' });
+    }
     await Customer.delete(req.params.id, req.tenantId);
     res.json({ message: 'Customer deleted successfully' });
   } catch (error) {
-    next(error);
-  }
-});
-
-// Delete all customers (admin only)
-router.delete('/all/delete', async (req, res, next) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-    await Customer.deleteAll(req.tenantId);
-    res.json({ message: 'All customers deleted' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Import customers from Excel
-router.post('/import/excel', checkLimit('max_customers', Customer.countByTenant), upload.single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    // Read the Excel file
-    const workbook = xlsx.readFile(req.file.path);
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(worksheet);
-
-    // Parse and transform data
-    const customers = data.map(row => {
-      // Parse account manager (remove SharePoint ID reference)
-      let accountManager = row['Account manager'] || '';
-      if (accountManager.includes(';#')) {
-        accountManager = accountManager.split(';#')[0];
-      }
-
-      return {
-        customer_facility: row['Customer_Owner-Facility'] || null,
-        customer_owner: row['Customer_Owner'] || null,
-        account_manager: accountManager || null,
-        field_leads: row['Field Lead(s)'] || null,
-        customer_number: row['CustomerNumber'] || null,
-        address: row['Address'] || null,
-        city: row['City_Province'] || null,
-        state: row['State_Country'] || null,
-        zip_code: row['ZipCode_PostalCode'] || null,
-        controls: row['Controls'] || null,
-        department: row['Department'] || null,
-        market: row['Market'] || null,
-        customer_score: row['Customer Score'] || null,
-        active_customer: row['Active Customer'] === true || row['Active Customer'] === 'Yes' || row['Active Customer'] === 1,
-        notes: null
-      };
-    });
-
-    // Bulk insert with tenant ID
-    const inserted = await Customer.bulkCreate(customers, req.tenantId);
-
-    // Clean up uploaded file
-    fs.unlinkSync(req.file.path);
-
-    res.json({
-      message: 'Import successful',
-      count: inserted.length,
-      customers: inserted
-    });
-  } catch (error) {
-    // Clean up file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
     next(error);
   }
 });

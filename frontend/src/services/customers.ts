@@ -3,11 +3,10 @@ import { favoritesService } from './favorites';
 
 export interface Customer {
   id: number;
-  customer_facility: string;
-  customer_owner: string;
-  account_manager: string;
-  field_leads?: string;
+  name: string;
   customer_number?: string;
+  account_manager?: string;
+  field_leads?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -18,16 +17,20 @@ export interface Customer {
   customer_score?: number;
   active_customer: boolean;
   notes?: string;
+  source?: 'vista' | 'manual';
+  vp_customer_id?: number;
+  // Deprecated — kept for backward compat during transition
+  customer_facility?: string;
+  customer_owner?: string;
+  // Runtime
+  isFavorited?: boolean;
   created_at: string;
   updated_at: string;
-  // Note: favorite is now managed per-user via favoritesService
-  isFavorited?: boolean; // Runtime property added by UI
 }
 
 export interface CustomerStats {
   total_customers: string;
   active_customers: string;
-  unique_owners: string;
   account_managers: string;
   states_covered: string;
 }
@@ -71,32 +74,7 @@ export const customersApi = {
   },
 
   async toggleFavorite(id: number) {
-    // Use the new per-user favorites system
     return favoritesService.toggle('customer', id);
-  },
-
-  async deleteAll() {
-    const response = await api.delete('/customers/all/delete');
-    return response.data;
-  },
-
-  async importExcel(file: File, onProgress?: (progress: number) => void) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await api.post('/customers/import/excel', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress(percentCompleted);
-        }
-      },
-    });
-
-    return response.data;
   }
 };
 
@@ -122,27 +100,19 @@ export const getCustomerOpportunities = async (id: string) => {
   const response = await api.get(`/customers/${id}/opportunities`);
   return response.data;
 };
-
-// Company-level functions (aggregates across all facilities)
-export const getCompanyMetrics = async (id: string, facilityId?: number) => {
-  const params = facilityId ? `?facility_id=${facilityId}` : '';
-  const response = await api.get(`/customers/${id}/company-metrics${params}`);
+export const getCompanyMetrics = async (id: string) => {
+  const response = await api.get(`/customers/${id}/company-metrics`);
   return response.data;
 };
-export const getCompanyFacilities = async (id: string) => {
-  const response = await api.get(`/customers/${id}/facilities`);
-  return response.data;
-};
-export const getCustomerWorkOrders = async (id: string, includeAll?: boolean) => {
-  const params = includeAll ? '?all=true' : '';
-  const response = await api.get(`/customers/${id}/work-orders${params}`);
+export const getCustomerWorkOrders = async (id: string) => {
+  const response = await api.get(`/customers/${id}/work-orders`);
   return response.data;
 };
 export const getCustomerContacts = async (id: string) => {
   const response = await api.get(`/customers/${id}/contacts`);
   return response.data;
 };
-// Company-level data (all facilities)
+// Backward compat aliases — these now call the same endpoints as facility-level
 export const getCompanyProjects = async (id: string) => {
   const response = await api.get(`/customers/${id}/company-projects`);
   return response.data;
@@ -155,4 +125,3 @@ export const getCompanyOpportunities = async (id: string) => {
   const response = await api.get(`/customers/${id}/company-opportunities`);
   return response.data;
 };
-

@@ -49,7 +49,7 @@ const CustomerProjects: React.FC = () => {
               &larr; Back to Customer
             </Link>
             <h1>📁 Projects</h1>
-            <div className="sales-subtitle">{customer.customer_facility || customer.customer_owner}</div>
+            <div className="sales-subtitle">{customer.name || customer.customer_facility || customer.customer_owner}</div>
           </div>
         </div>
         <div className="sales-header-actions">

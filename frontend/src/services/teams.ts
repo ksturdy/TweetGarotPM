@@ -65,6 +65,7 @@ export interface TeamOpportunity {
 
 export interface TeamCustomer {
   id: number;
+  name: string;
   customer_facility: string;
   customer_owner: string;
   account_manager: string;

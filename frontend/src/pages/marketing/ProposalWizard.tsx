@@ -298,7 +298,7 @@ const ProposalWizard: React.FC = () => {
               <option value="">Select Customer</option>
               {customers.map((customer: any) => (
                 <option key={customer.id} value={customer.id}>
-                  {customer.customer_facility}
+                  {customer.name || customer.customer_facility}
                 </option>
               ))}
             </select>
@@ -688,7 +688,7 @@ const ProposalWizard: React.FC = () => {
         <div className="review-grid">
           <div className="review-item">
             <div className="review-label">Customer</div>
-            <div className="review-data">{selectedCustomer?.customer_facility || '—'}</div>
+            <div className="review-data">{selectedCustomer?.name || selectedCustomer?.customer_facility || '—'}</div>
           </div>
           <div className="review-item">
             <div className="review-label">Title</div>

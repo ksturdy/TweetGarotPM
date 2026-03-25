@@ -122,7 +122,7 @@ const CustomerContacts: React.FC = () => {
               &larr; Back to Customer
             </Link>
             <h1>📇 Contacts</h1>
-            <div className="sales-subtitle">{customer.customer_facility || customer.customer_owner}</div>
+            <div className="sales-subtitle">{customer.name || customer.customer_facility || customer.customer_owner}</div>
           </div>
         </div>
         <div className="sales-header-actions">
@@ -309,7 +309,7 @@ const CustomerContacts: React.FC = () => {
       {showContactModal && (
         <ContactModal
           customerId={parseInt(id!)}
-          customerName={customer.customer_facility}
+          customerName={customer.name || customer.customer_facility || 'Unknown'}
           onClose={() => setShowContactModal(false)}
         />
       )}
@@ -318,7 +318,7 @@ const CustomerContacts: React.FC = () => {
       {showTouchpointModal && (
         <TouchpointModal
           customerId={parseInt(id!)}
-          customerName={customer.customer_facility || 'Unnamed Customer'}
+          customerName={customer.name || customer.customer_facility || 'Unnamed Customer'}
           onClose={() => setShowTouchpointModal(false)}
         />
       )}
@@ -335,7 +335,7 @@ const CustomerContacts: React.FC = () => {
             </div>
 
             <div className="modal-subtitle">
-              Editing contact for <strong>{customer.customer_facility}</strong>
+              Editing contact for <strong>{customer.name || customer.customer_facility}</strong>
             </div>
 
             <form onSubmit={handleUpdateContact}>

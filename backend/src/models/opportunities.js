@@ -42,8 +42,8 @@ const opportunities = {
         ps.probability as stage_probability,
         e.first_name || ' ' || e.last_name as assigned_to_name,
         creator.first_name || ' ' || creator.last_name as created_by_name,
-        c.customer_owner as customer_name,
-        fc.customer_facility as facility_customer_name,
+        COALESCE(c.name, c.customer_owner) as customer_name,
+        COALESCE(fc.name, fc.customer_facility) as facility_customer_name,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id) as activity_count,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
       FROM opportunities o
@@ -125,9 +125,9 @@ const opportunities = {
         e.email as assigned_to_email,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
-        c.customer_facility as customer_name,
-        gc.customer_facility as gc_customer_name,
-        fc.customer_facility as facility_customer_name
+        COALESCE(c.name, c.customer_facility) as customer_name,
+        COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
+        COALESCE(fc.name, fc.customer_facility) as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id
@@ -157,9 +157,9 @@ const opportunities = {
         e.email as assigned_to_email,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         p.name as converted_project_name,
-        c.customer_facility as customer_name,
-        gc.customer_facility as gc_customer_name,
-        fc.customer_facility as facility_customer_name
+        COALESCE(c.name, c.customer_facility) as customer_name,
+        COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
+        COALESCE(fc.name, fc.customer_facility) as facility_customer_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id

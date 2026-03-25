@@ -42,7 +42,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
   const uniqueCompanies = useMemo(() => {
     const companyMap = new Map<string, Customer>();
     customers.forEach((customer: Customer) => {
-      const companyName = customer.customer_owner || customer.customer_facility;
+      const companyName = customer.name;
       if (companyName && !companyMap.has(companyName)) {
         companyMap.set(companyName, customer);
       }
@@ -60,7 +60,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
     if (linkToExistingOwner && formData.customer_id) {
       effectiveCustomerId = Number(formData.customer_id);
       const selectedCustomer = customers.find((c: Customer) => c.id === effectiveCustomerId);
-      effectiveCustomerName = selectedCustomer?.customer_owner || selectedCustomer?.customer_facility || '';
+      effectiveCustomerName = selectedCustomer?.name || '';
     } else if (formData.owner) {
       effectiveCustomerName = formData.owner;
       effectiveCustomerId = undefined;
@@ -198,7 +198,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
                         <option value="">Select company...</option>
                         {uniqueCompanies.map((customer: Customer) => (
                           <option key={customer.id} value={customer.id}>
-                            {customer.customer_owner || customer.customer_facility}
+                            {customer.name}
                           </option>
                         ))}
                       </select>
@@ -242,7 +242,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
                         <option value="">Select customer...</option>
                         {customers.map((customer: Customer) => (
                           <option key={customer.id} value={customer.id}>
-                            {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                            {customer.name}
                           </option>
                         ))}
                       </select>
@@ -287,7 +287,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
                       <option value="">Select facility...</option>
                       {customers.map((customer: Customer) => (
                         <option key={customer.id} value={customer.id}>
-                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                          {customer.name}
                         </option>
                       ))}
                     </select>
@@ -310,7 +310,7 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
                   <option value="">Select company...</option>
                   {uniqueCompanies.map((customer: Customer) => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.customer_owner || customer.customer_facility}
+                      {customer.name}
                     </option>
                   ))}
                 </select>

@@ -169,6 +169,7 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
         d.name as linked_department_name,
@@ -219,6 +220,7 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
         d.name as linked_department_name
@@ -239,6 +241,7 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
         d.name as linked_department_name
@@ -455,6 +458,7 @@ const VistaData = {
     let query = `
       SELECT vw.*,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
         d.name as linked_department_name
@@ -501,6 +505,7 @@ const VistaData = {
     const result = await db.query(
       `SELECT vw.*,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
         d.name as linked_department_name
@@ -775,6 +780,7 @@ const VistaData = {
         vpc.city, vpc.state, vpc.zip, vpc.active, vpc.linked_customer_id,
         vpc.link_status, vpc.import_batch_id, vpc.created_at, vpc.updated_at,
         vpc.linked_at, vpc.linked_by,
+        COALESCE(tc.name, tc.customer_owner) as linked_customer_name,
         tc.customer_owner as linked_customer_owner,
         tc.customer_facility as linked_customer_facility
       FROM vp_customers vpc
@@ -1040,10 +1046,10 @@ const VistaData = {
           }
         }
 
-        // Match by customer_name (exact match on customer_owner)
+        // Match by customer_name (exact match on name)
         if (contract.customer_name) {
           const customer = await client.query(
-            'SELECT id FROM customers WHERE tenant_id = $1 AND LOWER(customer_owner) = LOWER($2)',
+            'SELECT id FROM customers WHERE tenant_id = $1 AND (LOWER(name) = LOWER($2) OR LOWER(customer_owner) = LOWER($2))',
             [tenantId, contract.customer_name]
           );
           if (customer.rows.length > 0) {
@@ -1148,7 +1154,7 @@ const VistaData = {
         // Match by customer_name
         if (wo.customer_name) {
           const customer = await client.query(
-            'SELECT id FROM customers WHERE tenant_id = $1 AND LOWER(customer_owner) = LOWER($2)',
+            'SELECT id FROM customers WHERE tenant_id = $1 AND (LOWER(name) = LOWER($2) OR LOWER(customer_owner) = LOWER($2))',
             [tenantId, wo.customer_name]
           );
           if (customer.rows.length > 0) {
@@ -1438,81 +1444,10 @@ const VistaData = {
   },
 
   // Find potential customer duplicates between VP and Titan
+  // findCustomerDuplicates removed — customers are now synced by customer_number, no fuzzy matching needed
   async findCustomerDuplicates(tenantId, minSimilarity = 0.5) {
-    // Get all unlinked VP customers
-    const vpCustomers = await db.query(
-      `SELECT id, customer_number, name, city, state, active
-       FROM vp_customers
-       WHERE link_status = 'unmatched'
-       ORDER BY name`
-    );
-
-    // Get Titan customers that are NOT already linked to a VP customer
-    const titanCustomers = await db.query(
-      `SELECT c.id, c.customer_owner, c.customer_facility, c.city, c.state
-       FROM customers c
-       LEFT JOIN vp_customers vpc ON vpc.linked_customer_id = c.id
-       WHERE c.tenant_id = $1 AND vpc.id IS NULL
-       ORDER BY c.customer_owner`,
-      [tenantId]
-    );
-
-    const duplicates = [];
-
-    for (const vpCust of vpCustomers.rows) {
-      const vpName = vpCust.name || '';
-      const matches = [];
-
-      for (const titanCust of titanCustomers.rows) {
-        // Compare VP name against both customer_owner and customer_facility
-        const ownerSimilarity = this._calculateSimilarity(vpName, titanCust.customer_owner || '');
-        const facilitySimilarity = this._calculateSimilarity(vpName, titanCust.customer_facility || '');
-
-        // Use the best match
-        const nameSimilarity = Math.max(ownerSimilarity, facilitySimilarity);
-
-        // Boost score if city/state match
-        const locationMatch = vpCust.city && titanCust.city &&
-          vpCust.city.toLowerCase() === titanCust.city.toLowerCase();
-
-        const finalSimilarity = locationMatch ? Math.min(nameSimilarity + 0.1, 1.0) : nameSimilarity;
-
-        if (finalSimilarity >= minSimilarity) {
-          matches.push({
-            titan_id: titanCust.id,
-            titan_owner: titanCust.customer_owner,
-            titan_facility: titanCust.customer_facility,
-            titan_location: titanCust.city && titanCust.state ? `${titanCust.city}, ${titanCust.state}` : '',
-            similarity: Math.round(finalSimilarity * 100) / 100,
-            matched_on: ownerSimilarity >= facilitySimilarity ? 'owner' : 'facility',
-            location_match: locationMatch
-          });
-        }
-      }
-
-      // Sort matches by similarity descending
-      matches.sort((a, b) => b.similarity - a.similarity);
-
-      if (matches.length > 0) {
-        duplicates.push({
-          vp_id: vpCust.id,
-          vp_customer_number: vpCust.customer_number,
-          vp_name: vpName,
-          vp_location: vpCust.city && vpCust.state ? `${vpCust.city}, ${vpCust.state}` : '',
-          vp_active: vpCust.active,
-          potential_matches: matches.slice(0, 5) // Top 5 matches
-        });
-      }
-    }
-
-    // Sort by highest match similarity
-    duplicates.sort((a, b) => {
-      const aMax = a.potential_matches[0]?.similarity || 0;
-      const bMax = b.potential_matches[0]?.similarity || 0;
-      return bMax - aMax;
-    });
-
-    return duplicates;
+    // Return empty array for backward compat — customer linking is now handled by syncCustomersToTitan
+    return [];
   },
 
   // Import unmatched VP employees as new Titan employees
@@ -1601,70 +1536,108 @@ const VistaData = {
     }
   },
 
-  // Import unmatched VP customers as new Titan customers
-  async importUnmatchedCustomersToTitan(tenantId, userId) {
+  // Sync ALL VP customers to Titan customers (Vista is source of truth)
+  // Creates new customers or updates existing ones by customer_number
+  async syncCustomersToTitan(tenantId, userId) {
     const client = await db.getClient();
-    let imported = 0;
+    let created = 0;
+    let updated = 0;
     const results = [];
 
     try {
       await client.query('BEGIN');
 
-      // Get all unlinked VP customers
-      const unlinked = await client.query(
+      // Get ALL VP customers (not just unmatched)
+      const vpCustomers = await client.query(
         `SELECT id, customer_number, name, address, address2, city, state, zip, active
          FROM vp_customers
-         WHERE link_status = 'unmatched'
          ORDER BY name`
       );
 
-      for (const vpCust of unlinked.rows) {
-        await client.query('SAVEPOINT import_cust_row');
+      for (const vpCust of vpCustomers.rows) {
+        await client.query('SAVEPOINT sync_cust_row');
         try {
-          // Create new Titan customer (using VP name as customer_owner - facility/location comes from separate import)
-          const newCustomer = await client.query(
-            `INSERT INTO customers (
-              tenant_id, customer_owner, customer_facility, address, city, state, zip_code, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            RETURNING id`,
-            [
-              tenantId,
-              vpCust.name || 'Unknown',
-              null, // Facility/location populated via separate facilities import
-              vpCust.address || '',
-              vpCust.city || '',
-              vpCust.state || '',
-              vpCust.zip || ''
-            ]
+          // Try to find existing Titan customer by customer_number
+          const existing = await client.query(
+            `SELECT id FROM customers
+             WHERE tenant_id = $1 AND customer_number = $2`,
+            [tenantId, String(vpCust.customer_number)]
           );
 
-          // Link the VP customer to the new Titan customer
+          let titanId;
+
+          if (existing.rows.length > 0) {
+            // Update existing customer with Vista data (only Vista-owned fields)
+            titanId = existing.rows[0].id;
+            await client.query(
+              `UPDATE customers SET
+                name = $2,
+                address = COALESCE(NULLIF($3, ''), address),
+                city = COALESCE(NULLIF($4, ''), city),
+                state = COALESCE(NULLIF($5, ''), state),
+                zip_code = COALESCE(NULLIF($6, ''), zip_code),
+                active_customer = $7,
+                source = 'vista',
+                vp_customer_id = $8,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = $1`,
+              [
+                titanId,
+                vpCust.name || 'Unknown',
+                vpCust.address || '',
+                vpCust.city || '',
+                vpCust.state || '',
+                vpCust.zip || '',
+                vpCust.active,
+                vpCust.id
+              ]
+            );
+            updated++;
+          } else {
+            // Create new Titan customer from Vista data
+            const newCustomer = await client.query(
+              `INSERT INTO customers (
+                tenant_id, name, customer_owner, customer_number, address, city, state, zip_code,
+                active_customer, source, vp_customer_id, created_at, updated_at
+              ) VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, 'vista', $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              RETURNING id`,
+              [
+                tenantId,
+                vpCust.name || 'Unknown',
+                String(vpCust.customer_number),
+                vpCust.address || '',
+                vpCust.city || '',
+                vpCust.state || '',
+                vpCust.zip || '',
+                vpCust.active,
+                vpCust.id
+              ]
+            );
+            titanId = newCustomer.rows[0].id;
+            created++;
+          }
+
+          // Link the VP customer to the Titan customer
           await client.query(
             `UPDATE vp_customers SET
               linked_customer_id = $1,
-              link_status = 'manual_matched',
+              link_status = 'auto_matched',
               linked_at = CURRENT_TIMESTAMP,
               linked_by = $2
             WHERE id = $3`,
-            [newCustomer.rows[0].id, userId, vpCust.id]
+            [titanId, userId, vpCust.id]
           );
 
-          await client.query('RELEASE SAVEPOINT import_cust_row');
-
-          imported++;
-          results.push({
-            vp_id: vpCust.id,
-            titan_id: newCustomer.rows[0].id,
-            name: vpCust.name
-          });
+          await client.query('RELEASE SAVEPOINT sync_cust_row');
+          results.push({ vp_id: vpCust.id, titan_id: titanId, name: vpCust.name });
         } catch (rowError) {
-          await client.query('ROLLBACK TO SAVEPOINT import_cust_row');
-          console.error(`[Vista Import] Failed to import customer ${vpCust.name}: ${rowError.message}`);
+          await client.query('ROLLBACK TO SAVEPOINT sync_cust_row');
+          console.error(`[Vista Sync] Failed to sync customer ${vpCust.name}: ${rowError.message}`);
         }
       }
 
       await client.query('COMMIT');
-      return { imported, total: unlinked.rows.length, results };
+      return { created, updated, total: vpCustomers.rows.length, results };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -1673,199 +1646,16 @@ const VistaData = {
     }
   },
 
-  // Update customer facility from facilities import
-  // Priority: Use facility-specific address when available, fall back to AR Customer address
-  async updateCustomerFacility(tenantId, data) {
-    // Support both snake_case (from route) and camelCase property names
-    const customerOwner = data.customer_owner || data.customerOwner;
-    const facilityName = data.customer_facility || data.facilityName;
-    const accountManager = data.account_manager || data.accountManager;
-
-    // Debug: Log processing for specific customers
-    const debugCustomer = customerOwner && customerOwner.toLowerCase().includes('packer');
-    if (debugCustomer) {
-      console.log(`[Facility Debug] Processing: owner="${customerOwner}" / facility="${facilityName}"`);
-    }
-    const fieldLead = data.field_lead || data.fieldLead;
-    const address = data.address;
-    const city = data.city;
-    const state = data.state;
-    const zip = data.zip;
-    const controls = data.controls;
-    const department = data.department;
-    const customerScore = data.customer_score || data.customerScore;
-    const activeCustomer = data.is_active !== undefined ? data.is_active : data.activeCustomer;
-
-    // Helper function to normalize company names for fuzzy matching
-    const normalizeCompanyName = (name) => {
-      if (!name) return '';
-      return name
-        .toLowerCase()
-        .replace(/[,.'"\-()]/g, '') // Remove punctuation
-        .replace(/\s+/g, ' ')       // Normalize whitespace
-        .replace(/\b(inc|llc|ltd|corp|corporation|company|co|llp|lp|pllc|pc|pa|plc)\b/gi, '') // Remove common suffixes
-        .replace(/\s+/g, ' ')       // Clean up whitespace again
-        .trim();
-    };
-
-    // First, try exact match (case-insensitive, trimmed)
-    let existing = await db.query(
-      `SELECT id, customer_owner, customer_facility
-       FROM customers
-       WHERE tenant_id = $1 AND LOWER(TRIM(customer_owner)) = LOWER(TRIM($2))
-       LIMIT 1`,
-      [tenantId, customerOwner]
-    );
-
-    // If exact match fails, try normalized fuzzy matching
-    if (existing.rows.length === 0) {
-      const normalizedInput = normalizeCompanyName(customerOwner);
-      if (normalizedInput.length >= 3) {
-        // Get all customers and find best normalized match
-        const allCustomers = await db.query(
-          `SELECT id, customer_owner, customer_facility FROM customers WHERE tenant_id = $1`,
-          [tenantId]
-        );
-
-        for (const cust of allCustomers.rows) {
-          const normalizedDb = normalizeCompanyName(cust.customer_owner);
-          if (normalizedDb === normalizedInput) {
-            existing = { rows: [cust] };
-            break;
-          }
-        }
-      }
-    }
-
-    if (existing.rows.length === 0) {
-      // Customer not found - do NOT create new customers from facilities import
-      // Vista AR Customers is the source of truth for customers
-      // Facilities import should only UPDATE existing customers
-      if (debugCustomer) console.log(`[Facility Debug] NOT FOUND in customers table`);
-      return { status: 'not_found' };
-    }
-
-    // Found a customer with this owner - now check if this specific facility already exists
-    const matchedOwner = existing.rows[0].customer_owner;
-    if (debugCustomer) console.log(`[Facility Debug] Found owner: "${matchedOwner}", original facility: "${existing.rows[0].customer_facility}"`);
-
-    // Check if this exact facility already exists for this customer_owner
-    const existingFacility = await db.query(
-      `SELECT id, customer_owner, customer_facility
-       FROM customers
-       WHERE tenant_id = $1
-         AND LOWER(TRIM(customer_owner)) = LOWER(TRIM($2))
-         AND LOWER(TRIM(customer_facility)) = LOWER(TRIM($3))
-       LIMIT 1`,
-      [tenantId, matchedOwner, facilityName || '']
-    );
-
-    if (existingFacility.rows.length > 0) {
-      if (debugCustomer) console.log(`[Facility Debug] EXACT facility exists - UPDATING id=${existingFacility.rows[0].id}`);
-      // This exact facility exists - update it
-      const customer = existingFacility.rows[0];
-      await db.query(
-        `UPDATE customers SET
-          address = COALESCE($2, address),
-          city = COALESCE($3, city),
-          state = COALESCE($4, state),
-          zip_code = COALESCE($5, zip_code),
-          account_manager = COALESCE($6, account_manager),
-          field_leads = COALESCE($7, field_leads),
-          controls = COALESCE($8, controls),
-          department = COALESCE($9, department),
-          customer_score = COALESCE($10, customer_score),
-          active_customer = $11,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1`,
-        [
-          customer.id,
-          address,
-          city,
-          state,
-          zip,
-          accountManager,
-          fieldLead,
-          controls,
-          department,
-          customerScore,
-          activeCustomer !== false
-        ]
-      );
-      return { status: 'updated', id: customer.id };
-    }
-
-    // Check if the original customer has no facility yet (use it for the first one)
-    const originalCustomer = existing.rows[0];
-    if (!originalCustomer.customer_facility) {
-      // Original customer has no facility - update it with this facility
-      if (debugCustomer) console.log(`[Facility Debug] Original has NO facility - UPDATING original id=${originalCustomer.id}`);
-      await db.query(
-        `UPDATE customers SET
-          customer_facility = $2,
-          address = COALESCE($3, address),
-          city = COALESCE($4, city),
-          state = COALESCE($5, state),
-          zip_code = COALESCE($6, zip_code),
-          account_manager = COALESCE($7, account_manager),
-          field_leads = COALESCE($8, field_leads),
-          controls = COALESCE($9, controls),
-          department = COALESCE($10, department),
-          customer_score = COALESCE($11, customer_score),
-          active_customer = $12,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1`,
-        [
-          originalCustomer.id,
-          facilityName,
-          address,
-          city,
-          state,
-          zip,
-          accountManager,
-          fieldLead,
-          controls,
-          department,
-          customerScore,
-          activeCustomer !== false
-        ]
-      );
-      return { status: 'updated', id: originalCustomer.id };
-    }
-
-    // This is a NEW facility for an existing customer_owner - create a new row
-    if (debugCustomer) console.log(`[Facility Debug] NEW facility - CREATING new row for "${facilityName}"`);
-    const newCustomer = await db.query(
-      `INSERT INTO customers (
-        tenant_id, customer_owner, customer_facility, address, city, state, zip_code,
-        account_manager, field_leads, controls, department, customer_score, active_customer,
-        created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      RETURNING id`,
-      [
-        tenantId,
-        matchedOwner,  // Use the matched owner name from database to ensure consistency
-        facilityName,
-        address,
-        city,
-        state,
-        zip,
-        accountManager,
-        fieldLead,
-        controls,
-        department,
-        customerScore,
-        activeCustomer !== false
-      ]
-    );
-
-    return { status: 'created', id: newCustomer.rows[0].id };
-  },
+  // updateCustomerFacility removed — facility concept no longer used; Vista sync handles customer updates
 
   // Get duplicates summary stats
   async getDuplicatesStats(tenantId) {
     const employeeDuplicates = await this.findEmployeeDuplicates(tenantId);
-    const customerDuplicates = await this.findCustomerDuplicates(tenantId);
+
+    // Count unlinked VP customers (customers are now synced by customer_number, no fuzzy matching needed)
+    const unlinkedCustomers = await db.query(
+      `SELECT COUNT(*) as count FROM vp_customers WHERE link_status = 'unmatched'`
+    );
 
     return {
       employees: {
@@ -1881,16 +1671,7 @@ const VistaData = {
         }).length
       },
       customers: {
-        total_unlinked: customerDuplicates.length,
-        with_high_confidence: customerDuplicates.filter(d => d.potential_matches[0]?.similarity >= 0.8).length,
-        with_medium_confidence: customerDuplicates.filter(d => {
-          const sim = d.potential_matches[0]?.similarity;
-          return sim >= 0.6 && sim < 0.8;
-        }).length,
-        with_low_confidence: customerDuplicates.filter(d => {
-          const sim = d.potential_matches[0]?.similarity;
-          return sim >= 0.5 && sim < 0.6;
-        }).length
+        total_unlinked: parseInt(unlinkedCustomers.rows[0].count) || 0
       }
     };
   },
@@ -1908,7 +1689,7 @@ const VistaData = {
 
     // Get Titan projects that are NOT already linked to a VP contract
     const titanProjects = await db.query(
-      `SELECT p.id, p.number, p.name, p.status, c.customer_owner
+      `SELECT p.id, p.number, p.name, p.status, COALESCE(c.name, c.customer_owner) as customer_owner
        FROM projects p
        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
        LEFT JOIN customers c ON p.customer_id = c.id
@@ -2874,125 +2655,20 @@ const VistaData = {
     }
   },
 
-  // Auto-link VP customers to Titan customers where similarity >= 100% (rounded)
+  // Auto-link VP customers to Titan customers by customer_number
+  // Replaces the old fuzzy-matching approach
   async autoLinkExactCustomerMatches(tenantId, userId) {
-    // Use the existing similarity-based duplicate finder to get 100% matches
-    const duplicates = await this.findCustomerDuplicates(tenantId, 0.995);
-
-    const client = await db.getClient();
-    let totalLinked = 0;
-    const linkedCustomers = [];
-
-    try {
-      await client.query('BEGIN');
-
-      for (const dup of duplicates) {
-        // Get the top match if it's >= 100% (after rounding)
-        const topMatch = dup.potential_matches[0];
-        if (!topMatch || topMatch.similarity < 1.0) continue;
-
-        // Check if this Titan customer is already linked to another VP customer
-        const existingLink = await client.query(
-          `SELECT id FROM vp_customers WHERE linked_customer_id = $1 AND id != $2`,
-          [topMatch.titan_id, dup.vp_id]
-        );
-        if (existingLink.rows.length > 0) continue;
-
-        // Link the VP customer to Titan customer
-        await client.query(
-          `UPDATE vp_customers SET
-            linked_customer_id = $1,
-            link_status = 'auto_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [topMatch.titan_id, userId, dup.vp_id]
-        );
-
-        totalLinked++;
-        linkedCustomers.push({
-          vp_id: dup.vp_id,
-          vp_customer_number: dup.vp_customer_number,
-          vp_name: dup.vp_name,
-          titan_id: topMatch.titan_id,
-          titan_owner: topMatch.titan_owner,
-          titan_facility: topMatch.titan_facility
-        });
-      }
-
-      await client.query('COMMIT');
-
-      return {
-        customers_linked: totalLinked,
-        details: linkedCustomers
-      };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    // Just delegate to syncCustomersToTitan which handles all linking
+    const result = await this.syncCustomersToTitan(tenantId, userId);
+    return {
+      customers_linked: result.created + result.updated,
+      details: result.results
+    };
   },
 
-  // Auto-link ALL VP customers that have any match (links top match for each)
+  // Auto-link ALL VP customers (same as exact for the new customer_number approach)
   async autoLinkAllCustomerMatches(tenantId, userId) {
-    // Use the existing similarity-based duplicate finder to get ALL matches
-    const duplicates = await this.findCustomerDuplicates(tenantId, 0.5);
-
-    const client = await db.getClient();
-    let totalLinked = 0;
-    const linkedCustomers = [];
-
-    try {
-      await client.query('BEGIN');
-
-      for (const dup of duplicates) {
-        // Get the top match (highest similarity)
-        const topMatch = dup.potential_matches[0];
-        if (!topMatch) continue;
-
-        // Check if this Titan customer is already linked to another VP customer
-        const existingLink = await client.query(
-          `SELECT id FROM vp_customers WHERE linked_customer_id = $1 AND id != $2`,
-          [topMatch.titan_id, dup.vp_id]
-        );
-        if (existingLink.rows.length > 0) continue;
-
-        // Link the VP customer to Titan customer
-        await client.query(
-          `UPDATE vp_customers SET
-            linked_customer_id = $1,
-            link_status = 'auto_matched',
-            linked_at = CURRENT_TIMESTAMP,
-            linked_by = $2
-          WHERE id = $3`,
-          [topMatch.titan_id, userId, dup.vp_id]
-        );
-
-        totalLinked++;
-        linkedCustomers.push({
-          vp_id: dup.vp_id,
-          vp_customer_number: dup.vp_customer_number,
-          vp_name: dup.vp_name,
-          titan_id: topMatch.titan_id,
-          titan_owner: topMatch.titan_owner,
-          titan_facility: topMatch.titan_facility,
-          similarity: topMatch.similarity
-        });
-      }
-
-      await client.query('COMMIT');
-
-      return {
-        customers_linked: totalLinked,
-        details: linkedCustomers
-      };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    return this.autoLinkExactCustomerMatches(tenantId, userId);
   },
 
   // Auto-link VP vendors to Titan vendors where similarity >= 100% (rounded)
@@ -3084,23 +2760,14 @@ const VistaData = {
   },
 
   async getTitanOnlyCustomers(tenantId) {
-    // Get unique owners where NO facility of that owner is linked to Vista
-    // (excludes owners that have any facility linked)
+    // Get customers that are NOT linked to Vista (manual-only customers)
     const result = await db.query(
-      `SELECT DISTINCT c.customer_owner as name, MIN(c.id) as id, COUNT(*) as facility_count
+      `SELECT c.id, COALESCE(c.name, c.customer_owner) as name, c.city, c.state
        FROM customers c
        WHERE c.tenant_id = $1
-         AND c.customer_owner IS NOT NULL
-         AND c.customer_owner != ''
-         AND c.customer_owner NOT IN (
-           -- Exclude owners that have any facility linked to Vista
-           SELECT DISTINCT c2.customer_owner
-           FROM customers c2
-           INNER JOIN vp_customers vpc ON vpc.linked_customer_id = c2.id
-           WHERE c2.tenant_id = $1 AND c2.customer_owner IS NOT NULL
-         )
-       GROUP BY c.customer_owner
-       ORDER BY c.customer_owner`,
+         AND (c.source IS NULL OR c.source = 'manual')
+         AND c.vp_customer_id IS NULL
+       ORDER BY COALESCE(c.name, c.customer_owner)`,
       [tenantId]
     );
     return result.rows;
@@ -3214,7 +2881,7 @@ const VistaData = {
 
       // Find Titan customers not linked to any Vista customer
       const toDelete = await client.query(
-        `SELECT c.id, c.customer_owner, c.customer_facility
+        `SELECT c.id, COALESCE(c.name, c.customer_owner) as name
          FROM customers c
          LEFT JOIN vp_customers vpc ON vpc.linked_customer_id = c.id
          WHERE c.tenant_id = $1 AND vpc.id IS NULL`,
@@ -3236,7 +2903,7 @@ const VistaData = {
 
       // Delete the customers
       const result = await client.query(
-        `DELETE FROM customers WHERE id = ANY($1) RETURNING id, customer_owner, customer_facility`,
+        `DELETE FROM customers WHERE id = ANY($1) RETURNING id, name`,
         [idsToDelete]
       );
 
@@ -3419,15 +3086,15 @@ const VistaData = {
   async findTitanDuplicateCustomers(tenantId) {
     // Find customers with similar names (potential duplicates)
     const result = await db.query(
-      `SELECT c1.id as id1, c1.customer_owner as name1, c1.customer_facility as facility1,
-              c2.id as id2, c2.customer_owner as name2, c2.customer_facility as facility2,
-              SIMILARITY(LOWER(c1.customer_owner), LOWER(c2.customer_owner)) as similarity
+      `SELECT c1.id as id1, COALESCE(c1.name, c1.customer_owner) as name1,
+              c2.id as id2, COALESCE(c2.name, c2.customer_owner) as name2,
+              SIMILARITY(LOWER(COALESCE(c1.name, c1.customer_owner)), LOWER(COALESCE(c2.name, c2.customer_owner))) as similarity
        FROM customers c1
        JOIN customers c2 ON c1.id < c2.id AND c1.tenant_id = c2.tenant_id
        WHERE c1.tenant_id = $1
-         AND c1.customer_owner IS NOT NULL
-         AND c2.customer_owner IS NOT NULL
-         AND SIMILARITY(LOWER(c1.customer_owner), LOWER(c2.customer_owner)) > 0.7
+         AND COALESCE(c1.name, c1.customer_owner) IS NOT NULL
+         AND COALESCE(c2.name, c2.customer_owner) IS NOT NULL
+         AND SIMILARITY(LOWER(COALESCE(c1.name, c1.customer_owner)), LOWER(COALESCE(c2.name, c2.customer_owner))) > 0.7
        ORDER BY similarity DESC
        LIMIT 100`,
       [tenantId]

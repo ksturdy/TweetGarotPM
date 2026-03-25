@@ -676,14 +676,14 @@ const ProjectList: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
             <SearchableSelect
-              options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+              options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
               value={bulkOwnerCustomerId}
               onChange={setBulkOwnerCustomerId}
               placeholder="-- Assign Owner --"
               style={{ minWidth: '220px' }}
             />
             <SearchableSelect
-              options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+              options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
               value={bulkCustomerId}
               onChange={setBulkCustomerId}
               placeholder="-- Assign Customer (GC) --"

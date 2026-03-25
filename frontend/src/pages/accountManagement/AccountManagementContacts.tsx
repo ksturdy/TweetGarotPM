@@ -76,12 +76,13 @@ const AccountManagementContacts: React.FC = () => {
     },
   });
 
-  // Get unique companies (customer_owner)
+  // Get unique companies (name or customer_owner)
   const uniqueCompanies = useMemo(() => {
     const companies = new Map<string, Customer>();
     customers.forEach((c: Customer) => {
-      if (c.customer_owner && !companies.has(c.customer_owner)) {
-        companies.set(c.customer_owner, c);
+      const companyName = (c as any).name || c.customer_owner;
+      if (companyName && !companies.has(companyName)) {
+        companies.set(companyName, c);
       }
     });
     return Array.from(companies.values());
@@ -92,14 +93,14 @@ const AccountManagementContacts: React.FC = () => {
     if (!companySearch) return uniqueCompanies.slice(0, 50);
     const search = companySearch.toLowerCase();
     return uniqueCompanies
-      .filter((c: Customer) => c.customer_owner?.toLowerCase().includes(search))
+      .filter((c: Customer) => ((c as any).name || c.customer_owner)?.toLowerCase().includes(search))
       .slice(0, 50);
   }, [uniqueCompanies, companySearch]);
 
   // Get facilities filtered by selected company
   const filteredFacilities = useMemo(() => {
     if (!selectedCompany) return [];
-    const facilities = customers.filter((c: Customer) => c.customer_owner === selectedCompany);
+    const facilities = customers.filter((c: Customer) => ((c as any).name || c.customer_owner) === selectedCompany);
     if (!facilitySearch) return facilities.slice(0, 50);
     const search = facilitySearch.toLowerCase();
     return facilities
@@ -208,7 +209,7 @@ const AccountManagementContacts: React.FC = () => {
       contact.last_name?.toLowerCase().includes(searchLower) ||
       contact.email?.toLowerCase().includes(searchLower) ||
       contact.customer_facility?.toLowerCase().includes(searchLower) ||
-      contact.customer_owner?.toLowerCase().includes(searchLower) ||
+      ((contact as any).name || contact.customer_owner)?.toLowerCase().includes(searchLower) ||
       contact.title?.toLowerCase().includes(searchLower)
     );
   });
@@ -267,11 +268,12 @@ const AccountManagementContacts: React.FC = () => {
               <div style={dropdownStyle}>
                 {filteredCompanies.map((customer: Customer) => (
                   <div
-                    key={customer.customer_owner}
+                    key={(customer as any).name || customer.customer_owner}
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      setSelectedCompany(customer.customer_owner);
-                      setContact({ ...contact, customer_owner: customer.customer_owner, customer_id: null, customer_facility: null });
+                      const companyName = (customer as any).name || customer.customer_owner;
+                      setSelectedCompany(companyName);
+                      setContact({ ...contact, customer_owner: companyName, customer_id: null, customer_facility: null });
                       setCompanySearch('');
                       setFacilitySearch('');
                       setShowCompanyDropdown(false);
@@ -285,7 +287,7 @@ const AccountManagementContacts: React.FC = () => {
                     onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
                     onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
                   >
-                    <div style={{ fontWeight: 500, color: '#1f2937' }}>{customer.customer_owner}</div>
+                    <div style={{ fontWeight: 500, color: '#1f2937' }}>{(customer as any).name || customer.customer_owner}</div>
                   </div>
                 ))}
               </div>
@@ -604,8 +606,8 @@ const AccountManagementContacts: React.FC = () => {
                   </td>
                   <td>{contact.title || '-'}</td>
                   <td>
-                    {contact.customer_owner ? (
-                      <span style={{ fontWeight: 500 }}>{contact.customer_owner}</span>
+                    {((contact as any).name || contact.customer_owner) ? (
+                      <span style={{ fontWeight: 500 }}>{(contact as any).name || contact.customer_owner}</span>
                     ) : (
                       <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>-</span>
                     )}

@@ -4,26 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import {
   getCustomer,
   getCompanyMetrics,
-  getCompanyFacilities,
-  getCustomerProjects,
-  getCustomerBids,
-  getCustomerOpportunities,
-  getCustomerWorkOrders,
-  getCustomerContacts,
   getCompanyProjects,
   getCompanyBids,
   getCompanyOpportunities,
-  Customer
+  getCustomerWorkOrders,
+  getCustomerContacts
 } from '../services/customers';
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import './CustomerDetail.css';
 import '../styles/SalesPipeline.css';
-
-interface Facility extends Customer {
-  estimate_count: number;
-  project_count: number;
-  work_order_count: number;
-}
 
 interface Contact {
   id: number;
@@ -50,7 +39,6 @@ const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedFacilityId, setSelectedFacilityId] = useState<number | null>(null);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
   // Sorting state
@@ -66,43 +54,34 @@ const CustomerDetail: React.FC = () => {
   });
 
   const { data: metrics } = useQuery({
-    queryKey: ['company-metrics', id, selectedFacilityId],
-    queryFn: () => getCompanyMetrics(id!, selectedFacilityId || undefined),
+    queryKey: ['company-metrics', id],
+    queryFn: () => getCompanyMetrics(id!),
     enabled: !!customer,
   });
-
-  const { data: facilities = [] } = useQuery<Facility[]>({
-    queryKey: ['company-facilities', id],
-    queryFn: () => getCompanyFacilities(id!),
-    enabled: !!customer,
-  });
-
-  const activeFacilityId = selectedFacilityId || parseInt(id!);
-  const isCompanyView = !selectedFacilityId;
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['customer-projects', id, selectedFacilityId],
-    queryFn: () => isCompanyView ? getCompanyProjects(id!) : getCustomerProjects(String(activeFacilityId)),
+    queryKey: ['customer-projects', id],
+    queryFn: () => getCompanyProjects(id!),
   });
 
   const { data: estimates = [] } = useQuery({
-    queryKey: ['customer-bids', id, selectedFacilityId],
-    queryFn: () => isCompanyView ? getCompanyBids(id!) : getCustomerBids(String(activeFacilityId)),
+    queryKey: ['customer-bids', id],
+    queryFn: () => getCompanyBids(id!),
   });
 
   const { data: opportunities = [] } = useQuery({
-    queryKey: ['customer-opportunities', id, selectedFacilityId],
-    queryFn: () => isCompanyView ? getCompanyOpportunities(id!) : getCustomerOpportunities(String(activeFacilityId)),
+    queryKey: ['customer-opportunities', id],
+    queryFn: () => getCompanyOpportunities(id!),
   });
 
   const { data: workOrders = [] } = useQuery({
-    queryKey: ['customer-work-orders', id, selectedFacilityId],
-    queryFn: () => getCustomerWorkOrders(id!, isCompanyView),
+    queryKey: ['customer-work-orders', id],
+    queryFn: () => getCustomerWorkOrders(id!),
   });
 
   const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ['customer-contacts', activeFacilityId],
-    queryFn: () => getCustomerContacts(String(activeFacilityId)),
+    queryKey: ['customer-contacts', id],
+    queryFn: () => getCustomerContacts(id!),
   });
 
   // Sort work orders
@@ -183,13 +162,7 @@ const CustomerDetail: React.FC = () => {
     return new Date(dateString).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
   };
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '??';
-    return name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const selectedFacility = selectedFacilityId ? facilities.find(f => f.id === selectedFacilityId) : null;
-  const displayName = customer.customer_owner || customer.customer_facility || 'Unnamed Company';
+  const displayName = customer.name || 'Unnamed Company';
 
   return (
     <div className="customer-detail-page">
@@ -203,14 +176,7 @@ const CustomerDetail: React.FC = () => {
               </Link>
               <h1>👥 {displayName}</h1>
               <div className="sales-subtitle">
-                {selectedFacility ? (
-                  <>
-                    📍 Viewing: {selectedFacility.customer_facility}
-                    <button onClick={() => setSelectedFacilityId(null)} className="cd-clear-filter" style={{ marginLeft: '4px' }}>✕</button>
-                  </>
-                ) : (
-                  facilities.length > 1 ? `${facilities.length} locations` : customer.city && customer.state ? `${customer.city}, ${customer.state}` : 'No location'
-                )}
+                {customer.city && customer.state ? `${customer.city}, ${customer.state}` : ''}
               </div>
             </div>
           </div>
@@ -324,44 +290,13 @@ const CustomerDetail: React.FC = () => {
 
       {/* Row 4: Main Content */}
       <div className="cd-main-grid">
-        {/* Top Left: Locations Panel */}
-        <div className="cd-locations-panel">
-          <div className="cd-panel-header">
-            <h3><span className="cd-panel-icon">📍</span>Locations <span className="cd-count">{facilities.length}</span></h3>
-            <div className="cd-panel-actions">
-              <button className="cd-icon-btn" onClick={() => navigate(`/customers/${activeFacilityId}/contacts`)} title={`Contacts (${contacts.length})`}>
-                👥
-              </button>
-            </div>
-          </div>
-          <div className="cd-locations-list">
-            {facilities.length === 0 ? (
-              <div className="cd-empty-mini">No facilities found</div>
-            ) : (
-              facilities.map((facility) => (
-                <div
-                  key={facility.id}
-                  className={`cd-location-item ${selectedFacilityId === facility.id ? 'selected' : ''} ${facility.id === parseInt(id!) && !selectedFacilityId ? 'current' : ''}`}
-                  onClick={() => setSelectedFacilityId(facility.id === selectedFacilityId ? null : facility.id)}
-                >
-                  <div className="cd-location-info">
-                    <div className="cd-location-name">{facility.customer_facility || 'Unnamed'}</div>
-                    <div className="cd-location-address">{facility.city}, {facility.state}</div>
-                  </div>
-                  <div className="cd-location-stats">
-                    <span>{facility.work_order_count || 0} WO</span>
-                    <span>{facility.estimate_count || 0} Est</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Top Right: Projects */}
-        <div className="cd-module-card">
+        {/* Top: Projects (full width) */}
+        <div className="cd-module-card cd-projects-card">
           <div className="cd-module-header">
             <span className="cd-module-title">🏗️ Projects <span className="cd-count">{projects.length}</span></span>
+            <button className="cd-icon-btn" onClick={() => navigate(`/customers/${id}/contacts`)} title={`Contacts (${contacts.length})`}>
+              👥 Contacts ({contacts.length})
+            </button>
           </div>
           <div className="cd-module-body">
             {sortedProjects.length === 0 ? (
@@ -452,8 +387,8 @@ const CustomerDetail: React.FC = () => {
                 style={{ padding: '2px 8px', fontSize: '10px' }}
                 onClick={() => navigate('/estimating/estimates/new', {
                   state: {
-                    customerId: activeFacilityId,
-                    customerName: selectedFacility?.customer_facility || customer.customer_facility || displayName,
+                    customerId: parseInt(id!),
+                    customerName: displayName,
                   }
                 })}
               >
@@ -504,7 +439,7 @@ const CustomerDetail: React.FC = () => {
               <button
                 className="sales-btn sales-btn-primary"
                 style={{ padding: '2px 8px', fontSize: '10px' }}
-                onClick={() => navigate('/sales/pipeline/new', { state: { customerId: activeFacilityId } })}
+                onClick={() => navigate('/sales/pipeline/new', { state: { customerId: parseInt(id!) } })}
               >
                 + New
               </button>

@@ -502,7 +502,7 @@ const EstimatesList: React.FC = () => {
                       <span className="est-project-name">{estimate.project_name || 'Untitled'}</span>
                     </div>
                   </td>
-                  <td>{estimate.customer_owner || estimate.customer_name || estimate.customer_facility || '-'}</td>
+                  <td>{estimate.customer_name || estimate.customer_owner || '-'}</td>
                   <td className="est-value-cell">
                     {formatCurrency(Number(estimate.total_cost || 0))}
                   </td>

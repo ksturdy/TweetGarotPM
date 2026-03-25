@@ -21,7 +21,7 @@ const Project = {
   async findById(id) {
     const result = await db.query(
       `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
-              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
+              COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
               CASE
@@ -46,7 +46,7 @@ const Project = {
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
       `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
-              COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
+              COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
               CASE
@@ -71,7 +71,7 @@ const Project = {
   async findAll(filters = {}) {
     let query = `
       SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
-             COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
+             COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
@@ -113,7 +113,7 @@ const Project = {
   async findAllByTenant(tenantId, filters = {}) {
     let query = `
       SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
-             COALESCE(c.customer_owner, p.client) as customer_name, oc.customer_owner as owner_name,
+             COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,

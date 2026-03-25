@@ -732,7 +732,7 @@ export default function CampaignDetail() {
         </div>
       </div>
 
-      <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
+      <main style={{ padding: '12px 0' }}>
 
         {tab === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1119,14 +1119,14 @@ export default function CampaignDetail() {
                 <table className="sales-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Project / Opportunity</th>
-                      <th>Owner</th>
-                      <th>Market</th>
-                      <th>Value</th>
-                      <th>Stage</th>
-                      <th>Probability</th>
-                      <th>Salesperson</th>
+                      <th style={{ width: '10%' }}>Date</th>
+                      <th style={{ width: '24%' }}>Project / Opportunity</th>
+                      <th style={{ width: '14%' }}>Owner</th>
+                      <th style={{ width: '10%' }}>Market</th>
+                      <th style={{ width: '10%' }}>Value</th>
+                      <th style={{ width: '10%' }}>Stage</th>
+                      <th style={{ width: '10%' }}>Probability</th>
+                      <th style={{ width: '12%' }}>Salesperson</th>
                     </tr>
                   </thead>
                   <tbody>

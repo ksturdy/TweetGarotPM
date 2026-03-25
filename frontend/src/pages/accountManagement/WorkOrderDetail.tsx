@@ -297,7 +297,7 @@ const WorkOrderDetail: React.FC = () => {
             <DetailRow label="Link Confidence" value={workOrder.link_confidence ? `${(workOrder.link_confidence * 100).toFixed(0)}%` : null} />
             <DetailRow label="Linked At" value={formatDate(workOrder.linked_at)} />
             <DetailRow label="Linked Employee" value={workOrder.linked_employee_name || (workOrder.linked_employee_id ? `ID: ${workOrder.linked_employee_id}` : null)} />
-            <DetailRow label="Linked Customer" value={workOrder.linked_customer_facility || workOrder.linked_customer_owner || (workOrder.linked_customer_id ? `ID: ${workOrder.linked_customer_id}` : null)} />
+            <DetailRow label="Linked Customer" value={(workOrder as any).linked_customer_name || workOrder.linked_customer_facility || workOrder.linked_customer_owner || (workOrder.linked_customer_id ? `ID: ${workOrder.linked_customer_id}` : null)} />
             <DetailRow label="Linked Department" value={workOrder.linked_department_name || (workOrder.linked_department_id ? `ID: ${workOrder.linked_department_id}` : null)} />
           </div>
         </div>

@@ -104,7 +104,7 @@ const EstimateDetail: React.FC = () => {
   const uniqueCompanies = useMemo(() => {
     const companyMap = new Map<string, Customer>();
     customers?.forEach((customer: Customer) => {
-      const companyName = customer.customer_owner || customer.customer_facility;
+      const companyName = customer.name;
       if (companyName && !companyMap.has(companyName)) {
         companyMap.set(companyName, customer);
       }
@@ -223,16 +223,15 @@ const EstimateDetail: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       customer_id: customer.id,
-      customer_name: customer.customer_facility,
+      customer_name: customer.name,
     }));
-    setCustomerSearch(`${customer.customer_facility} (${customer.customer_owner})`);
+    setCustomerSearch(customer.name);
     setShowCustomerDropdown(false);
   };
 
   const filteredCustomers = customers?.filter((c: any) =>
     customerSearch
-      ? c.customer_facility?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-        c.customer_owner?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      ? c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
         c.city?.toLowerCase().includes(customerSearch.toLowerCase())
       : true
   ).slice(0, 10);
@@ -724,10 +723,9 @@ const EstimateDetail: React.FC = () => {
                         e.currentTarget.style.backgroundColor = 'white';
                       }}
                     >
-                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{customer.customer_facility}</div>
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{customer.name}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
-                        {customer.customer_owner}
-                        {customer.city && ` • ${customer.city}, ${customer.state}`}
+                        {customer.city && `${customer.city}, ${customer.state}`}
                       </div>
                     </div>
                   ))}
@@ -883,10 +881,10 @@ const EstimateDetail: React.FC = () => {
                         setFormData(prev => ({
                           ...prev,
                           customer_id: selectedId,
-                          customer_name: selectedCustomer?.customer_facility || '',
+                          customer_name: selectedCustomer?.name || '',
                         }));
                         if (selectedCustomer) {
-                          setCustomerSearch(`${selectedCustomer.customer_facility} (${selectedCustomer.customer_owner})`);
+                          setCustomerSearch(selectedCustomer.name || '');
                         }
                       }}
                       style={{ marginTop: '0.5rem', padding: '0.5rem' }}
@@ -894,7 +892,7 @@ const EstimateDetail: React.FC = () => {
                       <option value="">Select company...</option>
                       {uniqueCompanies.map((customer: Customer) => (
                         <option key={customer.id} value={customer.id}>
-                          {customer.customer_owner || customer.customer_facility}
+                          {customer.name}
                         </option>
                       ))}
                     </select>
@@ -940,7 +938,7 @@ const EstimateDetail: React.FC = () => {
                       <option value="">Select customer...</option>
                       {customers?.map((customer: Customer) => (
                         <option key={customer.id} value={customer.id}>
-                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                          {customer.name}
                         </option>
                       ))}
                     </select>
@@ -986,7 +984,7 @@ const EstimateDetail: React.FC = () => {
                       <option value="">Select facility...</option>
                       {customers?.map((customer: Customer) => (
                         <option key={customer.id} value={customer.id}>
-                          {customer.customer_owner ? `${customer.customer_owner} - ${customer.customer_facility}` : customer.customer_facility}
+                          {customer.name}
                         </option>
                       ))}
                     </select>
@@ -1010,7 +1008,7 @@ const EstimateDetail: React.FC = () => {
                 <option value="">Select company...</option>
                 {uniqueCompanies.map((customer: Customer) => (
                   <option key={customer.id} value={customer.id}>
-                    {customer.customer_owner || customer.customer_facility}
+                    {customer.name}
                   </option>
                 ))}
               </select>

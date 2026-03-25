@@ -74,7 +74,7 @@ const CaseStudy = {
     const result = await db.query(
       `SELECT cs.*,
               p.name as project_name,
-              c.customer_owner as customer_name,
+              COALESCE(c.name, c.customer_owner) as customer_name,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
               CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name
        FROM case_studies cs
@@ -99,7 +99,7 @@ const CaseStudy = {
               p.start_date as project_start_date,
               p.end_date as project_end_date,
               p.square_footage as project_square_footage,
-              c.customer_owner as customer_name,
+              COALESCE(c.name, c.customer_owner) as customer_name,
               c.account_manager as customer_account_manager,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
               CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name,
@@ -132,7 +132,7 @@ const CaseStudy = {
              p.start_date as project_start_date,
              p.end_date as project_end_date,
              p.square_footage as project_square_footage,
-             c.customer_owner as customer_name,
+             COALESCE(c.name, c.customer_owner) as customer_name,
              CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
              cst.name as template_name,
              (SELECT COUNT(*) FROM case_study_images WHERE case_study_id = cs.id) as image_count,
@@ -350,7 +350,7 @@ const CaseStudy = {
     const result = await db.query(
       `SELECT cs.*,
               p.name as project_name,
-              c.customer_owner as customer_name,
+              COALESCE(c.name, c.customer_owner) as customer_name,
               (SELECT file_path FROM case_study_images
                WHERE case_study_id = cs.id AND is_hero_image = true
                LIMIT 1) as hero_image_path
@@ -373,7 +373,7 @@ const CaseStudy = {
   async getByProject(projectId, tenantId) {
     const result = await db.query(
       `SELECT cs.*,
-              c.customer_owner as customer_name,
+              COALESCE(c.name, c.customer_owner) as customer_name,
               (SELECT file_path FROM case_study_images
                WHERE case_study_id = cs.id AND is_hero_image = true
                LIMIT 1) as hero_image_path

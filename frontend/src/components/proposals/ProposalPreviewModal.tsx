@@ -324,7 +324,7 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
             <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '6px', borderLeft: `4px solid ${accentColor}` }}>
               <div style={{ fontSize: '9pt', fontWeight: 700, color: accentColor, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Prepared For</div>
               {proposal.customer_name && <div style={{ fontSize: '11pt', fontWeight: 600, marginBottom: '4px' }}>{proposal.customer_name}</div>}
-              {(proposal as any).customer_owner && <div style={{ fontSize: '10pt', marginBottom: '4px' }}>{(proposal as any).customer_owner}</div>}
+              {((proposal as any).customer_owner_name || (proposal as any).customer_owner) && <div style={{ fontSize: '10pt', marginBottom: '4px' }}>{(proposal as any).customer_owner_name || (proposal as any).customer_owner}</div>}
               {(proposal as any).customer_address && <div style={{ fontSize: '10pt', color: '#6b7280' }}>{(proposal as any).customer_address}</div>}
             </div>
             <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '6px', borderLeft: `4px solid ${accentColor}` }}>

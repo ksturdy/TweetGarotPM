@@ -113,7 +113,7 @@ const ProjectForm: React.FC = () => {
             <div className="form-group">
               <label className="form-label">Customer (GC)</label>
               <SearchableSelect
-                options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
                 value={formData.customer_id}
                 onChange={(value) => setFormData(prev => ({ ...prev, customer_id: value }))}
                 placeholder="-- Select Customer --"
@@ -124,7 +124,7 @@ const ProjectForm: React.FC = () => {
             <div className="form-group">
               <label className="form-label">Owner</label>
               <SearchableSelect
-                options={customers.map((c: Customer) => ({ value: c.id, label: c.customer_owner }))}
+                options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
                 value={formData.owner_customer_id}
                 onChange={(value) => setFormData(prev => ({ ...prev, owner_customer_id: value }))}
                 placeholder="-- Select Owner --"
