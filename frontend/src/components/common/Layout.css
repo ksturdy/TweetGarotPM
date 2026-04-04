@@ -190,6 +190,11 @@
   overflow-x: hidden;
 }
 
+/* Main content when sidebar is collapsed */
+.main.sidebar-is-collapsed {
+  margin-left: 64px;
+}
+
 /* Sidebar Overlay - backdrop for mobile/tablet */
 .sidebar-overlay {
   display: none;

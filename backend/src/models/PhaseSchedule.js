@@ -14,7 +14,8 @@ const PhaseSchedule = {
   async getScheduleItems(projectId, tenantId) {
     const result = await db.query(
       `SELECT psi.id, psi.project_id, psi.tenant_id, psi.name, psi.phase_code_ids, psi.cost_types,
-         psi.row_number, psi.predecessor_id,
+         COALESCE(psi.row_number, ROW_NUMBER() OVER (PARTITION BY psi.project_id ORDER BY psi.sort_order, psi.id))::integer as row_number,
+         psi.predecessor_id,
          psi.start_date, psi.end_date, psi.contour_type,
          psi.use_manual_values, psi.manual_monthly_values,
          COALESCE(pc_agg.sum_est_cost, 0) as total_est_cost,

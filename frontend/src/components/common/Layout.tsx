@@ -12,10 +12,15 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+const COLLAPSED_KEY = 'sidebar-collapsed';
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, tenant, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem(COLLAPSED_KEY) === 'true';
+  });
 
   // Close sidebar on route change (mobile/tablet)
   useEffect(() => {
@@ -28,6 +33,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const closeSidebar = useCallback(() => {
     setSidebarOpen(false);
+  }, []);
+
+  const toggleSidebarCollapse = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem(COLLAPSED_KEY, String(next));
+      return next;
+    });
   }, []);
 
   // Get tenant branding
@@ -83,8 +96,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </header>
       {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
       <div className="layout-body">
-        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
-        <main className="main">{children}</main>
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebarCollapse} />
+        <main className={`main ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>{children}</main>
       </div>
     </div>
   );

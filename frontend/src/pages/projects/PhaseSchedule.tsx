@@ -194,6 +194,11 @@ const fmtDate = (d: string | null | undefined): string => {
   if (!d) return '';
   return d.substring(0, 10);
 };
+// Short date display: MM/dd/yy
+const fmtDateShort = (d: string | null | undefined): string => {
+  if (!d) return '';
+  try { return format(new Date(d), 'MM/dd/yy'); } catch { return ''; }
+};
 
 // Compute duration in calendar days between two dates (inclusive)
 const getDuration = (start: string | null, end: string | null): number => {
@@ -546,24 +551,41 @@ const EditItemPanel: React.FC<{
 // ===== GANTT VIEW =====
 const GanttView: React.FC<{
   items: PhaseScheduleItem[];
+  allItems: PhaseScheduleItem[];
   months: Date[];
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
   costTypeGroups: CostTypeGroup[];
   collapsedGroups: Set<number>;
   onToggleGroup: (costType: number) => void;
-}> = ({ items, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup }) => {
+  selectedItems: Set<number>;
+  onToggleItem: (itemId: number) => void;
+  onToggleGroupSelection: (costType: number) => void;
+  onToggleAll: () => void;
+  filterText: string;
+  onFilterChange: (text: string) => void;
+  sortDir: 'none' | 'asc' | 'desc';
+  onSortChange: () => void;
+}> = ({ items, allItems, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange }) => {
   const ganttRef = useRef<HTMLDivElement>(null);
   const colWidth = 80;
   const rowHeight = 28;
-  const [leftPanelWidth, setLeftPanelWidth] = useState(670);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    try { const saved = localStorage.getItem('phaseSchedule_ganttPanelW'); return saved ? parseInt(saved) : 670; }
+    catch { return 670; }
+  });
+  useEffect(() => { localStorage.setItem('phaseSchedule_ganttPanelW', String(leftPanelWidth)); }, [leftPanelWidth]);
   const draggingRef = useRef<{ startX: number; startW: number } | null>(null);
   const today = startOfDay(new Date());
 
-  // Gantt column widths
-  const ganttColDefaults = { rowNum: 32, phase: 220, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
-  const [ganttCols, setGanttCols] = useState(ganttColDefaults);
-  const ganttColsRef = useRef(ganttColDefaults);
+  // Gantt column widths (persisted to localStorage)
+  const ganttColDefaults = { sel: 28, rowNum: 32, phase: 220, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
+  const [ganttCols, setGanttCols] = useState<typeof ganttColDefaults>(() => {
+    try { const saved = localStorage.getItem('phaseSchedule_ganttCols'); return saved ? { ...ganttColDefaults, ...JSON.parse(saved) } : ganttColDefaults; }
+    catch { return ganttColDefaults; }
+  });
+  const ganttColsRef = useRef(ganttCols);
+  useEffect(() => { localStorage.setItem('phaseSchedule_ganttCols', JSON.stringify(ganttCols)); }, [ganttCols]);
   const colResizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
   // Hidden columns state
@@ -625,8 +647,66 @@ const GanttView: React.FC<{
     document.body.style.userSelect = 'none';
   };
 
+  const autofitGanttCol = (col: string) => {
+    // Note: canvas doesn't support rem units, so convert to px (0.68rem ≈ 11px at 16px base)
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let maxW = 36;
+    // Header text widths
+    const headers: Record<string, string> = { rowNum: 'ID', phase: 'Phase Code', estCost: 'Est $', start: 'Start', end: 'End', dur: 'Dur', pred: 'Pred', contour: 'Contour' };
+    ctx.font = '600 11px system-ui, -apple-system, sans-serif';
+    maxW = Math.max(maxW, ctx.measureText(headers[col] || '').width + 24);
+    // Measure cell content from items
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
+    items.forEach(item => {
+      let text = '';
+      switch (col) {
+        case 'rowNum': text = String(item.row_number || ''); break;
+        case 'phase': text = `${item.phase_code_display || ''} - ${item.name || ''}`; break;
+        case 'estCost': text = fmtCompact(parseNum(item.total_est_cost)); break;
+        case 'start': text = item.start_date ? format(new Date(item.start_date), 'MM/dd/yy') : ''; break;
+        case 'end': text = item.end_date ? format(new Date(item.end_date), 'MM/dd/yy') : ''; break;
+        case 'dur': { const d = getDuration(item.start_date, item.end_date); text = d > 0 ? String(d) : ''; break; }
+        case 'pred': text = item.predecessor_id ? String(item.predecessor_id) : ''; break;
+        case 'contour': text = item.contour_type || 'flat'; break;
+      }
+      if (text && text !== '-') {
+        const padding = col === 'phase' ? 40 : 20; // phase has color dots + gap
+        maxW = Math.max(maxW, ctx.measureText(text).width + padding);
+      }
+    });
+    maxW = Math.min(Math.ceil(maxW), 500);
+    setGanttCols(prev => {
+      const next = { ...prev, [col]: maxW };
+      ganttColsRef.current = next;
+      return next;
+    });
+  };
+
+  const ganttDblClickRef = useRef<{ col: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const handleGanttResizeMouseDown = (col: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (ganttDblClickRef.current && ganttDblClickRef.current.col === col) {
+      clearTimeout(ganttDblClickRef.current.timer);
+      ganttDblClickRef.current = null;
+      colResizeRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      autofitGanttCol(col);
+      return;
+    }
+    startColResize(col, e);
+    ganttDblClickRef.current = {
+      col,
+      timer: setTimeout(() => { ganttDblClickRef.current = null; }, 300)
+    };
+  };
+
   const ganttResizeHandle = (col: string) => (
-    <div onMouseDown={e => startColResize(col, e)}
+    <div onMouseDown={e => handleGanttResizeMouseDown(col, e)}
       style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }}
       onMouseEnter={e => { (e.target as HTMLElement).style.backgroundColor = 'rgba(59,130,246,0.25)'; }}
       onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
@@ -637,13 +717,50 @@ const GanttView: React.FC<{
   const totalWidth = months.length * colWidth;
   const todayOffset = firstMonth ? differenceInCalendarDays(today, firstMonth) / 30.44 * colWidth : 0;
 
+  // Day-level pixel position for a date within the monthly column grid
+  const dateToX = (date: Date): number => {
+    if (!firstMonth) return 0;
+    const monthStart = startOfMonth(date);
+    const monthIndex = differenceInMonths(monthStart, firstMonth);
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const dayFraction = (date.getDate() - 1) / daysInMonth;
+    return monthIndex * colWidth + dayFraction * colWidth;
+  };
+
   return (
     <div style={{ display: 'flex', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
       {/* Left panel - task list grid */}
       <div style={{ width: leftPanelWidth, flexShrink: 0, overflow: 'auto' }}>
         <div style={{ height: '28px', borderBottom: '1px solid #94a3b8', display: 'flex', alignItems: 'center', fontSize: '0.68rem', fontWeight: 600, color: '#1e293b', background: '#eef2f7' }}>
+          <div style={{ width: ganttCols.sel, textAlign: 'center', flexShrink: 0, borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <input type="checkbox" checked={selectedItems.size === items.length && items.length > 0}
+              onChange={onToggleAll} style={{ cursor: 'pointer' }} title="Select all" />
+          </div>
           <div style={{ width: ganttCols.rowNum, textAlign: 'center', padding: '0 0.15rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>ID{ganttResizeHandle('rowNum')}</div>
-          <div style={{ width: ganttCols.phase, minWidth: 0, padding: '0 0.4rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Phase Code{ganttResizeHandle('phase')}</div>
+          <div style={{ width: ganttCols.phase, minWidth: 0, padding: '0 0.4rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%' }}>
+              <input type="text" value={filterText} onChange={e => onFilterChange(e.target.value)}
+                placeholder="Search phases..." style={{
+                  flex: 1, padding: '0.15rem 0.3rem', fontSize: '0.65rem', border: '1px solid #e2e8f0',
+                  borderRadius: '3px', background: filterText ? '#fffbeb' : '#fff', color: '#1e293b',
+                  outline: 'none', minWidth: 0, fontWeight: 400
+                }} />
+              {filterText && (
+                <button onClick={() => onFilterChange('')} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1
+                }}>&times;</button>
+              )}
+              <button onClick={onSortChange} title={sortDir === 'none' ? 'Sort A-Z' : sortDir === 'asc' ? 'Sort Z-A' : 'Clear sort'}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+                  fontSize: '0.65rem', color: sortDir !== 'none' ? '#3b82f6' : '#94a3b8', lineHeight: 1, flexShrink: 0
+                }}>
+                {sortDir === 'asc' ? '▲' : sortDir === 'desc' ? '▼' : '⇅'}
+              </button>
+            </div>
+            {ganttResizeHandle('phase')}
+          </div>
           {!gh('estCost') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'estCost', 'Est $')} style={{ width: ganttCols.estCost, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Est ${ganttResizeHandle('estCost')}</div>}
           {!gh('start') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'start', 'Start')} style={{ width: ganttCols.start, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Start{ganttResizeHandle('start')}</div>}
           {!gh('end') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'end', 'End')} style={{ width: ganttCols.end, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>End{ganttResizeHandle('end')}</div>}
@@ -663,6 +780,14 @@ const GanttView: React.FC<{
                 }}
                 onClick={() => onToggleGroup(group.costType)}
               >
+                <div style={{ width: ganttCols.sel, flexShrink: 0, borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={e => e.stopPropagation()}>
+                  <input type="checkbox"
+                    checked={group.items.length > 0 && group.items.every(i => selectedItems.has(i.id))}
+                    ref={(el) => { if (el) el.indeterminate = group.items.some(i => selectedItems.has(i.id)) && !group.items.every(i => selectedItems.has(i.id)); }}
+                    onChange={() => onToggleGroupSelection(group.costType)}
+                    style={{ cursor: 'pointer' }} title={`Select all ${group.name} items`} />
+                </div>
                 <div style={{ width: ganttCols.rowNum, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />
                 <div style={{ width: ganttCols.phase, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 0.4rem', gap: '4px', borderRight: '1px solid #cbd5e1', overflow: 'hidden' }}>
                   <span style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '0.6rem', color: '#64748b' }}>&#9660;</span>
@@ -680,7 +805,8 @@ const GanttView: React.FC<{
                 {!gh('contour') && <div style={{ width: ganttCols.contour, flexShrink: 0 }} />}
               </div>
               {!isCollapsed && group.items.map(item => (
-                <GanttRow key={item.id} item={item} allItems={items} rowHeight={rowHeight} onUpdate={onUpdate} onEdit={onEdit} ganttCols={ganttCols} hiddenCols={ganttHiddenCols} />
+                <GanttRow key={item.id} item={item} allItems={allItems} rowHeight={rowHeight} onUpdate={onUpdate} onEdit={onEdit} ganttCols={ganttCols} hiddenCols={ganttHiddenCols}
+                  isSelected={selectedItems.has(item.id)} onToggleSelection={onToggleItem} />
               ))}
             </React.Fragment>
           );
@@ -718,13 +844,15 @@ const GanttView: React.FC<{
 
           {costTypeGroups.map(group => {
             const isCollapsed = collapsedGroups.has(group.costType);
-            // Group summary bar span
-            const gStart = group.earliestStart ? startOfMonth(new Date(group.earliestStart)) : null;
-            const gEnd = group.latestEnd ? startOfMonth(new Date(group.latestEnd)) : null;
+            // Group summary bar span (day-level precision)
+            const gStartDate = group.earliestStart ? new Date(group.earliestStart) : null;
+            const gEndDate = group.latestEnd ? new Date(group.latestEnd) : null;
             let gBarLeft = 0, gBarWidth = 0;
-            if (gStart && gEnd && firstMonth && gStart >= firstMonth) {
-              gBarLeft = differenceInMonths(gStart, firstMonth) * colWidth + 2;
-              gBarWidth = (differenceInMonths(gEnd, gStart) + 1) * colWidth - 4;
+            if (gStartDate && gEndDate && firstMonth && gStartDate >= firstMonth) {
+              gBarLeft = dateToX(gStartDate) + 2;
+              const gEndDaysInMonth = new Date(gEndDate.getFullYear(), gEndDate.getMonth() + 1, 0).getDate();
+              const gBarRight = dateToX(gEndDate) + colWidth / gEndDaysInMonth;
+              gBarWidth = gBarRight - gBarLeft;
             }
             return (
               <React.Fragment key={`ct-${group.costType}`}>
@@ -742,12 +870,14 @@ const GanttView: React.FC<{
                 </div>
                 {/* Child item bars */}
                 {!isCollapsed && group.items.map(item => {
-                  const start = item.start_date ? startOfMonth(new Date(item.start_date)) : null;
-                  const end = item.end_date ? startOfMonth(new Date(item.end_date)) : null;
+                  const startDate = item.start_date ? new Date(item.start_date) : null;
+                  const endDate = item.end_date ? new Date(item.end_date) : null;
                   let barLeft = 0, barWidth = 0;
-                  if (start && end && firstMonth && start >= firstMonth) {
-                    barLeft = differenceInMonths(start, firstMonth) * colWidth + 4;
-                    barWidth = (differenceInMonths(end, start) + 1) * colWidth - 8;
+                  if (startDate && endDate && firstMonth && startDate >= firstMonth) {
+                    barLeft = dateToX(startDate) + 2;
+                    const endDaysInMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate();
+                    const barRight = dateToX(endDate) + colWidth / endDaysInMonth;
+                    barWidth = barRight - barLeft;
                   }
                   const barColor = COST_TYPE_COLORS[item.cost_types?.[0] || 1];
                   return (
@@ -814,9 +944,11 @@ const GanttRow: React.FC<{
   rowHeight: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
-  ganttCols: { rowNum: number; phase: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
+  ganttCols: { sel: number; rowNum: number; phase: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
   hiddenCols: Set<string>;
-}> = ({ item, allItems, rowHeight, onUpdate, onEdit, ganttCols, hiddenCols }) => {
+  isSelected: boolean;
+  onToggleSelection: (id: number) => void;
+}> = ({ item, allItems, rowHeight, onUpdate, onEdit, ganttCols, hiddenCols, isSelected, onToggleSelection }) => {
   const dur = getDuration(item.start_date, item.end_date);
 
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
@@ -856,7 +988,10 @@ const GanttRow: React.FC<{
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0 0.25rem', border: 'none', borderRadius: 0, fontSize: '0.7rem', fontFamily: 'inherit', color: '#1e293b', background: 'transparent', outline: 'none', boxSizing: 'border-box' as const, height: '100%' };
 
   return (
-    <div style={{ height: rowHeight, borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'stretch', fontSize: '0.7rem' }}>
+    <div style={{ height: rowHeight, borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'stretch', fontSize: '0.7rem', backgroundColor: isSelected ? '#eff6ff' : undefined }}>
+      <div style={{ width: ganttCols.sel, flexShrink: 0, borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <input type="checkbox" checked={isSelected} onChange={() => onToggleSelection(item.id)} style={{ cursor: 'pointer' }} />
+      </div>
       <div style={{ ...cellStyle, width: ganttCols.rowNum, justifyContent: 'center', flexShrink: 0, fontSize: '0.65rem', color: '#64748b' }}>
         {item.row_number}
       </div>
@@ -866,20 +1001,22 @@ const GanttRow: React.FC<{
           <span key={ct} style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} />
         ))}
         {item.phase_code_display && (
-          <span style={{ color: '#64748b', flexShrink: 0, fontFamily: 'monospace' }}>{item.phase_code_display}</span>
+          <span style={{ color: '#64748b', flexShrink: 0 }}>{item.phase_code_display} -</span>
         )}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
       </div>
       {!hiddenCols.has('estCost') && <div style={{ ...cellStyle, width: ganttCols.estCost, justifyContent: 'center', padding: '0 0.25rem', flexShrink: 0 }}>
         {fmtCompact(parseNum(item.total_est_cost))}
       </div>}
-      {!hiddenCols.has('start') && <div style={{ ...cellStyle, width: ganttCols.start, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+      {!hiddenCols.has('start') && <div style={{ ...cellStyle, width: ganttCols.start, flexShrink: 0, position: 'relative', justifyContent: 'center', cursor: 'pointer' }} onClick={e => e.stopPropagation()}>
+        <span style={{ fontSize: '0.7rem', color: item.start_date ? '#1e293b' : '#94a3b8' }}>{fmtDateShort(item.start_date) || '-'}</span>
         <input type="date" className="date-no-icon" value={fmtDate(item.start_date)} onChange={e => handleDateChange('start_date', e.target.value)}
-          style={{ ...inputStyle, cursor: 'pointer', position: 'relative', textAlign: 'center' }} />
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
       </div>}
-      {!hiddenCols.has('end') && <div style={{ ...cellStyle, width: ganttCols.end, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+      {!hiddenCols.has('end') && <div style={{ ...cellStyle, width: ganttCols.end, flexShrink: 0, position: 'relative', justifyContent: 'center', cursor: 'pointer' }} onClick={e => e.stopPropagation()}>
+        <span style={{ fontSize: '0.7rem', color: item.end_date ? '#1e293b' : '#94a3b8' }}>{fmtDateShort(item.end_date) || '-'}</span>
         <input type="date" className="date-no-icon" value={fmtDate(item.end_date)} onChange={e => handleDateChange('end_date', e.target.value)}
-          style={{ ...inputStyle, cursor: 'pointer', position: 'relative', textAlign: 'center' }} />
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
       </div>}
       {!hiddenCols.has('dur') && <div style={{ ...cellStyle, width: ganttCols.dur, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <input type="number" value={dur || ''} min={1}
@@ -955,8 +1092,15 @@ const GridView: React.FC<{
   onFilterChange: (text: string) => void;
   sortDir: 'none' | 'asc' | 'desc';
   onSortChange: () => void;
-}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange }) => {
-  const [colWidths, setColWidths] = useState(GRID_COL_DEFAULTS);
+  ctFilter: number | null;
+  onCtFilterChange: (ct: number | null) => void;
+}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterChange }) => {
+  // Grid column widths (persisted to localStorage)
+  const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
+    try { const saved = localStorage.getItem('phaseSchedule_gridCols'); return saved ? { ...GRID_COL_DEFAULTS, ...JSON.parse(saved) } : GRID_COL_DEFAULTS; }
+    catch { return GRID_COL_DEFAULTS; }
+  });
+  useEffect(() => { localStorage.setItem('phaseSchedule_gridCols', JSON.stringify(colWidths)); }, [colWidths]);
   const resizingRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
 
@@ -1019,6 +1163,7 @@ const GridView: React.FC<{
     if (colIndex < 0) return;
 
     // Use an offscreen canvas to measure text width (tableLayout:fixed prevents scrollWidth from working)
+    // Note: canvas doesn't support rem units, so convert to px (0.68rem ≈ 11px at 16px base)
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -1028,22 +1173,23 @@ const GridView: React.FC<{
     // Measure header text
     const headerTh = headers[colIndex] as HTMLElement;
     if (headerTh) {
-      ctx.font = '600 0.65rem system-ui, -apple-system, sans-serif';
+      ctx.font = '600 11px system-ui, -apple-system, sans-serif';
       const headerText = headerTh.textContent || '';
       maxW = Math.max(maxW, ctx.measureText(headerText).width + 24);
     }
 
     // Measure body cell text content
-    ctx.font = '0.68rem system-ui, -apple-system, sans-serif';
+    ctx.font = '11px system-ui, -apple-system, sans-serif';
     const rows = table.querySelectorAll('tbody tr');
     rows.forEach(row => {
       const cell = row.children[colIndex] as HTMLElement | undefined;
       if (!cell) return;
-      // Get visible text from inputs/selects or text content
-      const input = cell.querySelector('input, select') as HTMLInputElement | null;
-      const text = input ? (input.value || input.placeholder || '') : (cell.textContent || '');
+      // Prefer visible span text (e.g. date overlays) over hidden input values
+      const span = cell.querySelector('span');
+      const input = cell.querySelector('input:not([style*="opacity"]), select') as HTMLInputElement | null;
+      const text = span ? (span.textContent || '') : input ? (input.value || input.placeholder || '') : (cell.textContent || '');
       if (text && text !== '-') {
-        const w = ctx.measureText(text).width + 16; // padding
+        const w = ctx.measureText(text).width + 20; // padding + borders
         maxW = Math.max(maxW, w);
       }
     });
@@ -1120,8 +1266,8 @@ const GridView: React.FC<{
     ...extra
   });
 
-  const groupHeaderStyle = (width: number, color: string): React.CSSProperties => ({
-    width, minWidth: width, textAlign: 'center' as const, padding: '0.15rem 0',
+  const groupHeaderStyle = (_width: number, color: string): React.CSSProperties => ({
+    textAlign: 'center' as const, padding: '0.15rem 0',
     fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.5px',
     borderBottom: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1',
     color, background: '#eef2f7'
@@ -1160,6 +1306,32 @@ const GridView: React.FC<{
   return (
     <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 280px)', border: '1px solid #cbd5e1' }}>
       <table ref={tableRef} style={{ borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed', width: fixedWidth + months.length * monthColWidth }}>
+        <colgroup>
+          <col style={{ width: colWidths.sel }} />
+          <col style={{ width: colWidths.rowNum }} />
+          <col style={{ width: colWidths.phase }} />
+          {gv('ct') && <col style={{ width: colWidths.ct }} />}
+          {gv('estQty') && <col style={{ width: colWidths.estQty }} />}
+          {gv('uom') && <col style={{ width: colWidths.uom }} />}
+          {gv('estHrs') && <col style={{ width: colWidths.estHrs }} />}
+          {gv('estCost') && <col style={{ width: colWidths.estCost }} />}
+          {gv('estPi') && <col style={{ width: colWidths.estPi }} />}
+          {gv('pctComp') && <col style={{ width: colWidths.pctComp }} />}
+          {gv('jtdQty') && <col style={{ width: colWidths.jtdQty }} />}
+          {gv('jtdHrs') && <col style={{ width: colWidths.jtdHrs }} />}
+          {gv('jtdCost') && <col style={{ width: colWidths.jtdCost }} />}
+          {gv('jtdPi') && <col style={{ width: colWidths.jtdPi }} />}
+          {gv('projQty') && <col style={{ width: colWidths.projQty }} />}
+          {gv('projHrs') && <col style={{ width: colWidths.projHrs }} />}
+          {gv('projCost') && <col style={{ width: colWidths.projCost }} />}
+          {gv('projPi') && <col style={{ width: colWidths.projPi }} />}
+          {gv('start') && <col style={{ width: colWidths.start }} />}
+          {gv('end') && <col style={{ width: colWidths.end }} />}
+          {gv('dur') && <col style={{ width: colWidths.dur }} />}
+          {gv('pred') && <col style={{ width: colWidths.pred }} />}
+          {gv('contour') && <col style={{ width: colWidths.contour }} />}
+          {months.map(m => <col key={m.toISOString()} style={{ width: monthColWidth }} />)}
+        </colgroup>
         <thead style={{ position: 'sticky', top: 0, zIndex: 4 }}>
           {/* Group header row */}
           <tr style={{ background: '#eef2f7' }}>
@@ -1169,8 +1341,8 @@ const GridView: React.FC<{
             </th>
             <th style={{ ...groupHeaderStyle(colWidths.rowNum, '#1e293b') }}></th>
             <th style={{ ...groupHeaderStyle(colWidths.phase, '#1e293b'), textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 5, padding: '0.15rem 0.5rem' }}></th>
-            {gv('ct') && <th style={groupHeaderStyle(colWidths.ct, '#1e293b')}></th>}
-            {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderRight: '2px solid #94a3b8' }}>Estimated</th>}
+            {gv('ct') && <th style={{ ...groupHeaderStyle(colWidths.ct, ctFilter ? '#3b82f6' : '#1e293b') }}>{ctFilter ? COST_TYPE_NAMES[ctFilter]?.charAt(0) : ''}</th>}
+            {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8', borderRight: '2px solid #94a3b8' }}>Estimated</th>}
             {jtdColSpan > 0 && <th colSpan={jtdColSpan} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' }}>JTD</th>}
             {projColSpan > 0 && <th colSpan={projColSpan} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' }}>Projected</th>}
             {schedColSpan > 0 && <th colSpan={schedColSpan} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' }}>Schedule</th>}
@@ -1209,9 +1381,21 @@ const GridView: React.FC<{
               </div>
               {resizeHandle('phase')}
             </th>
-            {gv('ct') && <th data-col="ct" onContextMenu={e => gridHeaderContextMenu(e, 'ct', 'CT')} style={thStyle(colWidths.ct)}>CT{resizeHandle('ct')}</th>}
+            {gv('ct') && <th data-col="ct" onContextMenu={e => gridHeaderContextMenu(e, 'ct', 'CT')} style={thStyle(colWidths.ct)}>
+              <select value={ctFilter ?? ''} onChange={e => onCtFilterChange(e.target.value ? Number(e.target.value) : null)}
+                title="Filter by cost type"
+                style={{
+                  width: '100%', border: 'none', background: 'transparent', fontSize: '0.65rem', fontWeight: 700,
+                  textAlign: 'center', cursor: 'pointer', padding: 0, color: ctFilter ? '#3b82f6' : 'inherit',
+                  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' as any
+                }}>
+                <option value="">CT</option>
+                {[1,2,3,4,5,6].map(ct => <option key={ct} value={ct}>{COST_TYPE_NAMES[ct]?.charAt(0)}</option>)}
+              </select>
+              {resizeHandle('ct')}
+            </th>}
             {/* Estimated group */}
-            {gv('estQty') && <th data-col="estQty" onContextMenu={e => gridHeaderContextMenu(e, 'estQty', 'Est Qty')} style={thStyle(colWidths.estQty, { background: COL_GROUP.est.hdr })}>Qty{resizeHandle('estQty')}</th>}
+            {gv('estQty') && <th data-col="estQty" onContextMenu={e => gridHeaderContextMenu(e, 'estQty', 'Est Qty')} style={thStyle(colWidths.estQty, { background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8' })}>Qty{resizeHandle('estQty')}</th>}
             {gv('uom') && <th data-col="uom" onContextMenu={e => gridHeaderContextMenu(e, 'uom', 'UOM')} style={thStyle(colWidths.uom, { background: COL_GROUP.est.hdr })}>UOM{resizeHandle('uom')}</th>}
             {gv('estHrs') && <th data-col="estHrs" onContextMenu={e => gridHeaderContextMenu(e, 'estHrs', 'Est Hrs')} style={thStyle(colWidths.estHrs, { background: COL_GROUP.est.hdr })}>Hrs{resizeHandle('estHrs')}</th>}
             {gv('estCost') && <th data-col="estCost" onContextMenu={e => gridHeaderContextMenu(e, 'estCost', 'Est Cost')} style={thStyle(colWidths.estCost, { background: COL_GROUP.est.hdr })}>Cost{resizeHandle('estCost')}</th>}
@@ -1301,7 +1485,7 @@ const GridView: React.FC<{
                 </td>
                 {gv('ct') && <td style={{ ...tdTot, width: colWidths.ct }}></td>}
                 {/* Estimated totals */}
-                {gv('estQty') && <td style={{ ...tdTot, width: colWidths.estQty, background: COL_GROUP.est.cell }}>{totEstQty > 0 ? Math.round(totEstQty).toLocaleString() : ''}</td>}
+                {gv('estQty') && <td style={{ ...tdTot, width: colWidths.estQty, background: COL_GROUP.est.cell, borderLeft: '2px solid #94a3b8' }}>{totEstQty > 0 ? Math.round(totEstQty).toLocaleString() : ''}</td>}
                 {gv('uom') && <td style={{ ...tdTot, width: colWidths.uom, background: COL_GROUP.est.cell }}></td>}
                 {gv('estHrs') && <td style={{ ...tdTot, width: colWidths.estHrs, background: COL_GROUP.est.cell }}>{fmtHrs(totEstHrs)}</td>}
                 {gv('estCost') && <td style={{ ...tdTot, width: colWidths.estCost, background: COL_GROUP.est.cell }}>{fmtCompact(totEstCost)}</td>}
@@ -1422,7 +1606,7 @@ const CostTypeSummaryRow: React.FC<{
       </td>
       {sv('ct') && <td style={{ ...tdS, width: colWidths.ct }}></td>}
       {/* Estimated */}
-      {sv('estQty') && <td style={{ ...tdS, width: colWidths.estQty, backgroundColor: COL_GROUP.est.cell }}>{group.estQty > 0 ? Math.round(group.estQty).toLocaleString() : ''}</td>}
+      {sv('estQty') && <td style={{ ...tdS, width: colWidths.estQty, backgroundColor: COL_GROUP.est.cell, borderLeft: '2px solid #94a3b8' }}>{group.estQty > 0 ? Math.round(group.estQty).toLocaleString() : ''}</td>}
       {sv('uom') && <td style={{ ...tdS, width: colWidths.uom, backgroundColor: COL_GROUP.est.cell }}></td>}
       {sv('estHrs') && <td style={{ ...tdS, width: colWidths.estHrs, backgroundColor: COL_GROUP.est.cell }}>{fmtHrs(group.estHrs)}</td>}
       {sv('estCost') && <td style={{ ...tdS, width: colWidths.estCost, backgroundColor: COL_GROUP.est.cell }}>{fmtCompact(group.estCost)}</td>}
@@ -1439,8 +1623,8 @@ const CostTypeSummaryRow: React.FC<{
       {sv('projCost') && <td style={{ ...tdS, width: colWidths.projCost, backgroundColor: COL_GROUP.proj.cell, color: group.projCost > group.estCost ? '#ef4444' : group.projCost < group.estCost ? '#10b981' : '#1e293b' }}>{fmtCompact(group.projCost)}</td>}
       {sv('projPi') && <td style={{ ...tdS, width: colWidths.projPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.proj.cell, color: (() => { const ePi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const pPi = group.projHrs > 0 ? group.projQty / group.projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#1e293b'; })() }}>{fmtPi(group.projQty, group.projHrs)}</td>}
       {/* Schedule */}
-      {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{group.earliestStart ? fmtDate(group.earliestStart).substring(5) : ''}</td>}
-      {sv('end') && <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{group.latestEnd ? fmtDate(group.latestEnd).substring(5) : ''}</td>}
+      {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.earliestStart)}</td>}
+      {sv('end') && <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.latestEnd)}</td>}
       {sv('dur') && <td style={{ ...tdS, width: colWidths.dur, textAlign: 'center', backgroundColor: COL_GROUP.sched.cell }}>{group.duration || ''}</td>}
       {sv('pred') && <td style={{ ...tdS, width: colWidths.pred, backgroundColor: COL_GROUP.sched.cell }}></td>}
       {sv('contour') && <td style={{ ...tdS, width: colWidths.contour, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.sched.cell }}></td>}
@@ -1570,16 +1754,16 @@ const GridRow: React.FC<{
         {item.row_number}
       </td>
       {/* Phase name - click to open edit panel */}
-      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel + colWidths.rowNum, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: '1px solid #cbd5e1', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer' }}
+      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel + colWidths.rowNum, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: '1px solid #cbd5e1', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer', fontSize: '0.7rem', color: '#1e293b' }}
         onClick={() => onEdit(item)} title={item.name}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
           {item.cost_types?.map(ct => (
             <span key={ct} style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} title={COST_TYPE_NAMES[ct]} />
           ))}
           {item.phase_code_display && (
-            <span style={{ fontSize: '0.6rem', color: '#64748b', flexShrink: 0, fontFamily: 'monospace' }}>{item.phase_code_display}</span>
+            <span style={{ color: '#64748b', flexShrink: 0 }}>{item.phase_code_display} -</span>
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: '#1e293b', fontSize: '0.7rem' }}>{item.name}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
         </div>
       </td>
       {/* Cost Types (read-only) */}
@@ -1588,7 +1772,7 @@ const GridRow: React.FC<{
       </td>}
 
       {/* === ESTIMATED GROUP === */}
-      {rv('estQty') && <td style={{ ...tdBase, width: colWidths.estQty, background: editBg }}>
+      {rv('estQty') && <td style={{ ...tdBase, width: colWidths.estQty, background: editBg, borderLeft: '2px solid #94a3b8' }}>
         <input type="text" defaultValue={parseNum(item.quantity) ? Math.round(parseNum(item.quantity)).toLocaleString() : ''} placeholder="-"
           onFocus={e => {
             e.target.value = e.target.value.replace(/,/g, '');
@@ -1673,15 +1857,17 @@ const GridRow: React.FC<{
       </td>}
 
       {/* === SCHEDULE GROUP === */}
-      {rv('start') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.start, background: editBg }}>
+      {rv('start') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.start, background: editBg, position: 'relative' as const }}>
+        <span style={{ fontSize: '0.68rem', color: item.start_date ? '#1e293b' : '#94a3b8' }}>{fmtDateShort(item.start_date) || '-'}</span>
         <input type="date" className="date-no-icon" value={fmtDate(item.start_date)}
           onChange={e => handleFieldChange('start_date', e.target.value || null)}
-          style={{ ...inlineCtrl, position: 'relative' }} />
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
       </td>}
-      {rv('end') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.end, background: editBg }}>
+      {rv('end') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.end, background: editBg, position: 'relative' as const }}>
+        <span style={{ fontSize: '0.68rem', color: item.end_date ? '#1e293b' : '#94a3b8' }}>{fmtDateShort(item.end_date) || '-'}</span>
         <input type="date" className="date-no-icon" value={fmtDate(item.end_date)}
           onChange={e => handleFieldChange('end_date', e.target.value || null)}
-          style={{ ...inlineCtrl, position: 'relative' }} />
+          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
       </td>}
       {rv('dur') && <td style={{ ...tdBase, width: colWidths.dur, background: editBg }}>
         <input type="number" defaultValue={dur || ''} min={1} placeholder="-"
@@ -1730,88 +1916,7 @@ const GridRow: React.FC<{
   );
 });
 
-// ===== BULK DATE ASSIGNMENT =====
-const BulkDateBar: React.FC<{
-  items: PhaseScheduleItem[];
-  onApply: (startDate: string, endDate: string, contour: ContourType, applyTo: 'all' | 'undated') => void;
-}> = ({ items, onApply }) => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [contour, setContour] = useState<ContourType>('flat');
-  const [applyTo, setApplyTo] = useState<'all' | 'undated'>('undated');
-  const [expanded, setExpanded] = useState(false);
-
-  const undatedCount = items.filter(i => !i.start_date || !i.end_date).length;
-
-  return (
-    <div className="card" style={{ marginBottom: '1rem', padding: expanded ? '1rem 1.5rem' : '0.6rem 1.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {undatedCount > 0 ? (
-            <span style={{ fontSize: '0.85rem', color: '#f59e0b', fontWeight: 500 }}>
-              {undatedCount} item{undatedCount !== 1 ? 's' : ''} without dates
-            </span>
-          ) : (
-            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
-              Bulk Date Assignment
-            </span>
-          )}
-          {!expanded && (
-            <button onClick={() => setExpanded(true)} style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.8rem', color: '#1e293b' }}>
-              {undatedCount > 0 ? 'Set Bulk Dates' : 'Change Dates'}
-            </button>
-          )}
-        </div>
-        {expanded && (
-          <button onClick={() => setExpanded(false)} style={{ background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
-        )}
-      </div>
-      {expanded && (
-        <div style={{ marginTop: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.2rem' }}>Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.2rem' }}>End Date</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.2rem' }}>Contour</label>
-              <select value={contour} onChange={e => setContour(e.target.value as ContourType)}
-                style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
-                {contourOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.2rem' }}>Apply To</label>
-              <select value={applyTo} onChange={e => setApplyTo(e.target.value as 'all' | 'undated')}
-                style={{ padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem' }}>
-                <option value="undated">Items without dates ({undatedCount})</option>
-                <option value="all">All items ({items.length})</option>
-              </select>
-            </div>
-            <button onClick={() => { if (startDate && endDate) onApply(startDate, endDate, contour, applyTo); }}
-              disabled={!startDate || !endDate}
-              style={{
-                padding: '0.4rem 1rem', border: 'none', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, cursor: startDate && endDate ? 'pointer' : 'default',
-                backgroundColor: startDate && endDate ? '#3b82f6' : '#d1d5db', color: 'white'
-              }}>
-              Apply Dates
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ===== BULK EDIT BAR (for multi-select in grid view) =====
+// ===== BULK EDIT BAR (for multi-select) =====
 const BulkEditBar: React.FC<{
   items: PhaseScheduleItem[];
   selectedItems: Set<number>;
@@ -1922,6 +2027,7 @@ const PhaseSchedule: React.FC = () => {
   const [bulkEditValues, setBulkEditValues] = useState<{ start_date: string; end_date: string; duration: string; contour_type: string }>({ start_date: '', end_date: '', duration: '', contour_type: '' });
   const [filterText, setFilterText] = useState('');
   const [sortDir, setSortDir] = useState<'none' | 'asc' | 'desc'>('none');
+  const [costTypeFilter, setCostTypeFilter] = useState<number | null>(null);
 
   const toggleGroup = useCallback((costType: number) => {
     setCollapsedGroups(prev => {
@@ -2021,6 +2127,9 @@ const PhaseSchedule: React.FC = () => {
 
   const filteredItems = useMemo(() => {
     let result = scheduleItems;
+    if (costTypeFilter !== null) {
+      result = result.filter(i => i.cost_types?.includes(costTypeFilter));
+    }
     if (filterText.trim()) {
       const lower = filterText.toLowerCase();
       result = result.filter(i =>
@@ -2035,7 +2144,7 @@ const PhaseSchedule: React.FC = () => {
       });
     }
     return result;
-  }, [scheduleItems, filterText, sortDir]);
+  }, [scheduleItems, filterText, sortDir, costTypeFilter]);
 
   const costTypeGroups = useMemo((): CostTypeGroup[] => {
     const groupMap = new Map<number, PhaseScheduleItem[]>();
@@ -2197,21 +2306,6 @@ const PhaseSchedule: React.FC = () => {
     deleteMutation.mutate(id);
   };
 
-  const handleBulkDates = async (startDate: string, endDate: string, contour: ContourType, applyTo: 'all' | 'undated') => {
-    setBulkUpdating(true);
-    const targets = applyTo === 'all' ? scheduleItems : scheduleItems.filter(i => !i.start_date || !i.end_date);
-    try {
-      await Promise.all(targets.map(item =>
-        phaseScheduleApi.updateItem(item.id, { start_date: startDate, end_date: endDate, contour_type: contour } as any)
-      ));
-      queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
-    } catch (err) {
-      console.error('Bulk update error:', err);
-    } finally {
-      setBulkUpdating(false);
-    }
-  };
-
   const handleBulkEditApply = async () => {
     if (selectedItems.size === 0) return;
     setBulkUpdating(true);
@@ -2330,14 +2424,11 @@ const PhaseSchedule: React.FC = () => {
         </>}
       </div>
 
-      {/* Bulk edit / date assignment bar */}
-      {scheduleItems.length > 0 && viewMode === 'grid' && (
+      {/* Bulk edit bar (shared across Gantt and Grid views) */}
+      {scheduleItems.length > 0 && (
         <BulkEditBar items={scheduleItems} selectedItems={selectedItems}
           bulkEditValues={bulkEditValues} onBulkEditChange={setBulkEditValues}
           onApply={handleBulkEditApply} onClear={clearSelection} bulkUpdating={bulkUpdating} />
-      )}
-      {scheduleItems.length > 0 && viewMode === 'gantt' && (
-        <BulkDateBar items={scheduleItems} onApply={handleBulkDates} />
       )}
       {bulkUpdating && (
         <div style={{ textAlign: 'center', padding: '1rem', color: '#3b82f6', fontSize: '0.9rem' }}>
@@ -2362,11 +2453,15 @@ const PhaseSchedule: React.FC = () => {
         </div>
       ) : (
         viewMode === 'gantt'
-          ? <GanttView items={scheduleItems} months={months} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
-          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          ? <GanttView items={filteredItems} allItems={scheduleItems} months={months} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')} />
+          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+              selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
+              filterText={filterText} onFilterChange={setFilterText}
+              sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
+              ctFilter={costTypeFilter} onCtFilterChange={setCostTypeFilter} />
       )}
 
       {/* Add Phase Codes Modal */}

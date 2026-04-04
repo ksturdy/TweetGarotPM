@@ -53,13 +53,14 @@ const getInitialExpandedSections = (): string[] => {
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   const { user } = useAuth();
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState<string[]>(getInitialExpandedSections);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Persist expanded sections to localStorage
   useEffect(() => {
@@ -303,7 +304,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       <button
         className="sidebar-toggle"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={onToggleCollapse}
         title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
