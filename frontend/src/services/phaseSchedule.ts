@@ -17,6 +17,7 @@ export interface PhaseCode {
   projected_cost: number;
   percent_complete: number;
   linked_project_id: number;
+  all_ids?: number[];  // all underlying vp_phase_codes IDs (when deduplicated across jobs)
 }
 
 export interface PhaseScheduleItem {

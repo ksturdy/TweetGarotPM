@@ -2,10 +2,33 @@ const db = require('../config/database');
 
 const PhaseSchedule = {
   async getPhaseCodesByProject(projectId, tenantId) {
+    // Deduplicate across jobs: same (cost_type, phase) in multiple jobs
+    // linked to the same project gets merged into a single row with summed values
     const result = await db.query(
-      `SELECT pc.* FROM vp_phase_codes pc
+      `SELECT
+         MIN(pc.id) as id,
+         pc.tenant_id,
+         MIN(pc.contract) as contract,
+         MIN(pc.job) as job,
+         MIN(pc.job_description) as job_description,
+         pc.cost_type,
+         pc.phase,
+         MIN(pc.phase_description) as phase_description,
+         SUM(pc.est_hours) as est_hours,
+         SUM(pc.est_cost) as est_cost,
+         SUM(pc.jtd_hours) as jtd_hours,
+         SUM(pc.jtd_cost) as jtd_cost,
+         SUM(pc.committed_cost) as committed_cost,
+         SUM(pc.projected_cost) as projected_cost,
+         CASE WHEN SUM(pc.est_cost) > 0
+           THEN SUM(pc.est_cost * pc.percent_complete) / SUM(pc.est_cost)
+           ELSE 0 END as percent_complete,
+         $2::integer as linked_project_id,
+         array_agg(pc.id ORDER BY pc.id) as all_ids
+       FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2
-       ORDER BY pc.job, pc.cost_type, pc.phase`,
+       GROUP BY pc.tenant_id, pc.cost_type, pc.phase
+       ORDER BY MIN(pc.job), pc.cost_type, pc.phase`,
       [tenantId, projectId]
     );
     return result.rows;

@@ -26,6 +26,7 @@ interface ColumnDef { key: string; label: string; group?: string; hideable: bool
 const GANTT_COLUMN_DEFS: ColumnDef[] = [
   { key: 'rowNum', label: 'ID', hideable: false },
   { key: 'phase', label: 'Phase Code', hideable: false },
+  { key: 'ct', label: 'CT', hideable: true },
   { key: 'estCost', label: 'Est $', hideable: true },
   { key: 'start', label: 'Start', hideable: true },
   { key: 'end', label: 'End', hideable: true },
@@ -151,6 +152,75 @@ const ColumnChooserDialog: React.FC<{
   );
 };
 
+// CT multi-select filter dropdown
+const CTFilterDropdown: React.FC<{
+  selected: Set<number>;
+  onToggle: (ct: number) => void;
+  onClear: () => void;
+  style?: React.CSSProperties;
+}> = ({ selected, onToggle, onClear, style }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  const active = selected.size > 0;
+  const label = active
+    ? [...selected].sort().map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('')
+    : 'CT';
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
+      <div onClick={() => setOpen(prev => !prev)}
+        style={{
+          width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', fontSize: '0.65rem', fontWeight: 700,
+          color: active ? '#3b82f6' : 'inherit', userSelect: 'none'
+        }}>
+        {label}
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '160px', padding: '4px 0', fontSize: '0.75rem', whiteSpace: 'nowrap'
+        }}>
+          {active && (
+            <>
+              <div onClick={() => { onClear(); setOpen(false); }}
+                style={{ padding: '4px 10px', cursor: 'pointer', color: '#ef4444', fontSize: '0.7rem' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+                Clear filter
+              </div>
+              <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
+            </>
+          )}
+          {[1, 2, 3, 4, 5, 6].map(ct => (
+            <label key={ct}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+              <input type="checkbox" checked={selected.has(ct)} onChange={() => onToggle(ct)} style={{ cursor: 'pointer' }} />
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} />
+              <span style={{ color: '#1e293b' }}>{COST_TYPE_NAMES[ct]}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Cost type group for summary rows
 interface CostTypeGroup {
   costType: number;
@@ -269,7 +339,10 @@ const AddPhaseCodesModal: React.FC<{
   const [filter, setFilter] = useState('');
   const [costTypeFilter, setCostTypeFilter] = useState<number | null>(null);
 
-  const available = phaseCodes.filter(pc => !scheduledIds.has(pc.id));
+  const available = phaseCodes.filter(pc => {
+    const ids = pc.all_ids || [pc.id];
+    return !ids.some(id => scheduledIds.has(id));
+  });
   const filtered = available.filter(pc => {
     const matchesText = !filter || pc.phase_description.toLowerCase().includes(filter.toLowerCase()) || pc.phase.includes(filter);
     const matchesCT = costTypeFilter === null || pc.cost_type === costTypeFilter;
@@ -358,7 +431,19 @@ const AddPhaseCodesModal: React.FC<{
 
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
           <button onClick={onClose} style={{ padding: '0.5rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onAdd([...selected], groupBy)} disabled={selected.size === 0}
+          <button onClick={() => {
+              // Expand selected IDs to include all underlying vp_phase_codes IDs (for multi-job dedup)
+              const expandedIds: number[] = [];
+              selected.forEach(selId => {
+                const pc = phaseCodes.find(p => p.id === selId);
+                if (pc?.all_ids && pc.all_ids.length > 0) {
+                  pc.all_ids.forEach(aid => { if (!expandedIds.includes(aid)) expandedIds.push(aid); });
+                } else {
+                  if (!expandedIds.includes(selId)) expandedIds.push(selId);
+                }
+              });
+              onAdd(expandedIds, groupBy);
+            }} disabled={selected.size === 0}
             style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '6px', backgroundColor: selected.size > 0 ? '#3b82f6' : '#d1d5db', color: 'white', cursor: selected.size > 0 ? 'pointer' : 'default', fontWeight: 500 }}>
             Add {selected.size} Phase Code{selected.size !== 1 ? 's' : ''} to Schedule
           </button>
@@ -566,7 +651,10 @@ const GanttView: React.FC<{
   onFilterChange: (text: string) => void;
   sortDir: 'none' | 'asc' | 'desc';
   onSortChange: () => void;
-}> = ({ items, allItems, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange }) => {
+  ctFilter: Set<number>;
+  onCtFilterToggle: (ct: number) => void;
+  onCtFilterClear: () => void;
+}> = ({ items, allItems, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear }) => {
   const ganttRef = useRef<HTMLDivElement>(null);
   const colWidth = 80;
   const rowHeight = 28;
@@ -579,7 +667,7 @@ const GanttView: React.FC<{
   const today = startOfDay(new Date());
 
   // Gantt column widths (persisted to localStorage)
-  const ganttColDefaults = { sel: 28, rowNum: 32, phase: 220, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
+  const ganttColDefaults = { sel: 28, rowNum: 32, phase: 220, ct: 32, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
   const [ganttCols, setGanttCols] = useState<typeof ganttColDefaults>(() => {
     try { const saved = localStorage.getItem('phaseSchedule_ganttCols'); return saved ? { ...ganttColDefaults, ...JSON.parse(saved) } : ganttColDefaults; }
     catch { return ganttColDefaults; }
@@ -654,7 +742,7 @@ const GanttView: React.FC<{
     if (!ctx) return;
     let maxW = 36;
     // Header text widths
-    const headers: Record<string, string> = { rowNum: 'ID', phase: 'Phase Code', estCost: 'Est $', start: 'Start', end: 'End', dur: 'Dur', pred: 'Pred', contour: 'Contour' };
+    const headers: Record<string, string> = { rowNum: 'ID', phase: 'Phase Code', ct: 'CT', estCost: 'Est $', start: 'Start', end: 'End', dur: 'Dur', pred: 'Pred', contour: 'Contour' };
     ctx.font = '600 11px system-ui, -apple-system, sans-serif';
     maxW = Math.max(maxW, ctx.measureText(headers[col] || '').width + 24);
     // Measure cell content from items
@@ -664,6 +752,7 @@ const GanttView: React.FC<{
       switch (col) {
         case 'rowNum': text = String(item.row_number || ''); break;
         case 'phase': text = `${item.phase_code_display || ''} - ${item.name || ''}`; break;
+        case 'ct': text = item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('') || ''; break;
         case 'estCost': text = fmtCompact(parseNum(item.total_est_cost)); break;
         case 'start': text = item.start_date ? format(new Date(item.start_date), 'MM/dd/yy') : ''; break;
         case 'end': text = item.end_date ? format(new Date(item.end_date), 'MM/dd/yy') : ''; break;
@@ -761,6 +850,10 @@ const GanttView: React.FC<{
             </div>
             {ganttResizeHandle('phase')}
           </div>
+          {!gh('ct') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'ct', 'CT')} style={{ width: ganttCols.ct, textAlign: 'center', padding: 0, flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>
+            <CTFilterDropdown selected={ctFilter} onToggle={onCtFilterToggle} onClear={onCtFilterClear} />
+            {ganttResizeHandle('ct')}
+          </div>}
           {!gh('estCost') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'estCost', 'Est $')} style={{ width: ganttCols.estCost, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Est ${ganttResizeHandle('estCost')}</div>}
           {!gh('start') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'start', 'Start')} style={{ width: ganttCols.start, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Start{ganttResizeHandle('start')}</div>}
           {!gh('end') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'end', 'End')} style={{ width: ganttCols.end, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>End{ganttResizeHandle('end')}</div>}
@@ -795,12 +888,19 @@ const GanttView: React.FC<{
                   <span style={{ fontWeight: 600, color: group.color }}>{group.name}</span>
                   <span style={{ fontSize: '0.6rem', color: '#64748b' }}>({group.items.length})</span>
                 </div>
+                {!gh('ct') && <div style={{ width: ganttCols.ct, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
                 {!gh('estCost') && <div style={{ width: ganttCols.estCost, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 0.25rem', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', color: '#64748b' }}>
                   {fmtCompact(group.estCost)}
                 </div>}
-                {!gh('start') && <div style={{ width: ganttCols.start, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
-                {!gh('end') && <div style={{ width: ganttCols.end, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
-                {!gh('dur') && <div style={{ width: ganttCols.dur, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('start') && <div style={{ width: ganttCols.start, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #cbd5e1', fontSize: '0.6rem', color: '#64748b' }}>
+                  {fmtDateShort(group.earliestStart)}
+                </div>}
+                {!gh('end') && <div style={{ width: ganttCols.end, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #cbd5e1', fontSize: '0.6rem', color: '#64748b' }}>
+                  {fmtDateShort(group.latestEnd)}
+                </div>}
+                {!gh('dur') && <div style={{ width: ganttCols.dur, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #cbd5e1', fontSize: '0.6rem', color: '#64748b' }}>
+                  {group.duration || ''}
+                </div>}
                 {!gh('pred') && <div style={{ width: ganttCols.pred, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
                 {!gh('contour') && <div style={{ width: ganttCols.contour, flexShrink: 0 }} />}
               </div>
@@ -944,7 +1044,7 @@ const GanttRow: React.FC<{
   rowHeight: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
-  ganttCols: { sel: number; rowNum: number; phase: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
+  ganttCols: { sel: number; rowNum: number; phase: number; ct: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
   hiddenCols: Set<string>;
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
@@ -1005,6 +1105,9 @@ const GanttRow: React.FC<{
         )}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
       </div>
+      {!hiddenCols.has('ct') && <div style={{ ...cellStyle, width: ganttCols.ct, justifyContent: 'center', flexShrink: 0, fontSize: '0.6rem', color: '#64748b' }}>
+        {item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('')}
+      </div>}
       {!hiddenCols.has('estCost') && <div style={{ ...cellStyle, width: ganttCols.estCost, justifyContent: 'center', padding: '0 0.25rem', flexShrink: 0 }}>
         {fmtCompact(parseNum(item.total_est_cost))}
       </div>}
@@ -1092,9 +1195,10 @@ const GridView: React.FC<{
   onFilterChange: (text: string) => void;
   sortDir: 'none' | 'asc' | 'desc';
   onSortChange: () => void;
-  ctFilter: number | null;
-  onCtFilterChange: (ct: number | null) => void;
-}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterChange }) => {
+  ctFilter: Set<number>;
+  onCtFilterToggle: (ct: number) => void;
+  onCtFilterClear: () => void;
+}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear }) => {
   // Grid column widths (persisted to localStorage)
   const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
     try { const saved = localStorage.getItem('phaseSchedule_gridCols'); return saved ? { ...GRID_COL_DEFAULTS, ...JSON.parse(saved) } : GRID_COL_DEFAULTS; }
@@ -1341,7 +1445,7 @@ const GridView: React.FC<{
             </th>
             <th style={{ ...groupHeaderStyle(colWidths.rowNum, '#1e293b') }}></th>
             <th style={{ ...groupHeaderStyle(colWidths.phase, '#1e293b'), textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 5, padding: '0.15rem 0.5rem' }}></th>
-            {gv('ct') && <th style={{ ...groupHeaderStyle(colWidths.ct, ctFilter ? '#3b82f6' : '#1e293b') }}>{ctFilter ? COST_TYPE_NAMES[ctFilter]?.charAt(0) : ''}</th>}
+            {gv('ct') && <th style={{ ...groupHeaderStyle(colWidths.ct, ctFilter.size > 0 ? '#3b82f6' : '#1e293b') }}>{ctFilter.size > 0 ? [...ctFilter].sort().map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('') : ''}</th>}
             {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8', borderRight: '2px solid #94a3b8' }}>Estimated</th>}
             {jtdColSpan > 0 && <th colSpan={jtdColSpan} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' }}>JTD</th>}
             {projColSpan > 0 && <th colSpan={projColSpan} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' }}>Projected</th>}
@@ -1382,16 +1486,7 @@ const GridView: React.FC<{
               {resizeHandle('phase')}
             </th>
             {gv('ct') && <th data-col="ct" onContextMenu={e => gridHeaderContextMenu(e, 'ct', 'CT')} style={thStyle(colWidths.ct)}>
-              <select value={ctFilter ?? ''} onChange={e => onCtFilterChange(e.target.value ? Number(e.target.value) : null)}
-                title="Filter by cost type"
-                style={{
-                  width: '100%', border: 'none', background: 'transparent', fontSize: '0.65rem', fontWeight: 700,
-                  textAlign: 'center', cursor: 'pointer', padding: 0, color: ctFilter ? '#3b82f6' : 'inherit',
-                  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none' as any
-                }}>
-                <option value="">CT</option>
-                {[1,2,3,4,5,6].map(ct => <option key={ct} value={ct}>{COST_TYPE_NAMES[ct]?.charAt(0)}</option>)}
-              </select>
+              <CTFilterDropdown selected={ctFilter} onToggle={onCtFilterToggle} onClear={onCtFilterClear} />
               {resizeHandle('ct')}
             </th>}
             {/* Estimated group */}
@@ -1475,6 +1570,14 @@ const GridView: React.FC<{
               const jC = parseNum(i.total_jtd_cost);
               return s + (pct > 0 ? jC / (pct / 100) : parseNum(i.total_est_cost));
             }, 0);
+            // Overall schedule rollup
+            let totEarliestStart: string | null = null;
+            let totLatestEnd: string | null = null;
+            items.forEach(i => {
+              if (i.start_date && (!totEarliestStart || i.start_date < totEarliestStart)) totEarliestStart = i.start_date;
+              if (i.end_date && (!totLatestEnd || i.end_date > totLatestEnd)) totLatestEnd = i.end_date;
+            });
+            const totDuration = getDuration(totEarliestStart, totLatestEnd);
             const tdTot: React.CSSProperties = { padding: '0.15rem 0.2rem', textAlign: 'center', borderTop: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', whiteSpace: 'nowrap' };
             return (
               <tr style={{ fontWeight: 600, background: '#f1f5f9' }}>
@@ -1501,10 +1604,10 @@ const GridView: React.FC<{
                 {gv('projHrs') && <td style={{ ...tdTot, width: colWidths.projHrs, background: COL_GROUP.proj.cell }}>{fmtHrs(totProjHrs)}</td>}
                 {gv('projCost') && <td style={{ ...tdTot, width: colWidths.projCost, background: COL_GROUP.proj.cell }}>{fmtCompact(totProjCost)}</td>}
                 {gv('projPi') && <td style={{ ...tdTot, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.proj.cell }}>{fmtPi(totProjQty, totProjHrs)}</td>}
-                {/* Schedule totals (empty) */}
-                {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell }}></td>}
-                {gv('end') && <td style={{ ...tdTot, width: colWidths.end, background: COL_GROUP.sched.cell }}></td>}
-                {gv('dur') && <td style={{ ...tdTot, width: colWidths.dur, background: COL_GROUP.sched.cell }}></td>}
+                {/* Schedule totals */}
+                {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totEarliestStart)}</td>}
+                {gv('end') && <td style={{ ...tdTot, width: colWidths.end, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totLatestEnd)}</td>}
+                {gv('dur') && <td style={{ ...tdTot, width: colWidths.dur, background: COL_GROUP.sched.cell }}>{totDuration || ''}</td>}
                 {gv('pred') && <td style={{ ...tdTot, width: colWidths.pred, background: COL_GROUP.sched.cell }}></td>}
                 {gv('contour') && <td style={{ ...tdTot, width: colWidths.contour, borderRight: '2px solid #94a3b8', background: COL_GROUP.sched.cell }}></td>}
                 {/* Monthly totals */}
@@ -2027,7 +2130,19 @@ const PhaseSchedule: React.FC = () => {
   const [bulkEditValues, setBulkEditValues] = useState<{ start_date: string; end_date: string; duration: string; contour_type: string }>({ start_date: '', end_date: '', duration: '', contour_type: '' });
   const [filterText, setFilterText] = useState('');
   const [sortDir, setSortDir] = useState<'none' | 'asc' | 'desc'>('none');
-  const [costTypeFilter, setCostTypeFilter] = useState<number | null>(null);
+  const [costTypeFilter, setCostTypeFilter] = useState<Set<number>>(new Set());
+
+  const toggleCostTypeFilter = useCallback((ct: number) => {
+    setCostTypeFilter(prev => {
+      const next = new Set(prev);
+      next.has(ct) ? next.delete(ct) : next.add(ct);
+      return next;
+    });
+  }, []);
+
+  const clearCostTypeFilter = useCallback(() => {
+    setCostTypeFilter(new Set());
+  }, []);
 
   const toggleGroup = useCallback((costType: number) => {
     setCollapsedGroups(prev => {
@@ -2127,8 +2242,8 @@ const PhaseSchedule: React.FC = () => {
 
   const filteredItems = useMemo(() => {
     let result = scheduleItems;
-    if (costTypeFilter !== null) {
-      result = result.filter(i => i.cost_types?.includes(costTypeFilter));
+    if (costTypeFilter.size > 0) {
+      result = result.filter(i => i.cost_types?.some(ct => costTypeFilter.has(ct)));
     }
     if (filterText.trim()) {
       const lower = filterText.toLowerCase();
@@ -2227,6 +2342,8 @@ const PhaseSchedule: React.FC = () => {
 
     const headcount: number[] = new Array(months.length).fill(0);
     const monthlyCost: number[] = new Array(months.length).fill(0);
+    const monthlyEstQty: number[] = new Array(months.length).fill(0);
+    const monthlyEstHrs: number[] = new Array(months.length).fill(0);
 
     // Parse date string as local date (avoids UTC timezone shift)
     const parseLocalDate = (d: string): Date => {
@@ -2259,6 +2376,8 @@ const PhaseSchedule: React.FC = () => {
       // Convert labor hours to headcount per month (cost type 1 only)
       if (isLabor) {
         const estHrs = parseNum(item.total_est_hours);
+        const estQty = parseNum(item.quantity);
+
         if (estHrs > 0) {
           // Count total working days across the item's full duration
           const totalWorkingDays = eachDayOfInterval({ start: itemStart, end: itemEnd })
@@ -2268,10 +2387,16 @@ const PhaseSchedule: React.FC = () => {
           // Base workers = total hours / total working days / 8 hrs per day
           const baseWorkers = estHrs / totalWorkingDays / 8;
 
-          // Apply contour multiplier per month
+          // Distribute hours and quantity monthly for PI computation
+          const perMonthHrs = estHrs / itemMonths.length;
+          const perMonthQty = estQty / itemMonths.length;
           itemMonths.forEach((m, i) => {
             const idx = months.findIndex(mm => mm.getTime() === m.getTime());
-            if (idx >= 0) headcount[idx] += baseWorkers * multipliers[i];
+            if (idx >= 0) {
+              headcount[idx] += baseWorkers * multipliers[i];
+              monthlyEstHrs[idx] += perMonthHrs * multipliers[i];
+              if (estQty > 0) monthlyEstQty[idx] += perMonthQty * multipliers[i];
+            }
           });
         }
       }
@@ -2282,16 +2407,35 @@ const PhaseSchedule: React.FC = () => {
     let running = 0;
     monthlyCost.forEach(v => { running += v; cumulativeCost.push(running); });
 
-    // Actual JTD line - flat up to current month
+    // Cumulative PI: estimated baseline (labor items: cumulative qty / cumulative hrs)
+    const estPiLine: (number | null)[] = [];
+    let cumQty = 0, cumHrs = 0;
+    months.forEach((_m, i) => {
+      cumQty += monthlyEstQty[i];
+      cumHrs += monthlyEstHrs[i];
+      estPiLine.push(cumHrs > 0 ? cumQty / cumHrs : null);
+    });
+
+    // Actual JTD PI - flat line up to current month
     const today = startOfMonth(new Date());
     const todayIdx = months.findIndex(m => m >= today);
-    const jtdLine: (number | null)[] = months.map((m, i) => {
+    const laborItems = scheduleItems.filter(i => i.cost_types?.[0] === 1);
+    const totalJtdQtyVal = laborItems.reduce((s, i) => s + parseNum(i.quantity_installed), 0);
+    const totalJtdHrsVal = laborItems.reduce((s, i) => s + parseNum(i.total_jtd_hours), 0);
+    const actualPi = totalJtdHrsVal > 0 ? totalJtdQtyVal / totalJtdHrsVal : null;
+    const actualPiLine: (number | null)[] = months.map((_m, i) => {
+      if (todayIdx >= 0 && i <= todayIdx && actualPi !== null) return actualPi;
+      return null;
+    });
+
+    // Actual JTD cost line - flat up to current month
+    const jtdLine: (number | null)[] = months.map((_m, i) => {
       if (todayIdx >= 0 && i <= todayIdx) return totalJtdCost;
       return null;
     });
 
     const labels = months.map(m => format(m, 'MMM yy'));
-    return { labels, headcount, cumulativeCost, jtdLine };
+    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine };
   }, [scheduleItems, months, totalJtdCost]);
 
   const handleAdd = (ids: number[], groupBy: string) => {
@@ -2383,7 +2527,7 @@ const PhaseSchedule: React.FC = () => {
         </div>
         {/* Right: charts side by side */}
         {chartData && <>
-          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
             <div style={{ height: '110px' }}>
               <Line
@@ -2392,14 +2536,14 @@ const PhaseSchedule: React.FC = () => {
                   responsive: true, maintainAspectRatio: false,
                   plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
                   scales: {
-                    x: { ticks: { font: { size: 8 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 8 }, stepSize: undefined }, grid: { color: '#f1f5f9' }, beginAtZero: true }
+                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                    y: { ticks: { font: { size: 7 }, stepSize: undefined }, grid: { color: '#f1f5f9' }, beginAtZero: true }
                   }
                 }}
               />
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Cashflow (Cumulative)</div>
             <div style={{ height: '110px' }}>
               <Line
@@ -2414,8 +2558,30 @@ const PhaseSchedule: React.FC = () => {
                     tooltip: { callbacks: { label: (ctx) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1000000) return `${lbl}: $${(v / 1000000).toFixed(2)}M`; if (v >= 1000) return `${lbl}: $${(v / 1000).toFixed(0)}K`; return `${lbl}: $${v.toFixed(0)}`; } } }
                   },
                   scales: {
-                    x: { ticks: { font: { size: 8 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 8 }, callback: (v) => typeof v === 'number' ? (v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`) : v }, grid: { color: '#f1f5f9' } }
+                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                    y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? (v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`) : v }, grid: { color: '#f1f5f9' } }
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Productivity Index (Labor)</div>
+            <div style={{ height: '110px' }}>
+              <Line
+                data={{ labels: chartData.labels, datasets: [
+                  { label: 'Estimated PI', data: chartData.estPiLine, borderColor: '#3b82f6', borderDash: [6, 3], backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 },
+                  { label: 'Actual PI', data: chartData.actualPiLine, borderColor: '#10b981', backgroundColor: 'transparent', fill: false, tension: 0, pointRadius: 0, borderWidth: 2, spanGaps: false }
+                ] }}
+                options={{
+                  responsive: true, maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 4 } },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label || ''}: ${(ctx.parsed.y ?? 0).toFixed(2)} qty/hr` } }
+                  },
+                  scales: {
+                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                    y: { ticks: { font: { size: 7 }, callback: (v) => typeof v === 'number' ? v.toFixed(1) : v }, grid: { color: '#f1f5f9' }, beginAtZero: true }
                   }
                 }}
               />
@@ -2456,12 +2622,13 @@ const PhaseSchedule: React.FC = () => {
           ? <GanttView items={filteredItems} allItems={scheduleItems} months={months} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
-              sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')} />
+              sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
+              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter} />
           : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
-              ctFilter={costTypeFilter} onCtFilterChange={setCostTypeFilter} />
+              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter} />
       )}
 
       {/* Add Phase Codes Modal */}
