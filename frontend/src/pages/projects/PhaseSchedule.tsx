@@ -20,6 +20,137 @@ const COST_TYPE_COLORS: Record<number, string> = {
 };
 const UOM_OPTIONS = ['EA', 'LF', 'LS'];
 
+// Column definitions for hide/unhide feature
+interface ColumnDef { key: string; label: string; group?: string; hideable: boolean; }
+
+const GANTT_COLUMN_DEFS: ColumnDef[] = [
+  { key: 'rowNum', label: 'ID', hideable: false },
+  { key: 'phase', label: 'Phase Code', hideable: false },
+  { key: 'estCost', label: 'Est $', hideable: true },
+  { key: 'start', label: 'Start', hideable: true },
+  { key: 'end', label: 'End', hideable: true },
+  { key: 'dur', label: 'Duration', hideable: true },
+  { key: 'pred', label: 'Predecessor', hideable: true },
+  { key: 'contour', label: 'Contour', hideable: true },
+];
+
+const GRID_COLUMN_DEFS: ColumnDef[] = [
+  { key: 'sel', label: '', group: '', hideable: false },
+  { key: 'rowNum', label: 'ID', group: '', hideable: false },
+  { key: 'phase', label: 'Phase', group: '', hideable: false },
+  { key: 'ct', label: 'CT', group: '', hideable: true },
+  { key: 'estQty', label: 'Qty', group: 'Estimated', hideable: true },
+  { key: 'uom', label: 'UOM', group: 'Estimated', hideable: true },
+  { key: 'estHrs', label: 'Hrs', group: 'Estimated', hideable: true },
+  { key: 'estCost', label: 'Cost', group: 'Estimated', hideable: true },
+  { key: 'estPi', label: 'PI', group: 'Estimated', hideable: true },
+  { key: 'pctComp', label: '%Comp', group: 'JTD', hideable: true },
+  { key: 'jtdQty', label: 'Qty', group: 'JTD', hideable: true },
+  { key: 'jtdHrs', label: 'Hrs', group: 'JTD', hideable: true },
+  { key: 'jtdCost', label: 'Cost', group: 'JTD', hideable: true },
+  { key: 'jtdPi', label: 'PI', group: 'JTD', hideable: true },
+  { key: 'projQty', label: 'Qty', group: 'Projected', hideable: true },
+  { key: 'projHrs', label: 'Hrs', group: 'Projected', hideable: true },
+  { key: 'projCost', label: 'Cost', group: 'Projected', hideable: true },
+  { key: 'projPi', label: 'PI', group: 'Projected', hideable: true },
+  { key: 'start', label: 'Start', group: 'Schedule', hideable: true },
+  { key: 'end', label: 'End', group: 'Schedule', hideable: true },
+  { key: 'dur', label: 'Days', group: 'Schedule', hideable: true },
+  { key: 'pred', label: 'Pred', group: 'Schedule', hideable: true },
+  { key: 'contour', label: 'Contour', group: 'Schedule', hideable: true },
+];
+
+// Column context menu (right-click on header)
+const ColumnContextMenu: React.FC<{
+  x: number; y: number; colKey: string; colLabel: string;
+  onHide: () => void; onChooser: () => void; onClose: () => void;
+}> = ({ x, y, colLabel, onHide, onChooser, onClose }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', esc); };
+  }, [onClose]);
+
+  return (
+    <div ref={ref} style={{
+      position: 'fixed', left: x, top: y, zIndex: 9999, background: 'white',
+      border: '1px solid #e2e8f0', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      minWidth: '160px', padding: '4px 0', fontSize: '0.8rem'
+    }}>
+      <div onClick={() => { onHide(); onClose(); }}
+        style={{ padding: '6px 14px', cursor: 'pointer', color: '#1e293b' }}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+        Hide "{colLabel}"
+      </div>
+      <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
+      <div onClick={() => { onChooser(); onClose(); }}
+        style={{ padding: '6px 14px', cursor: 'pointer', color: '#1e293b' }}
+        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+        onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+        Column Chooser...
+      </div>
+    </div>
+  );
+};
+
+// Column chooser dialog (shows hidden columns with checkboxes)
+const ColumnChooserDialog: React.FC<{
+  columnDefs: ColumnDef[];
+  hiddenCols: Set<string>;
+  onToggle: (key: string) => void;
+  onShowAll: () => void;
+  onClose: () => void;
+}> = ({ columnDefs, hiddenCols, onToggle, onShowAll, onClose }) => {
+  const hideableCols = columnDefs.filter(c => c.hideable);
+  const groups = [...new Set(hideableCols.map(c => c.group).filter(Boolean))];
+  const ungrouped = hideableCols.filter(c => !c.group);
+
+  const renderCol = (col: ColumnDef) => (
+    <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '0.82rem' }}>
+      <input type="checkbox" checked={!hiddenCols.has(col.key)} onChange={() => onToggle(col.key)} style={{ cursor: 'pointer' }} />
+      <span style={{ color: hiddenCols.has(col.key) ? '#94a3b8' : '#1e293b' }}>{col.group ? `${col.label} (${col.group})` : col.label}</span>
+    </label>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '10px', width: '340px', maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', color: '#1e293b' }}>Column Chooser</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: '0.75rem 1.25rem' }}>
+          {hiddenCols.size > 0 && (
+            <button onClick={onShowAll} style={{
+              marginBottom: '0.75rem', padding: '0.35rem 0.75rem', border: '1px solid #e2e8f0',
+              borderRadius: '5px', backgroundColor: '#f8fafc', cursor: 'pointer', fontSize: '0.78rem', color: '#3b82f6', fontWeight: 500
+            }}>
+              Show All Columns
+            </button>
+          )}
+          {ungrouped.map(renderCol)}
+          {groups.map(group => (
+            <div key={group} style={{ marginTop: ungrouped.length > 0 || groups.indexOf(group!) > 0 ? '0.5rem' : 0 }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{group}</div>
+              {hideableCols.filter(c => c.group === group).map(renderCol)}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>
+          <button onClick={onClose} style={{ padding: '0.4rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.85rem' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Cost type group for summary rows
 interface CostTypeGroup {
   costType: number;
@@ -424,20 +555,60 @@ const GanttView: React.FC<{
 }> = ({ items, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup }) => {
   const ganttRef = useRef<HTMLDivElement>(null);
   const colWidth = 80;
-  const rowHeight = 36;
-  const [leftPanelWidth, setLeftPanelWidth] = useState(520);
+  const rowHeight = 28;
+  const [leftPanelWidth, setLeftPanelWidth] = useState(670);
   const draggingRef = useRef<{ startX: number; startW: number } | null>(null);
   const today = startOfDay(new Date());
 
-  // Resizable left panel
+  // Gantt column widths
+  const ganttColDefaults = { rowNum: 32, phase: 220, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
+  const [ganttCols, setGanttCols] = useState(ganttColDefaults);
+  const ganttColsRef = useRef(ganttColDefaults);
+  const colResizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
+
+  // Hidden columns state
+  const [ganttHiddenCols, setGanttHiddenCols] = useState<Set<string>>(new Set());
+  const [ganttContextMenu, setGanttContextMenu] = useState<{ x: number; y: number; key: string; label: string } | null>(null);
+  const [showGanttChooser, setShowGanttChooser] = useState(false);
+  const gh = (col: string) => ganttHiddenCols.has(col); // shorthand for hidden check
+
+  const toggleGanttCol = (key: string) => {
+    setGanttHiddenCols(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const ganttHeaderContextMenu = (e: React.MouseEvent, key: string, label: string) => {
+    const def = GANTT_COLUMN_DEFS.find(c => c.key === key);
+    if (!def?.hideable) return;
+    e.preventDefault();
+    setGanttContextMenu({ x: e.clientX, y: e.clientY, key, label });
+  };
+
+  // Column resize + panel resize in one handler
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!draggingRef.current) return;
-      const diff = e.clientX - draggingRef.current.startX;
-      setLeftPanelWidth(Math.max(200, Math.min(800, draggingRef.current.startW + diff)));
+      if (draggingRef.current) {
+        const diff = e.clientX - draggingRef.current.startX;
+        setLeftPanelWidth(Math.max(200, Math.min(800, draggingRef.current.startW + diff)));
+      }
+      if (colResizeRef.current) {
+        const r = colResizeRef.current;
+        const diff = e.clientX - r.startX;
+        const newW = Math.max(28, r.startW + diff);
+        const actualDiff = newW - ((ganttColsRef.current as any)[r.col] || r.startW);
+        setGanttCols(prev => {
+          ganttColsRef.current = { ...prev, [r.col]: newW };
+          return ganttColsRef.current;
+        });
+        if (actualDiff !== 0) setLeftPanelWidth(prev => Math.max(200, prev + actualDiff));
+      }
     };
     const onUp = () => {
       draggingRef.current = null;
+      colResizeRef.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -446,21 +617,39 @@ const GanttView: React.FC<{
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
+  const startColResize = (col: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colResizeRef.current = { col, startX: e.clientX, startW: (ganttCols as any)[col] || 60 };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const ganttResizeHandle = (col: string) => (
+    <div onMouseDown={e => startColResize(col, e)}
+      style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }}
+      onMouseEnter={e => { (e.target as HTMLElement).style.backgroundColor = 'rgba(59,130,246,0.25)'; }}
+      onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
+    />
+  );
+
   const firstMonth = months.length > 0 ? months[0] : null;
   const totalWidth = months.length * colWidth;
   const todayOffset = firstMonth ? differenceInCalendarDays(today, firstMonth) / 30.44 * colWidth : 0;
 
   return (
-    <div className="card" style={{ padding: 0, display: 'flex', overflow: 'hidden' }}>
-      {/* Left panel - task list with inline fields */}
+    <div style={{ display: 'flex', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+      {/* Left panel - task list grid */}
       <div style={{ width: leftPanelWidth, flexShrink: 0, overflow: 'auto' }}>
-        <div style={{ height: '36px', borderBottom: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', background: '#f8fafc' }}>
-          <div style={{ flex: 1, minWidth: 0, padding: '0 0.5rem' }}>Phase Code</div>
-          <div style={{ width: '65px', textAlign: 'right', padding: '0 0.25rem', flexShrink: 0 }}>Est $</div>
-          <div style={{ width: '85px', textAlign: 'center', padding: '0 0.25rem', flexShrink: 0 }}>Start</div>
-          <div style={{ width: '85px', textAlign: 'center', padding: '0 0.25rem', flexShrink: 0 }}>End</div>
-          <div style={{ width: '42px', textAlign: 'center', padding: '0 0.25rem', flexShrink: 0 }}>Dur</div>
-          <div style={{ width: '55px', textAlign: 'center', padding: '0 0.25rem', flexShrink: 0 }}>Contour</div>
+        <div style={{ height: '28px', borderBottom: '1px solid #94a3b8', display: 'flex', alignItems: 'center', fontSize: '0.68rem', fontWeight: 600, color: '#1e293b', background: '#eef2f7' }}>
+          <div style={{ width: ganttCols.rowNum, textAlign: 'center', padding: '0 0.15rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>ID{ganttResizeHandle('rowNum')}</div>
+          <div style={{ width: ganttCols.phase, minWidth: 0, padding: '0 0.4rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Phase Code{ganttResizeHandle('phase')}</div>
+          {!gh('estCost') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'estCost', 'Est $')} style={{ width: ganttCols.estCost, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Est ${ganttResizeHandle('estCost')}</div>}
+          {!gh('start') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'start', 'Start')} style={{ width: ganttCols.start, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Start{ganttResizeHandle('start')}</div>}
+          {!gh('end') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'end', 'End')} style={{ width: ganttCols.end, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>End{ganttResizeHandle('end')}</div>}
+          {!gh('dur') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'dur', 'Duration')} style={{ width: ganttCols.dur, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Dur{ganttResizeHandle('dur')}</div>}
+          {!gh('pred') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'pred', 'Predecessor')} style={{ width: ganttCols.pred, textAlign: 'center', padding: '0 0.15rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Pred{ganttResizeHandle('pred')}</div>}
+          {!gh('contour') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'contour', 'Contour')} style={{ width: ganttCols.contour, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative' }}>Contour{ganttResizeHandle('contour')}</div>}
         </div>
         {costTypeGroups.map(group => {
           const isCollapsed = collapsedGroups.has(group.costType);
@@ -468,20 +657,30 @@ const GanttView: React.FC<{
             <React.Fragment key={`ct-${group.costType}`}>
               <div
                 style={{
-                  height: rowHeight, borderBottom: `2px solid ${group.color}40`,
-                  display: 'flex', alignItems: 'center', fontSize: '0.72rem',
-                  backgroundColor: `${group.color}08`, cursor: 'pointer', padding: '0 0.5rem'
+                  height: rowHeight, borderBottom: '1px solid #94a3b8',
+                  display: 'flex', alignItems: 'stretch', fontSize: '0.7rem',
+                  backgroundColor: `${group.color}10`, cursor: 'pointer'
                 }}
                 onClick={() => onToggleGroup(group.costType)}
               >
-                <span style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '0.6rem', marginRight: '4px', color: '#64748b' }}>&#9660;</span>
-                <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: group.color, marginRight: '6px', flexShrink: 0 }} />
-                <span style={{ fontWeight: 700, color: group.color }}>{group.name}</span>
-                <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '4px' }}>({group.items.length})</span>
-                <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#64748b' }}>{fmtCompact(group.estCost)}</span>
+                <div style={{ width: ganttCols.rowNum, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />
+                <div style={{ width: ganttCols.phase, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 0.4rem', gap: '4px', borderRight: '1px solid #cbd5e1', overflow: 'hidden' }}>
+                  <span style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '0.6rem', color: '#64748b' }}>&#9660;</span>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: group.color, flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, color: group.color }}>{group.name}</span>
+                  <span style={{ fontSize: '0.6rem', color: '#64748b' }}>({group.items.length})</span>
+                </div>
+                {!gh('estCost') && <div style={{ width: ganttCols.estCost, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 0.25rem', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', color: '#64748b' }}>
+                  {fmtCompact(group.estCost)}
+                </div>}
+                {!gh('start') && <div style={{ width: ganttCols.start, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('end') && <div style={{ width: ganttCols.end, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('dur') && <div style={{ width: ganttCols.dur, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('pred') && <div style={{ width: ganttCols.pred, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('contour') && <div style={{ width: ganttCols.contour, flexShrink: 0 }} />}
               </div>
               {!isCollapsed && group.items.map(item => (
-                <GanttRow key={item.id} item={item} rowHeight={rowHeight} onUpdate={onUpdate} onEdit={onEdit} />
+                <GanttRow key={item.id} item={item} allItems={items} rowHeight={rowHeight} onUpdate={onUpdate} onEdit={onEdit} ganttCols={ganttCols} hiddenCols={ganttHiddenCols} />
               ))}
             </React.Fragment>
           );
@@ -496,9 +695,9 @@ const GanttView: React.FC<{
           document.body.style.cursor = 'col-resize';
           document.body.style.userSelect = 'none';
         }}
-        style={{ width: '4px', flexShrink: 0, cursor: 'col-resize', background: '#e2e8f0', transition: 'background 0.15s' }}
+        style={{ width: '3px', flexShrink: 0, cursor: 'col-resize', background: '#94a3b8', transition: 'background 0.15s' }}
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#3b82f6'; }}
-        onMouseLeave={e => { if (!draggingRef.current) (e.currentTarget as HTMLElement).style.background = '#e2e8f0'; }}
+        onMouseLeave={e => { if (!draggingRef.current) (e.currentTarget as HTMLElement).style.background = '#94a3b8'; }}
       />
 
       {/* Right panel - timeline */}
@@ -509,9 +708,9 @@ const GanttView: React.FC<{
           </div>
         ) : (
         <div style={{ minWidth: totalWidth, position: 'relative' }}>
-          <div style={{ display: 'flex', height: '36px', borderBottom: '2px solid #e2e8f0', background: '#f8fafc', position: 'sticky', top: 0, zIndex: 2 }}>
+          <div style={{ display: 'flex', height: '28px', borderBottom: '1px solid #94a3b8', background: '#eef2f7', position: 'sticky', top: 0, zIndex: 2 }}>
             {months.map(m => (
-              <div key={m.toISOString()} style={{ width: colWidth, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 500, color: '#1e293b', borderRight: '1px solid #f1f5f9' }}>
+              <div key={m.toISOString()} style={{ width: colWidth, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 600, color: '#1e293b', borderRight: '1px solid #cbd5e1' }}>
                 {format(m, 'MMM yy')}
               </div>
             ))}
@@ -530,13 +729,13 @@ const GanttView: React.FC<{
             return (
               <React.Fragment key={`ct-${group.costType}`}>
                 {/* Group summary row in timeline */}
-                <div style={{ height: rowHeight, position: 'relative', borderBottom: `2px solid ${group.color}40`, backgroundColor: `${group.color}08` }}>
+                <div style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #94a3b8', backgroundColor: `${group.color}10` }}>
                   {months.map((m, i) => (
-                    <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #f1f5f9' }} />
+                    <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #e2e8f0' }} />
                   ))}
                   {gBarWidth > 0 && (
                     <div style={{
-                      position: 'absolute', left: gBarLeft, top: 8, height: rowHeight - 16, width: gBarWidth,
+                      position: 'absolute', left: gBarLeft, top: 5, height: rowHeight - 10, width: gBarWidth,
                       backgroundColor: `${group.color}20`, border: `1px dashed ${group.color}`, borderRadius: '3px'
                     }} />
                   )}
@@ -552,13 +751,13 @@ const GanttView: React.FC<{
                   }
                   const barColor = COST_TYPE_COLORS[item.cost_types?.[0] || 1];
                   return (
-                    <div key={item.id} style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }} onClick={() => onEdit(item)}>
+                    <div key={item.id} style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #cbd5e1', cursor: 'pointer' }} onClick={() => onEdit(item)}>
                       {months.map((m, i) => (
-                        <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #f1f5f9' }} />
+                        <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #e2e8f0' }} />
                       ))}
                       {barWidth > 0 && (
                         <div style={{
-                          position: 'absolute', left: barLeft, top: 6, height: rowHeight - 12, width: barWidth,
+                          position: 'absolute', left: barLeft, top: 4, height: rowHeight - 8, width: barWidth,
                           backgroundColor: barColor + '30', border: `2px solid ${barColor}`, borderRadius: '4px',
                           display: 'flex', alignItems: 'center', paddingLeft: '6px', overflow: 'hidden'
                         }}
@@ -584,6 +783,26 @@ const GanttView: React.FC<{
         </div>
         )}
       </div>
+
+      {/* Context menu + Column chooser for Gantt */}
+      {ganttContextMenu && (
+        <ColumnContextMenu
+          x={ganttContextMenu.x} y={ganttContextMenu.y}
+          colKey={ganttContextMenu.key} colLabel={ganttContextMenu.label}
+          onHide={() => toggleGanttCol(ganttContextMenu.key)}
+          onChooser={() => setShowGanttChooser(true)}
+          onClose={() => setGanttContextMenu(null)}
+        />
+      )}
+      {showGanttChooser && (
+        <ColumnChooserDialog
+          columnDefs={GANTT_COLUMN_DEFS}
+          hiddenCols={ganttHiddenCols}
+          onToggle={toggleGanttCol}
+          onShowAll={() => setGanttHiddenCols(new Set())}
+          onClose={() => setShowGanttChooser(false)}
+        />
+      )}
     </div>
   );
 };
@@ -591,10 +810,13 @@ const GanttView: React.FC<{
 // Gantt row with inline editing
 const GanttRow: React.FC<{
   item: PhaseScheduleItem;
+  allItems: PhaseScheduleItem[];
   rowHeight: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
-}> = ({ item, rowHeight, onUpdate, onEdit }) => {
+  ganttCols: { rowNum: number; phase: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
+  hiddenCols: Set<string>;
+}> = ({ item, allItems, rowHeight, onUpdate, onEdit, ganttCols, hiddenCols }) => {
   const dur = getDuration(item.start_date, item.end_date);
 
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
@@ -612,40 +834,72 @@ const GanttRow: React.FC<{
     onUpdate(item.id, { contour_type: value } as any);
   };
 
+  const handlePredecessorChange = (value: string) => {
+    const predRowNum = value ? parseInt(value) : null;
+    if (predRowNum === null) {
+      onUpdate(item.id, { predecessor_id: null } as any);
+      return;
+    }
+    const predItem = allItems.find(i => i.row_number === predRowNum);
+    if (!predItem) return;
+    const updates: Partial<PhaseScheduleItem> = { predecessor_id: predRowNum } as any;
+    if (predItem.end_date) {
+      updates.start_date = format(addDays(new Date(predItem.end_date), 1), 'yyyy-MM-dd');
+      if (dur > 0 && updates.start_date) {
+        updates.end_date = format(addDays(new Date(updates.start_date), dur - 1), 'yyyy-MM-dd');
+      }
+    }
+    onUpdate(item.id, updates);
+  };
+
+  const cellStyle: React.CSSProperties = { borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', height: '100%', fontSize: '0.7rem', color: '#1e293b' };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '0 0.25rem', border: 'none', borderRadius: 0, fontSize: '0.7rem', fontFamily: 'inherit', color: '#1e293b', background: 'transparent', outline: 'none', boxSizing: 'border-box' as const, height: '100%' };
+
   return (
-    <div style={{ height: rowHeight, borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>
-      <div style={{ flex: 1, minWidth: 0, padding: '0 0.5rem', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', cursor: 'pointer' }}
+    <div style={{ height: rowHeight, borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'stretch', fontSize: '0.7rem' }}>
+      <div style={{ ...cellStyle, width: ganttCols.rowNum, justifyContent: 'center', flexShrink: 0, fontSize: '0.65rem', color: '#64748b' }}>
+        {item.row_number}
+      </div>
+      <div style={{ ...cellStyle, width: ganttCols.phase, minWidth: 0, padding: '0 0.4rem', gap: '4px', overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}
         onClick={() => onEdit(item)} title={item.name}>
         {item.cost_types?.map(ct => (
           <span key={ct} style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} />
         ))}
         {item.phase_code_display && (
-          <span style={{ fontSize: '0.6rem', color: '#64748b', flexShrink: 0, fontFamily: 'monospace' }}>{item.phase_code_display}</span>
+          <span style={{ color: '#64748b', flexShrink: 0, fontFamily: 'monospace' }}>{item.phase_code_display}</span>
         )}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#1e293b' }}>{item.name}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
       </div>
-      <div style={{ width: '65px', textAlign: 'right', padding: '0 0.25rem', flexShrink: 0, fontSize: '0.7rem', color: '#64748b' }}>
+      {!hiddenCols.has('estCost') && <div style={{ ...cellStyle, width: ganttCols.estCost, justifyContent: 'center', padding: '0 0.25rem', flexShrink: 0 }}>
         {fmtCompact(parseNum(item.total_est_cost))}
-      </div>
-      <div style={{ width: '85px', padding: '0 2px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-        <input type="date" value={fmtDate(item.start_date)} onChange={e => handleDateChange('start_date', e.target.value)}
-          style={{ width: '100%', padding: '0.15rem 0.25rem', border: '1px solid #e2e8f0', borderRadius: '3px', fontSize: '0.65rem', color: '#64748b', background: 'transparent', cursor: 'pointer', boxSizing: 'border-box' as const }} />
-      </div>
-      <div style={{ width: '85px', padding: '0 2px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-        <input type="date" value={fmtDate(item.end_date)} onChange={e => handleDateChange('end_date', e.target.value)}
-          style={{ width: '100%', padding: '0.15rem 0.25rem', border: '1px solid #e2e8f0', borderRadius: '3px', fontSize: '0.65rem', color: '#64748b', background: 'transparent', cursor: 'pointer', boxSizing: 'border-box' as const }} />
-      </div>
-      <div style={{ width: '42px', padding: '0 2px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+      </div>}
+      {!hiddenCols.has('start') && <div style={{ ...cellStyle, width: ganttCols.start, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <input type="date" className="date-no-icon" value={fmtDate(item.start_date)} onChange={e => handleDateChange('start_date', e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer', position: 'relative', textAlign: 'center' }} />
+      </div>}
+      {!hiddenCols.has('end') && <div style={{ ...cellStyle, width: ganttCols.end, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <input type="date" className="date-no-icon" value={fmtDate(item.end_date)} onChange={e => handleDateChange('end_date', e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer', position: 'relative', textAlign: 'center' }} />
+      </div>}
+      {!hiddenCols.has('dur') && <div style={{ ...cellStyle, width: ganttCols.dur, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <input type="number" value={dur || ''} min={1}
           onChange={e => handleDurationChange(parseInt(e.target.value) || 0)}
-          style={{ width: '100%', padding: '0.15rem 0.25rem', border: '1px solid #e2e8f0', borderRadius: '3px', fontSize: '0.65rem', color: '#64748b', textAlign: 'center', background: 'transparent', boxSizing: 'border-box' as const }} />
-      </div>
-      <div style={{ width: '55px', padding: '0 2px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          style={{ ...inputStyle, textAlign: 'center' }} />
+      </div>}
+      {!hiddenCols.has('pred') && <div style={{ ...cellStyle, width: ganttCols.pred, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <input type="text" inputMode="numeric" pattern="[0-9]*"
+          defaultValue={item.predecessor_id || ''}
+          onBlur={e => handlePredecessorChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          style={{ ...inputStyle, textAlign: 'center' }}
+          placeholder="-" />
+      </div>}
+      {!hiddenCols.has('contour') && <div style={{ width: ganttCols.contour, flexShrink: 0, display: 'flex', alignItems: 'center', height: '100%' }} onClick={e => e.stopPropagation()}>
         <select value={item.contour_type || 'flat'} onChange={e => handleContourChange(e.target.value)}
-          style={{ width: '100%', padding: '0.15rem 0.25rem', border: '1px solid #e2e8f0', borderRadius: '3px', fontSize: '0.65rem', color: '#64748b', background: 'transparent', cursor: 'pointer', boxSizing: 'border-box' as const }}>
+          style={{ ...inputStyle, cursor: 'pointer' }}>
           {contourOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
-      </div>
+      </div>}
     </div>
   );
 };
@@ -663,20 +917,29 @@ const fmtPi = (qty: number, hrs: number): string => {
   return (qty / hrs).toFixed(2);
 };
 
+// Column group shading for visual distinction
+const COL_GROUP = {
+  est:   { hdr: '#dbeafe', cell: '#eff6ff' },   // blue-100 / blue-50  — Estimated
+  jtd:   { hdr: '#fef3c7', cell: '#fffbeb' },   // amber-100 / amber-50 — JTD
+  proj:  { hdr: '#dcfce7', cell: '#f0fdf4' },   // green-100 / green-50 — Projected
+  sched: { hdr: '#e2e8f0', cell: '#f8fafc' },   // slate-200 / slate-50 — Schedule
+};
+
 const GRID_COL_DEFAULTS = {
-  sel: 28, phase: 200, ct: 30,
+  sel: 28, rowNum: 32, phase: 286, ct: 36,
   // Estimated group
-  estQty: 50, uom: 36, estHrs: 52, estCost: 65, estPi: 40,
+  estQty: 62, uom: 44, estHrs: 62, estCost: 78, estPi: 50,
   // JTD group
-  pctComp: 46, jtdQty: 50, jtdHrs: 52, jtdCost: 65, jtdPi: 40,
+  pctComp: 54, jtdQty: 62, jtdHrs: 62, jtdCost: 78, jtdPi: 50,
   // Projected group
-  projQty: 50, projHrs: 52, projCost: 65, projPi: 40,
+  projQty: 62, projHrs: 62, projCost: 78, projPi: 50,
   // Schedule
-  start: 88, end: 88, dur: 38, contour: 62
+  start: 100, end: 100, dur: 44, pred: 44, contour: 74
 };
 
 const GridView: React.FC<{
   items: PhaseScheduleItem[];
+  allItems: PhaseScheduleItem[];
   months: Date[];
   mode: 'cost' | 'qty';
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
@@ -692,9 +955,31 @@ const GridView: React.FC<{
   onFilterChange: (text: string) => void;
   sortDir: 'none' | 'asc' | 'desc';
   onSortChange: () => void;
-}> = ({ items, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange }) => {
+}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange }) => {
   const [colWidths, setColWidths] = useState(GRID_COL_DEFAULTS);
   const resizingRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  // Hidden columns state
+  const [gridHiddenCols, setGridHiddenCols] = useState<Set<string>>(new Set());
+  const [gridContextMenu, setGridContextMenu] = useState<{ x: number; y: number; key: string; label: string } | null>(null);
+  const [showGridChooser, setShowGridChooser] = useState(false);
+  const gv = (col: string) => !gridHiddenCols.has(col); // shorthand: visible?
+
+  const toggleGridCol = (key: string) => {
+    setGridHiddenCols(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const gridHeaderContextMenu = (e: React.MouseEvent, key: string, label: string) => {
+    const def = GRID_COLUMN_DEFS.find(c => c.key === key);
+    if (!def?.hideable) return;
+    e.preventDefault();
+    setGridContextMenu({ x: e.clientX, y: e.clientY, key, label });
+  };
 
   // Column resize handlers
   useEffect(() => {
@@ -720,6 +1005,51 @@ const GridView: React.FC<{
     resizingRef.current = { col, startX: e.clientX, startW: (colWidths as any)[col] || 60 };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+  };
+
+  const autofitColumn = (col: string) => {
+    const table = tableRef.current;
+    if (!table) return;
+    // Find the column index by looking for the header with data-col attribute
+    const headers = table.querySelectorAll('thead tr:last-child th');
+    let colIndex = -1;
+    headers.forEach((th, i) => {
+      if ((th as HTMLElement).dataset.col === col) colIndex = i;
+    });
+    if (colIndex < 0) return;
+
+    // Use an offscreen canvas to measure text width (tableLayout:fixed prevents scrollWidth from working)
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let maxW = 36; // minimum
+
+    // Measure header text
+    const headerTh = headers[colIndex] as HTMLElement;
+    if (headerTh) {
+      ctx.font = '600 0.65rem system-ui, -apple-system, sans-serif';
+      const headerText = headerTh.textContent || '';
+      maxW = Math.max(maxW, ctx.measureText(headerText).width + 24);
+    }
+
+    // Measure body cell text content
+    ctx.font = '0.68rem system-ui, -apple-system, sans-serif';
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+      const cell = row.children[colIndex] as HTMLElement | undefined;
+      if (!cell) return;
+      // Get visible text from inputs/selects or text content
+      const input = cell.querySelector('input, select') as HTMLInputElement | null;
+      const text = input ? (input.value || input.placeholder || '') : (cell.textContent || '');
+      if (text && text !== '-') {
+        const w = ctx.measureText(text).width + 16; // padding
+        maxW = Math.max(maxW, w);
+      }
+    });
+
+    maxW = Math.min(Math.ceil(maxW), 400);
+    setColWidths(prev => ({ ...prev, [col]: maxW }));
   };
 
   const allMonthlyValues = useMemo(() => {
@@ -765,28 +1095,62 @@ const GridView: React.FC<{
   }, [costTypeGroups, months, allMonthlyValues]);
 
   const monthColWidth = 62;
-  // Compute group widths for spanning headers
-  const estGroupW = colWidths.estQty + colWidths.uom + colWidths.estHrs + colWidths.estCost + colWidths.estPi;
-  const jtdGroupW = colWidths.pctComp + colWidths.jtdQty + colWidths.jtdHrs + colWidths.jtdCost + colWidths.jtdPi;
-  const projGroupW = colWidths.projQty + colWidths.projHrs + colWidths.projCost + colWidths.projPi;
-  const schedGroupW = colWidths.start + colWidths.end + colWidths.dur + colWidths.contour;
-  const fixedWidth = colWidths.sel + colWidths.phase + colWidths.ct + estGroupW + jtdGroupW + projGroupW + schedGroupW;
+  // Compute group widths for spanning headers (skip hidden columns)
+  const vw = (col: string) => gv(col) ? (colWidths as any)[col] : 0;
+  const estCols = ['estQty', 'uom', 'estHrs', 'estCost', 'estPi'];
+  const jtdCols = ['pctComp', 'jtdQty', 'jtdHrs', 'jtdCost', 'jtdPi'];
+  const projCols = ['projQty', 'projHrs', 'projCost', 'projPi'];
+  const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
+  const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
+  const jtdGroupW = jtdCols.reduce((s, c) => s + vw(c), 0);
+  const projGroupW = projCols.reduce((s, c) => s + vw(c), 0);
+  const schedGroupW = schedCols.reduce((s, c) => s + vw(c), 0);
+  const estColSpan = estCols.filter(c => gv(c)).length;
+  const jtdColSpan = jtdCols.filter(c => gv(c)).length;
+  const projColSpan = projCols.filter(c => gv(c)).length;
+  const schedColSpan = schedCols.filter(c => gv(c)).length;
+  const fixedWidth = colWidths.sel + colWidths.rowNum + colWidths.phase + vw('ct') + estGroupW + jtdGroupW + projGroupW + schedGroupW;
 
   const thStyle = (width: number, extra: React.CSSProperties = {}): React.CSSProperties => ({
-    width, minWidth: width, maxWidth: width, padding: '0.3rem 0.2rem', textAlign: 'center' as const,
-    borderBottom: '2px solid #e2e8f0', fontSize: '0.65rem', fontWeight: 600,
+    width, minWidth: width, maxWidth: width, padding: '0.15rem 0.2rem', textAlign: 'center' as const,
+    borderBottom: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1',
+    fontSize: '0.68rem', fontWeight: 600,
     whiteSpace: 'nowrap' as const, position: 'relative' as const, color: '#1e293b', overflow: 'hidden' as const,
+    background: '#eef2f7',
     ...extra
   });
 
   const groupHeaderStyle = (width: number, color: string): React.CSSProperties => ({
-    width, minWidth: width, textAlign: 'center' as const, padding: '0.25rem 0',
+    width, minWidth: width, textAlign: 'center' as const, padding: '0.15rem 0',
     fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.5px',
-    borderBottom: `2px solid ${color}`, color, background: '#f8fafc'
+    borderBottom: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1',
+    color, background: '#eef2f7'
   });
 
+  const dblClickRef = useRef<{ col: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const handleResizeMouseDown = (col: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (dblClickRef.current && dblClickRef.current.col === col) {
+      // Second click within timeout — it's a double-click
+      clearTimeout(dblClickRef.current.timer);
+      dblClickRef.current = null;
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      autofitColumn(col);
+      return;
+    }
+    // First click — start resize but also set a timer for double-click detection
+    startResize(col, e);
+    dblClickRef.current = {
+      col,
+      timer: setTimeout(() => { dblClickRef.current = null; }, 300)
+    };
+  };
+
   const resizeHandle = (col: string) => (
-    <div onMouseDown={e => startResize(col, e)}
+    <div onMouseDown={e => handleResizeMouseDown(col, e)}
       style={{ position: 'absolute', right: -1, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 1 }}
       onMouseEnter={e => { (e.target as HTMLElement).style.backgroundColor = 'rgba(59,130,246,0.25)'; }}
       onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
@@ -794,31 +1158,34 @@ const GridView: React.FC<{
   );
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
-      <table style={{ borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed', width: fixedWidth + months.length * monthColWidth }}>
+    <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 280px)', border: '1px solid #cbd5e1' }}>
+      <table ref={tableRef} style={{ borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed', width: fixedWidth + months.length * monthColWidth }}>
         <thead style={{ position: 'sticky', top: 0, zIndex: 4 }}>
           {/* Group header row */}
-          <tr style={{ background: '#f8fafc' }}>
-            <th style={{ ...groupHeaderStyle(colWidths.sel, '#1e293b'), position: 'sticky', left: 0, background: '#f8fafc', zIndex: 6, textAlign: 'center' }}>
+          <tr style={{ background: '#eef2f7' }}>
+            <th style={{ ...groupHeaderStyle(colWidths.sel, '#1e293b'), position: 'sticky', left: 0, background: '#eef2f7', zIndex: 6, textAlign: 'center' }}>
               <input type="checkbox" checked={selectedItems.size === items.length && items.length > 0}
                 onChange={onToggleAll} style={{ cursor: 'pointer' }} title="Select all" />
             </th>
-            <th style={{ ...groupHeaderStyle(colWidths.phase, '#1e293b'), textAlign: 'left', position: 'sticky', left: colWidths.sel, background: '#f8fafc', zIndex: 5, borderRight: '2px solid #e2e8f0', padding: '0.25rem 0.5rem' }}></th>
-            <th style={groupHeaderStyle(colWidths.ct, '#1e293b')}></th>
-            <th colSpan={5} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), borderRight: '2px solid #e2e8f0' }}>Estimated</th>
-            <th colSpan={5} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), borderRight: '2px solid #e2e8f0' }}>JTD</th>
-            <th colSpan={4} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), borderRight: '2px solid #e2e8f0' }}>Projected</th>
-            <th colSpan={4} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), borderRight: '2px solid #e2e8f0' }}>Schedule</th>
+            <th style={{ ...groupHeaderStyle(colWidths.rowNum, '#1e293b') }}></th>
+            <th style={{ ...groupHeaderStyle(colWidths.phase, '#1e293b'), textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 5, padding: '0.15rem 0.5rem' }}></th>
+            {gv('ct') && <th style={groupHeaderStyle(colWidths.ct, '#1e293b')}></th>}
+            {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderRight: '2px solid #94a3b8' }}>Estimated</th>}
+            {jtdColSpan > 0 && <th colSpan={jtdColSpan} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' }}>JTD</th>}
+            {projColSpan > 0 && <th colSpan={projColSpan} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' }}>Projected</th>}
+            {schedColSpan > 0 && <th colSpan={schedColSpan} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' }}>Schedule</th>}
             {months.length > 0 && (
               <th colSpan={months.length} style={groupHeaderStyle(months.length * monthColWidth, '#8b5cf6')}>Monthly Distribution</th>
             )}
           </tr>
           {/* Column header row */}
-          <tr style={{ background: '#f8fafc' }}>
+          <tr style={{ background: '#eef2f7' }}>
             {/* Checkbox column spacer */}
-            <th style={thStyle(colWidths.sel, { position: 'sticky', left: 0, background: '#f8fafc', zIndex: 6 })}></th>
+            <th data-col="sel" style={thStyle(colWidths.sel, { position: 'sticky', left: 0, background: '#eef2f7', zIndex: 6 })}></th>
+            {/* ID column */}
+            <th data-col="rowNum" style={thStyle(colWidths.rowNum)}>ID{resizeHandle('rowNum')}</th>
             {/* Fixed columns */}
-            <th style={thStyle(colWidths.phase, { textAlign: 'left', position: 'sticky', left: colWidths.sel, background: '#f8fafc', zIndex: 5, borderRight: '2px solid #e2e8f0', padding: '0.2rem 0.4rem' })}>
+            <th data-col="phase" style={thStyle(colWidths.phase, { textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 5, padding: '0.15rem 0.4rem' })}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                 <input type="text" value={filterText} onChange={e => onFilterChange(e.target.value)}
                   placeholder="Search phases..." style={{
@@ -842,32 +1209,33 @@ const GridView: React.FC<{
               </div>
               {resizeHandle('phase')}
             </th>
-            <th style={thStyle(colWidths.ct)}>CT{resizeHandle('ct')}</th>
+            {gv('ct') && <th data-col="ct" onContextMenu={e => gridHeaderContextMenu(e, 'ct', 'CT')} style={thStyle(colWidths.ct)}>CT{resizeHandle('ct')}</th>}
             {/* Estimated group */}
-            <th style={thStyle(colWidths.estQty, { borderLeft: '1px solid #dbeafe' })}>Qty{resizeHandle('estQty')}</th>
-            <th style={thStyle(colWidths.uom)}>UOM{resizeHandle('uom')}</th>
-            <th style={thStyle(colWidths.estHrs)}>Hrs{resizeHandle('estHrs')}</th>
-            <th style={thStyle(colWidths.estCost)}>Cost{resizeHandle('estCost')}</th>
-            <th style={thStyle(colWidths.estPi, { borderRight: '2px solid #e2e8f0' })}>PI{resizeHandle('estPi')}</th>
+            {gv('estQty') && <th data-col="estQty" onContextMenu={e => gridHeaderContextMenu(e, 'estQty', 'Est Qty')} style={thStyle(colWidths.estQty, { background: COL_GROUP.est.hdr })}>Qty{resizeHandle('estQty')}</th>}
+            {gv('uom') && <th data-col="uom" onContextMenu={e => gridHeaderContextMenu(e, 'uom', 'UOM')} style={thStyle(colWidths.uom, { background: COL_GROUP.est.hdr })}>UOM{resizeHandle('uom')}</th>}
+            {gv('estHrs') && <th data-col="estHrs" onContextMenu={e => gridHeaderContextMenu(e, 'estHrs', 'Est Hrs')} style={thStyle(colWidths.estHrs, { background: COL_GROUP.est.hdr })}>Hrs{resizeHandle('estHrs')}</th>}
+            {gv('estCost') && <th data-col="estCost" onContextMenu={e => gridHeaderContextMenu(e, 'estCost', 'Est Cost')} style={thStyle(colWidths.estCost, { background: COL_GROUP.est.hdr })}>Cost{resizeHandle('estCost')}</th>}
+            {gv('estPi') && <th data-col="estPi" onContextMenu={e => gridHeaderContextMenu(e, 'estPi', 'Est PI')} style={thStyle(colWidths.estPi, { background: COL_GROUP.est.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('estPi')}</th>}
             {/* JTD group */}
-            <th style={thStyle(colWidths.pctComp)}>%Comp{resizeHandle('pctComp')}</th>
-            <th style={thStyle(colWidths.jtdQty)}>Qty{resizeHandle('jtdQty')}</th>
-            <th style={thStyle(colWidths.jtdHrs)}>Hrs{resizeHandle('jtdHrs')}</th>
-            <th style={thStyle(colWidths.jtdCost)}>Cost{resizeHandle('jtdCost')}</th>
-            <th style={thStyle(colWidths.jtdPi, { borderRight: '2px solid #e2e8f0' })}>PI{resizeHandle('jtdPi')}</th>
+            {gv('pctComp') && <th data-col="pctComp" onContextMenu={e => gridHeaderContextMenu(e, 'pctComp', '%Comp')} style={thStyle(colWidths.pctComp, { background: COL_GROUP.jtd.hdr })}>%Comp{resizeHandle('pctComp')}</th>}
+            {gv('jtdQty') && <th data-col="jtdQty" onContextMenu={e => gridHeaderContextMenu(e, 'jtdQty', 'JTD Qty')} style={thStyle(colWidths.jtdQty, { background: COL_GROUP.jtd.hdr })}>Qty{resizeHandle('jtdQty')}</th>}
+            {gv('jtdHrs') && <th data-col="jtdHrs" onContextMenu={e => gridHeaderContextMenu(e, 'jtdHrs', 'JTD Hrs')} style={thStyle(colWidths.jtdHrs, { background: COL_GROUP.jtd.hdr })}>Hrs{resizeHandle('jtdHrs')}</th>}
+            {gv('jtdCost') && <th data-col="jtdCost" onContextMenu={e => gridHeaderContextMenu(e, 'jtdCost', 'JTD Cost')} style={thStyle(colWidths.jtdCost, { background: COL_GROUP.jtd.hdr })}>Cost{resizeHandle('jtdCost')}</th>}
+            {gv('jtdPi') && <th data-col="jtdPi" onContextMenu={e => gridHeaderContextMenu(e, 'jtdPi', 'JTD PI')} style={thStyle(colWidths.jtdPi, { background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('jtdPi')}</th>}
             {/* Projected group */}
-            <th style={thStyle(colWidths.projQty)}>Qty{resizeHandle('projQty')}</th>
-            <th style={thStyle(colWidths.projHrs)}>Hrs{resizeHandle('projHrs')}</th>
-            <th style={thStyle(colWidths.projCost)}>Cost{resizeHandle('projCost')}</th>
-            <th style={thStyle(colWidths.projPi, { borderRight: '2px solid #e2e8f0' })}>PI{resizeHandle('projPi')}</th>
+            {gv('projQty') && <th data-col="projQty" onContextMenu={e => gridHeaderContextMenu(e, 'projQty', 'Proj Qty')} style={thStyle(colWidths.projQty, { background: COL_GROUP.proj.hdr })}>Qty{resizeHandle('projQty')}</th>}
+            {gv('projHrs') && <th data-col="projHrs" onContextMenu={e => gridHeaderContextMenu(e, 'projHrs', 'Proj Hrs')} style={thStyle(colWidths.projHrs, { background: COL_GROUP.proj.hdr })}>Hrs{resizeHandle('projHrs')}</th>}
+            {gv('projCost') && <th data-col="projCost" onContextMenu={e => gridHeaderContextMenu(e, 'projCost', 'Proj Cost')} style={thStyle(colWidths.projCost, { background: COL_GROUP.proj.hdr })}>Cost{resizeHandle('projCost')}</th>}
+            {gv('projPi') && <th data-col="projPi" onContextMenu={e => gridHeaderContextMenu(e, 'projPi', 'Proj PI')} style={thStyle(colWidths.projPi, { background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('projPi')}</th>}
             {/* Schedule group */}
-            <th style={thStyle(colWidths.start)}>Start{resizeHandle('start')}</th>
-            <th style={thStyle(colWidths.end)}>End{resizeHandle('end')}</th>
-            <th style={thStyle(colWidths.dur)}>Days{resizeHandle('dur')}</th>
-            <th style={thStyle(colWidths.contour, { borderRight: '2px solid #e2e8f0' })}>Contour{resizeHandle('contour')}</th>
+            {gv('start') && <th data-col="start" onContextMenu={e => gridHeaderContextMenu(e, 'start', 'Start')} style={thStyle(colWidths.start, { background: COL_GROUP.sched.hdr })}>Start{resizeHandle('start')}</th>}
+            {gv('end') && <th data-col="end" onContextMenu={e => gridHeaderContextMenu(e, 'end', 'End')} style={thStyle(colWidths.end, { background: COL_GROUP.sched.hdr })}>End{resizeHandle('end')}</th>}
+            {gv('dur') && <th data-col="dur" onContextMenu={e => gridHeaderContextMenu(e, 'dur', 'Days')} style={thStyle(colWidths.dur, { background: COL_GROUP.sched.hdr })}>Days{resizeHandle('dur')}</th>}
+            {gv('pred') && <th data-col="pred" onContextMenu={e => gridHeaderContextMenu(e, 'pred', 'Predecessor')} style={thStyle(colWidths.pred, { background: COL_GROUP.sched.hdr })}>Pred{resizeHandle('pred')}</th>}
+            {gv('contour') && <th data-col="contour" onContextMenu={e => gridHeaderContextMenu(e, 'contour', 'Contour')} style={thStyle(colWidths.contour, { background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' })}>Contour{resizeHandle('contour')}</th>}
             {/* Monthly columns */}
             {months.map(m => (
-              <th key={m.toISOString()} style={thStyle(monthColWidth, { borderRight: '1px solid #f1f5f9' })}>
+              <th key={m.toISOString()} style={thStyle(monthColWidth, { borderRight: '1px solid #cbd5e1' })}>
                 {format(m, 'MMM yy')}
               </th>
             ))}
@@ -886,14 +1254,16 @@ const GridView: React.FC<{
                   colWidths={colWidths} monthColWidth={monthColWidth}
                   selectedItems={selectedItems}
                   onToggleGroupSelection={() => onToggleGroupSelection(group.costType)}
+                  hiddenCols={gridHiddenCols}
                 />
                 {!isCollapsed && group.items.map(item => (
-                  <GridRow key={item.id} item={item} months={months} mode={mode}
+                  <GridRow key={item.id} item={item} allItems={allItems} months={months} mode={mode}
                     monthlyVals={allMonthlyValues.get(item.id) || {}} maxVal={maxVal}
                     colWidths={colWidths} monthColWidth={monthColWidth}
                     onUpdate={onUpdate} onEdit={onEdit}
                     isSelected={selectedItems.has(item.id)}
-                    onToggleSelection={onToggleItem} />
+                    onToggleSelection={onToggleItem}
+                    hiddenCols={gridHiddenCols} />
                 ))}
               </React.Fragment>
             );
@@ -921,42 +1291,44 @@ const GridView: React.FC<{
               const jC = parseNum(i.total_jtd_cost);
               return s + (pct > 0 ? jC / (pct / 100) : parseNum(i.total_est_cost));
             }, 0);
-            const tdTot: React.CSSProperties = { padding: '0.3rem 0.2rem', textAlign: 'right', borderTop: '2px solid #e2e8f0', fontSize: '0.65rem', whiteSpace: 'nowrap' };
+            const tdTot: React.CSSProperties = { padding: '0.15rem 0.2rem', textAlign: 'center', borderTop: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', whiteSpace: 'nowrap' };
             return (
               <tr style={{ fontWeight: 600, background: '#f1f5f9' }}>
-                <td style={{ position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderTop: '2px solid #e2e8f0', width: colWidths.sel }}></td>
-                <td style={{ position: 'sticky', left: colWidths.sel, background: '#f1f5f9', zIndex: 1, padding: '0.4rem 0.5rem', borderTop: '2px solid #e2e8f0', borderRight: '2px solid #e2e8f0', fontSize: '0.72rem', width: colWidths.phase }}>
+                <td style={{ position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderTop: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1', width: colWidths.sel }}></td>
+                <td style={{ ...tdTot, width: colWidths.rowNum }}></td>
+                <td style={{ position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#f1f5f9', zIndex: 1, padding: '0.15rem 0.5rem', borderTop: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1', fontSize: '0.72rem', width: colWidths.phase }}>
                   Totals
                 </td>
-                <td style={{ ...tdTot, width: colWidths.ct }}></td>
+                {gv('ct') && <td style={{ ...tdTot, width: colWidths.ct }}></td>}
                 {/* Estimated totals */}
-                <td style={{ ...tdTot, width: colWidths.estQty }}>{totEstQty > 0 ? totEstQty.toFixed(0) : ''}</td>
-                <td style={{ ...tdTot, width: colWidths.uom }}></td>
-                <td style={{ ...tdTot, width: colWidths.estHrs }}>{fmtHrs(totEstHrs)}</td>
-                <td style={{ ...tdTot, width: colWidths.estCost }}>{fmtCompact(totEstCost)}</td>
-                <td style={{ ...tdTot, width: colWidths.estPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(totEstQty, totEstHrs)}</td>
+                {gv('estQty') && <td style={{ ...tdTot, width: colWidths.estQty, background: COL_GROUP.est.cell }}>{totEstQty > 0 ? Math.round(totEstQty).toLocaleString() : ''}</td>}
+                {gv('uom') && <td style={{ ...tdTot, width: colWidths.uom, background: COL_GROUP.est.cell }}></td>}
+                {gv('estHrs') && <td style={{ ...tdTot, width: colWidths.estHrs, background: COL_GROUP.est.cell }}>{fmtHrs(totEstHrs)}</td>}
+                {gv('estCost') && <td style={{ ...tdTot, width: colWidths.estCost, background: COL_GROUP.est.cell }}>{fmtCompact(totEstCost)}</td>}
+                {gv('estPi') && <td style={{ ...tdTot, width: colWidths.estPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.est.cell }}>{fmtPi(totEstQty, totEstHrs)}</td>}
                 {/* JTD totals */}
-                <td style={{ ...tdTot, width: colWidths.pctComp }}>{totPctComp > 0 ? `${totPctComp.toFixed(1)}%` : ''}</td>
-                <td style={{ ...tdTot, width: colWidths.jtdQty }}>{totJtdQty > 0 ? totJtdQty.toFixed(0) : ''}</td>
-                <td style={{ ...tdTot, width: colWidths.jtdHrs }}>{fmtHrs(totJtdHrs)}</td>
-                <td style={{ ...tdTot, width: colWidths.jtdCost }}>{fmtCompact(totJtdCost)}</td>
-                <td style={{ ...tdTot, width: colWidths.jtdPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(totJtdQty, totJtdHrs)}</td>
+                {gv('pctComp') && <td style={{ ...tdTot, width: colWidths.pctComp, background: COL_GROUP.jtd.cell }}>{totPctComp > 0 ? `${Math.round(totPctComp)}%` : ''}</td>}
+                {gv('jtdQty') && <td style={{ ...tdTot, width: colWidths.jtdQty, background: COL_GROUP.jtd.cell }}>{totJtdQty > 0 ? Math.round(totJtdQty).toLocaleString() : ''}</td>}
+                {gv('jtdHrs') && <td style={{ ...tdTot, width: colWidths.jtdHrs, background: COL_GROUP.jtd.cell }}>{fmtHrs(totJtdHrs)}</td>}
+                {gv('jtdCost') && <td style={{ ...tdTot, width: colWidths.jtdCost, background: COL_GROUP.jtd.cell }}>{fmtCompact(totJtdCost)}</td>}
+                {gv('jtdPi') && <td style={{ ...tdTot, width: colWidths.jtdPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.jtd.cell }}>{fmtPi(totJtdQty, totJtdHrs)}</td>}
                 {/* Projected totals */}
-                <td style={{ ...tdTot, width: colWidths.projQty }}>{totProjQty > 0 ? totProjQty.toFixed(0) : ''}</td>
-                <td style={{ ...tdTot, width: colWidths.projHrs }}>{fmtHrs(totProjHrs)}</td>
-                <td style={{ ...tdTot, width: colWidths.projCost }}>{fmtCompact(totProjCost)}</td>
-                <td style={{ ...tdTot, width: colWidths.projPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(totProjQty, totProjHrs)}</td>
+                {gv('projQty') && <td style={{ ...tdTot, width: colWidths.projQty, background: COL_GROUP.proj.cell }}>{totProjQty > 0 ? Math.round(totProjQty).toLocaleString() : ''}</td>}
+                {gv('projHrs') && <td style={{ ...tdTot, width: colWidths.projHrs, background: COL_GROUP.proj.cell }}>{fmtHrs(totProjHrs)}</td>}
+                {gv('projCost') && <td style={{ ...tdTot, width: colWidths.projCost, background: COL_GROUP.proj.cell }}>{fmtCompact(totProjCost)}</td>}
+                {gv('projPi') && <td style={{ ...tdTot, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.proj.cell }}>{fmtPi(totProjQty, totProjHrs)}</td>}
                 {/* Schedule totals (empty) */}
-                <td style={{ ...tdTot, width: colWidths.start }}></td>
-                <td style={{ ...tdTot, width: colWidths.end }}></td>
-                <td style={{ ...tdTot, width: colWidths.dur }}></td>
-                <td style={{ ...tdTot, width: colWidths.contour, borderRight: '2px solid #e2e8f0' }}></td>
+                {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell }}></td>}
+                {gv('end') && <td style={{ ...tdTot, width: colWidths.end, background: COL_GROUP.sched.cell }}></td>}
+                {gv('dur') && <td style={{ ...tdTot, width: colWidths.dur, background: COL_GROUP.sched.cell }}></td>}
+                {gv('pred') && <td style={{ ...tdTot, width: colWidths.pred, background: COL_GROUP.sched.cell }}></td>}
+                {gv('contour') && <td style={{ ...tdTot, width: colWidths.contour, borderRight: '2px solid #94a3b8', background: COL_GROUP.sched.cell }}></td>}
                 {/* Monthly totals */}
                 {months.map(m => {
                   const key = format(m, 'yyyy-MM');
                   const total = columnTotals[key] || 0;
                   return (
-                    <td key={key} style={{ ...tdTot, borderRight: '1px solid #f1f5f9', width: monthColWidth }}>
+                    <td key={key} style={{ ...tdTot, width: monthColWidth }}>
                       {total > 0 ? (mode === 'cost' ? fmtCompact(total) : total.toFixed(0)) : ''}
                     </td>
                   );
@@ -966,6 +1338,26 @@ const GridView: React.FC<{
           })()}
         </tbody>
       </table>
+
+      {/* Context menu + Column chooser for Grid */}
+      {gridContextMenu && (
+        <ColumnContextMenu
+          x={gridContextMenu.x} y={gridContextMenu.y}
+          colKey={gridContextMenu.key} colLabel={gridContextMenu.label}
+          onHide={() => toggleGridCol(gridContextMenu.key)}
+          onChooser={() => setShowGridChooser(true)}
+          onClose={() => setGridContextMenu(null)}
+        />
+      )}
+      {showGridChooser && (
+        <ColumnChooserDialog
+          columnDefs={GRID_COLUMN_DEFS}
+          hiddenCols={gridHiddenCols}
+          onToggle={toggleGridCol}
+          onShowAll={() => setGridHiddenCols(new Set())}
+          onClose={() => setShowGridChooser(false)}
+        />
+      )}
     </div>
   );
 };
@@ -982,7 +1374,9 @@ const CostTypeSummaryRow: React.FC<{
   monthColWidth: number;
   selectedItems: Set<number>;
   onToggleGroupSelection: () => void;
-}> = ({ group, isCollapsed, onToggle, months, mode, monthlyTotals, colWidths, monthColWidth, selectedItems, onToggleGroupSelection }) => {
+  hiddenCols: Set<string>;
+}> = ({ group, isCollapsed, onToggle, months, mode, monthlyTotals, colWidths, monthColWidth, selectedItems, onToggleGroupSelection, hiddenCols }) => {
+  const sv = (col: string) => !hiddenCols.has(col);
   const checkRef = useRef<HTMLInputElement>(null);
   const allSelected = group.items.length > 0 && group.items.every(i => selectedItems.has(i.id));
   const someSelected = group.items.some(i => selectedItems.has(i.id));
@@ -991,9 +1385,10 @@ const CostTypeSummaryRow: React.FC<{
   }, [allSelected, someSelected]);
 
   const tdS: React.CSSProperties = {
-    padding: '0.3rem 0.2rem', fontSize: '0.68rem', whiteSpace: 'nowrap',
-    textAlign: 'right', fontWeight: 600, color: '#1e293b',
-    borderBottom: `2px solid ${group.color}40`, backgroundColor: `${group.color}08`,
+    padding: '0.15rem 0.2rem', fontSize: '0.68rem', whiteSpace: 'nowrap',
+    textAlign: 'center', fontWeight: 600, color: '#1e293b',
+    borderBottom: '1px solid #94a3b8', borderRight: '1px solid #cbd5e1',
+    backgroundColor: `${group.color}08`,
   };
   return (
     <tr style={{ cursor: 'pointer', backgroundColor: `${group.color}08` }} onClick={onToggle}>
@@ -1003,11 +1398,13 @@ const CostTypeSummaryRow: React.FC<{
         <input ref={checkRef} type="checkbox" checked={allSelected} onChange={onToggleGroupSelection}
           style={{ cursor: 'pointer' }} title={`Select all ${group.name} items`} />
       </td>
+      {/* ID (empty for group) */}
+      <td style={{ ...tdS, width: colWidths.rowNum }}></td>
       {/* Phase name - cost type name with chevron */}
       <td style={{
-        ...tdS, textAlign: 'left', position: 'sticky', left: colWidths.sel,
+        ...tdS, textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum,
         backgroundColor: `${group.color}08`, zIndex: 1,
-        borderRight: '2px solid #e2e8f0', padding: '0.4rem 0.5rem', width: colWidths.phase
+        borderRight: '1px solid #cbd5e1', padding: '0.4rem 0.5rem', width: colWidths.phase
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{
@@ -1023,36 +1420,37 @@ const CostTypeSummaryRow: React.FC<{
           <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 400 }}>({group.items.length})</span>
         </div>
       </td>
-      <td style={{ ...tdS, width: colWidths.ct }}></td>
+      {sv('ct') && <td style={{ ...tdS, width: colWidths.ct }}></td>}
       {/* Estimated */}
-      <td style={{ ...tdS, width: colWidths.estQty }}>{group.estQty > 0 ? group.estQty.toFixed(0) : ''}</td>
-      <td style={{ ...tdS, width: colWidths.uom }}></td>
-      <td style={{ ...tdS, width: colWidths.estHrs }}>{fmtHrs(group.estHrs)}</td>
-      <td style={{ ...tdS, width: colWidths.estCost }}>{fmtCompact(group.estCost)}</td>
-      <td style={{ ...tdS, width: colWidths.estPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(group.estQty, group.estHrs)}</td>
+      {sv('estQty') && <td style={{ ...tdS, width: colWidths.estQty, backgroundColor: COL_GROUP.est.cell }}>{group.estQty > 0 ? Math.round(group.estQty).toLocaleString() : ''}</td>}
+      {sv('uom') && <td style={{ ...tdS, width: colWidths.uom, backgroundColor: COL_GROUP.est.cell }}></td>}
+      {sv('estHrs') && <td style={{ ...tdS, width: colWidths.estHrs, backgroundColor: COL_GROUP.est.cell }}>{fmtHrs(group.estHrs)}</td>}
+      {sv('estCost') && <td style={{ ...tdS, width: colWidths.estCost, backgroundColor: COL_GROUP.est.cell }}>{fmtCompact(group.estCost)}</td>}
+      {sv('estPi') && <td style={{ ...tdS, width: colWidths.estPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.est.cell }}>{fmtPi(group.estQty, group.estHrs)}</td>}
       {/* JTD */}
-      <td style={{ ...tdS, width: colWidths.pctComp }}>{group.pctComp > 0 ? `${group.pctComp.toFixed(1)}%` : ''}</td>
-      <td style={{ ...tdS, width: colWidths.jtdQty }}>{group.jtdQty > 0 ? group.jtdQty.toFixed(0) : ''}</td>
-      <td style={{ ...tdS, width: colWidths.jtdHrs }}>{fmtHrs(group.jtdHrs)}</td>
-      <td style={{ ...tdS, width: colWidths.jtdCost }}>{fmtCompact(group.jtdCost)}</td>
-      <td style={{ ...tdS, width: colWidths.jtdPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(group.jtdQty, group.jtdHrs)}</td>
+      {sv('pctComp') && <td style={{ ...tdS, width: colWidths.pctComp, backgroundColor: COL_GROUP.jtd.cell }}>{group.pctComp > 0 ? `${Math.round(group.pctComp)}%` : ''}</td>}
+      {sv('jtdQty') && <td style={{ ...tdS, width: colWidths.jtdQty, backgroundColor: COL_GROUP.jtd.cell }}>{group.jtdQty > 0 ? Math.round(group.jtdQty).toLocaleString() : ''}</td>}
+      {sv('jtdHrs') && <td style={{ ...tdS, width: colWidths.jtdHrs, backgroundColor: COL_GROUP.jtd.cell }}>{fmtHrs(group.jtdHrs)}</td>}
+      {sv('jtdCost') && <td style={{ ...tdS, width: colWidths.jtdCost, backgroundColor: COL_GROUP.jtd.cell }}>{fmtCompact(group.jtdCost)}</td>}
+      {sv('jtdPi') && <td style={{ ...tdS, width: colWidths.jtdPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.jtd.cell }}>{fmtPi(group.jtdQty, group.jtdHrs)}</td>}
       {/* Projected (color coded vs estimate) */}
-      <td style={{ ...tdS, width: colWidths.projQty }}>{group.projQty > 0 ? group.projQty.toFixed(0) : ''}</td>
-      <td style={{ ...tdS, width: colWidths.projHrs, color: group.projHrs > group.estHrs ? '#ef4444' : group.projHrs < group.estHrs ? '#10b981' : '#1e293b' }}>{fmtHrs(group.projHrs)}</td>
-      <td style={{ ...tdS, width: colWidths.projCost, color: group.projCost > group.estCost ? '#ef4444' : group.projCost < group.estCost ? '#10b981' : '#1e293b' }}>{fmtCompact(group.projCost)}</td>
-      <td style={{ ...tdS, width: colWidths.projPi, borderRight: '2px solid #e2e8f0', color: (() => { const ePi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const pPi = group.projHrs > 0 ? group.projQty / group.projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#1e293b'; })() }}>{fmtPi(group.projQty, group.projHrs)}</td>
+      {sv('projQty') && <td style={{ ...tdS, width: colWidths.projQty, backgroundColor: COL_GROUP.proj.cell }}>{group.projQty > 0 ? Math.round(group.projQty).toLocaleString() : ''}</td>}
+      {sv('projHrs') && <td style={{ ...tdS, width: colWidths.projHrs, backgroundColor: COL_GROUP.proj.cell, color: group.projHrs > group.estHrs ? '#ef4444' : group.projHrs < group.estHrs ? '#10b981' : '#1e293b' }}>{fmtHrs(group.projHrs)}</td>}
+      {sv('projCost') && <td style={{ ...tdS, width: colWidths.projCost, backgroundColor: COL_GROUP.proj.cell, color: group.projCost > group.estCost ? '#ef4444' : group.projCost < group.estCost ? '#10b981' : '#1e293b' }}>{fmtCompact(group.projCost)}</td>}
+      {sv('projPi') && <td style={{ ...tdS, width: colWidths.projPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.proj.cell, color: (() => { const ePi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const pPi = group.projHrs > 0 ? group.projQty / group.projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#1e293b'; })() }}>{fmtPi(group.projQty, group.projHrs)}</td>}
       {/* Schedule */}
-      <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem' }}>{group.earliestStart ? fmtDate(group.earliestStart).substring(5) : ''}</td>
-      <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem' }}>{group.latestEnd ? fmtDate(group.latestEnd).substring(5) : ''}</td>
-      <td style={{ ...tdS, width: colWidths.dur, textAlign: 'center' }}>{group.duration || ''}</td>
-      <td style={{ ...tdS, width: colWidths.contour, borderRight: '2px solid #e2e8f0' }}></td>
+      {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{group.earliestStart ? fmtDate(group.earliestStart).substring(5) : ''}</td>}
+      {sv('end') && <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{group.latestEnd ? fmtDate(group.latestEnd).substring(5) : ''}</td>}
+      {sv('dur') && <td style={{ ...tdS, width: colWidths.dur, textAlign: 'center', backgroundColor: COL_GROUP.sched.cell }}>{group.duration || ''}</td>}
+      {sv('pred') && <td style={{ ...tdS, width: colWidths.pred, backgroundColor: COL_GROUP.sched.cell }}></td>}
+      {sv('contour') && <td style={{ ...tdS, width: colWidths.contour, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.sched.cell }}></td>}
       {/* Monthly subtotals */}
       {months.map(m => {
         const key = format(m, 'yyyy-MM');
         const val = monthlyTotals[key] || 0;
         return (
           <td key={key} style={{
-            ...tdS, borderRight: '1px solid #f1f5f9', width: monthColWidth,
+            ...tdS, borderRight: '1px solid #cbd5e1', width: monthColWidth,
             backgroundColor: val > 0 ? `${group.color}15` : `${group.color}08`,
             fontSize: '0.63rem'
           }}>
@@ -1067,6 +1465,7 @@ const CostTypeSummaryRow: React.FC<{
 // Grid row with inline editing
 const GridRow: React.FC<{
   item: PhaseScheduleItem;
+  allItems: PhaseScheduleItem[];
   months: Date[];
   mode: 'cost' | 'qty';
   monthlyVals: Record<string, number>;
@@ -1077,7 +1476,9 @@ const GridRow: React.FC<{
   onEdit: (item: PhaseScheduleItem) => void;
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
-}> = React.memo(({ item, months, mode, monthlyVals, maxVal, colWidths, monthColWidth, onUpdate, onEdit, isSelected, onToggleSelection }) => {
+  hiddenCols: Set<string>;
+}> = React.memo(({ item, allItems, months, mode, monthlyVals, maxVal, colWidths, monthColWidth, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
+  const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
 
   // Computed values
@@ -1100,9 +1501,25 @@ const GridRow: React.FC<{
         const newEnd = format(addDays(new Date(item.start_date), value - 1), 'yyyy-MM-dd');
         onUpdate(item.id, { end_date: newEnd } as any);
       }
+    } else if (field === 'predecessor') {
+      const predRowNum = value ? parseInt(value) : null;
+      if (predRowNum === null) {
+        onUpdate(item.id, { predecessor_id: null } as any);
+        return;
+      }
+      const predItem = allItems.find(i => i.row_number === predRowNum);
+      if (!predItem) return;
+      const updates: any = { predecessor_id: predRowNum };
+      if (predItem.end_date) {
+        updates.start_date = format(addDays(new Date(predItem.end_date), 1), 'yyyy-MM-dd');
+        if (dur > 0 && updates.start_date) {
+          updates.end_date = format(addDays(new Date(updates.start_date), dur - 1), 'yyyy-MM-dd');
+        }
+      }
+      onUpdate(item.id, updates);
     } else if (field === 'percent_complete') {
       // Bidirectional: %Comp → calculate JTD Qty from Est Qty
-      const pct = parseFloat(value) || 0;
+      const pct = Math.round(parseFloat(value) || 0);
       const updates: any = { percent_complete: pct };
       if (estQty > 0) {
         updates.quantity_installed = Math.round(estQty * pct / 100 * 100) / 100;
@@ -1112,43 +1529,48 @@ const GridRow: React.FC<{
       // Bidirectional: JTD Qty → calculate %Comp from Est Qty
       const updates: any = { quantity_installed: value ?? 0 };
       if (estQty > 0) {
-        updates.percent_complete = Math.round((value ?? 0) / estQty * 10000) / 100;
+        updates.percent_complete = Math.round((value ?? 0) / estQty * 100);
       }
       onUpdate(item.id, updates);
     } else {
       onUpdate(item.id, { [field]: value } as any);
     }
-  }, [item.id, item.start_date, estQty, onUpdate]);
+  }, [item.id, item.start_date, dur, estQty, allItems, onUpdate]);
 
-  // Match ProjectedRevenue table styling
   const tdBase: React.CSSProperties = {
-    padding: '0.3rem 0.2rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.68rem', overflow: 'hidden'
+    padding: '0.15rem 0.2rem', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1',
+    fontSize: '0.68rem', overflow: 'hidden'
   };
-  // Read-only data cell
   const tdData: React.CSSProperties = {
-    ...tdBase, textAlign: 'right', color: '#1e293b', whiteSpace: 'nowrap'
+    ...tdBase, textAlign: 'center', color: '#1e293b', whiteSpace: 'nowrap'
   };
-  // Muted read-only cell
   const tdMuted: React.CSSProperties = {
-    ...tdBase, textAlign: 'right', color: '#64748b', whiteSpace: 'nowrap'
+    ...tdBase, textAlign: 'center', color: '#64748b', whiteSpace: 'nowrap'
   };
-  // Shared inline control style matching ProjectedRevenue selects
   const inlineCtrl: React.CSSProperties = {
-    padding: '0.15rem 0.2rem', fontSize: '0.63rem', border: '1px solid #e2e8f0',
-    borderRadius: '3px', background: 'transparent', color: '#64748b',
-    cursor: 'pointer', boxSizing: 'border-box' as const, width: '100%'
+    padding: '0 0.25rem', fontSize: '0.68rem', border: 'none', borderRadius: 0,
+    background: 'transparent', color: '#1e293b', fontFamily: 'inherit',
+    cursor: 'pointer', boxSizing: 'border-box' as const, width: '100%', outline: 'none',
+    textAlign: 'center' as const
   };
+
+  // Selection-aware background: selected row overrides group tints
+  const bg = (tint: string) => isSelected ? '#eff6ff' : tint;
+  // Editable cell = white, Read-only cell = group tint
+  const editBg = bg('#fff');
 
   return (
-    <tr style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: isSelected ? '#eff6ff' : undefined }}
-      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#fafbfc'; }}
-      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = ''; }}>
+    <tr style={{ backgroundColor: isSelected ? '#eff6ff' : undefined }}>
       {/* Selection checkbox */}
       <td style={{ ...tdBase, textAlign: 'center', width: colWidths.sel, position: 'sticky', left: 0, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1 }}>
         <input type="checkbox" checked={isSelected} onChange={() => onToggleSelection(item.id)} style={{ cursor: 'pointer' }} />
       </td>
+      {/* Row number (ID) */}
+      <td style={{ ...tdBase, textAlign: 'center', width: colWidths.rowNum, fontSize: '0.63rem', color: '#64748b' }}>
+        {item.row_number}
+      </td>
       {/* Phase name - click to open edit panel */}
-      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: '2px solid #e2e8f0', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer' }}
+      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel + colWidths.rowNum, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: '1px solid #cbd5e1', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer' }}
         onClick={() => onEdit(item)} title={item.name}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
           {item.cost_types?.map(ct => (
@@ -1161,130 +1583,136 @@ const GridRow: React.FC<{
         </div>
       </td>
       {/* Cost Types (read-only) */}
-      <td style={{ ...tdBase, textAlign: 'center', fontSize: '0.6rem', color: '#64748b', width: colWidths.ct }}>
+      {rv('ct') && <td style={{ ...tdBase, textAlign: 'center', fontSize: '0.6rem', color: '#64748b', width: colWidths.ct }}>
         {item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('')}
-      </td>
+      </td>}
 
       {/* === ESTIMATED GROUP === */}
-      {/* Est Qty - inline editable (user-entered) */}
-      <td style={{ ...tdBase, width: colWidths.estQty }}>
-        <input type="number" defaultValue={item.quantity || ''} placeholder="-"
+      {rv('estQty') && <td style={{ ...tdBase, width: colWidths.estQty, background: editBg }}>
+        <input type="text" defaultValue={parseNum(item.quantity) ? Math.round(parseNum(item.quantity)).toLocaleString() : ''} placeholder="-"
+          onFocus={e => {
+            e.target.value = e.target.value.replace(/,/g, '');
+            e.target.type = 'number';
+          }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : null;
+            const rounded = v !== null ? Math.round(v) : null;
+            e.target.type = 'text';
+            e.target.value = rounded ? rounded.toLocaleString() : '';
             if (v !== parseNum(item.quantity)) handleFieldChange('quantity', v);
           }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          style={{ ...inlineCtrl, textAlign: 'right', border: '1px solid transparent' }}
-          onFocus={e => { e.target.style.border = '1px solid #3b82f6'; e.target.style.background = '#eff6ff'; }}
-          onBlurCapture={e => { e.target.style.border = '1px solid transparent'; e.target.style.background = 'transparent'; }}
+          style={{ ...inlineCtrl, textAlign: 'center' }}
         />
-      </td>
-      {/* UOM - inline select (user-entered) */}
-      <td style={{ ...tdBase, width: colWidths.uom }}>
+      </td>}
+      {rv('uom') && <td style={{ ...tdBase, width: colWidths.uom, background: editBg }}>
         <select value={item.quantity_uom || ''} onChange={e => handleFieldChange('quantity_uom', e.target.value || null)}
-          style={{ ...inlineCtrl, border: '1px solid transparent' }}>
+          style={{ ...inlineCtrl }}>
           <option value="">-</option>
           {UOM_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
-      </td>
-      {/* Est Hrs (read-only from Vista) */}
-      <td style={{ ...tdData, width: colWidths.estHrs }}>{fmtHrs(estHrs)}</td>
-      {/* Est $ (read-only from Vista) */}
-      <td style={{ ...tdData, fontWeight: 500, width: colWidths.estCost }}>{fmtCompact(estCost)}</td>
-      {/* Est PI (calculated: qty / est_hours) */}
-      <td style={{ ...tdMuted, width: colWidths.estPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(estQty, estHrs)}</td>
+      </td>}
+      {rv('estHrs') && <td style={{ ...tdData, width: colWidths.estHrs, background: bg(COL_GROUP.est.cell) }}>{fmtHrs(estHrs)}</td>}
+      {rv('estCost') && <td style={{ ...tdData, fontWeight: 500, width: colWidths.estCost, background: bg(COL_GROUP.est.cell) }}>{fmtCompact(estCost)}</td>}
+      {rv('estPi') && <td style={{ ...tdMuted, width: colWidths.estPi, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.est.cell) }}>{fmtPi(estQty, estHrs)}</td>}
 
       {/* === JTD GROUP === */}
-      {/* %Complete - inline editable (bidirectional with JTD Qty) */}
-      <td style={{ ...tdBase, width: colWidths.pctComp }}>
+      {rv('pctComp') && <td style={{ ...tdBase, width: colWidths.pctComp, background: editBg }}>
         <input key={`pct-${item.id}-${item.percent_complete}`}
-          type="number" defaultValue={parseNum(item.percent_complete) || ''} placeholder="-"
-          step="1" min="0" max="100"
+          type="text" defaultValue={parseNum(item.percent_complete) ? `${Math.round(parseNum(item.percent_complete))}%` : ''} placeholder="-"
+          onFocus={e => {
+            const raw = e.target.value.replace('%', '');
+            e.target.value = raw;
+            e.target.type = 'number';
+          }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : 0;
-            if (v !== parseNum(item.percent_complete)) handleFieldChange('percent_complete', v);
+            const rounded = Math.round(v);
+            e.target.type = 'text';
+            e.target.value = rounded > 0 ? `${rounded}%` : '';
+            if (rounded !== Math.round(parseNum(item.percent_complete))) handleFieldChange('percent_complete', rounded);
           }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          style={{ ...inlineCtrl, textAlign: 'right', border: '1px solid transparent' }}
-          onFocus={e => { e.target.style.border = '1px solid #f59e0b'; e.target.style.background = '#fffbeb'; }}
-          onBlurCapture={e => { e.target.style.border = '1px solid transparent'; e.target.style.background = 'transparent'; }}
+          style={{ ...inlineCtrl, textAlign: 'center' }}
         />
-      </td>
-      {/* JTD Qty (quantity_installed - user-entered) */}
-      <td style={{ ...tdBase, width: colWidths.jtdQty }}>
+      </td>}
+      {rv('jtdQty') && <td style={{ ...tdBase, width: colWidths.jtdQty, background: editBg }}>
         <input key={`qi-${item.id}-${item.quantity_installed}`}
-          type="number" defaultValue={item.quantity_installed || ''} placeholder="-"
+          type="text" defaultValue={parseNum(item.quantity_installed) ? Math.round(parseNum(item.quantity_installed)).toLocaleString() : ''} placeholder="-"
+          onFocus={e => {
+            e.target.value = e.target.value.replace(/,/g, '');
+            e.target.type = 'number';
+          }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : null;
+            const rounded = v !== null ? Math.round(v) : null;
+            e.target.type = 'text';
+            e.target.value = rounded ? rounded.toLocaleString() : '';
             if (v !== parseNum(item.quantity_installed)) handleFieldChange('quantity_installed', v ?? 0);
           }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          style={{ ...inlineCtrl, textAlign: 'right', border: '1px solid transparent' }}
-          onFocus={e => { e.target.style.border = '1px solid #f59e0b'; e.target.style.background = '#fffbeb'; }}
-          onBlurCapture={e => { e.target.style.border = '1px solid transparent'; e.target.style.background = 'transparent'; }}
+          style={{ ...inlineCtrl, textAlign: 'center' }}
         />
-      </td>
-      {/* JTD Hrs (read-only from Vista) */}
-      <td style={{ ...tdData, width: colWidths.jtdHrs }}>{fmtHrs(jtdHrs)}</td>
-      {/* JTD $ (read-only from Vista) */}
-      <td style={{ ...tdData, width: colWidths.jtdCost }}>{fmtCompact(jtdCost)}</td>
-      {/* JTD PI (calculated: jtd_qty / jtd_hours) */}
-      <td style={{ ...tdMuted, width: colWidths.jtdPi, borderRight: '2px solid #e2e8f0' }}>{fmtPi(jtdQty, jtdHrs)}</td>
+      </td>}
+      {rv('jtdHrs') && <td style={{ ...tdData, width: colWidths.jtdHrs, background: bg(COL_GROUP.jtd.cell) }}>{fmtHrs(jtdHrs)}</td>}
+      {rv('jtdCost') && <td style={{ ...tdData, width: colWidths.jtdCost, background: bg(COL_GROUP.jtd.cell) }}>{fmtCompact(jtdCost)}</td>}
+      {rv('jtdPi') && <td style={{ ...tdMuted, width: colWidths.jtdPi, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.jtd.cell) }}>{fmtPi(jtdQty, jtdHrs)}</td>}
 
-      {/* === PROJECTED GROUP (all calculated, color-coded vs estimate) === */}
-      {/* Proj Qty */}
-      <td style={{ ...tdMuted, width: colWidths.projQty }}>
-        {projQty > 0 ? projQty.toFixed(0) : '-'}
-      </td>
-      {/* Proj Hrs - red if over est, green if under */}
-      <td style={{ ...tdMuted, width: colWidths.projHrs, color: projHrs > estHrs ? '#ef4444' : projHrs < estHrs ? '#10b981' : '#64748b' }}>
+      {/* === PROJECTED GROUP === */}
+      {rv('projQty') && <td style={{ ...tdMuted, width: colWidths.projQty, background: bg(COL_GROUP.proj.cell) }}>
+        {projQty > 0 ? Math.round(projQty).toLocaleString() : '-'}
+      </td>}
+      {rv('projHrs') && <td style={{ ...tdMuted, width: colWidths.projHrs, background: bg(COL_GROUP.proj.cell), color: projHrs > estHrs ? '#ef4444' : projHrs < estHrs ? '#10b981' : '#64748b' }}>
         {fmtHrs(projHrs)}
-      </td>
-      {/* Proj $ - red if over est, green if under */}
-      <td style={{ ...tdData, width: colWidths.projCost, fontWeight: 500, color: projCost > estCost ? '#ef4444' : projCost < estCost ? '#10b981' : '#1e293b' }}>
+      </td>}
+      {rv('projCost') && <td style={{ ...tdData, width: colWidths.projCost, fontWeight: 500, background: bg(COL_GROUP.proj.cell), color: projCost > estCost ? '#ef4444' : projCost < estCost ? '#10b981' : '#1e293b' }}>
         {fmtCompact(projCost)}
-      </td>
-      {/* Proj PI - green if higher than est PI (better), red if lower */}
-      <td style={{ ...tdMuted, width: colWidths.projPi, borderRight: '2px solid #e2e8f0', color: (() => { const ePi = estHrs > 0 ? estQty / estHrs : 0; const pPi = projHrs > 0 ? projQty / projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#64748b'; })() }}>
+      </td>}
+      {rv('projPi') && <td style={{ ...tdMuted, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.proj.cell), color: (() => { const ePi = estHrs > 0 ? estQty / estHrs : 0; const pPi = projHrs > 0 ? projQty / projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#64748b'; })() }}>
         {fmtPi(projQty, projHrs)}
-      </td>
+      </td>}
 
       {/* === SCHEDULE GROUP === */}
-      {/* Start Date - inline */}
-      <td style={{ ...tdBase, textAlign: 'center', width: colWidths.start }}>
-        <input type="date" value={fmtDate(item.start_date)}
+      {rv('start') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.start, background: editBg }}>
+        <input type="date" className="date-no-icon" value={fmtDate(item.start_date)}
           onChange={e => handleFieldChange('start_date', e.target.value || null)}
-          style={inlineCtrl} />
-      </td>
-      {/* End Date - inline */}
-      <td style={{ ...tdBase, textAlign: 'center', width: colWidths.end }}>
-        <input type="date" value={fmtDate(item.end_date)}
+          style={{ ...inlineCtrl, position: 'relative' }} />
+      </td>}
+      {rv('end') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.end, background: editBg }}>
+        <input type="date" className="date-no-icon" value={fmtDate(item.end_date)}
           onChange={e => handleFieldChange('end_date', e.target.value || null)}
-          style={inlineCtrl} />
-      </td>
-      {/* Duration - inline editable */}
-      <td style={{ ...tdBase, width: colWidths.dur }}>
+          style={{ ...inlineCtrl, position: 'relative' }} />
+      </td>}
+      {rv('dur') && <td style={{ ...tdBase, width: colWidths.dur, background: editBg }}>
         <input type="number" defaultValue={dur || ''} min={1} placeholder="-"
           onBlur={e => {
             const v = parseInt(e.target.value) || 0;
             if (v > 0 && v !== dur) handleFieldChange('duration', v);
           }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          style={{ ...inlineCtrl, textAlign: 'center', border: '1px solid transparent' }}
-          onFocus={e => { e.target.style.border = '1px solid #3b82f6'; e.target.style.background = '#eff6ff'; }}
-          onBlurCapture={e => { e.target.style.border = '1px solid transparent'; e.target.style.background = 'transparent'; }}
+          style={{ ...inlineCtrl, textAlign: 'center' }}
         />
-      </td>
-      {/* Contour - inline select */}
-      <td style={{ ...tdBase, borderRight: '2px solid #e2e8f0', width: colWidths.contour }}>
+      </td>}
+      {rv('pred') && <td style={{ ...tdBase, width: colWidths.pred, background: editBg }}>
+        <input key={`pred-${item.id}-${item.predecessor_id}`}
+          type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={item.predecessor_id || ''} placeholder="-"
+          onBlur={e => {
+            const v = e.target.value ? parseInt(e.target.value) : null;
+            if (v !== (item.predecessor_id || null)) handleFieldChange('predecessor', v);
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          style={{ ...inlineCtrl, textAlign: 'center' }}
+        />
+      </td>}
+      {rv('contour') && <td style={{ ...tdBase, borderRight: '2px solid #94a3b8', width: colWidths.contour, background: editBg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
           <ContourVisual contour={(item.contour_type || 'flat') as ContourType} />
           <select value={item.contour_type || 'flat'} onChange={e => handleFieldChange('contour_type', e.target.value)}
-            style={{ ...inlineCtrl, border: '1px solid transparent' }}>
+            style={{ ...inlineCtrl }}>
             {contourOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
-      </td>
+      </td>}
 
       {/* Monthly value columns */}
       {months.map(m => {
@@ -1293,7 +1721,7 @@ const GridRow: React.FC<{
         const intensity = maxVal > 0 ? val / maxVal : 0;
         const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : 'transparent';
         return (
-          <td key={key} style={{ padding: '0.2rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', fontSize: '0.63rem', backgroundColor: bgColor, whiteSpace: 'nowrap', width: monthColWidth, color: val > 0 ? '#1e293b' : '#cbd5e1' }}>
+          <td key={key} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1', fontSize: '0.63rem', backgroundColor: bgColor, whiteSpace: 'nowrap', width: monthColWidth, color: val > 0 ? '#1e293b' : '#cbd5e1' }}>
             {val > 0 ? (mode === 'cost' ? fmtCompact(val) : val.toFixed(0)) : ''}
           </td>
         );
@@ -1543,12 +1971,27 @@ const PhaseSchedule: React.FC = () => {
     },
   });
 
-  // Inline update (fire-and-forget, no panel close)
+  // Inline update (fire-and-forget, no panel close) with predecessor cascading
   const handleInlineUpdate = useCallback((id: number, data: Partial<PhaseScheduleItem>) => {
     phaseScheduleApi.updateItem(id, data).then(() => {
+      // If end_date changed, cascade to successors (items whose predecessor_id = this item's row_number)
+      const updatedItem = scheduleItems.find(i => i.id === id);
+      const newEndDate = (data as any).end_date;
+      if (newEndDate && updatedItem) {
+        const successors = scheduleItems.filter(i => i.predecessor_id === updatedItem.row_number);
+        successors.forEach(s => {
+          const newStart = format(addDays(new Date(newEndDate), 1), 'yyyy-MM-dd');
+          const sDur = getDuration(s.start_date, s.end_date);
+          const cascadeData: any = { start_date: newStart };
+          if (sDur > 0) {
+            cascadeData.end_date = format(addDays(new Date(newStart), sDur - 1), 'yyyy-MM-dd');
+          }
+          phaseScheduleApi.updateItem(s.id, cascadeData);
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
     });
-  }, [projectId, queryClient]);
+  }, [projectId, queryClient, scheduleItems]);
 
   const scheduledIds = useMemo(() => {
     const ids = new Set<number>();
@@ -1920,7 +2363,7 @@ const PhaseSchedule: React.FC = () => {
       ) : (
         viewMode === 'gantt'
           ? <GanttView items={scheduleItems} months={months} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup} />
-          : <GridView items={filteredItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')} />

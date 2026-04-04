@@ -14,6 +14,7 @@ const PhaseSchedule = {
   async getScheduleItems(projectId, tenantId) {
     const result = await db.query(
       `SELECT psi.id, psi.project_id, psi.tenant_id, psi.name, psi.phase_code_ids, psi.cost_types,
+         psi.row_number, psi.predecessor_id,
          psi.start_date, psi.end_date, psi.contour_type,
          psi.use_manual_values, psi.manual_monthly_values,
          COALESCE(pc_agg.sum_est_cost, 0) as total_est_cost,
@@ -62,6 +63,16 @@ const PhaseSchedule = {
   },
 
   async createScheduleItem(data) {
+    // Auto-assign row_number if not provided
+    let rowNumber = data.row_number;
+    if (!rowNumber) {
+      const maxRow = await db.query(
+        'SELECT COALESCE(MAX(row_number), 0) as max_row FROM phase_schedule_items WHERE project_id = $1',
+        [data.project_id]
+      );
+      rowNumber = maxRow.rows[0].max_row + 1;
+    }
+
     const result = await db.query(
       `INSERT INTO phase_schedule_items (
         project_id, tenant_id, name, phase_code_ids, cost_types,
@@ -69,8 +80,8 @@ const PhaseSchedule = {
         total_est_cost, total_est_hours, total_jtd_cost, total_jtd_hours, total_projected_cost,
         quantity, quantity_uom, quantity_installed,
         use_manual_qty_values, manual_monthly_qty,
-        sort_order, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        sort_order, created_by, row_number, predecessor_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *`,
       [
         data.project_id, data.tenant_id, data.name, data.phase_code_ids, data.cost_types,
@@ -81,7 +92,7 @@ const PhaseSchedule = {
         data.quantity || null, data.quantity_uom || null, data.quantity_installed || 0,
         data.use_manual_qty_values || false,
         data.manual_monthly_qty ? JSON.stringify(data.manual_monthly_qty) : null,
-        data.sort_order || 0, data.created_by
+        data.sort_order || 0, data.created_by, rowNumber, data.predecessor_id || null
       ]
     );
     return result.rows[0];
@@ -112,7 +123,9 @@ const PhaseSchedule = {
       manual_monthly_qty: 'manual_monthly_qty',
       sort_order: 'sort_order',
       phase_code_ids: 'phase_code_ids',
-      cost_types: 'cost_types'
+      cost_types: 'cost_types',
+      row_number: 'row_number',
+      predecessor_id: 'predecessor_id'
     };
 
     for (const [key, column] of Object.entries(allowedFields)) {

@@ -26,6 +26,8 @@ export interface PhaseScheduleItem {
   name: string;
   phase_code_ids: number[];
   cost_types: number[];
+  row_number: number;
+  predecessor_id: number | null;
   start_date: string | null;
   end_date: string | null;
   contour_type: string;
