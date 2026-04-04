@@ -71,4 +71,12 @@ export const phaseScheduleApi = {
 
   reorder: (projectId: number, itemIds: number[]) =>
     api.put(`/phase-schedule/project/${projectId}/reorder`, { itemIds }),
+
+  downloadPdf: (projectId: number, view: 'grid' | 'gantt', mode?: 'cost' | 'qty') => {
+    const params = new URLSearchParams({ view });
+    if (mode) params.set('mode', mode);
+    return api.get(`/phase-schedule/project/${projectId}/pdf-download?${params}`, {
+      responseType: 'blob',
+    });
+  },
 };

@@ -4,6 +4,7 @@ const PhaseSchedule = require('../models/PhaseSchedule');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const { generatePhaseSchedulePdfBuffer } = require('../utils/phaseSchedulePdfBuffer');
 
 const router = express.Router();
 
@@ -42,6 +43,37 @@ router.get('/project/:projectId/phase-codes', verifyProjectOwnership, async (req
     res.json(phaseCodes);
   } catch (error) {
     next(error);
+  }
+});
+
+// Download Phase Schedule as PDF (Grid or Gantt view)
+router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const view = req.query.view || 'grid';
+    const mode = req.query.mode || 'cost';
+
+    const items = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'No schedule items to export' });
+    }
+
+    const project = req.project;
+    const pdfBuffer = await generatePhaseSchedulePdfBuffer({
+      items,
+      project: { name: project.name, number: project.number, id: project.id },
+      view,
+      mode,
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const viewLabel = view === 'gantt' ? 'Gantt' : 'Grid';
+    const safeName = (project.number || project.name || 'Project').replace(/[^a-zA-Z0-9\-_]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Phase-Schedule-${viewLabel}-${safeName}-${dateStr}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating phase schedule PDF:', error);
+    res.status(500).json({ error: 'Failed to generate phase schedule PDF' });
   }
 });
 

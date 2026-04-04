@@ -676,6 +676,21 @@ const GanttView: React.FC<{
   useEffect(() => { localStorage.setItem('phaseSchedule_ganttCols', JSON.stringify(ganttCols)); }, [ganttCols]);
   const colResizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
 
+  // Bar drag-to-move state
+  const barDragRef = useRef<{
+    itemId: number;
+    startMouseX: number;
+    originalBarLeft: number;
+    originalStartDate: Date;
+    originalEndDate: Date;
+    durationDays: number;
+    dragStarted: boolean;
+  } | null>(null);
+  const dragOccurredRef = useRef(false);
+  const [barDragOffset, setBarDragOffset] = useState<{ itemId: number; deltaX: number } | null>(null);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
   // Hidden columns state
   const [ganttHiddenCols, setGanttHiddenCols] = useState<Set<string>>(new Set());
   const [ganttContextMenu, setGanttContextMenu] = useState<{ x: number; y: number; key: string; label: string } | null>(null);
@@ -697,7 +712,7 @@ const GanttView: React.FC<{
     setGanttContextMenu({ x: e.clientX, y: e.clientY, key, label });
   };
 
-  // Column resize + panel resize in one handler
+  // Column resize + panel resize + bar drag in one handler
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (draggingRef.current) {
@@ -715,8 +730,33 @@ const GanttView: React.FC<{
         });
         if (actualDiff !== 0) setLeftPanelWidth(prev => Math.max(200, prev + actualDiff));
       }
+      if (barDragRef.current) {
+        const drag = barDragRef.current;
+        const deltaX = e.clientX - drag.startMouseX;
+        if (!drag.dragStarted) {
+          if (Math.abs(deltaX) < 4) return;
+          drag.dragStarted = true;
+          document.body.style.cursor = 'grabbing';
+          document.body.style.userSelect = 'none';
+        }
+        setBarDragOffset({ itemId: drag.itemId, deltaX });
+      }
     };
-    const onUp = () => {
+    const onUp = (e: MouseEvent) => {
+      if (barDragRef.current && barDragRef.current.dragStarted) {
+        const drag = barDragRef.current;
+        const deltaX = e.clientX - drag.startMouseX;
+        const newBarLeft = drag.originalBarLeft + deltaX;
+        const newStartDate = xToDateRef.current(newBarLeft);
+        const newEndDate = addDays(newStartDate, drag.durationDays);
+        onUpdateRef.current(drag.itemId, {
+          start_date: format(newStartDate, 'yyyy-MM-dd'),
+          end_date: format(newEndDate, 'yyyy-MM-dd'),
+        } as any);
+        dragOccurredRef.current = true;
+      }
+      barDragRef.current = null;
+      setBarDragOffset(null);
       draggingRef.current = null;
       colResizeRef.current = null;
       document.body.style.cursor = '';
@@ -815,6 +855,20 @@ const GanttView: React.FC<{
     const dayFraction = (date.getDate() - 1) / daysInMonth;
     return monthIndex * colWidth + dayFraction * colWidth;
   };
+
+  // Inverse of dateToX — convert pixel X offset back to a calendar date
+  const xToDate = (x: number): Date => {
+    if (!firstMonth) return new Date();
+    const monthIndex = Math.floor(x / colWidth);
+    const remainder = x - monthIndex * colWidth;
+    const targetMonth = addMonths(firstMonth, monthIndex);
+    const daysInMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+    const day = Math.round((remainder / colWidth) * daysInMonth) + 1;
+    const clampedDay = Math.max(1, Math.min(day, daysInMonth));
+    return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), clampedDay);
+  };
+  const xToDateRef = useRef(xToDate);
+  xToDateRef.current = xToDate;
 
   return (
     <div style={{ display: 'flex', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
@@ -980,19 +1034,38 @@ const GanttView: React.FC<{
                     barWidth = barRight - barLeft;
                   }
                   const barColor = COST_TYPE_COLORS[item.cost_types?.[0] || 1];
+                  const isDraggingThis = barDragOffset?.itemId === item.id;
+                  const dragDelta = isDraggingThis ? barDragOffset.deltaX : 0;
                   return (
-                    <div key={item.id} style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #cbd5e1', cursor: 'pointer' }} onClick={() => onEdit(item)}>
+                    <div key={item.id} style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #cbd5e1', cursor: 'pointer' }}
+                      onClick={() => { if (dragOccurredRef.current) { dragOccurredRef.current = false; return; } onEdit(item); }}>
                       {months.map((m, i) => (
                         <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #e2e8f0' }} />
                       ))}
                       {barWidth > 0 && (
                         <div style={{
-                          position: 'absolute', left: barLeft, top: 4, height: rowHeight - 8, width: barWidth,
-                          backgroundColor: barColor + '30', border: `2px solid ${barColor}`, borderRadius: '4px',
-                          display: 'flex', alignItems: 'center', paddingLeft: '6px', overflow: 'hidden'
+                          position: 'absolute', left: barLeft + dragDelta, top: 4, height: rowHeight - 8, width: barWidth,
+                          backgroundColor: isDraggingThis ? barColor + '50' : barColor + '30',
+                          border: `2px solid ${barColor}`, borderRadius: '4px',
+                          display: 'flex', alignItems: 'center', paddingLeft: '6px', overflow: 'hidden',
+                          cursor: isDraggingThis ? 'grabbing' : 'grab',
+                          zIndex: isDraggingThis ? 10 : undefined,
                         }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = barColor + '50'; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = barColor + '30'; }}>
+                          onMouseDown={e => {
+                            if (e.button !== 0 || !startDate || !endDate) return;
+                            e.stopPropagation();
+                            barDragRef.current = {
+                              itemId: item.id,
+                              startMouseX: e.clientX,
+                              originalBarLeft: barLeft,
+                              originalStartDate: startDate,
+                              originalEndDate: endDate,
+                              durationDays: differenceInCalendarDays(endDate, startDate),
+                              dragStarted: false,
+                            };
+                          }}
+                          onMouseEnter={e => { if (!barDragRef.current) e.currentTarget.style.backgroundColor = barColor + '50'; }}
+                          onMouseLeave={e => { if (!barDragRef.current) e.currentTarget.style.backgroundColor = barColor + '30'; }}>
                           <span style={{ fontSize: '0.65rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {item.name}
                           </span>
@@ -1123,12 +1196,14 @@ const GanttRow: React.FC<{
       </div>}
       {!hiddenCols.has('dur') && <div style={{ ...cellStyle, width: ganttCols.dur, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <input type="number" value={dur || ''} min={1}
+          onFocus={e => e.target.select()}
           onChange={e => handleDurationChange(parseInt(e.target.value) || 0)}
           style={{ ...inputStyle, textAlign: 'center' }} />
       </div>}
       {!hiddenCols.has('pred') && <div style={{ ...cellStyle, width: ganttCols.pred, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <input type="text" inputMode="numeric" pattern="[0-9]*"
           defaultValue={item.predecessor_id || ''}
+          onFocus={e => e.target.select()}
           onBlur={e => handlePredecessorChange(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           style={{ ...inputStyle, textAlign: 'center' }}
@@ -1880,6 +1955,7 @@ const GridRow: React.FC<{
           onFocus={e => {
             e.target.value = e.target.value.replace(/,/g, '');
             e.target.type = 'number';
+            e.target.select();
           }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : null;
@@ -1911,6 +1987,7 @@ const GridRow: React.FC<{
             const raw = e.target.value.replace('%', '');
             e.target.value = raw;
             e.target.type = 'number';
+            e.target.select();
           }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : 0;
@@ -1929,6 +2006,7 @@ const GridRow: React.FC<{
           onFocus={e => {
             e.target.value = e.target.value.replace(/,/g, '');
             e.target.type = 'number';
+            e.target.select();
           }}
           onBlur={e => {
             const v = e.target.value ? parseFloat(e.target.value) : null;
@@ -1974,6 +2052,7 @@ const GridRow: React.FC<{
       </td>}
       {rv('dur') && <td style={{ ...tdBase, width: colWidths.dur, background: editBg }}>
         <input type="number" defaultValue={dur || ''} min={1} placeholder="-"
+          onFocus={e => e.target.select()}
           onBlur={e => {
             const v = parseInt(e.target.value) || 0;
             if (v > 0 && v !== dur) handleFieldChange('duration', v);
@@ -1985,6 +2064,7 @@ const GridRow: React.FC<{
       {rv('pred') && <td style={{ ...tdBase, width: colWidths.pred, background: editBg }}>
         <input key={`pred-${item.id}-${item.predecessor_id}`}
           type="text" inputMode="numeric" pattern="[0-9]*" defaultValue={item.predecessor_id || ''} placeholder="-"
+          onFocus={e => e.target.select()}
           onBlur={e => {
             const v = e.target.value ? parseInt(e.target.value) : null;
             if (v !== (item.predecessor_id || null)) handleFieldChange('predecessor', v);
@@ -2123,6 +2203,7 @@ const PhaseSchedule: React.FC = () => {
   const [viewMode, setViewMode] = useState<'gantt' | 'grid'>('grid');
   const [gridMode, setGridMode] = useState<'cost' | 'qty'>('cost');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<PhaseScheduleItem | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
@@ -2483,6 +2564,28 @@ const PhaseSchedule: React.FC = () => {
     }
   };
 
+  const handleExportPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const response = await phaseScheduleApi.downloadPdf(
+        Number(projectId),
+        viewMode,
+        viewMode === 'grid' ? gridMode : undefined
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      const viewLabel = viewMode === 'gantt' ? 'Gantt' : 'Grid';
+      a.download = `Phase-Schedule-${viewLabel}-${project?.number || projectId}-${new Date().toISOString().split('T')[0]}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   if (loadingPhaseCodes || loadingItems) {
     return <div className="loading">Loading...</div>;
   }
@@ -2523,6 +2626,20 @@ const PhaseSchedule: React.FC = () => {
               </div>
             )}
             <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
+            <button
+              onClick={handleExportPdf}
+              disabled={pdfLoading || scheduleItems.length === 0}
+              style={{
+                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+                border: '1px solid #e2e8f0', borderRadius: '6px',
+                backgroundColor: pdfLoading ? '#f1f5f9' : 'white',
+                color: pdfLoading ? '#94a3b8' : '#1e293b',
+                cursor: pdfLoading || scheduleItems.length === 0 ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.3rem'
+              }}
+            >
+              {pdfLoading ? 'Exporting...' : 'Export PDF'}
+            </button>
           </div>
         </div>
         {/* Right: charts side by side */}
