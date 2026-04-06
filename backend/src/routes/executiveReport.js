@@ -107,18 +107,21 @@ async function buildReportData(tenantId, requestedDate) {
   const snapshotQueries = [
     currentDate ? db.query(snapshotQuery, [tenantId, currentDate]) : Promise.resolve({ rows: [] }),
     previousDate ? db.query(snapshotQuery, [tenantId, previousDate]) : Promise.resolve({ rows: [] }),
-    // New projects (started in last 90 days)
+    // New projects (started in last 90 days, largest by contract value)
     db.query(
       `SELECT p.id as project_id, p.name as project_name, p.number as project_number,
-              p.market, p.status, p.contract_value, p.start_date,
+              p.market, p.status,
+              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+              p.start_date,
               COALESCE(e.first_name || ' ' || e.last_name, '') as manager_name
        FROM projects p
        LEFT JOIN employees e ON p.manager_id = e.id
+       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
        WHERE p.tenant_id = $1
-         AND p.start_date >= NOW() - INTERVAL '90 days'
-         AND p.contract_value IS NOT NULL
-         AND p.contract_value > 0
-       ORDER BY p.contract_value DESC
+         AND p.status NOT IN ('Hard-Closed', 'Soft-Closed', 'completed', 'cancelled')
+         AND COALESCE(vc.contract_amount, p.contract_value) > 0
+         AND p.start_date >= CURRENT_DATE - INTERVAL '90 days'
+       ORDER BY COALESCE(vc.contract_amount, p.contract_value) DESC
        LIMIT 10`,
       [tenantId]
     ),
@@ -357,7 +360,8 @@ async function buildReportData(tenantId, requestedDate) {
         'DESC',
         (s) => {
           const pct = num(s.percent_complete);
-          return pct >= 0.75 && pct < 1.0;
+          const closed = ['Hard-Closed', 'Soft-Closed', 'completed', 'cancelled'];
+          return pct >= 0.75 && pct < 0.995 && !closed.includes(s.status);
         }
       ),
     },
