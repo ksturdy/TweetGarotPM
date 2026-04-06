@@ -5,6 +5,7 @@ const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { generatePhaseSchedulePdfBuffer } = require('../utils/phaseSchedulePdfBuffer');
+const { fetchLogoBase64 } = require('../utils/logoFetcher');
 
 const router = express.Router();
 
@@ -58,11 +59,13 @@ router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (re
     }
 
     const project = req.project;
+    const logoBase64 = await fetchLogoBase64(req.tenantId);
     const pdfBuffer = await generatePhaseSchedulePdfBuffer({
       items,
       project: { name: project.name, number: project.number, id: project.id },
       view,
       mode,
+      logoBase64,
     });
 
     const dateStr = new Date().toISOString().split('T')[0];

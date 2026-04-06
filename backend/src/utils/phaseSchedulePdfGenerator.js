@@ -207,18 +207,29 @@ function buildCostTypeGroups(items) {
 }
 
 // ─── Project Header HTML ─────────────────────────────────────────────
-function buildProjectHeader(project, viewLabel, itemCount, totalEst, totalJtd) {
+function buildProjectHeader(project, viewLabel, itemCount, totalEst, totalJtd, logoBase64) {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return `
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; margin-bottom: 4px; border-bottom: 2px solid #002356;">
-      <div>
-        <div style="font-size: 10pt; font-weight: 700; color: #002356;">Phase Schedule &mdash; ${viewLabel} View</div>
-        <div style="font-size: 7pt; color: #64748b;">Tweet Garot Mechanical</div>
+    <div class="header">
+      <div class="header-left">
+        <h1>Phase Schedule &mdash; ${viewLabel} View</h1>
+        <div class="header-project">${project.number ? '#' + escHtml(project.number) + ' &mdash; ' : ''}${escHtml(project.name || '')}</div>
+        <div class="header-meta">${dateStr} at ${timeStr} &nbsp;&bull;&nbsp; ${itemCount} items &nbsp;&bull;&nbsp; Est: ${fmtCompact(totalEst)} &nbsp; JTD: ${fmtCompact(totalJtd)}</div>
       </div>
-      <div style="text-align: right;">
-        <div style="font-size: 8pt; font-weight: 600; color: #1e293b;">${project.number ? '#' + project.number + ' &mdash; ' : ''}${escHtml(project.name || '')}</div>
-        <div style="font-size: 7pt; color: #64748b;">${dateStr} &nbsp;|&nbsp; ${itemCount} items &nbsp;|&nbsp; Est: ${fmtCompact(totalEst)} &nbsp; JTD: ${fmtCompact(totalJtd)}</div>
+      <div class="header-right">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
       </div>
+    </div>`;
+}
+
+function buildFooter(project, viewLabel) {
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `
+    <div class="footer">
+      <span>${project.number ? '#' + escHtml(project.number) + ' - ' : ''}${escHtml(project.name || '')} &nbsp;|&nbsp; Phase Schedule (${viewLabel})</span>
+      <span>Generated ${dateStr} at ${timeStr}</span>
     </div>`;
 }
 
@@ -230,7 +241,7 @@ function escHtml(s) {
 // ═══════════════════════════════════════════════════════════════════════
 // GRID VIEW HTML
 // ═══════════════════════════════════════════════════════════════════════
-function buildGridHtml(items, months, mode, project) {
+function buildGridHtml(items, months, mode, project, logoBase64) {
   const groups = buildCostTypeGroups(items);
   const totalEst = items.reduce((s, i) => s + parseNum(i.total_est_cost), 0);
   const totalJtd = items.reduce((s, i) => s + parseNum(i.total_jtd_cost), 0);
@@ -266,7 +277,9 @@ function buildGridHtml(items, months, mode, project) {
   const fixedW = Object.values(cw).reduce((a, b) => a + b, 0);
   const totalW = fixedW + mc * mColW;
 
-  const header = buildProjectHeader(project, `Grid (${mode === 'cost' ? 'Cost' : 'Qty'})`, items.length, totalEst, totalJtd);
+  const viewLabel = `Grid (${mode === 'cost' ? 'Cost' : 'Qty'})`;
+  const header = buildProjectHeader(project, viewLabel, items.length, totalEst, totalJtd, logoBase64);
+  const footer = buildFooter(project, viewLabel);
 
   // Styles
   const thS = `padding: 2px 3px; text-align: center; font-size: 6pt; font-weight: 600; white-space: nowrap; border-bottom: 1px solid #94a3b8; border-right: 1px solid #cbd5e1; color: #1e293b; overflow: hidden;`;
@@ -484,13 +497,14 @@ function buildGridHtml(items, months, mode, project) {
       <tbody>
         ${rows}
       </tbody>
-    </table>`;
+    </table>
+    ${footer}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // GANTT VIEW HTML
 // ═══════════════════════════════════════════════════════════════════════
-function buildGanttHtml(items, months, project) {
+function buildGanttHtml(items, months, project, logoBase64) {
   const groups = buildCostTypeGroups(items);
   const totalEst = items.reduce((s, i) => s + parseNum(i.total_est_cost), 0);
   const totalJtd = items.reduce((s, i) => s + parseNum(i.total_jtd_cost), 0);
@@ -524,7 +538,8 @@ function buildGanttHtml(items, months, project) {
     return monthIndex * colWidth + dayFraction * colWidth;
   }
 
-  const header = buildProjectHeader(project, 'Gantt', items.length, totalEst, totalJtd);
+  const header = buildProjectHeader(project, 'Gantt', items.length, totalEst, totalJtd, logoBase64);
+  const footer = buildFooter(project, 'Gantt');
 
   // Today marker offset
   const todayX = firstMonth ? dateToX(today) + leftW : 0;
@@ -647,19 +662,20 @@ function buildGanttHtml(items, months, project) {
         ${rowsHtml}
       </tbody>
     </table>
-    ${todayX > leftW ? `<div style="position: absolute; left: ${todayX}px; top: 0; bottom: 0; width: 2px; background: #ef4444; opacity: 0.6; z-index: 10;"><div style="position: absolute; top: -1px; left: -12px; font-size: 5pt; color: #ef4444; font-weight: 600;">Today</div></div>` : ''}`;
+    ${todayX > leftW ? `<div style="position: absolute; left: ${todayX}px; top: 0; bottom: 0; width: 2px; background: #ef4444; opacity: 0.6; z-index: 10;"><div style="position: absolute; top: -1px; left: -12px; font-size: 5pt; color: #ef4444; font-weight: 600;">Today</div></div>` : ''}
+    ${footer}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════
 function generatePhaseSchedulePdfHtml(data) {
-  const { items, project, view, mode } = data;
+  const { items, project, view, mode, logoBase64 } = data;
   const months = generateMonths(items);
 
   const content = view === 'gantt'
-    ? buildGanttHtml(items, months, project)
-    : buildGridHtml(items, months, mode || 'cost', project);
+    ? buildGanttHtml(items, months, project, logoBase64)
+    : buildGridHtml(items, months, mode || 'cost', project, logoBase64);
 
   return `<!DOCTYPE html>
 <html>
@@ -680,6 +696,50 @@ function generatePhaseSchedulePdfHtml(data) {
     }
     table { border-collapse: collapse; }
     td, th { vertical-align: middle; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0 0 8px 0;
+      margin-bottom: 6px;
+      border-bottom: 2px solid #3b82f6;
+    }
+    .header-left { flex: 1; }
+    .header-left h1 {
+      font-size: 14pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 2px 0;
+    }
+    .header-project {
+      font-size: 9pt;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 2px;
+    }
+    .header-meta {
+      font-size: 7pt;
+      color: #94a3b8;
+    }
+    .header-right {
+      flex-shrink: 0;
+      margin-left: 16px;
+    }
+    .logo {
+      max-height: 48px;
+      max-width: 160px;
+      object-fit: contain;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0 0 0;
+      margin-top: 8px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 6.5pt;
+      color: #94a3b8;
+    }
   </style>
 </head>
 <body style="padding: 4px; position: relative;">

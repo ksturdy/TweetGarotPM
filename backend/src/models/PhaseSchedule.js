@@ -46,7 +46,7 @@ const PhaseSchedule = {
          COALESCE(pc_agg.sum_jtd_cost, 0) as total_jtd_cost,
          COALESCE(pc_agg.sum_jtd_hours, 0) as total_jtd_hours,
          COALESCE(pc_agg.sum_projected_cost, 0) as total_projected_cost,
-         COALESCE(pc_agg.weighted_pct, 0) as percent_complete,
+         CASE WHEN psi.percent_complete > 0 THEN psi.percent_complete ELSE COALESCE(pc_agg.weighted_pct, 0) END as percent_complete,
          psi.quantity, psi.quantity_uom, psi.quantity_installed,
          psi.use_manual_qty_values, psi.manual_monthly_qty,
          psi.sort_order, psi.created_by, psi.created_at, psi.updated_at,

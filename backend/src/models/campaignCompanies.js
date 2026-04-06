@@ -271,6 +271,61 @@ const campaignCompanies = {
     }
   },
 
+  // Update target week
+  updateTargetWeek: async (id, newWeek, userId) => {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get current company and old week label
+      const oldQuery = `
+        SELECT cc.*, cw.label as old_week_label
+        FROM campaign_companies cc
+        LEFT JOIN campaign_weeks cw ON cw.campaign_id = cc.campaign_id AND cw.week_number = cc.target_week
+        WHERE cc.id = $1
+      `;
+      const oldResult = await client.query(oldQuery, [id]);
+      const company = oldResult.rows[0];
+      const oldWeek = company.target_week;
+
+      // Update target_week
+      const updateResult = await client.query(
+        'UPDATE campaign_companies SET target_week = $1 WHERE id = $2 RETURNING *',
+        [newWeek, id]
+      );
+
+      // Get new week label
+      const newWeekResult = await client.query(
+        'SELECT label FROM campaign_weeks WHERE campaign_id = $1 AND week_number = $2',
+        [company.campaign_id, newWeek]
+      );
+      const newWeekLabel = newWeekResult.rows[0]?.label || `Week ${newWeek}`;
+      const oldWeekLabel = company.old_week_label || (oldWeek ? `Week ${oldWeek}` : 'Unscheduled');
+
+      // Log activity with metadata for goal tracking
+      await client.query(
+        `INSERT INTO campaign_activity_logs (
+          campaign_id, campaign_company_id, user_id, activity_type, description, metadata
+        ) VALUES ($1, $2, $3, 'week_reassignment', $4, $5)`,
+        [
+          company.campaign_id,
+          id,
+          userId,
+          `Moved from ${oldWeekLabel} to ${newWeekLabel}`,
+          JSON.stringify({ from_week: oldWeek, to_week: newWeek })
+        ]
+      );
+
+      await client.query('COMMIT');
+      return updateResult.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   // Add to main companies database
   addToDatabase: async (campaignCompanyId, userId) => {
     const client = await db.pool.connect();

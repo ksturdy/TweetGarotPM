@@ -319,24 +319,8 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList, logoBase64);
     console.log('[Report] HTML generated, length:', html.length);
 
-    // In production (Render), use @sparticuz/chromium which bundles its own binary.
-    // Locally, use full puppeteer which downloads its own Chrome.
-    if (process.env.NODE_ENV === 'production') {
-      const chromium = require('@sparticuz/chromium');
-      const puppeteerCore = require('puppeteer-core');
-      browser = await puppeteerCore.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-      });
-    } else {
-      const puppeteer = require('puppeteer');
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      });
-    }
+    const { launchBrowser } = require('../utils/launchBrowser');
+    browser = await launchBrowser();
     console.log('[Report] Puppeteer launched');
 
     const page = await browser.newPage();
@@ -431,7 +415,11 @@ router.post('/:campaignId/companies', async (req, res, next) => {
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const data = { ...req.body, campaign_id: req.params.campaignId };
+    // Auto-detect source: if campaign has no weeks yet (not generated), this is an
+    // initial setup prospect ('seed'). Once the campaign is generated, new additions are 'manual'.
+    const weeksList = await campaigns.getWeeks(req.params.campaignId);
+    const source = weeksList.length === 0 ? 'seed' : 'manual';
+    const data = { ...req.body, campaign_id: req.params.campaignId, source };
     const company = await campaignCompanies.create(data);
     res.status(201).json(company);
   } catch (error) {
@@ -505,6 +493,24 @@ router.patch('/:campaignId/companies/:id/assign', async (req, res, next) => {
     const company = await campaignCompanies.updateAssignment(
       req.params.id,
       req.body.assigned_to_id,
+      req.user.id
+    );
+    res.json(company);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// UPDATE company target week (reassign to different week)
+router.patch('/:campaignId/companies/:id/week', async (req, res, next) => {
+  try {
+    const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    const company = await campaignCompanies.updateTargetWeek(
+      req.params.id,
+      req.body.target_week,
       req.user.id
     );
     res.json(company);

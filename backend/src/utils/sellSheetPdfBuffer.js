@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('./launchBrowser');
 const { generateSellSheetPdfHtml } = require('./sellSheetPdfGenerator');
 
 async function generateSellSheetPdfBuffer(sellSheet, images, logoBase64) {
@@ -6,16 +6,7 @@ async function generateSellSheetPdfBuffer(sellSheet, images, logoBase64) {
   let browser = null;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--allow-file-access-from-files',
-      ],
-    });
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
     await page.setViewport({ width: 816, height: 1056 });

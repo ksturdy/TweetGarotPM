@@ -146,6 +146,7 @@ const BacklogFitAnalysis: React.FC = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('PDF download failed:', err);
+      alert('Failed to generate PDF. Please try again.');
     } finally {
       setPdfLoading(false);
     }

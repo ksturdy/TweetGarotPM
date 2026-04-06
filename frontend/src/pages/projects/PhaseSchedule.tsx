@@ -1637,13 +1637,17 @@ const GridView: React.FC<{
               const eQ = parseNum(i.quantity);
               const jQ = parseNum(i.quantity_installed);
               const jH = parseNum(i.total_jtd_hours);
+              const eH = parseNum(i.total_est_hours);
               const pi = jQ > 0 && jH > 0 ? jQ / jH : 0;
-              return s + (pi > 0 ? eQ / pi : parseNum(i.total_est_hours));
+              return s + (pi > 0 ? Math.max(eQ / pi, jH) : jH > eH ? jH : eH);
             }, 0);
             const totProjCost = items.reduce((s, i) => {
+              const vPC = parseNum(i.total_projected_cost);
               const pct = parseNum(i.percent_complete);
               const jC = parseNum(i.total_jtd_cost);
-              return s + (pct > 0 ? jC / (pct / 100) : parseNum(i.total_est_cost));
+              const eC = parseNum(i.total_est_cost);
+              const p = vPC > 0 ? Math.max(vPC, jC) : pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
+              return s + p;
             }, 0);
             // Overall schedule rollup
             let totEarliestStart: string | null = null;
@@ -1852,10 +1856,14 @@ const GridRow: React.FC<{
   const jtdCost = parseNum(item.total_jtd_cost);
   const pctComp = parseNum(item.percent_complete);
   const jtdPi = jtdQty > 0 && jtdHrs > 0 ? jtdQty / jtdHrs : 0;
-  // Projected = extrapolated totals based on % complete and PI
+  // Projected = Vista projected cost when available, else extrapolate from % complete, else estimate
+  const vistaProjCost = parseNum(item.total_projected_cost);
   const projQty = estQty; // scope doesn't change
-  const projHrs = jtdPi > 0 ? estQty / jtdPi : estHrs; // Est Qty / actual PI, fallback to Est Hrs
-  const projCost = pctComp > 0 ? jtdCost / (pctComp / 100) : estCost; // JTD$ / %Comp, fallback to Est$
+  const projHrs = jtdPi > 0 ? Math.max(estQty / jtdPi, jtdHrs) : jtdHrs > estHrs ? jtdHrs : estHrs;
+  const projCost = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost)
+    : pctComp > 0 ? Math.max(jtdCost / (pctComp / 100), jtdCost)
+    : jtdCost > estCost ? jtdCost
+    : estCost;
 
   const handleFieldChange = useCallback((field: string, value: any) => {
     if (field === 'duration') {
@@ -2362,13 +2370,15 @@ const PhaseSchedule: React.FC = () => {
       const pctComp = estCost > 0 ? (jtdCost / estCost * 100) : 0;
       const projQty = estQty;
       const projHrs = items.reduce((s, i) => {
-        const eQ = parseNum(i.quantity); const jQ = parseNum(i.quantity_installed); const jH = parseNum(i.total_jtd_hours);
+        const eQ = parseNum(i.quantity); const jQ = parseNum(i.quantity_installed); const jH = parseNum(i.total_jtd_hours); const eH = parseNum(i.total_est_hours);
         const pi = jQ > 0 && jH > 0 ? jQ / jH : 0;
-        return s + (pi > 0 ? eQ / pi : parseNum(i.total_est_hours));
+        return s + (pi > 0 ? Math.max(eQ / pi, jH) : jH > eH ? jH : eH);
       }, 0);
       const projCost = items.reduce((s, i) => {
-        const pct = parseNum(i.percent_complete); const jC = parseNum(i.total_jtd_cost);
-        return s + (pct > 0 ? jC / (pct / 100) : parseNum(i.total_est_cost));
+        const vPC = parseNum(i.total_projected_cost);
+        const pct = parseNum(i.percent_complete); const jC = parseNum(i.total_jtd_cost); const eC = parseNum(i.total_est_cost);
+        const p = vPC > 0 ? Math.max(vPC, jC) : pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
+        return s + p;
       }, 0);
       let earliestStart: string | null = null;
       let latestEnd: string | null = null;

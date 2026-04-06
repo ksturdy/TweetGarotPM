@@ -8,7 +8,7 @@ import { assessmentsApi } from '../services/assessments';
 import {
   getCampaign, updateCampaign,
   getCampaignCompanies, getCampaignWeeks, getCampaignTeam, getCampaignActivity,
-  createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction, updateCampaignCompanyAssignment,
+  createCampaignCompany, updateCampaignCompanyStatus, updateCampaignCompanyAction, updateCampaignCompanyAssignment, updateCampaignCompanyWeek,
   addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
   getCampaignCompanyAssessment, deleteCampaignCompany,
@@ -166,6 +166,15 @@ export default function CampaignDetail() {
   const assignMutation = useMutation({
     mutationFn: ({ companyId, assignedToId }: { companyId: number; assignedToId: number }) =>
       updateCampaignCompanyAssignment(campaignId, companyId, assignedToId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
+    }
+  });
+
+  const weekMutation = useMutation({
+    mutationFn: ({ companyId, targetWeek }: { companyId: number; targetWeek: number }) =>
+      updateCampaignCompanyWeek(campaignId, companyId, targetWeek),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campaign-companies', campaignId] });
       queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
@@ -428,6 +437,7 @@ export default function CampaignDetail() {
   const [note, setNote] = useState('');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [filter, setFilter] = useState({ team: 'all', status: 'all', tier: 'all' });
+  const [prospectSearch, setProspectSearch] = useState('');
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -542,11 +552,24 @@ export default function CampaignDetail() {
   };
 
   const filtered = useMemo(() => {
-    let filteredData = activeData.filter((c: any) =>
-      (filter.team === 'all' || c.assignedTo === filter.team) &&
-      (filter.status === 'all' || c.status === filter.status) &&
-      (filter.tier === 'all' || c.tier === filter.tier)
-    );
+    let filteredData = activeData.filter((c: any) => {
+      if (filter.team !== 'all' && c.assignedTo !== filter.team) return false;
+      if (filter.status !== 'all' && c.status !== filter.status) return false;
+      if (filter.tier !== 'all' && c.tier !== filter.tier) return false;
+      if (prospectSearch) {
+        const term = prospectSearch.toLowerCase();
+        return (
+          c.name.toLowerCase().includes(term) ||
+          (c.sector && c.sector.toLowerCase().includes(term)) ||
+          (c.assignedTo && c.assignedTo.toLowerCase().includes(term)) ||
+          (c.address && c.address.toLowerCase().includes(term)) ||
+          (c.phone && c.phone.toLowerCase().includes(term)) ||
+          (c.status && c.status.toLowerCase().includes(term)) ||
+          (c.action && c.action.toLowerCase().includes(term))
+        );
+      }
+      return true;
+    });
 
     // Apply sorting
     if (sortConfig) {
@@ -589,7 +612,7 @@ export default function CampaignDetail() {
     }
 
     return filteredData;
-  }, [activeData, filter, sortConfig, assessmentsMap]);
+  }, [activeData, filter, sortConfig, assessmentsMap, prospectSearch]);
 
   const updateField = (companyId: number, field: string, value: string) => {
     if (field === 'status') {
@@ -598,6 +621,8 @@ export default function CampaignDetail() {
       actionMutation.mutate({ companyId, action: value });
     } else if (field === 'assignedTo') {
       assignMutation.mutate({ companyId, assignedToId: parseInt(value) });
+    } else if (field === 'week') {
+      weekMutation.mutate({ companyId, targetWeek: parseInt(value) });
     }
   };
 
@@ -1122,6 +1147,18 @@ export default function CampaignDetail() {
           <div style={{ display: 'flex', gap: '20px' }}>
             <div style={{ flex: 1 }}>
               <div style={{ ...card, padding: '12px 16px', marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div className="sales-search-box" style={{ width: '220px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search prospects..."
+                    value={prospectSearch}
+                    onChange={e => setProspectSearch(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
                 <select value={filter.team} onChange={e => setFilter({...filter, team: e.target.value})} style={{...input, width: 'auto'}}>
                   <option value="all">All Team</option>
                   {activeTeam.map((t: string) => <option key={t} value={t}>{t}</option>)}
@@ -1136,6 +1173,14 @@ export default function CampaignDetail() {
                   <option value="B">B-Tier</option>
                 </select>
                 <span style={{ fontSize: '13px', color: '#64748b' }}>{filtered.length} prospects</span>
+                {(prospectSearch || filter.team !== 'all' || filter.status !== 'all' || filter.tier !== 'all') && (
+                  <button
+                    onClick={() => { setProspectSearch(''); setFilter({ team: 'all', status: 'all', tier: 'all' }); }}
+                    style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', color: '#64748b', cursor: 'pointer' }}
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
 
               <div style={{ ...card, overflow: 'hidden' }}>
@@ -1219,7 +1264,11 @@ export default function CampaignDetail() {
                                 {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
                               </select>
                             </td>
-                            <td style={{ padding: '12px', fontSize: '12px' }}>{activeWeeks.find((w: any)=>w.num===c.targetWeek)?.label}</td>
+                            <td style={{ padding: '12px', fontSize: '12px' }}>
+                              <select value={c.targetWeek || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'week', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                                {activeWeeks.map((w: any) => <option key={w.num} value={w.num}>{w.label}</option>)}
+                              </select>
+                            </td>
                           <td style={{ padding: '12px' }}>
                             <select value={c.status} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto' }}>
                               {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}

@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('./launchBrowser');
 const { generateResumeHtml } = require('./resumePdfGenerator');
 
 /**
@@ -13,16 +13,7 @@ async function generateResumePdfBuffer(resume, projects, photoBase64) {
   let browser = null;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--allow-file-access-from-files',
-      ],
-    });
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
     await page.setViewport({ width: 816, height: 1056 }); // Letter size

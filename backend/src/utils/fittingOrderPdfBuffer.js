@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('./launchBrowser');
 const { generateFittingOrderPdfHtml } = require('./fittingOrderPdfGenerator');
 
 /**
@@ -12,15 +12,7 @@ async function generateFittingOrderPdfBuffer(order, logoBase64 = '') {
   let browser = null;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
 

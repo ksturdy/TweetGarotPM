@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('./launchBrowser');
 const { generatePhaseSchedulePdfHtml } = require('./phaseSchedulePdfGenerator');
 
 /**
@@ -11,15 +11,7 @@ async function generatePhaseSchedulePdfBuffer(data) {
   let browser = null;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-    });
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
 
@@ -39,10 +31,10 @@ async function generatePhaseSchedulePdfBuffer(data) {
       landscape: true,
       printBackground: true,
       margin: {
-        top: '0.3in',
-        right: '0.3in',
-        bottom: '0.3in',
-        left: '0.3in',
+        top: '0.5in',
+        right: '0.5in',
+        bottom: '0.5in',
+        left: '0.5in',
       },
       preferCSSPageSize: false,
     });
