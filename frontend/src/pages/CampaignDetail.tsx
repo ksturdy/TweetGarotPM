@@ -1759,7 +1759,7 @@ export default function CampaignDetail() {
       {/* Prospect Detail Modal */}
       {detailView && (
         <div style={modalOverlay} onClick={() => { setDetailView(null); setDetailTab('overview'); }}>
-          <div style={{ ...detailModal, maxHeight: '92vh', display: 'flex', flexDirection: 'column', maxWidth: '960px' }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...detailModal, height: '85vh', display: 'flex', flexDirection: 'column', maxWidth: '960px' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
