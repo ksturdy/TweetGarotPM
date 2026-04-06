@@ -5,6 +5,8 @@ import opportunitiesService, { Opportunity as OpportunityType } from '../service
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
 import { assessmentsApi } from '../services/assessments';
+import { customersApi, Customer } from '../services/customers';
+import CompanyPicker from '../components/CompanyPicker';
 import {
   getCampaign, updateCampaign,
   getCampaignCompanies, getCampaignWeeks, getCampaignTeam, getCampaignActivity,
@@ -104,6 +106,12 @@ export default function CampaignDetail() {
     queryKey: ['campaign-team', campaignId],
     queryFn: () => getCampaignTeam(campaignId),
     enabled: campaignId > 0
+  });
+
+  // Fetch existing customers/companies for linking in New Prospect modal
+  const { data: allCustomers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll()
   });
 
   const { data: dbActivity = [] } = useQuery({
@@ -555,7 +563,7 @@ export default function CampaignDetail() {
     setOrphanReassignTo('');
   };
 
-  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0 });
+  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number; linked_company_id: number | null }>({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0, linked_company_id: null });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
 
@@ -671,9 +679,10 @@ export default function CampaignDetail() {
       tier: newCustomer.tier,
       score: newCustomer.score,
       target_week: newCustomer.targetWeek || currentCampaignWeek,
-      assigned_to_id: newCustomer.assignedToId
+      assigned_to_id: newCustomer.assignedToId,
+      linked_company_id: newCustomer.linked_company_id
     });
-    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0 });
+    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0, linked_company_id: null });
     setShowNewCustomer(false);
   };
 
@@ -834,7 +843,7 @@ export default function CampaignDetail() {
             ))}
           </div>
           <button className="sales-btn sales-btn-primary" onClick={() => {
-              setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: dbTeam[0]?.name || '', assignedToId: dbTeam[0]?.employee_id || null, tier: 'B', score: 70, targetWeek: 0 });
+              setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: dbTeam[0]?.name || '', assignedToId: dbTeam[0]?.employee_id || null, tier: 'B', score: 70, targetWeek: 0, linked_company_id: null });
               setShowNewCustomer(true);
             }}>
             <span style={{ fontSize: '16px' }}>+</span> New Prospect
@@ -1641,13 +1650,15 @@ export default function CampaignDetail() {
             <div style={{ padding: '24px', maxHeight: 'calc(90vh - 150px)', overflow: 'auto' }}>
               <div style={{ display: 'grid', gap: '16px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Company Name *</label>
-                  <input
-                    type="text"
-                    value={newCustomer.name}
-                    onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
-                    style={input}
-                    placeholder="e.g., ABC Manufacturing"
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Company *</label>
+                  <CompanyPicker
+                    companies={allCustomers.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                    selectedId={newCustomer.linked_company_id?.toString() || ''}
+                    textValue={newCustomer.name}
+                    onSelectCompany={(id, name) => setNewCustomer(prev => ({ ...prev, linked_company_id: parseInt(id), name }))}
+                    onManualEntry={(name) => setNewCustomer(prev => ({ ...prev, linked_company_id: null, name }))}
+                    onClear={() => setNewCustomer(prev => ({ ...prev, linked_company_id: null, name: '' }))}
+                    placeholder="Search existing companies..."
                   />
                 </div>
                 <div>

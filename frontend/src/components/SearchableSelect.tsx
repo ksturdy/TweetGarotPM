@@ -15,6 +15,7 @@ interface SearchableSelectProps {
   disabled?: boolean;
   style?: React.CSSProperties;
   className?: string;
+  onSearchTermChange?: (term: string) => void;
 }
 
 const MAX_VISIBLE = 50;
@@ -26,7 +27,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   placeholder = '-- Select --',
   disabled = false,
   style,
-  className
+  className,
+  onSearchTermChange
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -162,7 +164,10 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           ref={inputRef}
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            onSearchTermChange?.(e.target.value);
+          }}
           placeholder={`Type to search (${validOptions.length} options)...`}
           style={{
             width: '100%',

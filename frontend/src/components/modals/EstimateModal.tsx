@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
+import CompanyPicker from '../CompanyPicker';
 import { MARKETS } from '../../constants/markets';
 import './Modal.css';
 
@@ -28,9 +29,6 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
     send_estimate_to: '',
   });
 
-  const [linkToExistingOwner, setLinkToExistingOwner] = useState(!!customerId);
-  const [linkToExistingGC, setLinkToExistingGC] = useState(false);
-  const [linkToExistingFacility, setLinkToExistingFacility] = useState(false);
 
   // Fetch customers for linking
   const { data: customers = [] } = useQuery({
@@ -53,14 +51,14 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Get the customer name based on whether we're linking or using text input
+    // Get the customer name based on whether a company is linked or manually entered
     let effectiveCustomerId = customerId;
     let effectiveCustomerName = customerName;
 
-    if (linkToExistingOwner && formData.customer_id) {
+    if (formData.customer_id) {
       effectiveCustomerId = Number(formData.customer_id);
       const selectedCustomer = customers.find((c: Customer) => c.id === effectiveCustomerId);
-      effectiveCustomerName = selectedCustomer?.name || '';
+      effectiveCustomerName = selectedCustomer?.name || formData.owner;
     } else if (formData.owner) {
       effectiveCustomerName = formData.owner;
       effectiveCustomerId = undefined;
@@ -77,11 +75,11 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
         estimatedValue: formData.estimated_value,
         notes: formData.notes,
         owner: formData.owner,
-        customer_id: linkToExistingOwner ? formData.customer_id : null,
+        customer_id: formData.customer_id || null,
         general_contractor: formData.general_contractor,
-        gc_customer_id: linkToExistingGC ? formData.gc_customer_id : null,
+        gc_customer_id: formData.gc_customer_id || null,
         facility_name: formData.facility_name,
-        facility_customer_id: linkToExistingFacility ? formData.facility_customer_id : null,
+        facility_customer_id: formData.facility_customer_id || null,
         send_estimate_to: formData.send_estimate_to,
       }
     });
@@ -164,135 +162,42 @@ const EstimateModal: React.FC<EstimateModalProps> = ({ customerId, customerName,
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="owner">Company</label>
-                  <input
-                    type="text"
-                    id="owner"
-                    name="owner"
-                    value={formData.owner}
-                    onChange={handleChange}
-                    placeholder="Company name"
+                  <CompanyPicker
+                    companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                    selectedId={formData.customer_id}
+                    textValue={formData.owner}
+                    onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, customer_id: id, owner: name }))}
+                    onManualEntry={(name) => setFormData(prev => ({ ...prev, customer_id: '', owner: name }))}
+                    onClear={() => setFormData(prev => ({ ...prev, customer_id: '', owner: '' }))}
+                    placeholder="Search companies..."
                   />
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={linkToExistingOwner}
-                        onChange={(e) => {
-                          setLinkToExistingOwner(e.target.checked);
-                          if (!e.target.checked) {
-                            setFormData(prev => ({ ...prev, customer_id: '' }));
-                          }
-                        }}
-                        style={{ width: '16px', height: '16px' }}
-                      />
-                      Link to Existing Company
-                    </label>
-                    {linkToExistingOwner && (
-                      <select
-                        id="customer_id"
-                        name="customer_id"
-                        value={formData.customer_id}
-                        onChange={handleChange}
-                        style={{ marginTop: '0.5rem', width: '100%' }}
-                      >
-                        <option value="">Select company...</option>
-                        {uniqueCompanies.map((customer: Customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
                 </div>
 
                 <div className="form-group">
                   <label htmlFor="general_contractor">General Contractor</label>
-                  <input
-                    type="text"
-                    id="general_contractor"
-                    name="general_contractor"
-                    value={formData.general_contractor}
-                    onChange={handleChange}
-                    placeholder="GC company name"
+                  <CompanyPicker
+                    companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                    selectedId={formData.gc_customer_id}
+                    textValue={formData.general_contractor}
+                    onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, gc_customer_id: id, general_contractor: name }))}
+                    onManualEntry={(name) => setFormData(prev => ({ ...prev, gc_customer_id: '', general_contractor: name }))}
+                    onClear={() => setFormData(prev => ({ ...prev, gc_customer_id: '', general_contractor: '' }))}
+                    placeholder="Search companies..."
                   />
-                  <div style={{ marginTop: '0.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={linkToExistingGC}
-                        onChange={(e) => {
-                          setLinkToExistingGC(e.target.checked);
-                          if (!e.target.checked) {
-                            setFormData(prev => ({ ...prev, gc_customer_id: '' }));
-                          }
-                        }}
-                        style={{ width: '16px', height: '16px' }}
-                      />
-                      Link to Existing General Contractor
-                    </label>
-                    {linkToExistingGC && (
-                      <select
-                        id="gc_customer_id"
-                        name="gc_customer_id"
-                        value={formData.gc_customer_id}
-                        onChange={handleChange}
-                        style={{ marginTop: '0.5rem', width: '100%' }}
-                      >
-                        <option value="">Select customer...</option>
-                        {customers.map((customer: Customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
                 </div>
               </div>
 
               <div className="form-group">
                 <label htmlFor="facility_name">Facility/Location Name</label>
-                <input
-                  type="text"
-                  id="facility_name"
-                  name="facility_name"
-                  value={formData.facility_name}
-                  onChange={handleChange}
-                  placeholder="Facility or location name"
+                <CompanyPicker
+                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                  selectedId={formData.facility_customer_id}
+                  textValue={formData.facility_name}
+                  onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, facility_customer_id: id, facility_name: name }))}
+                  onManualEntry={(name) => setFormData(prev => ({ ...prev, facility_customer_id: '', facility_name: name }))}
+                  onClear={() => setFormData(prev => ({ ...prev, facility_customer_id: '', facility_name: '' }))}
+                  placeholder="Search companies..."
                 />
-                <div style={{ marginTop: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={linkToExistingFacility}
-                      onChange={(e) => {
-                        setLinkToExistingFacility(e.target.checked);
-                        if (!e.target.checked) {
-                          setFormData(prev => ({ ...prev, facility_customer_id: '' }));
-                        }
-                      }}
-                      style={{ width: '16px', height: '16px' }}
-                    />
-                    Link to Existing Facility/Location
-                  </label>
-                  {linkToExistingFacility && (
-                    <select
-                      id="facility_customer_id"
-                      name="facility_customer_id"
-                      value={formData.facility_customer_id}
-                      onChange={handleChange}
-                      style={{ marginTop: '0.5rem', width: '100%' }}
-                    >
-                      <option value="">Select facility...</option>
-                      {customers.map((customer: Customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
               </div>
             </div>
 
