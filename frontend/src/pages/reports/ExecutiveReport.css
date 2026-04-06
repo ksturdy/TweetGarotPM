@@ -261,6 +261,18 @@
   background: #f9fafb;
 }
 
+.er-rank-item-clickable {
+  cursor: pointer;
+}
+
+.er-rank-item-clickable:hover {
+  background: #eff6ff;
+}
+
+.er-rank-item-clickable:hover .er-project-name {
+  color: #2563eb;
+}
+
 /* Medal / Rank Number */
 .er-rank-badge {
   width: 28px;

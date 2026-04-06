@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Chart } from 'react-chartjs-2';
 import {
@@ -118,6 +118,7 @@ const defaultSettings: BacklogFitSettings = {
 };
 
 const BacklogFitAnalysis: React.FC = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [capacityTarget, setCapacityTarget] = useState<number>(defaultSettings.capacityTarget);
   const [horizonMonths, setHorizonMonths] = useState<number>(defaultSettings.horizonMonths);
@@ -1159,7 +1160,13 @@ const BacklogFitAnalysis: React.FC = () => {
             </thead>
             <tbody>
               {opportunityScores.map((s, idx) => (
-                <tr key={s.opportunity.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr
+                  key={s.opportunity.id}
+                  style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.15s' }}
+                  onClick={() => navigate('/sales', { state: { selectedOpportunityId: s.opportunity.id } })}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#eff6ff')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
                   <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>{idx + 1}</td>
                   <td style={{ padding: '0.4rem 0.5rem' }}>
                     <div style={{ fontWeight: 500 }}>{s.opportunity.title}</div>

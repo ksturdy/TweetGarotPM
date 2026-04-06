@@ -169,7 +169,12 @@ const VistaDataSettings: React.FC = () => {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleString();
+    // Ensure UTC dates without Z suffix are treated as UTC, not local time
+    let str = dateString;
+    if (typeof str === 'string' && !str.endsWith('Z') && !str.includes('+') && !str.includes('-', 10)) {
+      str = str.replace(' ', 'T') + 'Z';
+    }
+    return new Date(str).toLocaleString();
   };
 
   const formatNumber = (num: number | string | null | undefined): string => {

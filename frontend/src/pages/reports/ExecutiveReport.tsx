@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { executiveReportApi, ExecutiveReportCategory, ExecutiveReportItem } from '../../services/executiveReport';
 
@@ -117,12 +118,12 @@ const KPI_CARDS = [
   { key: 'totalEarnedRevenue', label: 'Earned Revenue', icon: <ReceiptLongIcon />, gradient: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', format: 'currency' },
 ] as const;
 
-const RankItem: React.FC<{ item: ExecutiveReportItem; formatType: string; hasPrevious: boolean }> = ({ item, formatType, hasPrevious }) => {
+const RankItem: React.FC<{ item: ExecutiveReportItem; formatType: string; hasPrevious: boolean; onClick?: () => void }> = ({ item, formatType, hasPrevious, onClick }) => {
   const changeClass = item.change > 0 ? 'er-change-up' : item.change < 0 ? 'er-change-down' : 'er-change-flat';
   const ChangeIcon = item.change > 0 ? ArrowUpwardIcon : item.change < 0 ? ArrowDownwardIcon : RemoveIcon;
 
   return (
-    <li className="er-rank-item">
+    <li className={`er-rank-item${onClick ? ' er-rank-item-clickable' : ''}`} onClick={onClick}>
       <div className={`er-rank-badge ${getRankClass(item.rank)}`}>
         {item.rank}
       </div>
@@ -145,7 +146,7 @@ const RankItem: React.FC<{ item: ExecutiveReportItem; formatType: string; hasPre
   );
 };
 
-const CategoryCard: React.FC<{ category: ExecutiveReportCategory; hasPrevious: boolean }> = ({ category, hasPrevious }) => {
+const CategoryCard: React.FC<{ category: ExecutiveReportCategory; hasPrevious: boolean; onItemClick: (categoryId: string, item: ExecutiveReportItem) => void }> = ({ category, hasPrevious, onItemClick }) => {
   const icon = ICON_MAP[category.icon] || <EmojiEventsIcon />;
 
   return (
@@ -168,6 +169,7 @@ const CategoryCard: React.FC<{ category: ExecutiveReportCategory; hasPrevious: b
               item={item}
               formatType={category.formatType}
               hasPrevious={hasPrevious}
+              onClick={() => onItemClick(category.id, item)}
             />
           ))}
         </ul>
@@ -179,8 +181,19 @@ const CategoryCard: React.FC<{ category: ExecutiveReportCategory; hasPrevious: b
 };
 
 const ExecutiveReport: React.FC = () => {
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleItemClick = useCallback((categoryId: string, item: ExecutiveReportItem) => {
+    if (categoryId === 'hot-opportunities') {
+      navigate('/sales', { state: { selectedOpportunityId: item.projectId } });
+    } else if (categoryId === 'big-estimates') {
+      navigate(`/estimating/estimates/${item.projectId}`);
+    } else {
+      navigate(`/projects/${item.projectId}`);
+    }
+  }, [navigate]);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['executive-report', selectedDate],
@@ -328,6 +341,7 @@ const ExecutiveReport: React.FC = () => {
             key={category.id}
             category={category}
             hasPrevious={hasPrevious}
+            onItemClick={handleItemClick}
           />
         ))}
       </div>
