@@ -421,6 +421,23 @@ router.post('/:campaignId/companies', async (req, res, next) => {
     const source = weeksList.length === 0 ? 'seed' : 'manual';
     const data = { ...req.body, campaign_id: req.params.campaignId, source };
     const company = await campaignCompanies.create(data);
+
+    // Log which week this prospect was credited to when added during an active campaign
+    if (source === 'manual' && company.target_week) {
+      const weekLabel = weeksList.find(w => w.week_number === company.target_week)?.label || `Week ${company.target_week}`;
+      const db = require('../config/database');
+      await db.query(
+        `INSERT INTO campaign_activity_logs (campaign_id, campaign_company_id, user_id, activity_type, description, metadata)
+         VALUES ($1, $2, $3, 'note', $4, $5)`,
+        [
+          req.params.campaignId,
+          company.id,
+          req.user.id,
+          `New prospect added during campaign, credited to ${weekLabel}`,
+          JSON.stringify({ week_added: company.target_week, source: 'manual' })
+        ]
+      );
+    }
     res.status(201).json(company);
   } catch (error) {
     next(error);

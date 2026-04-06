@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
@@ -12,7 +12,12 @@ import {
   addCampaignNote, getTeamEligibleEmployees, downloadCampaignReport, regenerateCampaignWeeks,
   addTeamMember, removeTeamMember, reassignCompanies,
   getCampaignCompanyAssessment, deleteCampaignCompany,
-  CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee
+  getCampaignContacts, createCampaignContact, updateCampaignContact, deleteCampaignContact,
+  getCampaignCompanyOpportunities, createCampaignOpportunity, updateCampaignOpportunity, deleteCampaignOpportunity,
+  getCampaignCompanyEstimates, createCampaignEstimate, updateCampaignEstimate, deleteCampaignEstimate,
+  getCampaignCompanyActivity, logContactAttempt,
+  CampaignCompany, CampaignWeek, CampaignTeamMember, CampaignActivityLog, TeamEligibleEmployee,
+  CampaignContact, CampaignOpportunity, CampaignEstimate
 } from '../services/campaigns';
 import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
@@ -47,9 +52,15 @@ export default function CampaignDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<Record<number, CampaignContact[]>>({});
   const [estimates, setEstimates] = useState<any[]>([]);
   const [deletingProspect, setDeletingProspect] = useState<any>(null);
+  // Detail modal per-prospect data (fetched on open)
+  const [detailOpps, setDetailOpps] = useState<CampaignOpportunity[]>([]);
+  const [detailEstimates, setDetailEstimates] = useState<CampaignEstimate[]>([]);
+  const [detailActivity, setDetailActivity] = useState<CampaignActivityLog[]>([]);
+  const [expandedContact, setExpandedContact] = useState<number | null>(null);
+  const [editingContact, setEditingContact] = useState<CampaignContact | null>(null);
 
   // Fetch pipeline stages from database
   const { data: pipelineStages = [] } = useQuery({
@@ -142,6 +153,24 @@ export default function CampaignDetail() {
       end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       label: w.label || `Week ${w.week_number}`
     }));
+  }, [dbWeeks]);
+
+  // Determine which campaign week "today" falls in (for defaulting new prospects)
+  const currentCampaignWeek = useMemo(() => {
+    if (dbWeeks.length === 0) return 1;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (const w of dbWeeks) {
+      const start = new Date(w.start_date);
+      const end = new Date(w.end_date);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      if (today >= start && today <= end) return w.week_number;
+    }
+    // If past all weeks, use the last one; if before all, use the first
+    const last = dbWeeks[dbWeeks.length - 1];
+    if (today > new Date(last.end_date)) return last.week_number;
+    return dbWeeks[0].week_number;
   }, [dbWeeks]);
 
   // DB mutations
@@ -526,7 +555,7 @@ export default function CampaignDetail() {
     setOrphanReassignTo('');
   };
 
-  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
+  const [newCustomer, setNewCustomer] = useState<{ name: string; sector: string; address: string; phone: string; assignedTo: string; assignedToId: number | null; tier: string; score: number; targetWeek: number }>({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0 });
   const [newContact, setNewContact] = useState({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
   const [newEstimate, setNewEstimate] = useState({ companyId: '', oppId: '', name: '', amount: '', status: 'draft' });
 
@@ -641,10 +670,10 @@ export default function CampaignDetail() {
       phone: newCustomer.phone,
       tier: newCustomer.tier,
       score: newCustomer.score,
-      target_week: newCustomer.targetWeek,
+      target_week: newCustomer.targetWeek || currentCampaignWeek,
       assigned_to_id: newCustomer.assignedToId
     });
-    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 1 });
+    setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: '', assignedToId: null, tier: 'B', score: 70, targetWeek: 0 });
     setShowNewCustomer(false);
   };
 
@@ -660,13 +689,25 @@ export default function CampaignDetail() {
     await refetchOpportunities();
   };
 
-  const handleAddContact = () => {
+  const handleAddContact = async () => {
     if (!newContact.name.trim() || !newContact.companyId) return;
-    const newId = contacts.length > 0 ? Math.max(...contacts.map((c: any) => c.id)) + 1 : 1;
-    const contact = { ...newContact, id: newId, companyId: parseInt(newContact.companyId) };
-    setContacts([...contacts, contact]);
-    setNewContact({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
-    setShowNewContact(false);
+    try {
+      const companyId = parseInt(newContact.companyId);
+      await createCampaignContact(campaignId, companyId, {
+        name: newContact.name,
+        title: newContact.title,
+        email: newContact.email,
+        phone: newContact.phone,
+        is_primary: newContact.isPrimary
+      });
+      // Refetch contacts for this company
+      const updated = await getCampaignContacts(campaignId, companyId);
+      setContacts(prev => ({ ...prev, [companyId]: updated }));
+      setNewContact({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false });
+      setShowNewContact(false);
+    } catch (err) {
+      console.error('Failed to add contact:', err);
+    }
   };
 
   const handleAddEstimate = () => {
@@ -679,9 +720,32 @@ export default function CampaignDetail() {
     setShowNewEstimate(false);
   };
 
-  const openDetail = (company: any) => {
+  const fetchContactsForCompany = async (companyId: number) => {
+    try {
+      const data = await getCampaignContacts(campaignId, companyId);
+      setContacts(prev => ({ ...prev, [companyId]: data }));
+    } catch (err) {
+      console.error('Failed to fetch contacts:', err);
+    }
+  };
+
+  const openDetail = async (company: any) => {
     setDetailView(company);
     setDetailTab('overview');
+    setShowNewContact(false);
+    setExpandedContact(null);
+    setEditingContact(null);
+    // Fetch all per-prospect data in parallel
+    const [cts, opps, ests, acts] = await Promise.all([
+      getCampaignContacts(campaignId, company.id).catch(() => []),
+      getCampaignCompanyOpportunities(campaignId, company.id).catch(() => []),
+      getCampaignCompanyEstimates(campaignId, company.id).catch(() => []),
+      getCampaignCompanyActivity(campaignId, company.id, 50).catch(() => [])
+    ]);
+    setContacts(prev => ({ ...prev, [company.id]: cts }));
+    setDetailOpps(opps);
+    setDetailEstimates(ests);
+    setDetailActivity(acts);
   };
 
   const card: React.CSSProperties = { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #e5e5e5' };
@@ -691,7 +755,7 @@ export default function CampaignDetail() {
 
   const weekData = activeWeeks.find((w: any) => w.num === currentWeek);
 
-  const getCompanyContacts = (companyId: number) => contacts.filter((c: any) => c.companyId === companyId);
+  const getCompanyContacts = (companyId: number) => contacts[companyId] || [];
   const getCompanyOpportunities = (companyId: number) => opportunities.filter((o: any) => o.companyId === companyId);
   const getCompanyEstimates = (companyId: number) => estimates.filter((e: any) => e.companyId === companyId);
   const getCompanyLogs = (companyId: number) => activeLogs.filter((l: any) => l.cid === companyId);
@@ -769,7 +833,10 @@ export default function CampaignDetail() {
               </button>
             ))}
           </div>
-          <button className="sales-btn sales-btn-primary" onClick={() => setShowNewCustomer(true)}>
+          <button className="sales-btn sales-btn-primary" onClick={() => {
+              setNewCustomer({ name: '', sector: '', address: '', phone: '', assignedTo: dbTeam[0]?.name || '', assignedToId: dbTeam[0]?.employee_id || null, tier: 'B', score: 70, targetWeek: 0 });
+              setShowNewCustomer(true);
+            }}>
             <span style={{ fontSize: '16px' }}>+</span> New Prospect
           </button>
           <button className="sales-btn sales-btn-secondary" onClick={() => setIsOpportunityModalOpen(true)}>
@@ -1035,109 +1102,92 @@ export default function CampaignDetail() {
               </h3>
               <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Prospects scheduled for contact this week</p>
 
-              {activeTeam.map((pm: string) => {
-                const pmProspects = activeData.filter((c: any) => c.assignedTo === pm && c.targetWeek === currentWeek);
-                if (pmProspects.length === 0) return null;
-                return (
-                  <div key={pm} style={{ marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 12px', background: '#f9fafb', borderRadius: '6px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '14px' }}>{pm}</span>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>({pmProspects.length} prospects)</span>
-                    </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                      <thead>
-                        <tr style={{ background: '#fafafa' }}>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Company</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Sector</th>
-                          <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Score</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Phone</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pmProspects.map((c: any) => (
-                          <tr key={c.id} style={{ borderTop: '1px solid #e5e7eb' }}>
-                            <td style={{ padding: '10px' }}>
-                              <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={() => openDetail(c)}>{c.name}</div>
-                              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.address}</div>
-                            </td>
-                            <td style={{ padding: '10px', color: '#64748b' }}>{c.sector}</td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
-                            </td>
-                            <td style={{ padding: '10px' }}><a href={'tel:'+c.phone} style={{ color: '#2563eb', textDecoration: 'none' }}>{c.phone}</a></td>
-                            <td style={{ padding: '10px' }}>
-                              <select value={c.status} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', color: statuses.find(s=>s.key===c.status)?.color, width: 'auto' }}>
-                                {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ padding: '10px' }}>
-                              <select value={c.action} onChange={e => updateField(c.id, 'action', e.target.value)} style={{ ...input, fontSize: '11px', color: actions.find(a=>a.key===c.action)?.color, width: 'auto' }}>
-                                {actions.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })}
-              {/* Render prospects not matching any team member (unassigned or team not set up) */}
-              {(() => {
-                const unmatchedProspects = activeData.filter((c: any) =>
-                  c.targetWeek === currentWeek && !activeTeam.includes(c.assignedTo)
-                );
-                if (unmatchedProspects.length === 0) return null;
-                return (
-                  <div style={{ marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '8px 12px', background: '#fef3c7', borderRadius: '6px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '14px' }}>{activeTeam.length === 0 ? 'All Prospects' : 'Unassigned / Other'}</span>
-                      <span style={{ fontSize: '12px', color: '#92400e' }}>({unmatchedProspects.length} prospects)</span>
-                    </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                      <thead>
-                        <tr style={{ background: '#fafafa' }}>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Company</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Sector</th>
-                          <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600 }}>Score</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Assigned To</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Status</th>
-                          <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600 }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {unmatchedProspects.map((c: any) => (
-                          <tr key={c.id} style={{ borderTop: '1px solid #e5e7eb' }}>
-                            <td style={{ padding: '10px' }}>
-                              <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={() => openDetail(c)}>{c.name}</div>
-                              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.address}</div>
-                            </td>
-                            <td style={{ padding: '10px', color: '#64748b' }}>{c.sector}</td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
-                            </td>
-                            <td style={{ padding: '10px', color: '#64748b' }}>{c.assignedTo}</td>
-                            <td style={{ padding: '10px' }}>
-                              <select value={c.status} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', color: statuses.find(s=>s.key===c.status)?.color, width: 'auto' }}>
-                                {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ padding: '10px' }}>
-                              <select value={c.action} onChange={e => updateField(c.id, 'action', e.target.value)} style={{ ...input, fontSize: '11px', color: actions.find(a=>a.key===c.action)?.color, width: 'auto' }}>
-                                {actions.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-              {activeData.filter((c: any) => c.targetWeek === currentWeek).length === 0 && (
+              {activeData.filter((c: any) => c.targetWeek === currentWeek).length === 0 ? (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No prospects scheduled for this week</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: '#f9fafb' }}>
+                    <tr>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '22%' }}>Company</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '14%' }}>Sector</th>
+                      <th style={{ padding: '10px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Score</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '13%' }}>Phone</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '16%' }}>Status</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '15%' }}>Action</th>
+                      <th style={{ padding: '10px', textAlign: 'left', fontWeight: 600, width: '12%' }}>Week</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const teamEmployeeIds = dbTeam.map((t: CampaignTeamMember) => Number(t.employee_id));
+                      const weekProspects = activeData.filter((c: any) => c.targetWeek === currentWeek);
+
+                      // Build groups: one per team member + unassigned
+                      // Use Number() coercion to avoid string/number mismatch
+                      const groups: { label: string; bg: string; textColor: string; prospects: any[] }[] = [];
+                      dbTeam.forEach((member: CampaignTeamMember) => {
+                        const mid = Number(member.employee_id);
+                        const memberProspects = weekProspects.filter((c: any) => Number(c.assigned_to_id) === mid);
+                        if (memberProspects.length > 0) {
+                          groups.push({ label: `${member.name} (${memberProspects.length})`, bg: '#f9fafb', textColor: '#1e293b', prospects: memberProspects });
+                        }
+                      });
+                      const unmatched = weekProspects.filter((c: any) => !teamEmployeeIds.includes(Number(c.assigned_to_id)));
+                      // Group non-team assignees by their actual name instead of lumping as "Unassigned"
+                      const assignedNonTeam = unmatched.filter((c: any) => c.assigned_to_id && c.assignedTo && c.assignedTo !== 'Unassigned');
+                      const trulyUnassigned = unmatched.filter((c: any) => !c.assigned_to_id || !c.assignedTo || c.assignedTo === 'Unassigned');
+                      const nonTeamByName: Record<string, any[]> = {};
+                      assignedNonTeam.forEach((c: any) => {
+                        if (!nonTeamByName[c.assignedTo]) nonTeamByName[c.assignedTo] = [];
+                        nonTeamByName[c.assignedTo].push(c);
+                      });
+                      Object.entries(nonTeamByName).forEach(([name, prospects]) => {
+                        groups.push({ label: `${name} (${prospects.length})`, bg: '#f9fafb', textColor: '#1e293b', prospects });
+                      });
+                      if (trulyUnassigned.length > 0) {
+                        groups.push({ label: `${dbTeam.length === 0 && assignedNonTeam.length === 0 ? 'All Prospects' : 'Unassigned'} (${trulyUnassigned.length})`, bg: '#fef3c7', textColor: '#92400e', prospects: trulyUnassigned });
+                      }
+
+                      return groups.map((group, gi) => (
+                        <Fragment key={gi}>
+                          <tr>
+                            <td colSpan={7} style={{ padding: '10px 12px', background: group.bg, fontWeight: 600, fontSize: '13px', color: group.textColor, borderTop: gi > 0 ? '2px solid #e5e7eb' : undefined }}>
+                              {group.label}
+                            </td>
+                          </tr>
+                          {group.prospects.map((c: any) => (
+                            <tr key={c.id} style={{ borderTop: '1px solid #f3f4f6' }}>
+                              <td style={{ padding: '10px' }}>
+                                <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={() => openDetail(c)}>{c.name}</div>
+                                <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.address}</div>
+                              </td>
+                              <td style={{ padding: '10px', color: '#64748b' }}>{c.sector}</td>
+                              <td style={{ padding: '10px', textAlign: 'center' }}>
+                                <span style={{ background: c.tier === 'A' ? '#dcfce7' : '#fef9c3', color: c.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{c.tier}-{c.score}</span>
+                              </td>
+                              <td style={{ padding: '10px' }}><a href={'tel:'+c.phone} style={{ color: '#2563eb', textDecoration: 'none' }}>{c.phone}</a></td>
+                              <td style={{ padding: '10px' }}>
+                                <select value={c.status} onChange={e => updateField(c.id, 'status', e.target.value)} style={{ ...input, fontSize: '11px', color: statuses.find(s=>s.key===c.status)?.color, width: 'auto' }}>
+                                  {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding: '10px' }}>
+                                <select value={c.action} onChange={e => updateField(c.id, 'action', e.target.value)} style={{ ...input, fontSize: '11px', color: actions.find(a=>a.key===c.action)?.color, width: 'auto' }}>
+                                  {actions.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding: '10px' }}>
+                                <select value={c.targetWeek || ''} onChange={e => updateField(c.id, 'week', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                                  {activeWeeks.map((w: any) => <option key={w.num} value={w.num}>{w.label}</option>)}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
@@ -1260,7 +1310,8 @@ export default function CampaignDetail() {
                               )}
                             </td>
                             <td style={{ padding: '12px', fontSize: '12px' }}>
-                              <select value={c.assigned_to_id || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: '#374151' }}>
+                              <select value={c.assigned_to_id || ''} onClick={e => e.stopPropagation()} onChange={e => updateField(c.id, 'assignedTo', e.target.value)} style={{ ...input, fontSize: '11px', padding: '4px 6px', width: 'auto', color: c.assigned_to_id ? '#374151' : '#ef4444' }}>
+                                {!c.assigned_to_id && <option value="">-- Unassigned --</option>}
                                 {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
                               </select>
                             </td>
@@ -1669,6 +1720,7 @@ export default function CampaignDetail() {
                     }}
                     style={input}
                   >
+                    <option value="">-- Select Assignee --</option>
                     {dbTeam.map((t: CampaignTeamMember) => (
                       <option key={t.employee_id} value={t.employee_id}>{t.name}</option>
                     ))}
@@ -1677,11 +1729,11 @@ export default function CampaignDetail() {
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Target Week</label>
                   <select
-                    value={newCustomer.targetWeek}
+                    value={newCustomer.targetWeek || currentCampaignWeek}
                     onChange={e => setNewCustomer({...newCustomer, targetWeek: parseInt(e.target.value)})}
                     style={input}
                   >
-                    {activeWeeks.map((w: any) => <option key={w.num} value={w.num}>Week {w.num} ({w.label})</option>)}
+                    {activeWeeks.map((w: any) => <option key={w.num} value={w.num}>Week {w.num} ({w.label}){w.num === currentCampaignWeek ? ' — Current' : ''}</option>)}
                   </select>
                 </div>
               </div>
@@ -1707,65 +1759,165 @@ export default function CampaignDetail() {
       {/* Prospect Detail Modal */}
       {detailView && (
         <div style={modalOverlay} onClick={() => { setDetailView(null); setDetailTab('overview'); }}>
-          <div style={{ ...detailModal, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
-              <div>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', margin: 0 }}>{detailView.name}</h2>
-                <div style={{ display: 'flex', gap: '12px', marginTop: '6px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', color: '#64748b' }}>{detailView.sector}</span>
-                  <span style={{ background: detailView.tier === 'A' ? '#dcfce7' : '#fef9c3', color: detailView.tier === 'A' ? '#16a34a' : '#ca8a04', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '11px' }}>{detailView.tier}-{detailView.score}</span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Assigned: <strong>{detailView.assignedTo}</strong></span>
+          <div style={{ ...detailModal, maxHeight: '92vh', display: 'flex', flexDirection: 'column', maxWidth: '960px' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b', margin: 0 }}>{detailView.name}</h2>
+                    <span style={{ background: detailView.tier === 'A' ? '#dcfce7' : detailView.tier === 'B' ? '#fef9c3' : '#f1f5f9', color: detailView.tier === 'A' ? '#16a34a' : detailView.tier === 'B' ? '#ca8a04' : '#64748b', padding: '3px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '12px' }}>{detailView.tier}-{detailView.score}</span>
+                    {assessmentsMap[detailView.id] && (
+                      <span style={{ background: '#fffbeb', color: '#f59e0b', padding: '3px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '12px', border: '1px solid #fde68a' }}>TG Score: {assessmentsMap[detailView.id]}</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {detailView.sector && <span style={{ fontSize: '13px', color: '#64748b' }}>{detailView.sector}</span>}
+                    {detailView.address && <span style={{ fontSize: '13px', color: '#64748b' }}>{detailView.address}</span>}
+                    {detailView.phone && <a href={'tel:' + detailView.phone} style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{detailView.phone}</a>}
+                  </div>
+                  {/* Editable fields row */}
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Assigned</span>
+                      <select value={detailView.assigned_to_id || ''} onChange={e => {
+                        const val = e.target.value; if (!val) return;
+                        updateField(detailView.id, 'assignedTo', val);
+                        const member = dbTeam.find((t: CampaignTeamMember) => Number(t.employee_id) === Number(val));
+                        setDetailView({ ...detailView, assigned_to_id: Number(val), assignedTo: member?.name || '' });
+                      }} style={{ fontSize: '12px', fontWeight: 600, border: '1px solid #e5e7eb', borderRadius: '4px', padding: '3px 8px', color: detailView.assigned_to_id ? '#1e293b' : '#ef4444', background: '#fff', cursor: 'pointer' }}>
+                        {!detailView.assigned_to_id && <option value="">-- Unassigned --</option>}
+                        {dbTeam.map((t: CampaignTeamMember) => <option key={t.employee_id} value={t.employee_id}>{t.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Status</span>
+                      <select value={detailView.status} onChange={e => {
+                        updateField(detailView.id, 'status', e.target.value);
+                        setDetailView({ ...detailView, status: e.target.value });
+                      }} style={{ fontSize: '12px', fontWeight: 500, border: '1px solid #e5e7eb', borderRadius: '4px', padding: '3px 8px', color: statuses.find(s => s.key === detailView.status)?.color || '#374151', background: '#fff', cursor: 'pointer' }}>
+                        {statuses.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Action</span>
+                      <select value={detailView.action} onChange={e => {
+                        updateField(detailView.id, 'action', e.target.value);
+                        setDetailView({ ...detailView, action: e.target.value });
+                      }} style={{ fontSize: '12px', fontWeight: 500, border: '1px solid #e5e7eb', borderRadius: '4px', padding: '3px 8px', color: actions.find(a => a.key === detailView.action)?.color || '#374151', background: '#fff', cursor: 'pointer' }}>
+                        {actions.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Week</span>
+                      <select value={detailView.targetWeek || ''} onChange={e => {
+                        updateField(detailView.id, 'week', e.target.value);
+                        setDetailView({ ...detailView, targetWeek: Number(e.target.value) });
+                      }} style={{ fontSize: '12px', fontWeight: 500, border: '1px solid #e5e7eb', borderRadius: '4px', padding: '3px 8px', background: '#fff', cursor: 'pointer' }}>
+                        {activeWeeks.map((w: any) => <option key={w.num} value={w.num}>{w.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
                 </div>
+                <button onClick={() => { setDetailView(null); setDetailTab('overview'); }} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8', padding: '4px', lineHeight: 1 }}>×</button>
               </div>
-              <button onClick={() => { setDetailView(null); setDetailTab('overview'); }} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}>×</button>
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-              {['overview', 'contacts', 'activity'].map(t => (
-                <button key={t} onClick={() => setDetailTab(t)} style={{
-                  padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: '13px', fontWeight: detailTab === t ? 600 : 400,
-                  color: detailTab === t ? '#ea580c' : '#64748b',
-                  borderBottom: detailTab === t ? '2px solid #ea580c' : '2px solid transparent',
-                }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+            <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #e5e7eb', flexShrink: 0, paddingLeft: '8px' }}>
+              {[
+                { key: 'overview', label: 'Overview' },
+                { key: 'contacts', label: `Contacts (${getCompanyContacts(detailView.id).length})` },
+                { key: 'opportunities', label: `Opportunities (${detailOpps.length})` },
+                { key: 'estimates', label: `Estimates (${detailEstimates.length})` },
+                { key: 'activity', label: 'Activity' },
+              ].map(t => (
+                <button key={t.key} onClick={() => setDetailTab(t.key)} style={{
+                  padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: '12px', fontWeight: detailTab === t.key ? 600 : 400,
+                  color: detailTab === t.key ? '#ea580c' : '#64748b',
+                  borderBottom: detailTab === t.key ? '2px solid #ea580c' : '2px solid transparent',
+                  whiteSpace: 'nowrap',
+                }}>{t.label}</button>
               ))}
             </div>
 
-            <div style={{ padding: '24px', overflow: 'auto', flex: 1 }}>
+            {/* Tab content */}
+            <div style={{ padding: '20px 24px', overflow: 'auto', flex: 1 }}>
+
+              {/* === OVERVIEW TAB === */}
               {detailTab === 'overview' && (
-                <div style={{ display: 'grid', gap: '16px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Address</div>
-                      <div style={{ fontSize: '13px', color: '#1e293b' }}>{detailView.address || 'N/A'}</div>
+                <div style={{ display: 'grid', gap: '20px' }}>
+                  {/* Summary cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                    <div style={{ padding: '14px', background: '#f0f9ff', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#0369a1' }}>{getCompanyContacts(detailView.id).length}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Contacts</div>
                     </div>
-                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Phone</div>
-                      <a href={'tel:' + detailView.phone} style={{ fontSize: '15px', fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>{detailView.phone || 'N/A'}</a>
+                    <div style={{ padding: '14px', background: '#f0fdf4', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#16a34a' }}>{detailOpps.length}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Opportunities</div>
                     </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Status</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{statuses.find(s => s.key === detailView.status)?.label || detailView.status}</div>
+                    <div style={{ padding: '14px', background: '#fefce8', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#ca8a04' }}>{detailEstimates.length}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Estimates</div>
                     </div>
-                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Next Action</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{actions.find(a => a.key === detailView.action)?.label || detailView.action}</div>
-                    </div>
-                    <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Target Week</div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{activeWeeks.find((w: any) => w.num === detailView.targetWeek)?.label || `Week ${detailView.targetWeek}`}</div>
+                    <div style={{ padding: '14px', background: '#faf5ff', borderRadius: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#7c3aed' }}>${detailOpps.reduce((sum, o) => sum + (o.value || 0), 0).toLocaleString()}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Pipeline Value</div>
                     </div>
                   </div>
-                  {assessmentsMap[detailView.id] && (
-                    <div style={{ padding: '16px', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a' }}>
-                      <div style={{ fontSize: '11px', color: '#92400e', textTransform: 'uppercase', marginBottom: '6px' }}>TG Customer Score</div>
-                      <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>{assessmentsMap[detailView.id]}/100</div>
+
+                  {/* Key contacts */}
+                  {getCompanyContacts(detailView.id).length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Key Contacts</div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {getCompanyContacts(detailView.id).slice(0, 3).map((ct: CampaignContact) => (
+                          <div key={ct.id} onClick={() => setDetailTab('contacts')} style={{ padding: '8px 14px', background: '#f9fafb', borderRadius: '8px', cursor: 'pointer', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: ct.is_primary ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: ct.is_primary ? '#1d4ed8' : '#64748b' }}>{ct.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{ct.name}</div>
+                              {ct.title && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{ct.title}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
+
+                  {/* Recent opportunities */}
+                  {detailOpps.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Opportunities</div>
+                      {detailOpps.slice(0, 3).map(opp => (
+                        <div key={opp.id} style={{ padding: '10px 14px', background: '#f9fafb', borderRadius: '8px', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{opp.name}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>{opp.stage?.replace('_', ' ')} · {opp.probability}% probability</div>
+                          </div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#16a34a' }}>${(opp.value || 0).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recent activity */}
+                  {detailActivity.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Recent Activity</div>
+                      {detailActivity.slice(0, 4).map(l => (
+                        <div key={l.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>
+                          <span style={{ color: '#1e293b' }}>{l.description}</span>
+                          <span style={{ color: '#94a3b8', marginLeft: '8px' }}>{new Date(l.created_at).toLocaleDateString()}</span>
+                          {l.user_name && <span style={{ color: '#94a3b8' }}> · {l.user_name}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions row */}
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', paddingTop: '4px' }}>
                     <button onClick={() => { setAssessmentCustomer(detailView); setShowAssessment(true); }} style={{ ...btn, fontSize: '13px' }}>Score Prospect</button>
                     {isOwner && (
                       <button onClick={() => setDeletingProspect(detailView)} style={{ ...btn, fontSize: '13px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Delete Prospect</button>
@@ -1774,65 +1926,269 @@ export default function CampaignDetail() {
                 </div>
               )}
 
+              {/* === CONTACTS TAB === */}
               {detailTab === 'contacts' && (
-                <div>
-                  {(() => {
-                    const companyContacts = getCompanyContacts(detailView.id);
-                    return companyContacts.length > 0 ? (
-                      <div style={{ display: 'grid', gap: '8px' }}>
-                        {companyContacts.map((ct: any) => (
-                          <div key={ct.id} style={{ padding: '12px 16px', background: '#f9fafb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b' }}>{ct.name}</div>
-                              <div style={{ fontSize: '12px', color: '#64748b' }}>{ct.title}</div>
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {getCompanyContacts(detailView.id).length > 0 ? getCompanyContacts(detailView.id).map((ct: CampaignContact) => {
+                    const isExpanded = expandedContact === ct.id;
+                    const isEditing = editingContact?.id === ct.id;
+                    return (
+                      <div key={ct.id} style={{ background: '#f9fafb', borderRadius: '10px', border: isExpanded ? '1px solid #bae6fd' : '1px solid #e5e7eb', overflow: 'hidden' }}>
+                        {/* Collapsed row */}
+                        <div onClick={() => setExpandedContact(isExpanded ? null : ct.id)} style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: ct.is_primary ? '#dbeafe' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: ct.is_primary ? '#1d4ed8' : '#475569' }}>
+                              {ct.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
-                            <div style={{ textAlign: 'right', fontSize: '12px' }}>
-                              {ct.email && <div><a href={'mailto:' + ct.email} style={{ color: '#2563eb' }}>{ct.email}</a></div>}
-                              {ct.phone && <div><a href={'tel:' + ct.phone} style={{ color: '#2563eb' }}>{ct.phone}</a></div>}
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b' }}>
+                                {ct.name}
+                                {ct.is_primary && <span style={{ marginLeft: '8px', fontSize: '10px', padding: '2px 6px', background: '#dbeafe', color: '#1d4ed8', borderRadius: '4px', fontWeight: 600 }}>Primary</span>}
+                              </div>
+                              {ct.title && <div style={{ fontSize: '12px', color: '#64748b' }}>{ct.title}</div>}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: '13px' }}>
-                        No contacts added yet
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {!isExpanded && ct.phone && <span style={{ fontSize: '12px', color: '#2563eb' }}>{ct.phone}</span>}
+                            <span style={{ fontSize: '14px', color: '#94a3b8', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                          </div>
+                        </div>
+                        {/* Expanded detail */}
+                        {isExpanded && (
+                          <div style={{ padding: '0 16px 16px', borderTop: '1px solid #e5e7eb' }}>
+                            {isEditing ? (
+                              <div style={{ paddingTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                <input placeholder="Name *" value={editingContact.name} onChange={e => setEditingContact({ ...editingContact, name: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                                <input placeholder="Title" value={editingContact.title || ''} onChange={e => setEditingContact({ ...editingContact, title: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                                <input placeholder="Email" value={editingContact.email || ''} onChange={e => setEditingContact({ ...editingContact, email: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                                <input placeholder="Phone" value={editingContact.phone || ''} onChange={e => setEditingContact({ ...editingContact, phone: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                                <div style={{ gridColumn: '1/-1', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <input type="checkbox" checked={editingContact.is_primary} onChange={e => setEditingContact({ ...editingContact, is_primary: e.target.checked })} /> Primary Contact
+                                  </label>
+                                  <input placeholder="Notes" value={editingContact.notes || ''} onChange={e => setEditingContact({ ...editingContact, notes: e.target.value })} style={{ ...input, fontSize: '12px', flex: 1 }} />
+                                </div>
+                                <div style={{ gridColumn: '1/-1', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                  <button onClick={() => setEditingContact(null)} style={{ ...btn, fontSize: '12px', background: '#f1f5f9', color: '#475569' }}>Cancel</button>
+                                  <button onClick={async () => {
+                                    await updateCampaignContact(campaignId, detailView.id, editingContact.id, editingContact);
+                                    const updated = await getCampaignContacts(campaignId, detailView.id);
+                                    setContacts(prev => ({ ...prev, [detailView.id]: updated }));
+                                    setEditingContact(null);
+                                  }} style={{ ...btn, fontSize: '12px' }}>Save</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ paddingTop: '12px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                                  {ct.email && (
+                                    <div>
+                                      <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '2px' }}>Email</div>
+                                      <a href={'mailto:' + ct.email} style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none' }}>{ct.email}</a>
+                                    </div>
+                                  )}
+                                  {ct.phone && (
+                                    <div>
+                                      <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '2px' }}>Phone</div>
+                                      <a href={'tel:' + ct.phone} style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none' }}>{ct.phone}</a>
+                                    </div>
+                                  )}
+                                  {ct.notes && (
+                                    <div style={{ gridColumn: '1/-1' }}>
+                                      <div style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '2px' }}>Notes</div>
+                                      <div style={{ fontSize: '13px', color: '#1e293b' }}>{ct.notes}</div>
+                                    </div>
+                                  )}
+                                  {!ct.email && !ct.phone && !ct.notes && (
+                                    <div style={{ gridColumn: '1/-1', fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>No additional details</div>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => setEditingContact({ ...ct })} style={{ ...btn, fontSize: '11px', padding: '4px 10px' }}>Edit</button>
+                                  <button onClick={async () => {
+                                    await deleteCampaignContact(campaignId, detailView.id, ct.id);
+                                    const updated = await getCampaignContacts(campaignId, detailView.id);
+                                    setContacts(prev => ({ ...prev, [detailView.id]: updated }));
+                                    setExpandedContact(null);
+                                  }} style={{ ...btn, fontSize: '11px', padding: '4px 10px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Remove</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
-                  })()}
+                  }) : (
+                    <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>No contacts added yet</div>
+                  )}
+                  {/* Add contact form */}
+                  {showNewContact ? (
+                    <div style={{ padding: '16px', background: '#f0f9ff', borderRadius: '10px', border: '1px solid #bae6fd' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0369a1', marginBottom: '10px' }}>New Contact</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                        <input placeholder="Name *" value={newContact.name} onChange={e => setNewContact({ ...newContact, name: e.target.value, companyId: String(detailView.id) })} style={{ ...input, fontSize: '12px' }} />
+                        <input placeholder="Title" value={newContact.title} onChange={e => setNewContact({ ...newContact, title: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                        <input placeholder="Email" value={newContact.email} onChange={e => setNewContact({ ...newContact, email: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                        <input placeholder="Phone" value={newContact.phone} onChange={e => setNewContact({ ...newContact, phone: e.target.value })} style={{ ...input, fontSize: '12px' }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <label style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input type="checkbox" checked={newContact.isPrimary} onChange={e => setNewContact({ ...newContact, isPrimary: e.target.checked })} /> Primary
+                        </label>
+                        <div style={{ flex: 1 }} />
+                        <button onClick={() => { setShowNewContact(false); setNewContact({ companyId: '', name: '', title: '', email: '', phone: '', isPrimary: false }); }} style={{ ...btn, fontSize: '12px', background: '#f1f5f9', color: '#475569' }}>Cancel</button>
+                        <button onClick={handleAddContact} disabled={!newContact.name.trim()} style={{ ...btn, fontSize: '12px', opacity: newContact.name.trim() ? 1 : 0.5 }}>Save</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setNewContact({ companyId: String(detailView.id), name: '', title: '', email: '', phone: '', isPrimary: false }); setShowNewContact(true); }} style={{ ...btn, fontSize: '12px', width: '100%', textAlign: 'center', border: '1px dashed #94a3b8', background: '#fafafa', color: '#64748b', padding: '12px' }}>+ Add Contact</button>
+                  )}
                 </div>
               )}
 
+              {/* === OPPORTUNITIES TAB === */}
+              {detailTab === 'opportunities' && (() => {
+                const stageColors: Record<string, string> = { qualification: '#6366f1', discovery: '#0ea5e9', proposal: '#f59e0b', negotiation: '#ea580c', closed_won: '#16a34a', closed_lost: '#dc2626' };
+                return (
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {detailOpps.length > 0 ? detailOpps.map(opp => (
+                      <div key={opp.id} style={{ padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{opp.name}</div>
+                            {opp.description && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{opp.description}</div>}
+                          </div>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#16a34a' }}>${(opp.value || 0).toLocaleString()}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '6px', background: (stageColors[opp.stage] || '#6b7280') + '18', color: stageColors[opp.stage] || '#6b7280' }}>
+                            {opp.stage?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </span>
+                          <span style={{ fontSize: '12px', color: '#64748b' }}>{opp.probability}% probability</span>
+                          {opp.close_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Close: {new Date(opp.close_date).toLocaleDateString()}</span>}
+                          {opp.is_converted && <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a' }}>Converted</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                          <button onClick={async () => {
+                            if (confirm('Delete this opportunity?')) {
+                              await deleteCampaignOpportunity(campaignId, detailView.id, opp.id);
+                              setDetailOpps(prev => prev.filter(o => o.id !== opp.id));
+                            }
+                          }} style={{ ...btn, fontSize: '11px', padding: '3px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Remove</button>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>No opportunities yet</div>
+                    )}
+                    <button onClick={async () => {
+                      const name = prompt('Opportunity name:');
+                      if (!name) return;
+                      const valueStr = prompt('Estimated value ($):');
+                      const value = parseFloat(valueStr || '0');
+                      const opp = await createCampaignOpportunity(campaignId, detailView.id, { name, value, stage: 'qualification', probability: 10 });
+                      setDetailOpps(prev => [...prev, opp]);
+                    }} style={{ ...btn, fontSize: '12px', width: '100%', textAlign: 'center', border: '1px dashed #94a3b8', background: '#fafafa', color: '#64748b', padding: '12px' }}>+ Add Opportunity</button>
+                  </div>
+                );
+              })()}
+
+              {/* === ESTIMATES TAB === */}
+              {detailTab === 'estimates' && (() => {
+                const estStatusColors: Record<string, string> = { draft: '#6b7280', pending: '#f59e0b', sent: '#0ea5e9', accepted: '#16a34a', declined: '#dc2626' };
+                return (
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {detailEstimates.length > 0 ? detailEstimates.map(est => (
+                      <div key={est.id} style={{ padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>{est.estimate_number}</span>
+                              <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{est.name}</div>
+                            </div>
+                            {est.opportunity_name && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>Opportunity: {est.opportunity_name}</div>}
+                          </div>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>${(est.amount || 0).toLocaleString()}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '6px', background: (estStatusColors[est.status] || '#6b7280') + '18', color: estStatusColors[est.status] || '#6b7280' }}>
+                            {est.status?.charAt(0).toUpperCase() + est.status?.slice(1)}
+                          </span>
+                          {est.sent_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Sent: {new Date(est.sent_date).toLocaleDateString()}</span>}
+                          {est.valid_until && <span style={{ fontSize: '12px', color: '#64748b' }}>Valid until: {new Date(est.valid_until).toLocaleDateString()}</span>}
+                        </div>
+                        {est.notes && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>{est.notes}</div>}
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                          <button onClick={async () => {
+                            if (confirm('Delete this estimate?')) {
+                              await deleteCampaignEstimate(campaignId, detailView.id, est.id);
+                              setDetailEstimates(prev => prev.filter(e => e.id !== est.id));
+                            }
+                          }} style={{ ...btn, fontSize: '11px', padding: '3px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Remove</button>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>No estimates yet</div>
+                    )}
+                    <button onClick={async () => {
+                      const name = prompt('Estimate name:');
+                      if (!name) return;
+                      const amountStr = prompt('Estimate amount ($):');
+                      const amount = parseFloat(amountStr || '0');
+                      const est = await createCampaignEstimate(campaignId, detailView.id, { name, amount, status: 'draft' });
+                      setDetailEstimates(prev => [...prev, est]);
+                    }} style={{ ...btn, fontSize: '12px', width: '100%', textAlign: 'center', border: '1px dashed #94a3b8', background: '#fafafa', color: '#64748b', padding: '12px' }}>+ Add Estimate</button>
+                  </div>
+                );
+              })()}
+
+              {/* === ACTIVITY TAB (comments/notes) === */}
               {detailTab === 'activity' && (
                 <div>
-                  {/* Quick note entry */}
-                  <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
-                    <input
-                      type="text"
-                      value={note}
-                      onChange={e => setNote(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && note.trim()) { setSelected(detailView); addNote(); } }}
-                      placeholder="Add a note..."
-                      style={{ ...input, flex: 1 }}
-                    />
-                    <button onClick={() => { setSelected(detailView); addNote(); }} disabled={!note.trim()} style={{ ...btn, fontSize: '13px', opacity: note.trim() ? 1 : 0.5 }}>Add</button>
+                  {/* Add note / log contact attempt */}
+                  <div style={{ marginBottom: '16px', padding: '14px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input type="text" value={note} onChange={e => setNote(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && note.trim()) { setSelected(detailView); addNote(); setTimeout(async () => { const acts = await getCampaignCompanyActivity(campaignId, detailView.id, 50).catch(() => []); setDetailActivity(acts); }, 500); } }}
+                        placeholder="Add a comment or note..." style={{ ...input, flex: 1, fontSize: '13px' }} />
+                      <button onClick={() => { setSelected(detailView); addNote(); setTimeout(async () => { const acts = await getCampaignCompanyActivity(campaignId, detailView.id, 50).catch(() => []); setDetailActivity(acts); }, 500); }} disabled={!note.trim()} style={{ ...btn, fontSize: '13px', opacity: note.trim() ? 1 : 0.5 }}>Comment</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {['phone', 'email', 'meeting'].map(method => (
+                        <button key={method} onClick={async () => {
+                          const notes = prompt(`Notes for ${method} contact attempt:`);
+                          await logContactAttempt(campaignId, detailView.id, method, notes || '');
+                          const acts = await getCampaignCompanyActivity(campaignId, detailView.id, 50).catch(() => []);
+                          setDetailActivity(acts);
+                          queryClient.invalidateQueries({ queryKey: ['campaign-activity', campaignId] });
+                        }} style={{ ...btn, fontSize: '11px', padding: '4px 10px', background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                          Log {method.charAt(0).toUpperCase() + method.slice(1)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  {(() => {
-                    const companyLogs = getCompanyLogs(detailView.id);
-                    return companyLogs.length > 0 ? (
-                      <div style={{ display: 'grid', gap: '6px' }}>
-                        {companyLogs.map((l: any) => (
-                          <div key={l.id} style={{ padding: '10px 14px', background: '#f9fafb', borderRadius: '6px', fontSize: '13px' }}>
-                            <div style={{ color: '#1e293b' }}>{l.text || l.description}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{new Date(l.time || l.created_at).toLocaleString()}</div>
+                  {/* Activity timeline */}
+                  {detailActivity.length > 0 ? (
+                    <div style={{ position: 'relative', paddingLeft: '20px' }}>
+                      <div style={{ position: 'absolute', left: '7px', top: '4px', bottom: '4px', width: '2px', background: '#e5e7eb' }} />
+                      {detailActivity.map(l => {
+                        const typeIcons: Record<string, string> = { note: '💬', status_change: '🔄', action_change: '📋', contact_attempt: '📞', meeting: '🤝', email: '📧', phone_call: '📱', opportunity_created: '💰', estimate_sent: '📄', company_added_to_db: '🏢', reassignment: '👤', week_reassignment: '📅' };
+                        return (
+                          <div key={l.id} style={{ position: 'relative', marginBottom: '12px', paddingLeft: '16px' }}>
+                            <div style={{ position: 'absolute', left: '-6px', top: '2px', width: '14px', height: '14px', borderRadius: '50%', background: '#fff', border: '2px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px' }}>
+                              {typeIcons[l.activity_type] || '•'}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#1e293b' }}>{l.description}</div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                              {new Date(l.created_at).toLocaleString()}
+                              {l.user_name && <span> · {l.user_name}</span>}
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: '13px' }}>
-                        No activity yet
-                      </div>
-                    );
-                  })()}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8', fontSize: '13px' }}>No activity yet</div>
+                  )}
                 </div>
               )}
             </div>
