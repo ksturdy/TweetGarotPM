@@ -4,6 +4,7 @@ const opportunities = require('../models/opportunities');
 const opportunityActivities = require('../models/opportunityActivities');
 const OpportunityComment = require('../models/OpportunityComment');
 const OpportunityFollower = require('../models/OpportunityFollower');
+const OpportunityEstimate = require('../models/OpportunityEstimate');
 const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
@@ -105,6 +106,23 @@ router.get('/trend', async (req, res, next) => {
   }
 });
 
+// ===== Estimate Routes (must be before /:id) =====
+
+// Get default estimate percentages from historical data
+// Optional query param: ?trades=pf,sm (comma-separated active trades)
+router.get('/estimate-defaults', async (req, res, next) => {
+  try {
+    const options = {};
+    if (req.query.trades) {
+      options.trades = req.query.trades.split(',').filter(t => ['pf', 'sm', 'pl'].includes(t));
+    }
+    const defaults = await OpportunityEstimate.getDefaultPercentages(req.tenantId, options);
+    res.json(defaults);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single opportunity
 router.get('/:id', async (req, res, next) => {
   try {
@@ -128,7 +146,8 @@ router.post('/',
     body('estimated_value').optional({ values: 'falsy' }).isNumeric().withMessage('Estimated value must be a number'),
     body('priority').optional({ values: 'falsy' }).isIn(['low', 'medium', 'high', 'urgent']).withMessage('Invalid priority'),
     body('construction_type').optional({ values: 'falsy' }).isString().withMessage('Construction type must be a string'),
-    body('market').optional({ values: 'falsy' }).isString().withMessage('Market must be a string')
+    body('market').optional({ values: 'falsy' }).isString().withMessage('Market must be a string'),
+    body('location_group').optional({ values: 'falsy' }).isIn(['NEW', 'CW', 'WW', 'AZ', '']).withMessage('Invalid location group')
   ],
   async (req, res, next) => {
     try {
@@ -564,6 +583,41 @@ router.delete('/:id/follow', async (req, res, next) => {
   try {
     await OpportunityFollower.unfollow(req.params.id, req.user.id);
     res.json({ following: false });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Estimate Routes =====
+
+// Get estimate for an opportunity
+router.get('/:id/estimate', async (req, res, next) => {
+  try {
+    const estimate = await OpportunityEstimate.findByOpportunityId(req.params.id, req.tenantId);
+    res.json(estimate);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create or update estimate for an opportunity
+router.put('/:id/estimate', async (req, res, next) => {
+  try {
+    const estimate = await OpportunityEstimate.upsert(req.params.id, req.tenantId, req.body, req.user.id);
+    res.json(estimate);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete estimate for an opportunity
+router.delete('/:id/estimate', async (req, res, next) => {
+  try {
+    const deleted = await OpportunityEstimate.delete(req.params.id, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

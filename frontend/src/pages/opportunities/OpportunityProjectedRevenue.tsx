@@ -5,6 +5,7 @@ import opportunitiesService, { Opportunity } from '../../services/opportunities'
 import { getForecastRules, saveForecastRules } from '../../services/tenant';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 // Formatting helpers (same as ProjectedRevenue)
 const fmt = (value: number | null | undefined): string => {
@@ -80,6 +81,7 @@ const OpportunityProjectedRevenue: React.FC = () => {
   const [assignedFilter, setAssignedFilter] = useState<string>('');
   const [stageFilter, setStageFilter] = useState<string>('');
   const [searchFilter, setSearchFilter] = useState<string>('');
+  const [locationGroupFilter, setLocationGroupFilter] = useState<string>('');
 
   // User-adjusted overrides per opportunity
   const [adjustedStartDates, setAdjustedStartDates] = useState<Record<number, string>>({});
@@ -282,6 +284,9 @@ const OpportunityProjectedRevenue: React.FC = () => {
       // Market filter
       if (marketFilter && o.market !== marketFilter) return false;
 
+      // Location group filter
+      if (locationGroupFilter && o.location_group !== locationGroupFilter) return false;
+
       // Assigned filter
       if (assignedFilter && o.assigned_to_name !== assignedFilter) return false;
 
@@ -412,7 +417,7 @@ const OpportunityProjectedRevenue: React.FC = () => {
     });
 
     return results;
-  }, [opportunities, marketFilter, assignedFilter, stageFilter, searchFilter, adjustedStartDates, adjustedDurationMonths, selectedContours, pursuitRules, workDurationRules, sortColumn, sortDirection, excludedStageNames]);
+  }, [opportunities, marketFilter, assignedFilter, stageFilter, searchFilter, locationGroupFilter, adjustedStartDates, adjustedDurationMonths, selectedContours, pursuitRules, workDurationRules, sortColumn, sortDirection, excludedStageNames]);
 
   // Column totals
   const columnTotals = useMemo(() => {
@@ -588,6 +593,20 @@ const OpportunityProjectedRevenue: React.FC = () => {
           </div>
 
           <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Location Group</label>
+            <select
+              value={locationGroupFilter}
+              onChange={(e) => setLocationGroupFilter(e.target.value)}
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
+            >
+              <option value="">All Groups</option>
+              {LOCATION_GROUPS.map(g => (
+                <option key={g.value} value={g.value}>{g.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Assigned To</label>
             <select
               value={assignedFilter}
@@ -601,9 +620,9 @@ const OpportunityProjectedRevenue: React.FC = () => {
             </select>
           </div>
 
-          {(searchFilter || stageFilter || marketFilter || assignedFilter) && (
+          {(searchFilter || stageFilter || marketFilter || locationGroupFilter || assignedFilter) && (
             <button
-              onClick={() => { setSearchFilter(''); setStageFilter(''); setMarketFilter(''); setAssignedFilter(''); }}
+              onClick={() => { setSearchFilter(''); setStageFilter(''); setMarketFilter(''); setLocationGroupFilter(''); setAssignedFilter(''); }}
               style={{
                 padding: '0.35rem 0.75rem', fontSize: '0.75rem', background: '#f1f5f9',
                 border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem'

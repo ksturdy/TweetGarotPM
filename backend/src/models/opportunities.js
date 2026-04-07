@@ -195,7 +195,7 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date,
-      construction_type, project_type, location, stage_id, priority, assigned_to, source,
+      construction_type, project_type, location, location_group, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id
     } = opportunityData;
@@ -207,17 +207,17 @@ const opportunities = {
       INSERT INTO opportunities (
         title, description, estimated_value, estimated_start_date, estimated_duration_days,
         estimated_end_date,
-        construction_type, project_type, location, stage_id, priority, assigned_to, source,
+        construction_type, project_type, location, location_group, stage_id, priority, assigned_to, source,
         market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
         facility_name, facility_customer_id, created_by, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date || null,
-      typeValue, typeValue, location, stage_id, priority, assigned_to, source,
+      typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id || null, gc_customer_id || null,
       facility_name, facility_customer_id || null, userId, tenantId
     ]);
@@ -232,7 +232,7 @@ const opportunities = {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date,
-      construction_type, project_type, location, stage_id, priority, assigned_to, probability, lost_reason,
+      construction_type, project_type, location, location_group, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id
     } = opportunityData;
@@ -251,30 +251,31 @@ const opportunities = {
         construction_type = COALESCE($7, construction_type),
         project_type = COALESCE($8, project_type),
         location = COALESCE($9, location),
-        stage_id = COALESCE($10, stage_id),
-        priority = COALESCE($11, priority),
-        assigned_to = $12,
-        probability = COALESCE($13, probability),
-        lost_reason = COALESCE($14, lost_reason),
-        market = COALESCE($15, market),
-        owner = COALESCE($16, owner),
-        general_contractor = COALESCE($17, general_contractor),
-        architect = COALESCE($18, architect),
-        engineer = COALESCE($19, engineer),
-        campaign_id = $20,
-        customer_id = $21,
-        gc_customer_id = $22,
-        facility_name = COALESCE($23, facility_name),
-        facility_customer_id = $24,
+        location_group = $10,
+        stage_id = COALESCE($11, stage_id),
+        priority = COALESCE($12, priority),
+        assigned_to = $13,
+        probability = COALESCE($14, probability),
+        lost_reason = COALESCE($15, lost_reason),
+        market = COALESCE($16, market),
+        owner = COALESCE($17, owner),
+        general_contractor = COALESCE($18, general_contractor),
+        architect = COALESCE($19, architect),
+        engineer = COALESCE($20, engineer),
+        campaign_id = $21,
+        customer_id = $22,
+        gc_customer_id = $23,
+        facility_name = COALESCE($24, facility_name),
+        facility_customer_id = $25,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $25 AND tenant_id = $26
+      WHERE id = $26 AND tenant_id = $27
       RETURNING *
     `;
 
     const result = await pool.query(query, [
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date || null,
-      typeValue, typeValue, location, stage_id, priority, assigned_to, probability, lost_reason,
+      typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
       facility_name, facility_customer_id, id, tenantId
     ]);

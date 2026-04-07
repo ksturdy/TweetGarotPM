@@ -90,6 +90,7 @@ export interface VPContract {
   created_at: string;
   updated_at: string;
   // Projection overrides
+  user_adjusted_start_months: number | null;
   user_adjusted_end_months: number | null;
   user_selected_contour: string | null;
   // Joined fields
@@ -695,7 +696,7 @@ export const vistaDataService = {
     return response.data;
   },
 
-  updateProjectionOverrides: async (id: number, overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null }): Promise<VPContract> => {
+  updateProjectionOverrides: async (id: number, overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null; user_adjusted_start_months?: number | null }): Promise<VPContract> => {
     const response = await api.patch(`/vista/contracts/${id}/projection`, overrides);
     return response.data;
   },

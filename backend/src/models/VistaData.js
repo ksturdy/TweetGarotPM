@@ -321,12 +321,14 @@ const VistaData = {
       `UPDATE vp_contracts SET
         user_adjusted_end_months = $1,
         user_selected_contour = $2,
+        user_adjusted_start_months = $3,
         updated_at = NOW()
-       WHERE id = $3 AND tenant_id = $4
+       WHERE id = $4 AND tenant_id = $5
        RETURNING *`,
       [
         overrides.user_adjusted_end_months ?? null,
         overrides.user_selected_contour ?? null,
+        overrides.user_adjusted_start_months ?? null,
         id,
         tenantId
       ]

@@ -312,6 +312,20 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     }));
     const opportunitiesList = [...campaignOppsList, ...mainOpps];
 
+    // Enrich company statuses: mark companies with linked opportunities as new_opp
+    // so the status breakdown reflects actual opportunity data
+    const campOppCompanyIds = new Set(campaignOppsList.map(o => o.campaign_company_id));
+    const mainOppCompanyNames = new Set(
+      mainOpps.map(o => (o.company_name || '').toLowerCase().trim()).filter(Boolean)
+    );
+    companiesList.forEach(c => {
+      if (c.status !== 'new_opp' && c.status !== 'no_interest' && c.status !== 'dead') {
+        if (campOppCompanyIds.has(c.id) || mainOppCompanyNames.has((c.name || '').toLowerCase().trim())) {
+          c.status = 'new_opp';
+        }
+      }
+    });
+
     const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
     const { fetchLogoBase64 } = require('../utils/logoFetcher');
 
@@ -544,7 +558,7 @@ router.post('/:campaignId/companies/:id/add-to-database', async (req, res, next)
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const result = await campaignCompanies.addToDatabase(req.params.id, req.user.id);
+    const result = await campaignCompanies.addToDatabase(req.params.id, req.user.id, req.tenantId);
     res.json(result);
   } catch (error) {
     next(error);

@@ -10,6 +10,7 @@ export interface Opportunity {
   construction_type?: string;
   project_type?: string; // Deprecated - kept for backward compatibility
   location?: string;
+  location_group?: string;
   stage_id: number;
   stage_name?: string;
   stage_color?: string;
@@ -113,6 +114,36 @@ export interface OpportunityComment {
   comment: string;
   commenter_name: string;
   commenter_email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpportunityEstimateData {
+  labor_pct: number;
+  material_pct: number;
+  subcontracts_pct: number;
+  rentals_pct: number;
+  mep_equip_pct: number;
+  general_conditions_pct: number;
+  pf_labor_pct: number;
+  sm_labor_pct: number;
+  pl_labor_pct: number;
+  pf_shop_pct: number;
+  pf_field_pct: number;
+  sm_shop_pct: number;
+  sm_field_pct: number;
+  pl_shop_pct: number;
+  pl_field_pct: number;
+  pf_labor_rate: number;
+  sm_labor_rate: number;
+  pl_labor_rate: number;
+}
+
+export interface OpportunityEstimate extends OpportunityEstimateData {
+  id: number;
+  opportunity_id: number;
+  tenant_id: number;
+  created_by?: number;
   created_at: string;
   updated_at: string;
 }
@@ -281,6 +312,28 @@ const opportunitiesService = {
 
   async deleteComment(opportunityId: number, commentId: number): Promise<void> {
     await api.delete(`/opportunities/${opportunityId}/comments/${commentId}`);
+  },
+
+  // ===== Estimates =====
+
+  async getEstimate(opportunityId: number): Promise<OpportunityEstimate | null> {
+    const response = await api.get(`/opportunities/${opportunityId}/estimate`);
+    return response.data;
+  },
+
+  async saveEstimate(opportunityId: number, data: OpportunityEstimateData): Promise<OpportunityEstimate> {
+    const response = await api.put(`/opportunities/${opportunityId}/estimate`, data);
+    return response.data;
+  },
+
+  async deleteEstimate(opportunityId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/estimate`);
+  },
+
+  async getEstimateDefaults(trades?: string[]): Promise<OpportunityEstimateData> {
+    const params = trades && trades.length > 0 ? `?trades=${trades.join(',')}` : '';
+    const response = await api.get(`/opportunities/estimate-defaults${params}`);
+    return response.data;
   },
 
   // ===== Follow =====

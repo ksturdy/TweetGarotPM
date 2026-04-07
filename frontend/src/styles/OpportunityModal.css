@@ -178,11 +178,11 @@
   box-shadow: none;
 }
 
-/* Two-column layout: form+description left, comments right */
+/* Two-column layout: form+description left, estimate right */
 .opportunity-modal .opportunity-form-columns {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 1.5rem;
+  grid-template-columns: 1fr 340px;
+  gap: 1rem;
   min-height: 0;
 }
 
@@ -195,18 +195,16 @@
 
 /* Description textarea in left column */
 .opportunity-modal .form-group textarea.description-textarea {
-  min-height: 200px;
+  min-height: 80px;
 }
 
-/* Right column: comments sidebar */
+/* Right column: estimate sidebar */
 .opportunity-modal .opportunity-form-right {
   display: flex;
   flex-direction: column;
   min-width: 0;
   border-left: 1px solid #e5e7eb;
-  padding-left: 1.5rem;
-  overflow-y: auto;
-  max-height: calc(95vh - 160px);
+  padding-left: 1rem;
 }
 
 /* Form Styles - scoped to .opportunity-modal to override Modal.css & index.css */
@@ -385,6 +383,256 @@
 .opportunity-modal .btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ===== Comments Tab Content ===== */
+
+.comments-tab-content {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.comments-tab-content .comment-list {
+  max-height: 500px;
+}
+
+/* ===== Titan Estimate Panel ===== */
+
+.titan-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.te-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.te-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.te-reset-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.te-reset-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.te-empty {
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+/* Section headers */
+.te-sec-hdr {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 3px;
+  margin-top: 2px;
+}
+
+/* Shared table styles */
+.te-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.te-tbl th {
+  font-size: 9px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  padding: 0 1px 1px;
+  text-align: left;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.te-tbl td {
+  padding: 1px 1px;
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.te-tbl .r { text-align: right; }
+
+.te-tbl tbody td:first-child {
+  font-weight: 500;
+}
+
+.te-tbl-total td {
+  border-top: 1px solid #e5e7eb;
+  font-weight: 700;
+  padding-top: 2px;
+}
+
+/* Percentage input inline */
+.te-pi {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.te-pi input {
+  width: 38px;
+  padding: 1px 2px;
+  border: 1px solid #e5e7eb;
+  border-radius: 2px;
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.te-pi input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.15);
+}
+
+.te-pct-sym {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.te-warn {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.te-warn-inline {
+  font-size: 10px;
+}
+
+/* Trade table extras */
+.te-tn {
+  font-weight: 600 !important;
+}
+
+.te-trade-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.te-trade-check input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.te-trade-row td {
+  padding-top: 3px;
+}
+
+.te-trade-row.te-disabled td {
+  color: #d1d5db;
+}
+
+.te-trade-row.te-disabled .te-tn label {
+  color: #9ca3af;
+}
+
+.te-sf-detail td {
+  padding: 0 1px 1px;
+}
+
+.te-sf-info {
+  font-size: 10px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Rates section */
+.te-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.te-rates-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+}
+
+.te-rates-row label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.te-rate-sym {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.te-rates-row input {
+  width: 52px;
+  padding: 1px 3px;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.te-rates-row input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.15);
+}
+
+.te-saving {
+  font-size: 10px;
+  color: #667eea;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Hide number input spinners */
+.titan-estimate input[type="number"]::-webkit-inner-spin-button,
+.titan-estimate input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.titan-estimate input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 /* ===== Comment Thread Styles ===== */
@@ -678,7 +926,6 @@
     padding-left: 0;
     border-top: 1px solid #e5e7eb;
     padding-top: 0.75rem;
-    max-height: 300px;
   }
 
   .opportunity-modal .form-row,

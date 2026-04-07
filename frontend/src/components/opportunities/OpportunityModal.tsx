@@ -8,8 +8,10 @@ import SearchableSelect from '../SearchableSelect';
 import CompanyPicker from '../CompanyPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
+import TitanEstimate from './TitanEstimate';
 import FollowButton from './FollowButton';
 import { MARKETS } from '../../constants/markets';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 import '../../styles/OpportunityModal.css';
 
 interface OpportunityModalProps {
@@ -43,6 +45,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       : '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
+    location_group: opportunity?.location_group || '',
     stage_id: opportunity?.stage_id || 1,
     priority: opportunity?.priority || 'medium',
     probability: opportunity?.probability || opportunity?.stage_probability || '',
@@ -60,7 +63,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     facility_customer_id: opportunity?.facility_customer_id || ''
   });
 
-  const [activeTab, setActiveTab] = useState<'details' | 'activities'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Fetch active employees for assignment (lightweight endpoint, no HR access needed)
@@ -195,6 +198,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.description) cleanedData.description = formData.description;
     if (formData.construction_type) cleanedData.construction_type = formData.construction_type;
     if (formData.location) cleanedData.location = formData.location;
+    cleanedData.location_group = formData.location_group || null;
     if (formData.estimated_start_date) cleanedData.estimated_start_date = formData.estimated_start_date;
     if (formData.estimated_end_date) cleanedData.estimated_end_date = formData.estimated_end_date;
     if (formData.source) cleanedData.source = formData.source;
@@ -269,6 +273,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
               {opportunity?.activity_count && opportunity.activity_count > 0 && (
                 <span className="tab-badge">{opportunity.activity_count}</span>
               )}
+            </button>
+          )}
+          {isEditMode && (
+            <button
+              className={`tab ${activeTab === 'comments' ? 'active' : ''}`}
+              onClick={() => setActiveTab('comments')}
+            >
+              Comments
             </button>
           )}
         </div>
@@ -430,8 +442,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Row 5: Construction Type, Market, Location, Source */}
-                  <div className="form-row-4">
+                  {/* Row 5: Construction Type, Market, Location Group, Location, Source */}
+                  <div className="form-row-5">
                     <div className="form-group">
                       <label htmlFor="construction_type">Construction Type</label>
                       <select
@@ -458,6 +470,21 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         <option value="">Select market</option>
                         {MARKETS.map(m => (
                           <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="location_group">Location Group</label>
+                      <select
+                        id="location_group"
+                        name="location_group"
+                        value={formData.location_group}
+                        onChange={handleChange}
+                      >
+                        <option value="">Select group</option>
+                        {LOCATION_GROUPS.map(g => (
+                          <option key={g.value} value={g.value}>{g.label}</option>
                         ))}
                       </select>
                     </div>
@@ -612,10 +639,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   </div>
                 </div>
 
-                {/* Right column: Comments only */}
+                {/* Right column: Titan Estimate */}
                 {isEditMode && (
                   <div className="opportunity-form-right">
-                    <CommentThread opportunityId={opportunity!.id} />
+                    <TitanEstimate
+                      opportunityId={opportunity!.id}
+                      estimatedValue={Number(formData.estimated_value) || 0}
+                    />
                   </div>
                 )}
               </div>
@@ -652,9 +682,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                 </div>
               </div>
             </form>
-          ) : (
+          ) : activeTab === 'activities' ? (
             <ActivityTimeline opportunityId={opportunity!.id} />
-          )}
+          ) : activeTab === 'comments' ? (
+            <div className="comments-tab-content">
+              <CommentThread opportunityId={opportunity!.id} />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

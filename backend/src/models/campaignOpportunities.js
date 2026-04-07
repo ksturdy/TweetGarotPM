@@ -78,9 +78,17 @@ const campaignOpportunities = {
       const opportunity = result.rows[0];
 
       // Get campaign company to get campaign_id
-      const ccQuery = 'SELECT campaign_id, name FROM campaign_companies WHERE id = $1';
+      const ccQuery = 'SELECT campaign_id, name, status FROM campaign_companies WHERE id = $1';
       const ccResult = await client.query(ccQuery, [data.campaign_company_id]);
       const company = ccResult.rows[0];
+
+      // Auto-update company status to new_opp if currently prospect or follow_up
+      if (company && (company.status === 'prospect' || company.status === 'follow_up')) {
+        await client.query(
+          'UPDATE campaign_companies SET status = $1 WHERE id = $2',
+          ['new_opp', data.campaign_company_id]
+        );
+      }
 
       // Log activity
       const logQuery = `

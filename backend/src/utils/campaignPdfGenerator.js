@@ -14,7 +14,8 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
   const totalProspects = companies.length;
   const contacted = companies.filter(c => c.status !== 'prospect').length;
   const followUp = companies.filter(c => c.status === 'follow_up').length;
-  const newOpp = companies.filter(c => c.status === 'new_opp').length;
+  const newOppByStatus = companies.filter(c => c.status === 'new_opp').length;
+  const newOpp = Math.max(newOppByStatus, opportunities.length);
   const noInterest = companies.filter(c => c.status === 'no_interest').length;
   const dead = companies.filter(c => c.status === 'dead').length;
   const prospect = companies.filter(c => c.status === 'prospect').length;

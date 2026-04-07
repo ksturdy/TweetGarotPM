@@ -2,12 +2,32 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
+import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import '../../components/modals/Modal.css';
 import { format, addMonths, addWeeks, startOfMonth, startOfWeek } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+function loadImageAsDataUrl(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'blob';
+    const token = localStorage.getItem('token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      if (xhr.status !== 200) { reject(new Error(`Failed: ${xhr.status}`)); return; }
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = () => reject(new Error('Failed to load image'));
+    xhr.send();
+  });
+}
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -142,6 +162,17 @@ const TRADES: TradeInfo[] = [
   { key: 'pl', label: 'Plumber', color: '#f59e0b' },
 ];
 
+// ─── Location groups (derived from department code prefix) ──
+
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
+
+const getLocationGroup = (deptCode: string | null | undefined): string | null => {
+  if (!deptCode) return null;
+  const prefix = deptCode.substring(0, 2);
+  const group = LOCATION_GROUPS.find(g => g.prefix === prefix);
+  return group ? group.label : null;
+};
+
 // ─── Interfaces ────────────────────────────────────────────
 
 interface TradeMonthlyHours {
@@ -161,6 +192,7 @@ type SFByTrade = Partial<Record<TradeName, Partial<Record<'shop' | 'field', SFEn
 
 interface ProjectLaborProjection {
   contract: VPContract;
+  startOffset: number;
   remainingMonths: number;
   contour: ContourType;
   isAutoContour: boolean;
@@ -175,6 +207,9 @@ interface ProjectLaborProjection {
 // ═══════════════════════════════════════════════════════════
 
 const LaborForecast: React.FC = () => {
+  const { tenant } = useAuth();
+  const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
+
   // Filters
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [marketFilter, setMarketFilter] = useState<string>('');
@@ -182,10 +217,12 @@ const LaborForecast: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [locationGroupFilter, setLocationGroupFilter] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState<'both' | 'shop' | 'field'>('both');
   const [drillDownCol, setDrillDownCol] = useState<{ key: string; label: string; monthKey: string } | null>(null);
 
   // Overrides (shared with revenue page)
+  const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
   const [adjustedEndMonths, setAdjustedEndMonths] = useState<Record<number, number>>({});
   const [selectedContours, setSelectedContours] = useState<Record<number, ContourType>>({});
   const [overridesInitialized, setOverridesInitialized] = useState(false);
@@ -263,12 +300,15 @@ const LaborForecast: React.FC = () => {
 
   useEffect(() => {
     if (contracts && !overridesInitialized) {
+      const startMonths: Record<number, number> = {};
       const endMonths: Record<number, number> = {};
       const contours: Record<number, ContourType> = {};
       contracts.forEach(c => {
+        if (c.user_adjusted_start_months != null) startMonths[c.id] = c.user_adjusted_start_months;
         if (c.user_adjusted_end_months != null) endMonths[c.id] = c.user_adjusted_end_months;
         if (c.user_selected_contour) contours[c.id] = c.user_selected_contour as ContourType;
       });
+      setAdjustedStartMonths(startMonths);
       setAdjustedEndMonths(endMonths);
       setSelectedContours(contours);
       setOverridesInitialized(true);
@@ -277,7 +317,7 @@ const LaborForecast: React.FC = () => {
 
   const saveProjectionOverride = useCallback(async (
     contractId: number,
-    overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null }
+    overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null; user_adjusted_start_months?: number | null }
   ) => {
     try {
       await vistaDataService.updateProjectionOverrides(contractId, overrides);
@@ -319,6 +359,10 @@ const LaborForecast: React.FC = () => {
           if (!status.includes('soft')) return false;
         }
         if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
+        if (locationGroupFilter.length > 0) {
+          const group = getLocationGroup(c.department_code);
+          if (!group || !locationGroupFilter.includes(group)) return false;
+        }
         if (marketFilter && c.primary_market !== marketFilter) return false;
         if (pmFilter && c.project_manager_name !== pmFilter) return false;
         if (searchFilter) {
@@ -336,7 +380,7 @@ const LaborForecast: React.FC = () => {
         searchText: `${c.contract_number} ${c.description || ''} ${c.customer_name || ''} ${c.project_manager_name || ''}`,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [contracts, statusFilter, departmentFilter, marketFilter, pmFilter, searchFilter]);
+  }, [contracts, statusFilter, departmentFilter, locationGroupFilter, marketFilter, pmFilter, searchFilter]);
 
   // Clear project filter selections that are no longer in the filtered list
   useEffect(() => {
@@ -415,6 +459,10 @@ const LaborForecast: React.FC = () => {
         if (!status.includes('soft')) return false;
       }
       if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
+      if (locationGroupFilter.length > 0) {
+        const group = getLocationGroup(c.department_code);
+        if (!group || !locationGroupFilter.includes(group)) return false;
+      }
       if (marketFilter && c.primary_market !== marketFilter) return false;
       if (pmFilter && c.project_manager_name !== pmFilter) return false;
       if (searchFilter) {
@@ -494,37 +542,40 @@ const LaborForecast: React.FC = () => {
       // Skip contracts with no remaining labor hours
       if (totalRemainingHours <= 0) continue;
 
-      // Calculate remaining months (same logic as revenue page)
-      const userAdjustedMonths = adjustedEndMonths[contract.id];
-      let remainingMonths = 0;
+      // Start offset (months from now until work begins; 0 = current month)
+      const startOffset = adjustedStartMonths[contract.id] ?? 0;
 
-      if (backlog > 0) {
-        if (userAdjustedMonths !== undefined) {
-          remainingMonths = Math.max(1, Math.min(36, userAdjustedMonths));
-        } else {
-          const totalDuration = getDurationForValue(contractValue);
-          const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
-          const monthsRemaining = Math.ceil(totalDuration * (1 - pctComplete));
-          remainingMonths = Math.max(1, Math.min(36, monthsRemaining));
-        }
+      // Calculate end offset and duration
+      const userAdjustedEnd = adjustedEndMonths[contract.id];
+      let endOffset: number;
+
+      if (userAdjustedEnd !== undefined) {
+        endOffset = Math.max(startOffset + 1, Math.min(36, userAdjustedEnd));
+      } else if (backlog > 0) {
+        const totalDuration = getDurationForValue(contractValue);
+        const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
+        const monthsRemaining = Math.ceil(totalDuration * (1 - pctComplete));
+        endOffset = startOffset + Math.max(1, Math.min(36, monthsRemaining));
       } else {
         // No backlog but hours remain - use a reasonable default
-        remainingMonths = 3;
+        endOffset = startOffset + 3;
       }
+
+      const remainingMonths = endOffset - startOffset;
 
       const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
       const userSelectedContour = selectedContours[contract.id];
       const contour = userSelectedContour || getDefaultContour(pctComplete);
       const isAutoContour = !userSelectedContour;
 
-      // Distribute hours across months
+      // Distribute hours across months (offset by startOffset)
       const monthlyHours = new Map<string, TradeMonthlyHours>();
 
       if (remainingMonths > 0) {
         const multipliers = getContourMultipliers(remainingMonths, contour);
 
         for (let i = 0; i < remainingMonths; i++) {
-          const monthDate = addMonths(now, i);
+          const monthDate = addMonths(now, startOffset + i);
           const monthKey = format(monthDate, 'yyyy-MM');
 
           const pfHrs = (tradeHours[0].remaining / remainingMonths) * multipliers[i];
@@ -543,7 +594,7 @@ const LaborForecast: React.FC = () => {
       }
 
       results.push({
-        contract, remainingMonths, contour, isAutoContour, pctComplete,
+        contract, startOffset, remainingMonths, contour, isAutoContour, pctComplete,
         tradeHours, totalRemainingHours, monthlyHours,
       });
     }
@@ -570,7 +621,7 @@ const LaborForecast: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap]);
+  }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -614,7 +665,7 @@ const LaborForecast: React.FC = () => {
   // Close drill-down when filters change
   useEffect(() => {
     setDrillDownCol(null);
-  }, [departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, locationFilter, timeHorizon, granularity]);
+  }, [departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, locationFilter, timeHorizon, granularity]);
 
   // ─── Tooltip helper ──────────────────────────────────────
 
@@ -625,7 +676,7 @@ const LaborForecast: React.FC = () => {
 
   // ─── PDF Export ─────────────────────────────────────────
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const hpp = hoursPerPersonPerMonth;
@@ -635,11 +686,32 @@ const LaborForecast: React.FC = () => {
     if (statusFilter === 'Open') filters.push('Open Only');
     else if (statusFilter === 'Soft-Closed') filters.push('Soft-Closed Only');
     if (departmentFilter.length > 0) filters.push(`Dept: ${departmentFilter.join(', ')}`);
+    if (locationGroupFilter.length > 0) filters.push(`Location: ${locationGroupFilter.join(', ')}`);
     if (marketFilter) filters.push(`Market: ${marketFilter}`);
     if (pmFilter) filters.push(`PM: ${pmFilter}`);
     if (searchFilter) filters.push(`Search: "${searchFilter}"`);
     if (projectFilter.length > 0) filters.push(`${projectFilter.length} project(s) selected`);
     if (locationFilter !== 'both') filters.push(locationFilter === 'shop' ? 'Shop Only' : 'Field Only');
+
+    // Logo (top-right)
+    if (logoUrl) {
+      try {
+        const imgData = await loadImageAsDataUrl(logoUrl);
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = imgData;
+        });
+        const maxW = 80;
+        const maxH = 28;
+        const aspect = img.width / img.height;
+        let drawW = maxW;
+        let drawH = drawW / aspect;
+        if (drawH > maxH) { drawH = maxH; drawW = drawH * aspect; }
+        doc.addImage(imgData, pageWidth - 30 - drawW, 18, drawW, drawH);
+      } catch { /* logo not available */ }
+    }
 
     // Header
     let y = 40;
@@ -669,7 +741,7 @@ const LaborForecast: React.FC = () => {
     const stripWidth = pageWidth - 80;
     const cellW = stripWidth / kpis.length;
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(40, y, stripWidth, 32, 4, 4, 'F');
+    doc.rect(40, y, stripWidth, 32, 'F');
     kpis.forEach((kpi, i) => {
       const cx = 40 + cellW * i + cellW / 2;
       doc.setFontSize(7);
@@ -685,8 +757,207 @@ const LaborForecast: React.FC = () => {
 
     // Column headers for time periods
     const colLabels = displayColumns.map(c => c.label);
+    const pgW = doc.internal.pageSize.getWidth();
+    const pgH = doc.internal.pageSize.getHeight();
 
-    // ── Trade Summary Table ──
+    // Page footer helper
+    const drawFooter = () => {
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      const footY = pgH - 20;
+      doc.text(
+        `Generated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+        40, footY
+      );
+      const pgCount = (doc as any).internal.getNumberOfPages();
+      const pgNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
+      doc.text(`Page ${pgNum} of ${pgCount}`, pgW - 40, footY, { align: 'right' });
+    };
+
+    // ── Chart 1: Stacked Bar Chart — Projected Headcount by Month ──
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Projected Headcount by Month', 40, y + 4);
+    y += 16;
+
+    const cLeft = 80;
+    const cRight = pgW - 50;
+    const cW = cRight - cLeft;
+    const cH = 160;
+    const cBottom = y + cH;
+
+    const pdfGraphData = displayColumns.map(col => {
+      const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+      return { label: col.label, pfHC: ct.pf / hpp, smHC: ct.sm / hpp, plHC: ct.pl / hpp, totalHC: ct.total / hpp };
+    });
+
+    let pdfMaxHC = 0;
+    pdfGraphData.forEach(d => { if (d.totalHC > pdfMaxHC) pdfMaxHC = d.totalHC; });
+    pdfMaxHC = Math.ceil(pdfMaxHC / 5) * 5;
+    if (pdfMaxHC === 0) pdfMaxHC = 10;
+
+    // Y-axis gridlines
+    for (let i = 0; i <= 5; i++) {
+      const yVal = (pdfMaxHC / 5) * i;
+      const yPos = cBottom - (i / 5) * cH;
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.line(cLeft, yPos, cRight, yPos);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(yVal.toFixed(0), cLeft - 5, yPos + 2, { align: 'right' });
+    }
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('People', cLeft - 5, y - 4, { align: 'right' });
+
+    // Stacked bars
+    const pdfBarCount = pdfGraphData.length;
+    const pdfBarW = Math.min(cW / pdfBarCount * 0.75, 20);
+    const pdfBarGap = cW / pdfBarCount;
+    const tColors: Array<[number, number, number]> = [[59, 130, 246], [16, 185, 129], [245, 158, 11]];
+
+    pdfGraphData.forEach((d, i) => {
+      const bx = cLeft + i * pdfBarGap + (pdfBarGap - pdfBarW) / 2;
+      const plBarH = pdfMaxHC > 0 ? (d.plHC / pdfMaxHC) * cH : 0;
+      const smBarH = pdfMaxHC > 0 ? (d.smHC / pdfMaxHC) * cH : 0;
+      const pfBarH = pdfMaxHC > 0 ? (d.pfHC / pdfMaxHC) * cH : 0;
+
+      if (plBarH > 0.5) {
+        doc.setFillColor(tColors[2][0], tColors[2][1], tColors[2][2]);
+        doc.rect(bx, cBottom - plBarH, pdfBarW, plBarH, 'F');
+      }
+      if (smBarH > 0.5) {
+        doc.setFillColor(tColors[1][0], tColors[1][1], tColors[1][2]);
+        doc.rect(bx, cBottom - plBarH - smBarH, pdfBarW, smBarH, 'F');
+      }
+      if (pfBarH > 0.5) {
+        doc.setFillColor(tColors[0][0], tColors[0][1], tColors[0][2]);
+        doc.rect(bx, cBottom - plBarH - smBarH - pfBarH, pdfBarW, pfBarH, 'F');
+      }
+
+      const pdfLabelEvery = pdfBarCount <= 12 ? 1 : pdfBarCount <= 18 ? 2 : 3;
+      if (i % pdfLabelEvery === 0) {
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(d.label, bx + pdfBarW / 2, cBottom + 10, { align: 'center' });
+      }
+    });
+
+    // Legend
+    const lgY = cBottom + 20;
+    const tLabels = ['Pipefitter', 'Sheet Metal', 'Plumber'];
+    let lgX = cLeft;
+    for (let ti = 0; ti < tColors.length; ti++) {
+      doc.setFillColor(tColors[ti][0], tColors[ti][1], tColors[ti][2]);
+      doc.rect(lgX, lgY - 4, 10, 6, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(tLabels[ti], lgX + 13, lgY + 1);
+      lgX += 70;
+    }
+
+    // ── Chart 2: Trade Breakdown Horizontal Bars ──
+    y = lgY + 25;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Total Remaining Hours by Trade', 40, y);
+    y += 12;
+
+    const mxTradeHrs = Math.max(grandTotalsByTrade.pf, grandTotalsByTrade.sm, grandTotalsByTrade.pl, 1);
+    // Measure longest label text to reserve space on the right
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    let maxLabelW = 0;
+    TRADES.forEach((trade) => {
+      const hrs = grandTotalsByTrade[trade.key];
+      const lbl = `${fmtHours(hrs)} hrs (${(hrs / hpp).toFixed(0)} person-months)`;
+      const tw = doc.getTextWidth(lbl);
+      if (tw > maxLabelW) maxLabelW = tw;
+    });
+    const hbMaxW = cW - 80 - maxLabelW - 15; // 80 for trade name, 15 for padding
+
+    TRADES.forEach((trade, i) => {
+      const hrs = grandTotalsByTrade[trade.key];
+      const bw = (hrs / mxTradeHrs) * hbMaxW;
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(tColors[i][0], tColors[i][1], tColors[i][2]);
+      doc.text(trade.label, cLeft, y + 8);
+
+      doc.setFillColor(226, 232, 240);
+      doc.rect(cLeft + 70, y, hbMaxW, 12, 'F');
+      if (bw > 0) {
+        doc.setFillColor(tColors[i][0], tColors[i][1], tColors[i][2]);
+        doc.rect(cLeft + 70, y, Math.max(bw, 2), 12, 'F');
+      }
+
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${fmtHours(hrs)} hrs (${(hrs / hpp).toFixed(0)} person-months)`, cRight, y + 8, { align: 'right' });
+      y += 18;
+    });
+
+    // ── Chart 3: Quarterly Summary (compact row) ──
+    y += 10;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Projected Headcount by Quarter', 40, y);
+    y += 14;
+
+    const qNow = startOfMonth(new Date());
+    const pdfQuarters: { label: string; total: number }[] = [];
+    for (let q = 0; q < 8; q++) {
+      const sm = q * 3;
+      let total = 0;
+      for (let m = 0; m < 3; m++) {
+        const monthDate = addMonths(qNow, sm + m);
+        const key = format(monthDate, 'yyyy-MM');
+        projections.forEach(p => {
+          const h = p.monthlyHours.get(key);
+          if (h) total += h.total;
+        });
+      }
+      const avgHC = (total / 3) / hpp;
+      const qStart = addMonths(qNow, sm);
+      const qNum = Math.floor(qStart.getMonth() / 3) + 1;
+      pdfQuarters.push({ label: `Q${qNum} ${qStart.getFullYear()}`, total: avgHC });
+    }
+
+    const qbW = Math.min((pgW - 80) / pdfQuarters.length - 4, 80);
+    const qbH = 32;
+    pdfQuarters.forEach((q, i) => {
+      const qx = 40 + i * (qbW + 4);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.rect(qx, y, qbW, qbH, 'FD');
+
+      doc.setFontSize(6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(q.label, qx + qbW / 2, y + 10, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 41, 59);
+      doc.text(q.total > 0 ? q.total.toFixed(1) : '-', qx + qbW / 2, y + 22, { align: 'center' });
+
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(148, 163, 184);
+      doc.text('avg people', qx + qbW / 2, y + 29, { align: 'center' });
+    });
+
+    // ── Trade Summary Table (same page, below charts) ──
+    y += qbH + 15;
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
@@ -730,17 +1001,20 @@ const LaborForecast: React.FC = () => {
           data.cell.styles.fillColor = [241, 245, 249];
         }
       },
+      didDrawPage: () => { drawFooter(); },
     });
 
-    // ── Project Detail Table ──
-    y = (doc as any).lastAutoTable.finalY + 20;
+    // ── Project Detail Table (new page) ──
+    doc.addPage();
+    y = 40;
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
     doc.text('Project Detail', 40, y + 4);
     y += 12;
 
-    const projHeaders = ['Contract', 'Description', 'PM', 'Dept', 'Rem. Hrs', 'PF', 'SM', 'PL', '% Comp', ...colLabels];
+    const pdfNow = startOfMonth(new Date());
+    const projHeaders = ['Contract', 'Description', 'PM', 'Dept', 'Rem. Hrs', 'PF', 'SM', 'PL', '% Comp', 'Start', 'End', ...colLabels];
     const projRows = projections.map(p => {
       const desc = (p.contract.description || p.contract.customer_name || '-').substring(0, 30);
       const pm = (p.contract.project_manager_name || '-').split(',')[0].substring(0, 15);
@@ -758,6 +1032,8 @@ const LaborForecast: React.FC = () => {
         fmtHours(p.tradeHours[1].remaining),
         fmtHours(p.tradeHours[2].remaining),
         p.pctComplete > 0 ? `${p.pctComplete.toFixed(0)}%` : '-',
+        format(addMonths(pdfNow, p.startOffset), 'MMM yy'),
+        format(addMonths(pdfNow, p.startOffset + p.remainingMonths), 'MMM yy'),
         ...monthlyCols,
       ];
     });
@@ -772,15 +1048,17 @@ const LaborForecast: React.FC = () => {
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
         0: { halign: 'left', cellWidth: 48 },   // Contract
-        1: { halign: 'left', cellWidth: 85 },    // Description
-        2: { halign: 'left', cellWidth: 52 },     // PM
-        3: { halign: 'center', cellWidth: 30 },   // Dept
-        4: { halign: 'right', cellWidth: 40 },    // Rem. Hrs
-        5: { halign: 'right', cellWidth: 30 },    // PF
-        6: { halign: 'right', cellWidth: 30 },    // SM
-        7: { halign: 'right', cellWidth: 30 },    // PL
-        8: { halign: 'right', cellWidth: 32 },    // % Comp
-        ...Object.fromEntries(colLabels.map((_, i) => [i + 9, { halign: 'right' as const }])),
+        1: { halign: 'left', cellWidth: 75 },    // Description
+        2: { halign: 'left', cellWidth: 48 },     // PM
+        3: { halign: 'center', cellWidth: 26 },   // Dept
+        4: { halign: 'right', cellWidth: 36 },    // Rem. Hrs
+        5: { halign: 'right', cellWidth: 26 },    // PF
+        6: { halign: 'right', cellWidth: 26 },    // SM
+        7: { halign: 'right', cellWidth: 26 },    // PL
+        8: { halign: 'right', cellWidth: 28 },    // % Comp
+        9: { halign: 'center', cellWidth: 32 },   // Start
+        10: { halign: 'center', cellWidth: 32 },  // End
+        ...Object.fromEntries(colLabels.map((_, i) => [i + 11, { halign: 'right' as const }])),
       },
       didDrawPage: (data: any) => {
         const pageCount = (doc as any).internal.getNumberOfPages();
@@ -867,6 +1145,16 @@ const LaborForecast: React.FC = () => {
             />
           </div>
           <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Location</label>
+            <MultiSearchableSelect
+              options={LOCATION_GROUPS.map(g => ({ value: g.label, label: g.label }))}
+              value={locationGroupFilter}
+              onChange={setLocationGroupFilter}
+              placeholder="All Locations"
+              style={{ minWidth: '140px', fontSize: '0.8rem' }}
+            />
+          </div>
+          <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Market</label>
             <select value={marketFilter} onChange={(e) => setMarketFilter(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
               <option value="">All Markets</option>
@@ -894,9 +1182,9 @@ const LaborForecast: React.FC = () => {
             />
           </div>
 
-          {(searchFilter || departmentFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
+          {(searchFilter || departmentFilter.length > 0 || locationGroupFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
             <button
-              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
+              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setLocationGroupFilter([]); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
               style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}
             >
               Clear Filters
@@ -1186,6 +1474,7 @@ const LaborForecast: React.FC = () => {
                       >
                         % Comp<SortIndicator column="completion" />
                       </th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>Start</th>
                       <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>End</th>
                       <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Contour</th>
                     </>
@@ -1241,7 +1530,36 @@ const LaborForecast: React.FC = () => {
                       </td>
                       <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
                         <select
-                          value={p.remainingMonths}
+                          value={p.startOffset}
+                          onChange={(e) => {
+                            const newStart = parseInt(e.target.value);
+                            setAdjustedStartMonths(prev => ({ ...prev, [p.contract.id]: newStart }));
+                            saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart });
+                            // Auto-bump end if start >= end
+                            const currentEnd = p.startOffset + p.remainingMonths;
+                            if (newStart >= currentEnd) {
+                              const newEnd = newStart + 1;
+                              setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: newEnd }));
+                              saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
+                            }
+                          }}
+                          style={{
+                            padding: '0.15rem 0.25rem', fontSize: '0.65rem',
+                            border: adjustedStartMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                            borderRadius: '3px',
+                            background: adjustedStartMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
+                            color: adjustedStartMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
+                            cursor: 'pointer', width: '65px'
+                          }}
+                        >
+                          {Array.from({ length: 36 }, (_, i) => i).map(m => (
+                            <option key={m} value={m}>{format(addMonths(startOfMonth(new Date()), m), 'MMM yy')}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
+                        <select
+                          value={p.startOffset + p.remainingMonths}
                           onChange={(e) => {
                             const v = parseInt(e.target.value);
                             setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: v }));
@@ -1256,7 +1574,7 @@ const LaborForecast: React.FC = () => {
                             cursor: 'pointer', width: '65px'
                           }}
                         >
-                          {Array.from({ length: 36 }, (_, i) => i + 1).map(m => (
+                          {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > p.startOffset).map(m => (
                             <option key={m} value={m}>{format(addMonths(startOfMonth(new Date()), m), 'MMM yy')}</option>
                           ))}
                         </select>

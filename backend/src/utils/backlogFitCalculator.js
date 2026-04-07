@@ -170,12 +170,8 @@ const EXCLUDED_STAGES = new Set(['Won', 'Lost', 'Passed', 'Awarded']);
 
 // ─── Region Definitions ───
 
-const REGIONS = [
-  { prefix: '10', label: 'NE Wisconsin', color: '#3b82f6' },
-  { prefix: '20', label: 'Central WI', color: '#8b5cf6' },
-  { prefix: '30', label: 'Western WI', color: '#f59e0b' },
-  { prefix: '40', label: 'Tempe, AZ', color: '#ef4444' },
-];
+const { LOCATION_GROUPS: _LOC_GROUPS } = require('../constants/locationGroups');
+const REGIONS = _LOC_GROUPS.map(g => ({ prefix: g.prefix, label: g.longLabel, color: g.color }));
 
 function calcProjectMonthlyRevenue(contracts, stateFilter, regionFilter) {
   const monthly = new Map();

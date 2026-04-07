@@ -10,12 +10,12 @@ const campaignCompanies = {
         COUNT(DISTINCT cco.id) as contact_count,
         COUNT(DISTINCT co.id) as opportunity_count,
         COALESCE(SUM(co.value), 0) as total_opportunity_value,
-        c.name as linked_company_name
+        cust.name as linked_company_name
       FROM campaign_companies cc
       LEFT JOIN employees e ON cc.assigned_to_id = e.id
       LEFT JOIN campaign_contacts cco ON cc.id = cco.campaign_company_id
       LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
-      LEFT JOIN companies c ON cc.linked_company_id = c.id
+      LEFT JOIN customers cust ON cc.linked_company_id = cust.id
       WHERE cc.campaign_id = $1
     `;
 
@@ -45,7 +45,7 @@ const campaignCompanies = {
     }
 
     query += `
-      GROUP BY cc.id, e.first_name, e.last_name, c.name
+      GROUP BY cc.id, e.first_name, e.last_name, cust.name
       ORDER BY cc.tier, cc.score DESC, cc.name
     `;
 
@@ -64,7 +64,7 @@ const campaignCompanies = {
       FROM campaign_companies cc
       LEFT JOIN employees e ON cc.assigned_to_id = e.id
       LEFT JOIN campaigns c ON cc.campaign_id = c.id
-      LEFT JOIN companies comp ON cc.linked_company_id = comp.id
+      LEFT JOIN customers comp ON cc.linked_company_id = comp.id
       WHERE cc.id = $1
     `;
     const result = await db.query(query, [id]);
@@ -327,14 +327,19 @@ const campaignCompanies = {
     }
   },
 
-  // Add to main companies database
-  addToDatabase: async (campaignCompanyId, userId) => {
+  // Add to main customers database
+  addToDatabase: async (campaignCompanyId, userId, tenantId) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Get campaign company details
-      const ccQuery = 'SELECT * FROM campaign_companies WHERE id = $1';
+      // Get campaign company details (with tenant_id from campaign)
+      const ccQuery = `
+        SELECT cc.*, c.tenant_id
+        FROM campaign_companies cc
+        JOIN campaigns c ON cc.campaign_id = c.id
+        WHERE cc.id = $1
+      `;
       const ccResult = await client.query(ccQuery, [campaignCompanyId]);
       const campaignCompany = ccResult.rows[0];
 
@@ -346,40 +351,43 @@ const campaignCompanies = {
         throw new Error('Company already added to database');
       }
 
-      // Create company in main database
-      const companyQuery = `
-        INSERT INTO companies (name, industry, address, phone, website, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
+      const effectiveTenantId = tenantId || campaignCompany.tenant_id;
+
+      // Create customer in main database
+      const customerQuery = `
+        INSERT INTO customers (name, market, address, active_customer, source, tenant_id)
+        VALUES ($1, $2, $3, true, 'manual', $4)
         RETURNING *
       `;
-      const companyResult = await client.query(companyQuery, [
+      const customerResult = await client.query(customerQuery, [
         campaignCompany.name,
         campaignCompany.sector,
         campaignCompany.address,
-        campaignCompany.phone,
-        campaignCompany.website,
-        userId
+        effectiveTenantId
       ]);
-      const newCompany = companyResult.rows[0];
+      const newCustomer = customerResult.rows[0];
 
-      // Update campaign company to link to new company
+      // Update campaign company to link to new customer
       const updateQuery = `
         UPDATE campaign_companies
         SET linked_company_id = $1, is_added_to_database = true
         WHERE id = $2
         RETURNING *
       `;
-      const updateResult = await client.query(updateQuery, [newCompany.id, campaignCompanyId]);
+      const updateResult = await client.query(updateQuery, [newCustomer.id, campaignCompanyId]);
 
-      // Copy contacts to main database
+      // Copy contacts to customer_contacts
       const contactsQuery = 'SELECT * FROM campaign_contacts WHERE campaign_company_id = $1';
       const contactsResult = await client.query(contactsQuery, [campaignCompanyId]);
 
       for (const contact of contactsResult.rows) {
+        const nameParts = (contact.name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
         await client.query(
-          `INSERT INTO company_contacts (company_id, name, title, email, phone, is_primary)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [newCompany.id, contact.name, contact.title, contact.email, contact.phone, contact.is_primary]
+          `INSERT INTO customer_contacts (customer_id, first_name, last_name, title, email, phone, is_primary, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [newCustomer.id, firstName, lastName, contact.title, contact.email, contact.phone, contact.is_primary, effectiveTenantId]
         );
       }
 
@@ -396,11 +404,11 @@ const campaignCompanies = {
         campaignCompanyId,
         userId,
         `Company added to main database: ${campaignCompany.name}`,
-        JSON.stringify({ company_id: newCompany.id })
+        JSON.stringify({ customer_id: newCustomer.id })
       ]);
 
       await client.query('COMMIT');
-      return { campaignCompany: updateResult.rows[0], company: newCompany };
+      return { campaignCompany: updateResult.rows[0], customer: newCustomer };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
