@@ -237,6 +237,7 @@ export interface ImportResult {
   employees: { total: number; new: number; updated: number; batch_id: number | null };
   customers: { total: number; new: number; updated: number; batch_id: number | null };
   vendors: { total: number; new: number; updated: number; batch_id: number | null };
+  phaseCodes?: { total: number; new: number; updated: number; linked?: number; batch_id: number | null };
   facilities?: { total: number; created: number; updated: number; not_found: number; not_found_names?: string[] };
   autoImport?: {
     contracts?: { imported: number; updated?: number; errors?: { contract_number: string; error: string }[] };
