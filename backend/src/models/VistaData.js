@@ -3222,7 +3222,10 @@ const VistaData = {
           WHEN pc.phase LIKE '35-%' OR pc.phase LIKE '45-%' OR pc.phase LIKE '55-%' THEN 'shop'
         END AS location,
         COALESCE(SUM(pc.est_hours), 0) AS est_hours,
-        COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours
+        COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours,
+        COALESCE(SUM(pc.est_cost), 0) AS est_cost,
+        COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
+        COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
       FROM vp_phase_codes pc
       JOIN vp_contracts vc ON pc.contract = vc.contract_number AND pc.tenant_id = vc.tenant_id
       WHERE pc.tenant_id = $1
@@ -3245,6 +3248,104 @@ const VistaData = {
       [tenantId, projectId]
     );
     return result.rows;
+  },
+
+  async getJobsForProject(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT DISTINCT job, job_description
+       FROM vp_phase_codes
+       WHERE tenant_id = $1 AND linked_project_id = $2
+       ORDER BY job`,
+      [tenantId, projectId]
+    );
+    return result.rows;
+  },
+
+  async getPhaseCodeCostSummary(projectId, tenantId, job = null) {
+    const params = [tenantId, projectId];
+    const jobFilter = job ? ` AND pc.job = $3` : '';
+    if (job) params.push(job);
+
+    // Cost categories (cost_type 2-6)
+    const costResult = await db.query(
+      `SELECT pc.cost_type,
+         COALESCE(SUM(pc.est_cost), 0) AS est_cost,
+         COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
+         COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
+         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
+       FROM vp_phase_codes pc
+       WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
+         AND pc.cost_type IN (2, 3, 4, 5, 6)
+       GROUP BY pc.cost_type
+       ORDER BY pc.cost_type`,
+      params
+    );
+
+    // Labor breakdown by trade (cost_type=1)
+    const laborResult = await db.query(
+      `SELECT
+         CASE
+           WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '35-%' THEN 'sm'
+           WHEN pc.phase LIKE '40-%' OR pc.phase LIKE '45-%' THEN 'pf'
+           WHEN pc.phase LIKE '50-%' OR pc.phase LIKE '55-%' THEN 'pl'
+           WHEN pc.phase LIKE '70-%' THEN 'admin'
+           ELSE 'other'
+         END AS trade,
+         CASE
+           WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '40-%' OR pc.phase LIKE '50-%' THEN 'field'
+           WHEN pc.phase LIKE '35-%' OR pc.phase LIKE '45-%' OR pc.phase LIKE '55-%' THEN 'shop'
+           ELSE 'other'
+         END AS location,
+         COALESCE(SUM(pc.est_hours), 0) AS est_hours,
+         COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours,
+         COALESCE(SUM(pc.est_cost), 0) AS est_cost,
+         COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
+         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
+       FROM vp_phase_codes pc
+       WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
+         AND pc.cost_type = 1
+       GROUP BY trade, location
+       ORDER BY trade, location`,
+      params
+    );
+
+    // Map cost rows to named categories
+    const costMap = { 2: 'material', 3: 'subcontracts', 4: 'rentals', 5: 'mep_equipment', 6: 'general_conditions' };
+    const zeroCost = { est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0 };
+    const costs = {};
+    Object.values(costMap).forEach(name => { costs[name] = { ...zeroCost }; });
+    costResult.rows.forEach(row => {
+      const name = costMap[row.cost_type];
+      if (name) {
+        costs[name] = {
+          est_cost: parseFloat(row.est_cost),
+          jtd_cost: parseFloat(row.jtd_cost),
+          committed_cost: parseFloat(row.committed_cost),
+          projected_cost: parseFloat(row.projected_cost),
+        };
+      }
+    });
+
+    // Labor rows
+    const labor = laborResult.rows.map(r => ({
+      trade: r.trade,
+      location: r.location,
+      est_hours: parseFloat(r.est_hours),
+      jtd_hours: parseFloat(r.jtd_hours),
+      est_cost: parseFloat(r.est_cost),
+      jtd_cost: parseFloat(r.jtd_cost),
+      projected_cost: parseFloat(r.projected_cost),
+    }));
+
+    const labor_totals = labor.reduce((acc, r) => ({
+      est_hours: acc.est_hours + r.est_hours,
+      jtd_hours: acc.jtd_hours + r.jtd_hours,
+      est_cost: acc.est_cost + r.est_cost,
+      jtd_cost: acc.jtd_cost + r.jtd_cost,
+      projected_cost: acc.projected_cost + r.projected_cost,
+    }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, projected_cost: 0 });
+
+    return { costs, labor, labor_totals };
   }
 };
 

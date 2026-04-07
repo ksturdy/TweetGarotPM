@@ -108,6 +108,49 @@ export interface ShopFieldHours {
   location: 'shop' | 'field';
   est_hours: number;
   jtd_hours: number;
+  est_cost: number;
+  jtd_cost: number;
+  projected_cost: number;
+}
+
+export interface CostCategorySummary {
+  est_cost: number;
+  jtd_cost: number;
+  committed_cost: number;
+  projected_cost: number;
+}
+
+export interface LaborTradeSummary {
+  trade: 'pf' | 'sm' | 'pl' | 'admin' | 'other';
+  location: 'field' | 'shop' | 'other';
+  est_hours: number;
+  jtd_hours: number;
+  est_cost: number;
+  jtd_cost: number;
+  projected_cost: number;
+}
+
+export interface PhaseCodeCostSummary {
+  costs: {
+    material: CostCategorySummary;
+    subcontracts: CostCategorySummary;
+    rentals: CostCategorySummary;
+    mep_equipment: CostCategorySummary;
+    general_conditions: CostCategorySummary;
+  };
+  labor: LaborTradeSummary[];
+  labor_totals: {
+    est_hours: number;
+    jtd_hours: number;
+    est_cost: number;
+    jtd_cost: number;
+    projected_cost: number;
+  };
+}
+
+export interface ProjectJob {
+  job: string;
+  job_description: string;
 }
 
 export interface VPWorkOrder {
@@ -659,6 +702,17 @@ export const vistaDataService = {
 
   getShopFieldHours: async (): Promise<ShopFieldHours[]> => {
     const response = await api.get('/vista/contracts/shop-field-hours');
+    return response.data;
+  },
+
+  getProjectJobs: async (projectId: number): Promise<ProjectJob[]> => {
+    const response = await api.get(`/vista/phase-codes/project/${projectId}/jobs`);
+    return response.data;
+  },
+
+  getPhaseCodeCostSummary: async (projectId: number, job?: string): Promise<PhaseCodeCostSummary> => {
+    const params = job ? `?job=${encodeURIComponent(job)}` : '';
+    const response = await api.get(`/vista/phase-codes/project/${projectId}/cost-summary${params}`);
     return response.data;
   },
 

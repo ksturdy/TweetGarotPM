@@ -156,7 +156,7 @@ interface TradeHours {
   remaining: number;
 }
 
-type SFEntry = { est: number; jtd: number };
+type SFEntry = { est: number; jtd: number; est_cost: number; jtd_cost: number; projected_cost: number };
 type SFByTrade = Partial<Record<TradeName, Partial<Record<'shop' | 'field', SFEntry>>>>;
 
 interface ProjectLaborProjection {
@@ -253,6 +253,9 @@ const LaborForecast: React.FC = () => {
       byTrade[row.trade as TradeName]![row.location as 'shop' | 'field'] = {
         est: parseNum(row.est_hours),
         jtd: parseNum(row.jtd_hours),
+        est_cost: parseNum(row.est_cost),
+        jtd_cost: parseNum(row.jtd_cost),
+        projected_cost: parseNum(row.projected_cost),
       };
     }
     return map;
@@ -431,28 +434,42 @@ const LaborForecast: React.FC = () => {
       const backlog = parseNum(contract.backlog);
       const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
 
-      // Calculate remaining hours per trade (with shop/field proportional scaling)
+      // Calculate remaining projected hours per trade from phase code cost data
+      // Projected Hours = Projected Cost / Rate, where Rate = JTD Cost / JTD Hours (or Est Cost / Est Hours)
+      // Remaining = Projected Hours - JTD Hours
+      const sfData = shopFieldMap.get(contract.contract_number);
+
       const tradeHours: TradeHours[] = TRADES.map(trade => {
-        const projectedRaw = (contract as any)[`${trade.key}_hours_projected`];
-        const projected = parseNum(projectedRaw);
-        const estimate = parseNum((contract as any)[`${trade.key}_hours_estimate`]);
-        const jtd = parseNum((contract as any)[`${trade.key}_hours_jtd`]);
-        // Use projected if it has a value; only fall back to estimate when projected is null/unset
-        const basis = projectedRaw != null && projectedRaw !== '' ? projected : estimate;
-        const fullRemaining = Math.max(0, basis - jtd);
+        const tradeData = sfData?.[trade.key];
+        if (!tradeData) {
+          // No phase code data for this trade — show 0 (consistent with Financials)
+          return { key: trade.key, remaining: 0 };
+        }
+
+        // Sum shop + field for this trade
+        const estHours = (tradeData.shop?.est || 0) + (tradeData.field?.est || 0);
+        const jtdHours = (tradeData.shop?.jtd || 0) + (tradeData.field?.jtd || 0);
+        const estCost = (tradeData.shop?.est_cost || 0) + (tradeData.field?.est_cost || 0);
+        const jtdCost = (tradeData.shop?.jtd_cost || 0) + (tradeData.field?.jtd_cost || 0);
+        const projCost = (tradeData.shop?.projected_cost || 0) + (tradeData.field?.projected_cost || 0);
+
+        // Derive projected hours: Projected Cost / labor rate
+        let projectedHours: number;
+        if (projCost > 0) {
+          const rate = jtdHours > 0 ? jtdCost / jtdHours
+            : estHours > 0 ? estCost / estHours : 0;
+          projectedHours = rate > 0 ? projCost / rate : estHours;
+        } else {
+          projectedHours = estHours;
+        }
+
+        const fullRemaining = Math.max(0, projectedHours - jtdHours);
 
         if (locationFilter === 'both') {
           return { key: trade.key, remaining: fullRemaining };
         }
 
         // Apply shop/field proportional scaling
-        const sfData = shopFieldMap.get(contract.contract_number);
-        const tradeData = sfData?.[trade.key];
-        if (!tradeData) {
-          // No phase code data — cannot split, exclude from shop/field views
-          return { key: trade.key, remaining: 0 };
-        }
-
         const estShop = tradeData.shop?.est || 0;
         const estField = tradeData.field?.est || 0;
         const estTotal = estShop + estField;

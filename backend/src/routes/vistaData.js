@@ -947,6 +947,30 @@ router.get('/contracts/by-project/:projectId', async (req, res, next) => {
   }
 });
 
+// GET /api/vista/phase-codes/project/:projectId/jobs - Get distinct jobs for a project
+router.get('/phase-codes/project/:projectId/jobs', async (req, res, next) => {
+  try {
+    const jobs = await VistaData.getJobsForProject(req.params.projectId, req.tenantId);
+    res.json(jobs);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/phase-codes/project/:projectId/cost-summary - Aggregated cost data from phase codes
+router.get('/phase-codes/project/:projectId/cost-summary', async (req, res, next) => {
+  try {
+    const summary = await VistaData.getPhaseCodeCostSummary(
+      req.params.projectId,
+      req.tenantId,
+      req.query.job || null
+    );
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/vista/contracts/:id - Get contract by ID
 router.get('/contracts/:id', async (req, res, next) => {
   try {

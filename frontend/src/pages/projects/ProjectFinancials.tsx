@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { vistaDataService, VPContract } from '../../services/vistaData';
+import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { format } from 'date-fns';
@@ -106,6 +106,39 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </div>
 );
 
+const LaborHeader: React.FC = () => (
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.15rem 0', borderBottom: '1px solid #e2e8f0', marginBottom: '0.15rem' }}>
+    <span />
+    <span style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Hours</span>
+    <span style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Cost</span>
+  </div>
+);
+
+const LaborRow: React.FC<{
+  label: string; hours: string; cost: string;
+  highlight?: boolean; hoursColor?: string; costColor?: string;
+}> = ({ label, hours, cost, highlight, hoursColor, costColor }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.2rem 0', borderBottom: '1px solid #f1f5f9' }}>
+    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{label}</span>
+    <span style={{
+      textAlign: 'right', fontWeight: highlight ? 600 : 400, fontSize: '0.8rem',
+      color: hoursColor ? '#ffffff' : (highlight ? '#1e40af' : '#1e293b'),
+      backgroundColor: hoursColor || 'transparent',
+      padding: hoursColor ? '0.1rem 0.4rem' : '0',
+      borderRadius: hoursColor ? '4px' : '0',
+      justifySelf: 'end',
+    }}>{hours}</span>
+    <span style={{
+      textAlign: 'right', fontWeight: highlight ? 600 : 400, fontSize: '0.8rem',
+      color: costColor ? '#ffffff' : (highlight ? '#1e40af' : '#1e293b'),
+      backgroundColor: costColor || 'transparent',
+      padding: costColor ? '0.1rem 0.4rem' : '0',
+      borderRadius: costColor ? '4px' : '0',
+      justifySelf: 'end',
+    }}>{cost}</span>
+  </div>
+);
+
 const ProjectFinancials: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -113,6 +146,7 @@ const ProjectFinancials: React.FC = () => {
   const [showOverrideInputs, setShowOverrideInputs] = useState(false);
   const [marginOverride, setMarginOverride] = useState('');
   const [marginPctOverride, setMarginPctOverride] = useState('');
+  const [selectedJob, setSelectedJob] = useState<string | null>(null);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -123,6 +157,42 @@ const ProjectFinancials: React.FC = () => {
     queryKey: ['vpContract', projectId],
     queryFn: () => vistaDataService.getContractByProjectId(Number(projectId)),
   });
+
+  const { data: jobs } = useQuery({
+    queryKey: ['projectJobs', projectId],
+    queryFn: () => vistaDataService.getProjectJobs(Number(projectId)),
+    enabled: !!c,
+  });
+
+  const { data: costSummary } = useQuery({
+    queryKey: ['phaseCodeCostSummary', projectId, selectedJob],
+    queryFn: () => vistaDataService.getPhaseCodeCostSummary(Number(projectId), selectedJob || undefined),
+    enabled: !!c,
+  });
+
+  const getTradeSummary = (trade: string) => {
+    if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, projected_cost: 0 };
+    const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === trade);
+    return {
+      est_hours: rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0),
+      jtd_hours: rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_hours, 0),
+      est_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_cost, 0),
+      jtd_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_cost, 0),
+      projected_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0),
+    };
+  };
+
+  // Projected Hours = Projected Cost / Rate
+  // Rate = JTD Cost / JTD Hours (preferred), fallback to Est Cost / Est Hours
+  const calcProjectedHours = (summary: { jtd_cost: number; jtd_hours: number; est_cost: number; est_hours: number; projected_cost: number }) => {
+    if (!summary.projected_cost) return 0;
+    const rate = summary.jtd_hours > 0
+      ? summary.jtd_cost / summary.jtd_hours
+      : summary.est_hours > 0
+        ? summary.est_cost / summary.est_hours
+        : 0;
+    return rate > 0 ? summary.projected_cost / rate : 0;
+  };
 
   const captureSnapshotMutation = useMutation({
     mutationFn: () => projectSnapshotsApi.create(Number(projectId)),
@@ -246,6 +316,46 @@ const ProjectFinancials: React.FC = () => {
           </p>
         </div>
       ) : (
+        <>
+        {jobs && jobs.length > 1 && (
+          <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Job:</span>
+            <button
+              onClick={() => setSelectedJob(null)}
+              style={{
+                fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+                border: selectedJob === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                background: selectedJob === null ? '#eff6ff' : '#fff',
+                cursor: 'pointer', fontWeight: selectedJob === null ? 600 : 400,
+              }}
+            >
+              All Jobs ({jobs.length})
+            </button>
+            {jobs.map(j => (
+              <button
+                key={j.job}
+                onClick={() => setSelectedJob(j.job)}
+                style={{
+                  fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+                  border: selectedJob === j.job ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                  background: selectedJob === j.job ? '#eff6ff' : '#fff',
+                  cursor: 'pointer', fontWeight: selectedJob === j.job ? 600 : 400,
+                }}
+                title={j.job_description}
+              >
+                {j.job}
+              </button>
+            ))}
+            {selectedJob && (() => {
+              const selected = jobs.find(j => j.job === selectedJob);
+              return selected?.job_description ? (
+                <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic', marginLeft: '0.25rem' }}>
+                  — {selected.job_description}
+                </span>
+              ) : null;
+            })()}
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
           {/* Column 1: Contract & Revenue */}
           <div className="card" style={{ padding: '0.75rem' }}>
@@ -355,61 +465,190 @@ const ProjectFinancials: React.FC = () => {
             </Section>
           </div>
 
-          {/* Column 3: Cost Breakdown */}
+          {/* Column 3: Cost Breakdown (from Phase Codes) */}
           <div className="card" style={{ padding: '0.75rem' }}>
-            <Section title="Material">
-              <Row label="Estimate" value={fmt(c.material_estimate)} />
-              <Row label="JTD" value={fmt(c.material_jtd)} highlight />
-              <Row label="Projected" value={fmt(c.material_projected)} valueColor={getProjectedColor(c.material_projected, c.material_estimate)} />
-            </Section>
-            <Section title="Subcontracts">
-              <Row label="Estimate" value={fmt(c.subcontracts_estimate)} />
-              <Row label="JTD" value={fmt(c.subcontracts_jtd)} highlight />
-              <Row label="Projected" value={fmt(c.subcontracts_projected)} valueColor={getProjectedColor(c.subcontracts_projected, c.subcontracts_estimate)} />
-            </Section>
-            <Section title="Rentals">
-              <Row label="Estimate" value={fmt(c.rentals_estimate)} />
-              <Row label="JTD" value={fmt(c.rentals_jtd)} highlight />
-              <Row label="Projected" value={fmt(c.rentals_projected)} valueColor={getProjectedColor(c.rentals_projected, c.rentals_estimate)} />
-            </Section>
-            <Section title="MEP Equipment">
-              <Row label="Estimate" value={fmt(c.mep_equip_estimate)} />
-              <Row label="JTD" value={fmt(c.mep_equip_jtd)} highlight />
-              <Row label="Projected" value={fmt(c.mep_equip_projected)} valueColor={getProjectedColor(c.mep_equip_projected, c.mep_equip_estimate)} />
-            </Section>
+            {costSummary ? (
+              <>
+                <Section title="Material">
+                  <Row label="Estimate" value={fmt(costSummary.costs.material.est_cost)} />
+                  <Row label="JTD" value={fmt(costSummary.costs.material.jtd_cost)} highlight />
+                  <Row label="Projected" value={fmt(costSummary.costs.material.projected_cost)} valueColor={getProjectedColor(costSummary.costs.material.projected_cost, costSummary.costs.material.est_cost)} />
+                </Section>
+                <Section title="Subcontracts">
+                  <Row label="Estimate" value={fmt(costSummary.costs.subcontracts.est_cost)} />
+                  <Row label="JTD" value={fmt(costSummary.costs.subcontracts.jtd_cost)} highlight />
+                  <Row label="Projected" value={fmt(costSummary.costs.subcontracts.projected_cost)} valueColor={getProjectedColor(costSummary.costs.subcontracts.projected_cost, costSummary.costs.subcontracts.est_cost)} />
+                </Section>
+                <Section title="Rentals">
+                  <Row label="Estimate" value={fmt(costSummary.costs.rentals.est_cost)} />
+                  <Row label="JTD" value={fmt(costSummary.costs.rentals.jtd_cost)} highlight />
+                  <Row label="Projected" value={fmt(costSummary.costs.rentals.projected_cost)} valueColor={getProjectedColor(costSummary.costs.rentals.projected_cost, costSummary.costs.rentals.est_cost)} />
+                </Section>
+                <Section title="MEP Equipment">
+                  <Row label="Estimate" value={fmt(costSummary.costs.mep_equipment.est_cost)} />
+                  <Row label="JTD" value={fmt(costSummary.costs.mep_equipment.jtd_cost)} highlight />
+                  <Row label="Projected" value={fmt(costSummary.costs.mep_equipment.projected_cost)} valueColor={getProjectedColor(costSummary.costs.mep_equipment.projected_cost, costSummary.costs.mep_equipment.est_cost)} />
+                </Section>
+                <Section title="General Conditions">
+                  <Row label="Estimate" value={fmt(costSummary.costs.general_conditions.est_cost)} />
+                  <Row label="JTD" value={fmt(costSummary.costs.general_conditions.jtd_cost)} highlight />
+                  <Row label="Projected" value={fmt(costSummary.costs.general_conditions.projected_cost)} valueColor={getProjectedColor(costSummary.costs.general_conditions.projected_cost, costSummary.costs.general_conditions.est_cost)} />
+                </Section>
+              </>
+            ) : (
+              <>
+                <Section title="Material">
+                  <Row label="Estimate" value={fmt(c.material_estimate)} />
+                  <Row label="JTD" value={fmt(c.material_jtd)} highlight />
+                  <Row label="Projected" value={fmt(c.material_projected)} valueColor={getProjectedColor(c.material_projected, c.material_estimate)} />
+                </Section>
+                <Section title="Subcontracts">
+                  <Row label="Estimate" value={fmt(c.subcontracts_estimate)} />
+                  <Row label="JTD" value={fmt(c.subcontracts_jtd)} highlight />
+                  <Row label="Projected" value={fmt(c.subcontracts_projected)} valueColor={getProjectedColor(c.subcontracts_projected, c.subcontracts_estimate)} />
+                </Section>
+                <Section title="Rentals">
+                  <Row label="Estimate" value={fmt(c.rentals_estimate)} />
+                  <Row label="JTD" value={fmt(c.rentals_jtd)} highlight />
+                  <Row label="Projected" value={fmt(c.rentals_projected)} valueColor={getProjectedColor(c.rentals_projected, c.rentals_estimate)} />
+                </Section>
+                <Section title="MEP Equipment">
+                  <Row label="Estimate" value={fmt(c.mep_equip_estimate)} />
+                  <Row label="JTD" value={fmt(c.mep_equip_jtd)} highlight />
+                  <Row label="Projected" value={fmt(c.mep_equip_projected)} valueColor={getProjectedColor(c.mep_equip_projected, c.mep_equip_estimate)} />
+                </Section>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                  From contract totals. Import phase codes for detailed breakdown.
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Column 4: Labor Hours */}
+          {/* Column 4: Labor Hours (from Phase Codes) */}
           <div className="card" style={{ padding: '0.75rem' }}>
-            <Section title="Pipefitter (PF)">
-              <Row label="Estimate" value={fmtNum(c.pf_hours_estimate)} />
-              <Row label="JTD" value={fmtNum(c.pf_hours_jtd)} highlight />
-              <Row label="Projected" value={fmtNum(c.pf_hours_projected)} valueColor={getProjectedColor(c.pf_hours_projected, c.pf_hours_estimate)} />
-            </Section>
-            <Section title="Sheet Metal (SM)">
-              <Row label="Estimate" value={fmtNum(c.sm_hours_estimate)} />
-              <Row label="JTD" value={fmtNum(c.sm_hours_jtd)} highlight />
-              <Row label="Projected" value={fmtNum(c.sm_hours_projected)} valueColor={getProjectedColor(c.sm_hours_projected, c.sm_hours_estimate)} />
-            </Section>
-            <Section title="Plumbing (PL)">
-              <Row label="Estimate" value={fmtNum(c.pl_hours_estimate)} />
-              <Row label="JTD" value={fmtNum(c.pl_hours_jtd)} highlight />
-              <Row label="Projected" value={fmtNum(c.pl_hours_projected)} valueColor={getProjectedColor(c.pl_hours_projected, c.pl_hours_estimate)} />
-            </Section>
-            <Section title="Total Hours">
-              <Row label="Estimate" value={fmtNum(c.total_hours_estimate)} />
-              <Row label="JTD" value={fmtNum(c.total_hours_jtd)} highlight />
-              <Row label="Projected" value={fmtNum(c.total_hours_projected)} valueColor={getProjectedColor(c.total_hours_projected, c.total_hours_estimate)} />
-            </Section>
-            <Section title="Info">
-              <Row label="Customer" value={c.customer_name || '-'} />
-              <Row label="Market" value={c.primary_market || '-'} />
-              <Row label="Negotiated" value={c.negotiated_work || '-'} />
-              {c.start_month && <Row label="Start" value={format(new Date(c.start_month), 'MMM yyyy')} />}
-              {c.month_closed && <Row label="Closed" value={format(new Date(c.month_closed), 'MMM yyyy')} />}
-            </Section>
+            {costSummary ? (
+              <>
+                {(['pf', 'sm', 'pl'] as const).map(trade => {
+                  const ts = getTradeSummary(trade);
+                  const tradeLabel = trade === 'pf' ? 'Pipefitter (PF)' : trade === 'sm' ? 'Sheet Metal (SM)' : 'Plumbing (PL)';
+                  const projectedHours = calcProjectedHours(ts);
+                  return (
+                    <Section key={trade} title={tradeLabel}>
+                      <LaborHeader />
+                      <LaborRow label="Estimate" hours={fmtNum(ts.est_hours)} cost={fmt(ts.est_cost)} />
+                      <LaborRow label="JTD" hours={fmtNum(ts.jtd_hours)} cost={fmt(ts.jtd_cost)} highlight />
+                      <LaborRow label="Projected" hours={fmtNum(projectedHours)} cost={fmt(ts.projected_cost)}
+                        hoursColor={getProjectedColor(projectedHours, ts.est_hours)}
+                        costColor={getProjectedColor(ts.projected_cost, ts.est_cost)} />
+                    </Section>
+                  );
+                })}
+                {costSummary.labor.some(l => l.trade === 'admin') && (
+                  (() => {
+                    const admin = getTradeSummary('admin');
+                    const adminProjHours = calcProjectedHours(admin);
+                    return (
+                      <Section title="Office/Admin">
+                        <LaborHeader />
+                        <LaborRow label="Estimate" hours={fmtNum(admin.est_hours)} cost={fmt(admin.est_cost)} />
+                        <LaborRow label="JTD" hours={fmtNum(admin.jtd_hours)} cost={fmt(admin.jtd_cost)} highlight />
+                        <LaborRow label="Projected" hours={fmtNum(adminProjHours)} cost={fmt(admin.projected_cost)}
+                          hoursColor={getProjectedColor(adminProjHours, admin.est_hours)}
+                          costColor={getProjectedColor(admin.projected_cost, admin.est_cost)} />
+                      </Section>
+                    );
+                  })()
+                )}
+                <Section title="Total Labor">
+                  {(() => {
+                    const totalProjHours = calcProjectedHours(costSummary.labor_totals);
+                    return (
+                      <>
+                        <LaborHeader />
+                        <LaborRow label="Estimate" hours={fmtNum(costSummary.labor_totals.est_hours)} cost={fmt(costSummary.labor_totals.est_cost)} />
+                        <LaborRow label="JTD" hours={fmtNum(costSummary.labor_totals.jtd_hours)} cost={fmt(costSummary.labor_totals.jtd_cost)} highlight />
+                        <LaborRow label="Projected" hours={fmtNum(totalProjHours)} cost={fmt(costSummary.labor_totals.projected_cost)}
+                          hoursColor={getProjectedColor(totalProjHours, costSummary.labor_totals.est_hours)}
+                          costColor={getProjectedColor(costSummary.labor_totals.projected_cost, costSummary.labor_totals.est_cost)} />
+                      </>
+                    );
+                  })()}
+                </Section>
+              </>
+            ) : (
+              <>
+                <Section title="Pipefitter (PF)">
+                  <Row label="Estimate" value={fmtNum(c.pf_hours_estimate)} />
+                  <Row label="JTD" value={fmtNum(c.pf_hours_jtd)} highlight />
+                  <Row label="Projected" value={fmtNum(c.pf_hours_projected)} valueColor={getProjectedColor(c.pf_hours_projected, c.pf_hours_estimate)} />
+                </Section>
+                <Section title="Sheet Metal (SM)">
+                  <Row label="Estimate" value={fmtNum(c.sm_hours_estimate)} />
+                  <Row label="JTD" value={fmtNum(c.sm_hours_jtd)} highlight />
+                  <Row label="Projected" value={fmtNum(c.sm_hours_projected)} valueColor={getProjectedColor(c.sm_hours_projected, c.sm_hours_estimate)} />
+                </Section>
+                <Section title="Plumbing (PL)">
+                  <Row label="Estimate" value={fmtNum(c.pl_hours_estimate)} />
+                  <Row label="JTD" value={fmtNum(c.pl_hours_jtd)} highlight />
+                  <Row label="Projected" value={fmtNum(c.pl_hours_projected)} valueColor={getProjectedColor(c.pl_hours_projected, c.pl_hours_estimate)} />
+                </Section>
+                <Section title="Total Hours">
+                  <Row label="Estimate" value={fmtNum(c.total_hours_estimate)} />
+                  <Row label="JTD" value={fmtNum(c.total_hours_jtd)} highlight />
+                  <Row label="Projected" value={fmtNum(c.total_hours_projected)} valueColor={getProjectedColor(c.total_hours_projected, c.total_hours_estimate)} />
+                </Section>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                  From contract totals. Import phase codes for detailed breakdown.
+                </div>
+              </>
+            )}
+            {costSummary ? (
+              <>
+                <Section title="Cost Totals">
+                  <Row label="Labor" value={fmt(costSummary.labor_totals.projected_cost)} />
+                  <Row label="Material" value={fmt(costSummary.costs.material.projected_cost)} />
+                  <Row label="Subcontracts" value={fmt(costSummary.costs.subcontracts.projected_cost)} />
+                  <Row label="Rentals" value={fmt(costSummary.costs.rentals.projected_cost)} />
+                  <Row label="MEP Equipment" value={fmt(costSummary.costs.mep_equipment.projected_cost)} />
+                  <Row label="General Cond." value={fmt(costSummary.costs.general_conditions.projected_cost)} />
+                </Section>
+                <Section title="Total Project Cost">
+                  {(() => {
+                    const totalEst = costSummary.labor_totals.est_cost
+                      + costSummary.costs.material.est_cost + costSummary.costs.subcontracts.est_cost
+                      + costSummary.costs.rentals.est_cost + costSummary.costs.mep_equipment.est_cost
+                      + costSummary.costs.general_conditions.est_cost;
+                    const totalJtd = costSummary.labor_totals.jtd_cost
+                      + costSummary.costs.material.jtd_cost + costSummary.costs.subcontracts.jtd_cost
+                      + costSummary.costs.rentals.jtd_cost + costSummary.costs.mep_equipment.jtd_cost
+                      + costSummary.costs.general_conditions.jtd_cost;
+                    const totalProj = costSummary.labor_totals.projected_cost
+                      + costSummary.costs.material.projected_cost + costSummary.costs.subcontracts.projected_cost
+                      + costSummary.costs.rentals.projected_cost + costSummary.costs.mep_equipment.projected_cost
+                      + costSummary.costs.general_conditions.projected_cost;
+                    return (
+                      <>
+                        <Row label="Estimate" value={fmt(totalEst)} />
+                        <Row label="JTD" value={fmt(totalJtd)} highlight />
+                        <Row label="Projected" value={fmt(totalProj)}
+                          valueColor={getProjectedColor(totalProj, totalEst)} />
+                      </>
+                    );
+                  })()}
+                </Section>
+              </>
+            ) : (
+              <Section title="Info">
+                <Row label="Customer" value={c.customer_name || '-'} />
+                <Row label="Market" value={c.primary_market || '-'} />
+                <Row label="Negotiated" value={c.negotiated_work || '-'} />
+                {c.start_month && <Row label="Start" value={format(new Date(c.start_month), 'MMM yyyy')} />}
+                {c.month_closed && <Row label="Closed" value={format(new Date(c.month_closed), 'MMM yyyy')} />}
+              </Section>
+            )}
           </div>
         </div>
+        </>
       )}
     </div>
   );
