@@ -3208,6 +3208,35 @@ const VistaData = {
     return result.rowCount;
   },
 
+  async getShopFieldHoursByContract(tenantId) {
+    const result = await db.query(
+      `SELECT
+        vc.contract_number,
+        CASE
+          WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '35-%' THEN 'sm'
+          WHEN pc.phase LIKE '40-%' OR pc.phase LIKE '45-%' THEN 'pf'
+          WHEN pc.phase LIKE '50-%' OR pc.phase LIKE '55-%' THEN 'pl'
+        END AS trade,
+        CASE
+          WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '40-%' OR pc.phase LIKE '50-%' THEN 'field'
+          WHEN pc.phase LIKE '35-%' OR pc.phase LIKE '45-%' OR pc.phase LIKE '55-%' THEN 'shop'
+        END AS location,
+        COALESCE(SUM(pc.est_hours), 0) AS est_hours,
+        COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours
+      FROM vp_phase_codes pc
+      JOIN vp_contracts vc ON pc.contract = vc.contract_number AND pc.tenant_id = vc.tenant_id
+      WHERE pc.tenant_id = $1
+        AND pc.cost_type = 1
+        AND (pc.phase LIKE '30-%' OR pc.phase LIKE '35-%'
+          OR pc.phase LIKE '40-%' OR pc.phase LIKE '45-%'
+          OR pc.phase LIKE '50-%' OR pc.phase LIKE '55-%')
+      GROUP BY vc.contract_number, trade, location
+      ORDER BY vc.contract_number`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
   async getPhaseCodesByProject(projectId, tenantId) {
     const result = await db.query(
       `SELECT * FROM vp_phase_codes

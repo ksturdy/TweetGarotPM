@@ -1,8 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { vistaDataService, VPContract } from '../../services/vistaData';
+import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
+import SearchableSelect from '../../components/SearchableSelect';
+import MultiSearchableSelect from '../../components/MultiSearchableSelect';
+import '../../components/modals/Modal.css';
 import { format, addMonths, addWeeks, startOfMonth, startOfWeek } from 'date-fns';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -151,6 +156,9 @@ interface TradeHours {
   remaining: number;
 }
 
+type SFEntry = { est: number; jtd: number };
+type SFByTrade = Partial<Record<TradeName, Partial<Record<'shop' | 'field', SFEntry>>>>;
+
 interface ProjectLaborProjection {
   contract: VPContract;
   remainingMonths: number;
@@ -168,11 +176,14 @@ interface ProjectLaborProjection {
 
 const LaborForecast: React.FC = () => {
   // Filters
-  const [departmentFilter, setDepartmentFilter] = useState<string>('');
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [pmFilter, setPmFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchFilter, setSearchFilter] = useState<string>('');
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [locationFilter, setLocationFilter] = useState<'both' | 'shop' | 'field'>('both');
+  const [drillDownCol, setDrillDownCol] = useState<{ key: string; label: string; monthKey: string } | null>(null);
 
   // Overrides (shared with revenue page)
   const [adjustedEndMonths, setAdjustedEndMonths] = useState<Record<number, number>>({});
@@ -226,6 +237,27 @@ const LaborForecast: React.FC = () => {
     queryFn: () => vistaDataService.getAllContracts({ status: '' }),
   });
 
+  const { data: shopFieldData } = useQuery({
+    queryKey: ['vpShopFieldHours'],
+    queryFn: () => vistaDataService.getShopFieldHours(),
+  });
+
+  // Build lookup: contractNumber -> { trade -> { shop: {est,jtd}, field: {est,jtd} } }
+  const shopFieldMap = useMemo(() => {
+    if (!shopFieldData) return new Map<string, SFByTrade>();
+    const map = new Map<string, SFByTrade>();
+    for (const row of shopFieldData) {
+      if (!map.has(row.contract_number)) map.set(row.contract_number, {});
+      const byTrade = map.get(row.contract_number)!;
+      if (!byTrade[row.trade as TradeName]) byTrade[row.trade as TradeName] = {};
+      byTrade[row.trade as TradeName]![row.location as 'shop' | 'field'] = {
+        est: parseNum(row.est_hours),
+        jtd: parseNum(row.jtd_hours),
+      };
+    }
+    return map;
+  }, [shopFieldData]);
+
   useEffect(() => {
     if (contracts && !overridesInitialized) {
       const endMonths: Record<number, number> = {};
@@ -269,6 +301,48 @@ const LaborForecast: React.FC = () => {
       pms: Array.from(pms).sort(),
     };
   }, [contracts]);
+
+  // Dynamic project options filtered by other active filters
+  const projectOptions = useMemo(() => {
+    if (!contracts) return [];
+    return contracts
+      .filter(c => {
+        const status = c.status?.toLowerCase() || '';
+        if (statusFilter === 'all') {
+          if (!status.includes('open') && !status.includes('soft')) return false;
+        } else if (statusFilter === 'Open') {
+          if (!status.includes('open')) return false;
+        } else if (statusFilter === 'Soft-Closed') {
+          if (!status.includes('soft')) return false;
+        }
+        if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
+        if (marketFilter && c.primary_market !== marketFilter) return false;
+        if (pmFilter && c.project_manager_name !== pmFilter) return false;
+        if (searchFilter) {
+          const search = searchFilter.toLowerCase();
+          const m1 = c.contract_number?.toLowerCase().includes(search);
+          const m2 = c.description?.toLowerCase().includes(search);
+          const m3 = c.customer_name?.toLowerCase().includes(search);
+          if (!m1 && !m2 && !m3) return false;
+        }
+        return true;
+      })
+      .map(c => ({
+        value: c.contract_number,
+        label: `${c.contract_number} — ${c.description || c.customer_name || ''}`.substring(0, 80),
+        searchText: `${c.contract_number} ${c.description || ''} ${c.customer_name || ''} ${c.project_manager_name || ''}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [contracts, statusFilter, departmentFilter, marketFilter, pmFilter, searchFilter]);
+
+  // Clear project filter selections that are no longer in the filtered list
+  useEffect(() => {
+    if (projectFilter.length > 0) {
+      const validValues = new Set(projectOptions.map(o => o.value));
+      const cleaned = projectFilter.filter(v => validValues.has(v));
+      if (cleaned.length !== projectFilter.length) setProjectFilter(cleaned);
+    }
+  }, [projectFilter, projectOptions]);
 
   // ─── Columns (12 months + yearly) ───────────────────────
 
@@ -337,7 +411,7 @@ const LaborForecast: React.FC = () => {
       } else if (statusFilter === 'Soft-Closed') {
         if (!status.includes('soft')) return false;
       }
-      if (departmentFilter && c.department_code !== departmentFilter) return false;
+      if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
       if (marketFilter && c.primary_market !== marketFilter) return false;
       if (pmFilter && c.project_manager_name !== pmFilter) return false;
       if (searchFilter) {
@@ -347,6 +421,7 @@ const LaborForecast: React.FC = () => {
         const m3 = c.customer_name?.toLowerCase().includes(search);
         if (!m1 && !m2 && !m3) return false;
       }
+      if (projectFilter.length > 0 && !projectFilter.includes(c.contract_number)) return false;
       return true;
     });
 
@@ -356,12 +431,46 @@ const LaborForecast: React.FC = () => {
       const backlog = parseNum(contract.backlog);
       const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
 
-      // Calculate remaining hours per trade
-      const tradeHours: TradeHours[] = [
-        { key: 'pf', remaining: Math.max(0, (parseNum((contract as any).pf_hours_projected) || parseNum((contract as any).pf_hours_estimate)) - parseNum((contract as any).pf_hours_jtd)) },
-        { key: 'sm', remaining: Math.max(0, (parseNum((contract as any).sm_hours_projected) || parseNum((contract as any).sm_hours_estimate)) - parseNum((contract as any).sm_hours_jtd)) },
-        { key: 'pl', remaining: Math.max(0, (parseNum((contract as any).pl_hours_projected) || parseNum((contract as any).pl_hours_estimate)) - parseNum((contract as any).pl_hours_jtd)) },
-      ];
+      // Calculate remaining hours per trade (with shop/field proportional scaling)
+      const tradeHours: TradeHours[] = TRADES.map(trade => {
+        const projectedRaw = (contract as any)[`${trade.key}_hours_projected`];
+        const projected = parseNum(projectedRaw);
+        const estimate = parseNum((contract as any)[`${trade.key}_hours_estimate`]);
+        const jtd = parseNum((contract as any)[`${trade.key}_hours_jtd`]);
+        // Use projected if it has a value; only fall back to estimate when projected is null/unset
+        const basis = projectedRaw != null && projectedRaw !== '' ? projected : estimate;
+        const fullRemaining = Math.max(0, basis - jtd);
+
+        if (locationFilter === 'both') {
+          return { key: trade.key, remaining: fullRemaining };
+        }
+
+        // Apply shop/field proportional scaling
+        const sfData = shopFieldMap.get(contract.contract_number);
+        const tradeData = sfData?.[trade.key];
+        if (!tradeData) {
+          // No phase code data — cannot split, exclude from shop/field views
+          return { key: trade.key, remaining: 0 };
+        }
+
+        const estShop = tradeData.shop?.est || 0;
+        const estField = tradeData.field?.est || 0;
+        const estTotal = estShop + estField;
+
+        let proportion: number;
+        if (estTotal > 0) {
+          proportion = locationFilter === 'shop' ? estShop / estTotal : estField / estTotal;
+        } else {
+          const jtdShop = tradeData.shop?.jtd || 0;
+          const jtdField = tradeData.field?.jtd || 0;
+          const jtdTotal = jtdShop + jtdField;
+          proportion = jtdTotal > 0
+            ? (locationFilter === 'shop' ? jtdShop / jtdTotal : jtdField / jtdTotal)
+            : 0;
+        }
+
+        return { key: trade.key, remaining: fullRemaining * proportion };
+      });
 
       const totalRemainingHours = tradeHours.reduce((sum, t) => sum + t.remaining, 0);
 
@@ -444,7 +553,7 @@ const LaborForecast: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -472,11 +581,206 @@ const LaborForecast: React.FC = () => {
     return totals;
   }, [projections]);
 
+  // ─── Drill-down data ────────────────────────────────────
+
+  const drillDownProjects = useMemo(() => {
+    if (!drillDownCol) return [];
+    return projections
+      .map(p => {
+        const h = getHoursForColumn(p.monthlyHours, drillDownCol);
+        return { projection: p, hours: h };
+      })
+      .filter(d => d.hours.total > 0)
+      .sort((a, b) => b.hours.total - a.hours.total);
+  }, [drillDownCol, projections, getHoursForColumn]);
+
+  // Close drill-down when filters change
+  useEffect(() => {
+    setDrillDownCol(null);
+  }, [departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, locationFilter, timeHorizon, granularity]);
+
   // ─── Tooltip helper ──────────────────────────────────────
 
   const cellTooltip = (h: TradeMonthlyHours): string => {
     const hpp = hoursPerPersonPerMonth;
     return `PF: ${(h.pf / hpp).toFixed(1)} (${fmtHours(h.pf)} hrs)\nSM: ${(h.sm / hpp).toFixed(1)} (${fmtHours(h.sm)} hrs)\nPL: ${(h.pl / hpp).toFixed(1)} (${fmtHours(h.pl)} hrs)\nTotal: ${(h.total / hpp).toFixed(1)} (${fmtHours(h.total)} hrs)`;
+  };
+
+  // ─── PDF Export ─────────────────────────────────────────
+
+  const handleExportPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const hpp = hoursPerPersonPerMonth;
+
+    // Build filter subtitle
+    const filters: string[] = [];
+    if (statusFilter === 'Open') filters.push('Open Only');
+    else if (statusFilter === 'Soft-Closed') filters.push('Soft-Closed Only');
+    if (departmentFilter.length > 0) filters.push(`Dept: ${departmentFilter.join(', ')}`);
+    if (marketFilter) filters.push(`Market: ${marketFilter}`);
+    if (pmFilter) filters.push(`PM: ${pmFilter}`);
+    if (searchFilter) filters.push(`Search: "${searchFilter}"`);
+    if (projectFilter.length > 0) filters.push(`${projectFilter.length} project(s) selected`);
+    if (locationFilter !== 'both') filters.push(locationFilter === 'shop' ? 'Shop Only' : 'Field Only');
+
+    // Header
+    let y = 40;
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Labor Forecast', 40, y);
+
+    y += 16;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      filters.length > 0 ? filters.join('  |  ') : 'All Open + Soft-Closed',
+      40, y
+    );
+
+    // Summary KPI strip
+    y += 18;
+    const peakHC = Math.max(...Array.from(columnTotals.values()).map(h => h.total), 0) / hpp;
+    const kpis = [
+      { label: 'Projects', value: String(projections.length) },
+      { label: 'Total Remaining', value: `${fmtHours(grandTotalHours)} hrs` },
+      { label: 'Peak Headcount', value: `${peakHC.toFixed(1)} people` },
+      { label: 'PF / SM / PL', value: `${fmtHours(grandTotalsByTrade.pf)} / ${fmtHours(grandTotalsByTrade.sm)} / ${fmtHours(grandTotalsByTrade.pl)}` },
+    ];
+    const stripWidth = pageWidth - 80;
+    const cellW = stripWidth / kpis.length;
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(40, y, stripWidth, 32, 4, 4, 'F');
+    kpis.forEach((kpi, i) => {
+      const cx = 40 + cellW * i + cellW / 2;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(kpi.label.toUpperCase(), cx, y + 12, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 41, 59);
+      doc.text(kpi.value, cx, y + 25, { align: 'center' });
+    });
+    y += 42;
+
+    // Column headers for time periods
+    const colLabels = displayColumns.map(c => c.label);
+
+    // ── Trade Summary Table ──
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Trade Summary', 40, y + 4);
+    y += 12;
+
+    const tradeHeaders = ['Trade', 'Remaining Hours', ...colLabels];
+    const tradeEntries: { key: string; label: string }[] = [
+      ...TRADES.map(t => ({ key: t.key, label: t.label })),
+      { key: 'total', label: 'TOTAL' },
+    ];
+    const tradeRows = tradeEntries.map(trade => {
+      const remaining = trade.key === 'total'
+        ? fmtHours(grandTotalHours)
+        : fmtHours(grandTotalsByTrade[trade.key as TradeName] || 0);
+      const monthlyCols = displayColumns.map(col => {
+        const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+        const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
+        return fmtHeadcount(hours, hpp);
+      });
+      return [trade.label, remaining, ...monthlyCols];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [tradeHeaders],
+      body: tradeRows,
+      margin: { left: 40, right: 40 },
+      styles: { fontSize: 7, cellPadding: 4, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: 0.5 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { halign: 'left', fontStyle: 'bold', cellWidth: 70 },
+        1: { halign: 'right', cellWidth: 75 },
+        ...Object.fromEntries(colLabels.map((_, i) => [i + 2, { halign: 'right' as const }])),
+      },
+      didParseCell: (data: any) => {
+        // Bold the TOTAL row
+        if (data.section === 'body' && data.row.index === 3) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [241, 245, 249];
+        }
+      },
+    });
+
+    // ── Project Detail Table ──
+    y = (doc as any).lastAutoTable.finalY + 20;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('Project Detail', 40, y + 4);
+    y += 12;
+
+    const projHeaders = ['Contract', 'Description', 'PM', 'Dept', 'Rem. Hrs', 'PF', 'SM', 'PL', '% Comp', ...colLabels];
+    const projRows = projections.map(p => {
+      const desc = (p.contract.description || p.contract.customer_name || '-').substring(0, 30);
+      const pm = (p.contract.project_manager_name || '-').split(',')[0].substring(0, 15);
+      const monthlyCols = displayColumns.map(col => {
+        const h = getHoursForColumn(p.monthlyHours, col);
+        return fmtHeadcount(h.total, hpp);
+      });
+      return [
+        p.contract.contract_number || '',
+        desc,
+        pm,
+        p.contract.department_code || '-',
+        fmtHours(p.totalRemainingHours),
+        fmtHours(p.tradeHours[0].remaining),
+        fmtHours(p.tradeHours[1].remaining),
+        fmtHours(p.tradeHours[2].remaining),
+        p.pctComplete > 0 ? `${p.pctComplete.toFixed(0)}%` : '-',
+        ...monthlyCols,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [projHeaders],
+      body: projRows,
+      margin: { left: 40, right: 40 },
+      styles: { fontSize: 6.5, cellPadding: 3, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: 0.5 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 6.5 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { halign: 'left', cellWidth: 48 },   // Contract
+        1: { halign: 'left', cellWidth: 85 },    // Description
+        2: { halign: 'left', cellWidth: 52 },     // PM
+        3: { halign: 'center', cellWidth: 30 },   // Dept
+        4: { halign: 'right', cellWidth: 40 },    // Rem. Hrs
+        5: { halign: 'right', cellWidth: 30 },    // PF
+        6: { halign: 'right', cellWidth: 30 },    // SM
+        7: { halign: 'right', cellWidth: 30 },    // PL
+        8: { halign: 'right', cellWidth: 32 },    // % Comp
+        ...Object.fromEntries(colLabels.map((_, i) => [i + 9, { halign: 'right' as const }])),
+      },
+      didDrawPage: (data: any) => {
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        const footerY = doc.internal.pageSize.getHeight() - 20;
+        doc.text(
+          `Generated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+          40, footerY
+        );
+        doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - 40, footerY, { align: 'right' });
+      },
+    });
+
+    doc.save(`Labor_Forecast_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   // ═════════════════════════════════════════════════════════
@@ -497,6 +801,11 @@ const LaborForecast: React.FC = () => {
           <div style={{ color: '#64748b', fontSize: '0.8rem' }}>
             {projections.length} projects | Total Remaining: {fmtHours(grandTotalHours)} hours
             {' '}| Peak Headcount: {fmtHeadcount(Math.max(...Array.from(columnTotals.values()).map(h => h.total), 0), hoursPerPersonPerMonth)} people
+            {locationFilter !== 'both' && (
+              <span style={{ color: '#dc2626', fontWeight: 500 }}>
+                {' '}| {locationFilter === 'shop' ? 'Shop Only' : 'Field Only'}
+              </span>
+            )}
           </div>
         </div>
         <div>
@@ -532,10 +841,13 @@ const LaborForecast: React.FC = () => {
           </div>
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Department</label>
-            <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
-              <option value="">All Departments</option>
-              {filterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <MultiSearchableSelect
+              options={filterOptions.departments.map(d => ({ value: d, label: d }))}
+              value={departmentFilter}
+              onChange={setDepartmentFilter}
+              placeholder="All Departments"
+              style={{ minWidth: '160px', fontSize: '0.8rem' }}
+            />
           </div>
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Market</label>
@@ -546,15 +858,28 @@ const LaborForecast: React.FC = () => {
           </div>
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Project Manager</label>
-            <select value={pmFilter} onChange={(e) => setPmFilter(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
-              <option value="">All PMs</option>
-              {filterOptions.pms.map(pm => <option key={pm} value={pm}>{pm}</option>)}
-            </select>
+            <SearchableSelect
+              options={filterOptions.pms.map(pm => ({ value: pm, label: pm }))}
+              value={pmFilter}
+              onChange={setPmFilter}
+              placeholder="All PMs"
+              style={{ minWidth: '180px', fontSize: '0.8rem' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Project</label>
+            <MultiSearchableSelect
+              options={projectOptions}
+              value={projectFilter}
+              onChange={setProjectFilter}
+              placeholder="All Projects"
+              style={{ minWidth: '200px', fontSize: '0.8rem' }}
+            />
           </div>
 
-          {(searchFilter || departmentFilter || marketFilter || pmFilter || statusFilter !== 'all') && (
+          {(searchFilter || departmentFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
             <button
-              onClick={() => { setSearchFilter(''); setDepartmentFilter(''); setMarketFilter(''); setPmFilter(''); setStatusFilter('all'); }}
+              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
               style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}
             >
               Clear Filters
@@ -577,6 +902,20 @@ const LaborForecast: React.FC = () => {
                 <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
               </svg>
               Settings
+            </button>
+            <button
+              onClick={handleExportPdf}
+              style={{
+                padding: '0.35rem 0.75rem', fontSize: '0.75rem',
+                background: '#f1f5f9', color: '#64748b',
+                border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.25rem'
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              Export PDF
             </button>
 
             {/* Time horizon toggle */}
@@ -626,6 +965,30 @@ const LaborForecast: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Shop/Field location filter */}
+            <div style={{ display: 'flex', gap: '0' }}>
+              {([
+                { value: 'both' as const, label: 'All' },
+                { value: 'field' as const, label: 'Field' },
+                { value: 'shop' as const, label: 'Shop' },
+              ]).map((opt, i, arr) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setLocationFilter(opt.value)}
+                  style={{
+                    padding: '0.35rem 0.75rem', fontSize: '0.75rem',
+                    background: locationFilter === opt.value ? '#dc2626' : '#f1f5f9',
+                    color: locationFilter === opt.value ? '#fff' : '#64748b',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: i === 0 ? '4px 0 0 4px' : i === arr.length - 1 ? '0 4px 4px 0' : '0',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
             {/* Data view toggle */}
             <div style={{ display: 'flex', gap: '0' }}>
@@ -948,13 +1311,15 @@ const LaborForecast: React.FC = () => {
                         const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
                         return (
                           <td key={col.key}
-                            title={hours > 0 ? `${(hours / hoursPerPersonPerMonth).toFixed(1)} people (${fmtHours(hours)} hrs)` : ''}
+                            onClick={() => hours > 0 && setDrillDownCol({ key: col.key, label: col.label, monthKey: col.monthKey })}
+                            title={hours > 0 ? `${(hours / hoursPerPersonPerMonth).toFixed(1)} people (${fmtHours(hours)} hrs) — click for details` : ''}
                             style={{
                               padding: '0.5rem', textAlign: 'right',
                               color: hours > 0 ? '#1e293b' : '#cbd5e1',
                               fontWeight: hours > 0 ? 500 : 400,
                               background: trade.key === 'total' ? '#f1f5f9' : 'transparent',
                               fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
+                              cursor: hours > 0 ? 'pointer' : 'default',
                             }}>
                             {fmtHeadcount(hours, hoursPerPersonPerMonth)}
                           </td>
@@ -1094,7 +1459,10 @@ const LaborForecast: React.FC = () => {
                         const showLabel = i % labelEvery === 0;
 
                         return (
-                          <g key={d.key}>
+                          <g key={d.key}
+                            onClick={() => totalHC > 0 && setDrillDownCol({ key: d.key, label: d.label, monthKey: d.monthKey || d.key })}
+                            style={{ cursor: totalHC > 0 ? 'pointer' : 'default' }}
+                          >
                             <rect x={`${xPercent}%`} y={chartHeight - plH} width={`${barWidth * 0.8}%`} height={plH} fill={TRADES[2].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
                             </rect>
@@ -1236,6 +1604,103 @@ const LaborForecast: React.FC = () => {
                   </div>
                 ));
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── DRILL-DOWN MODAL ─── */}
+      {drillDownCol && (
+        <div className="modal-overlay" onClick={() => setDrillDownCol(null)}>
+          <div className="modal-container" style={{ maxWidth: '950px', width: '95%' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '1.25rem' }}>{drillDownCol.label} — Job Breakdown</h2>
+              <button className="modal-close" onClick={() => setDrillDownCol(null)}>&times;</button>
+            </div>
+            <div className="modal-subtitle">
+              {(() => {
+                const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                const hpp = hoursPerPersonPerMonth;
+                return (
+                  <>
+                    <strong>{(ct.total / hpp).toFixed(1)}</strong> total headcount ({fmtHours(ct.total)} hrs)
+                    {' — '}
+                    <span style={{ color: TRADES[0].color }}>PF {(ct.pf / hpp).toFixed(1)}</span>
+                    {' / '}
+                    <span style={{ color: TRADES[1].color }}>SM {(ct.sm / hpp).toFixed(1)}</span>
+                    {' / '}
+                    <span style={{ color: TRADES[2].color }}>PL {(ct.pl / hpp).toFixed(1)}</span>
+                    <span style={{ color: '#64748b' }}> — {drillDownProjects.length} projects</span>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="modal-body" style={{ padding: '0 1rem 1rem', maxHeight: '60vh', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>Contract</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>Description</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>PM</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc', color: TRADES[0].color }}>PF</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc', color: TRADES[1].color }}>SM</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc', color: TRADES[2].color }}>PL</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc', fontWeight: 700 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drillDownProjects.map(({ projection: p, hours: h }) => {
+                    const hpp = hoursPerPersonPerMonth;
+                    return (
+                      <tr key={p.contract.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.4rem 0.5rem', whiteSpace: 'nowrap' }}>
+                          {p.contract.linked_project_id ? (
+                            <Link to={`/projects/${p.contract.linked_project_id}`} style={{ color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
+                              {p.contract.contract_number}
+                            </Link>
+                          ) : (
+                            <span style={{ fontWeight: 500 }}>{p.contract.contract_number}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#475569' }}>
+                          {p.contract.description || p.contract.customer_name || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                          {p.contract.project_manager_name || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pf > 0 ? TRADES[0].color : '#cbd5e1' }}>
+                          {h.pf > 0 ? (h.pf / hpp).toFixed(1) : '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.sm > 0 ? TRADES[1].color : '#cbd5e1' }}>
+                          {h.sm > 0 ? (h.sm / hpp).toFixed(1) : '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pl > 0 ? TRADES[2].color : '#cbd5e1' }}>
+                          {h.pl > 0 ? (h.pl / hpp).toFixed(1) : '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600 }}>
+                          {(h.total / hpp).toFixed(1)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#f1f5f9', fontWeight: 600 }}>
+                    <td colSpan={3} style={{ padding: '0.5rem' }}>TOTAL ({drillDownProjects.length} projects)</td>
+                    {(() => {
+                      const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const hpp = hoursPerPersonPerMonth;
+                      return (
+                        <>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[0].color }}>{(ct.pf / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[1].color }}>{(ct.sm / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[2].color }}>{(ct.pl / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right' }}>{(ct.total / hpp).toFixed(1)}</td>
+                        </>
+                      );
+                    })()}
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>

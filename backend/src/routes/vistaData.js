@@ -548,6 +548,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         let newCount = 0;
         let updatedCount = 0;
 
+        let errorCount = 0;
         for (const row of validRows) {
           const phaseData = {
             contract: String(row['Contract'] || '').trim(),
@@ -567,12 +568,22 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
           if (!phaseData.job || !phaseData.phase) continue;
 
-          const result = await VistaData.upsertPhaseCode(phaseData, req.tenantId, batch.id);
-          if (result.isNew) {
-            newCount++;
-          } else {
-            updatedCount++;
+          try {
+            const result = await VistaData.upsertPhaseCode(phaseData, req.tenantId, batch.id);
+            if (result.isNew) {
+              newCount++;
+            } else {
+              updatedCount++;
+            }
+          } catch (rowError) {
+            errorCount++;
+            if (errorCount <= 3) {
+              console.error(`[Vista Import] Phase code error (${phaseData.job}/${phaseData.phase}): ${rowError.message}`);
+            }
           }
+        }
+        if (errorCount > 0) {
+          console.error(`[Vista Import] Phase codes: ${errorCount} rows failed out of ${validRows.length}`);
         }
 
         await VistaData.updateImportBatch(batch.id, {
@@ -898,6 +909,16 @@ router.get('/contracts', async (req, res, next) => {
 
     const contracts = await VistaData.getAllContracts(filters, req.tenantId);
     res.json(contracts);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/contracts/shop-field-hours - Get shop/field hour breakdowns from phase codes
+router.get('/contracts/shop-field-hours', async (req, res, next) => {
+  try {
+    const data = await VistaData.getShopFieldHoursByContract(req.tenantId);
+    res.json(data);
   } catch (error) {
     next(error);
   }

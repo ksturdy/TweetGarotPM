@@ -55,8 +55,8 @@ const apiKeyAuth = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid or missing API key' });
   }
 
-  req.user = { id: 1, role: 'admin' };  // Use ID 1 (admin user) for automated imports
-  req.tenantId = process.env.DEFAULT_TENANT_ID || 1;
+  req.user = { id: null, role: 'admin' };  // No real user for automated imports — linked_by will be NULL
+  req.tenantId = parseInt(process.env.DEFAULT_TENANT_ID) || 1;
   next();
 };
 
@@ -473,6 +473,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
         let newCount = 0;
         let updatedCount = 0;
 
+        let errorCount = 0;
         for (const row of validRows) {
           const phaseData = {
             contract: String(row['Contract'] || '').trim(),
@@ -492,12 +493,22 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
 
           if (!phaseData.job || !phaseData.phase) continue;
 
-          const result = await VistaData.upsertPhaseCode(phaseData, req.tenantId, batch.id);
-          if (result.isNew) {
-            newCount++;
-          } else {
-            updatedCount++;
+          try {
+            const result = await VistaData.upsertPhaseCode(phaseData, req.tenantId, batch.id);
+            if (result.isNew) {
+              newCount++;
+            } else {
+              updatedCount++;
+            }
+          } catch (rowError) {
+            errorCount++;
+            if (errorCount <= 3) {
+              console.error(`[Vista Auto-Import] Phase code error (${phaseData.job}/${phaseData.phase}): ${rowError.message}`);
+            }
           }
+        }
+        if (errorCount > 0) {
+          console.error(`[Vista Auto-Import] Phase codes: ${errorCount} rows failed out of ${validRows.length}`);
         }
 
         await VistaData.updateImportBatch(batch.id, {

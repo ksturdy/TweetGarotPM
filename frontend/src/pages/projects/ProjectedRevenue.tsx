@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPContract } from '../../services/vistaData';
+import SearchableSelect from '../../components/SearchableSelect';
+import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import { format, differenceInMonths, addMonths, startOfMonth } from 'date-fns';
 
 // Formatting helpers
@@ -65,11 +67,12 @@ const defaultDurationRules: DurationRule[] = [
 
 const ProjectedRevenue: React.FC = () => {
   // Filters
-  const [departmentFilter, setDepartmentFilter] = useState<string>('');
+  const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [marketFilter, setMarketFilter] = useState<string>('');
   const [pmFilter, setPmFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'Open', 'Soft-Closed'
   const [searchFilter, setSearchFilter] = useState<string>('');
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
 
   // User-adjusted end months per contract (contractId -> number of months from now)
   const [adjustedEndMonths, setAdjustedEndMonths] = useState<Record<number, number>>({});
@@ -179,6 +182,48 @@ const ProjectedRevenue: React.FC = () => {
     };
   }, [contracts]);
 
+  // Dynamic project options filtered by other active filters
+  const projectOptions = useMemo(() => {
+    if (!contracts) return [];
+    return contracts
+      .filter(c => {
+        const status = c.status?.toLowerCase() || '';
+        if (statusFilter === 'all') {
+          if (!status.includes('open') && !status.includes('soft')) return false;
+        } else if (statusFilter === 'Open') {
+          if (!status.includes('open')) return false;
+        } else if (statusFilter === 'Soft-Closed') {
+          if (!status.includes('soft')) return false;
+        }
+        if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
+        if (marketFilter && c.primary_market !== marketFilter) return false;
+        if (pmFilter && c.project_manager_name !== pmFilter) return false;
+        if (searchFilter) {
+          const search = searchFilter.toLowerCase();
+          const m1 = c.contract_number?.toLowerCase().includes(search);
+          const m2 = c.description?.toLowerCase().includes(search);
+          const m3 = c.customer_name?.toLowerCase().includes(search);
+          if (!m1 && !m2 && !m3) return false;
+        }
+        return true;
+      })
+      .map(c => ({
+        value: c.contract_number,
+        label: `${c.contract_number} — ${c.description || c.customer_name || ''}`.substring(0, 80),
+        searchText: `${c.contract_number} ${c.description || ''} ${c.customer_name || ''} ${c.project_manager_name || ''}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [contracts, statusFilter, departmentFilter, marketFilter, pmFilter, searchFilter]);
+
+  // Clear project filter selections that are no longer in the filtered list
+  useEffect(() => {
+    if (projectFilter.length > 0) {
+      const validValues = new Set(projectOptions.map(o => o.value));
+      const cleaned = projectFilter.filter(v => validValues.has(v));
+      if (cleaned.length !== projectFilter.length) setProjectFilter(cleaned);
+    }
+  }, [projectFilter, projectOptions]);
+
   // Generate column headers (next 12 months + years until 2030)
   const columns = useMemo(() => {
     const cols: { key: string; label: string; isYear: boolean }[] = [];
@@ -234,7 +279,7 @@ const ProjectedRevenue: React.FC = () => {
       }
 
       // Department filter
-      if (departmentFilter && c.department_code !== departmentFilter) return false;
+      if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
 
       // Market filter
       if (marketFilter && c.primary_market !== marketFilter) return false;
@@ -250,6 +295,9 @@ const ProjectedRevenue: React.FC = () => {
         const matchesCustomer = c.customer_name?.toLowerCase().includes(search);
         if (!matchesNumber && !matchesDesc && !matchesCustomer) return false;
       }
+
+      // Project filter
+      if (projectFilter.length > 0 && !projectFilter.includes(c.contract_number)) return false;
 
       return true;
     });
@@ -360,7 +408,7 @@ const ProjectedRevenue: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
 
   // Calculate column totals
   const columnTotals = useMemo(() => {
@@ -431,16 +479,13 @@ const ProjectedRevenue: React.FC = () => {
 
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Department</label>
-            <select
+            <MultiSearchableSelect
+              options={filterOptions.departments.map(d => ({ value: d, label: d }))}
               value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
-            >
-              <option value="">All Departments</option>
-              {filterOptions.departments.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+              onChange={setDepartmentFilter}
+              placeholder="All Departments"
+              style={{ minWidth: '160px', fontSize: '0.8rem' }}
+            />
           </div>
 
           <div>
@@ -459,25 +504,33 @@ const ProjectedRevenue: React.FC = () => {
 
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Project Manager</label>
-            <select
+            <SearchableSelect
+              options={filterOptions.pms.map(pm => ({ value: pm, label: pm }))}
               value={pmFilter}
-              onChange={(e) => setPmFilter(e.target.value)}
-              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
-            >
-              <option value="">All PMs</option>
-              {filterOptions.pms.map(pm => (
-                <option key={pm} value={pm}>{pm}</option>
-              ))}
-            </select>
+              onChange={setPmFilter}
+              placeholder="All PMs"
+              style={{ minWidth: '180px', fontSize: '0.8rem' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Project</label>
+            <MultiSearchableSelect
+              options={projectOptions}
+              value={projectFilter}
+              onChange={setProjectFilter}
+              placeholder="All Projects"
+              style={{ minWidth: '200px', fontSize: '0.8rem' }}
+            />
           </div>
 
-          {(searchFilter || departmentFilter || marketFilter || pmFilter || statusFilter !== 'all') && (
+          {(searchFilter || departmentFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all') && (
             <button
               onClick={() => {
                 setSearchFilter('');
-                setDepartmentFilter('');
+                setDepartmentFilter([]);
                 setMarketFilter('');
                 setPmFilter('');
+                setProjectFilter([]);
                 setStatusFilter('all');
               }}
               style={{
@@ -951,7 +1004,7 @@ const ProjectedRevenue: React.FC = () => {
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '1rem', color: '#1e293b' }}>
               Projected Revenue by Month (Next 36 Months)
-              {departmentFilter === '10-30' && (
+              {departmentFilter.length === 1 && departmentFilter[0] === '10-30' && (
                 <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b', marginLeft: '1rem' }}>
                   vs. $115M Annual Budget
                 </span>
@@ -967,7 +1020,7 @@ const ProjectedRevenue: React.FC = () => {
                 // Budget for 10-30 department: $115M/year = ~$9.58M/month
                 const annualBudget = 115000000;
                 const monthlyBudget = annualBudget / 12;
-                const showBudget = departmentFilter === '10-30';
+                const showBudget = departmentFilter.length === 1 && departmentFilter[0] === '10-30';
 
                 for (let i = 0; i < 36; i++) {
                   const monthDate = addMonths(now, i);
@@ -1135,7 +1188,7 @@ const ProjectedRevenue: React.FC = () => {
               })()}
             </div>
             {/* Budget legend when 10-30 is selected */}
-            {departmentFilter === '10-30' && (
+            {departmentFilter.length === 1 && departmentFilter[0] === '10-30' && (
               <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '2px' }}></span>

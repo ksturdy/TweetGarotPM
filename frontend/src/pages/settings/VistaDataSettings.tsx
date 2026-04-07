@@ -57,6 +57,9 @@ const VistaDataSettings: React.FC = () => {
       if (data.vendors.total > 0) {
         details.push(`Vista: ${data.vendors.total} vendors (${data.vendors.new} new, ${data.vendors.updated} updated)`);
       }
+      if (data.phaseCodes && data.phaseCodes.total > 0) {
+        details.push(`Vista: ${data.phaseCodes.total} phase codes (${data.phaseCodes.new} new, ${data.phaseCodes.updated} updated, ${data.phaseCodes.linked || 0} linked)`);
+      }
       // Show auto-import results (Vista → Titan sync)
       if (data.autoImport) {
         const ai = data.autoImport;

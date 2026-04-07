@@ -102,6 +102,14 @@ export interface VPContract {
   linked_department_name?: string;
 }
 
+export interface ShopFieldHours {
+  contract_number: string;
+  trade: 'pf' | 'sm' | 'pl';
+  location: 'shop' | 'field';
+  est_hours: number;
+  jtd_hours: number;
+}
+
 export interface VPWorkOrder {
   id: number;
   tenant_id: number;
@@ -645,6 +653,11 @@ export const vistaDataService = {
 
   updateProjectionOverrides: async (id: number, overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null }): Promise<VPContract> => {
     const response = await api.patch(`/vista/contracts/${id}/projection`, overrides);
+    return response.data;
+  },
+
+  getShopFieldHours: async (): Promise<ShopFieldHours[]> => {
+    const response = await api.get('/vista/contracts/shop-field-hours');
     return response.data;
   },
 
