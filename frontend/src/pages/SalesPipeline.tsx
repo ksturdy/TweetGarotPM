@@ -20,6 +20,7 @@ import { officeLocationsApi } from '../services/officeLocations';
 import { usersApi } from '../services/users';
 import { employeesApi } from '../services/employees';
 import '../styles/SalesPipeline.css';
+import { exportListToPdf } from '../utils/listExportPdf';
 
 // Register ChartJS components (excluding datalabels globally)
 ChartJS.register(
@@ -706,6 +707,55 @@ const SalesPipeline: React.FC = () => {
     });
   };
 
+  const handleExportPdf = () => {
+    const fmtCurrency = (v: number) => {
+      if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+      if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
+      return `$${v.toLocaleString()}`;
+    };
+
+    const filters: string[] = [];
+    if (selectedOfficeLocation !== 'all') {
+      const loc = officeLocations.find((o: any) => String(o.id) === selectedOfficeLocation);
+      if (loc) filters.push(`Office: ${(loc as any).name}`);
+    }
+    if (selectedSalesperson !== 'all') filters.push(`Salesperson: ${selectedSalesperson}`);
+    if (excludedStages.size > 0) {
+      const included = pipelineStages.filter(s => !excludedStages.has(s.name)).map(s => s.name);
+      if (included.length < pipelineStages.length) filters.push(`Stages: ${included.join(', ')}`);
+    }
+    if (searchTerm) filters.push(`Search: "${searchTerm}"`);
+
+    exportListToPdf({
+      title: 'Sales Pipeline — Opportunities',
+      subtitle: filters.length > 0 ? filters.join('  |  ') : `${sortedOpportunities.length} opportunities`,
+      orientation: 'landscape',
+      fileName: `Opportunities_${new Date().toISOString().slice(0, 10)}.pdf`,
+      columns: [
+        { header: 'Activity', key: 'activity', width: 1 },
+        { header: 'Opportunity', key: 'name', width: 3 },
+        { header: 'Company', key: 'company', width: 2 },
+        { header: 'Value', key: 'value', align: 'right', width: 1 },
+        { header: 'Stage', key: 'stage', width: 1.5 },
+        { header: 'Salesperson', key: 'salesperson', width: 1.5 },
+      ],
+      rows: sortedOpportunities.map(opp => ({
+        activity: new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        name: opp.name,
+        company: opp.company || '-',
+        value: fmtCurrency(opp.value),
+        stage: opp.stageName,
+        salesperson: opp.salesperson.name,
+      })),
+      summaryRows: [
+        { label: 'Opportunities', value: String(sortedOpportunities.length) },
+        { label: 'Pipeline Value', value: fmtCurrency(totalPipeline) },
+        { label: 'Weighted Value', value: fmtCurrency(weightedPipeline) },
+        { label: 'Win Rate', value: `${winRate.toFixed(0)}%` },
+      ],
+    });
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedOpportunity(null);
@@ -766,7 +816,7 @@ const SalesPipeline: React.FC = () => {
           <button className="sales-btn sales-btn-secondary" onClick={() => navigate('/sales/opportunity-search')}>
             Opp Search
           </button>
-          <button className="sales-btn sales-btn-secondary">
+          <button className="sales-btn sales-btn-secondary" onClick={handleExportPdf}>
             Export
           </button>
           <button className="sales-btn sales-btn-primary" onClick={() => {

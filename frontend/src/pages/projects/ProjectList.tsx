@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
 import '../../styles/SalesPipeline.css';
+import { exportListToPdf } from '../../utils/listExportPdf';
 
 const ProjectList: React.FC = () => {
   const navigate = useNavigate();
@@ -427,6 +428,62 @@ const ProjectList: React.FC = () => {
       : 0
   };
 
+  const handleExportPdf = () => {
+    const fmtCurrency = (v: number | undefined) => {
+      if (!v) return '-';
+      return `$${Math.round(v).toLocaleString()}`;
+    };
+
+    const filters: string[] = [];
+    if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
+    if (departmentFilter !== 'all') filters.push(`Dept: ${departmentFilter}`);
+    if (marketFilter !== 'all') filters.push(`Market: ${marketFilter}`);
+    if (searchTerm) filters.push(`Search: "${searchTerm}"`);
+
+    exportListToPdf({
+      title: 'Projects',
+      subtitle: filters.length > 0 ? filters.join('  |  ') : `${sortedProjects.length} projects`,
+      orientation: 'landscape',
+      fileName: `Projects_${new Date().toISOString().slice(0, 10)}.pdf`,
+      columns: [
+        { header: 'Number', key: 'number', width: 1 },
+        { header: 'Start Date', key: 'startDate', width: 1 },
+        { header: 'Project', key: 'name', width: 3 },
+        { header: 'Client', key: 'client', width: 2 },
+        { header: 'Contract Value', key: 'contractValue', align: 'right', width: 1.2 },
+        { header: 'GM%', key: 'gm', align: 'right', width: 0.6 },
+        { header: 'Backlog', key: 'backlog', align: 'right', width: 1.2 },
+        { header: 'JTD Cost', key: 'jtdCost', align: 'right', width: 1.2 },
+        { header: '% Complete', key: 'pctComplete', align: 'right', width: 0.8 },
+        { header: 'Status', key: 'status', width: 0.8 },
+        { header: 'Dept', key: 'dept', width: 0.6 },
+        { header: 'PM', key: 'manager', width: 1.5 },
+      ],
+      rows: sortedProjects.map((p: Project) => ({
+        number: p.number,
+        startDate: p.start_date ? new Date(p.start_date).toLocaleDateString('en-US') : '-',
+        name: p.name,
+        client: p.owner_name || p.customer_name || p.client || '-',
+        contractValue: fmtCurrency(Number(p.contract_value) || undefined),
+        gm: p.gross_margin_percent !== undefined && p.gross_margin_percent !== null
+          ? `${Math.round(Number(p.gross_margin_percent) * 100)}%` : '-',
+        backlog: fmtCurrency(Number(p.backlog) || undefined),
+        jtdCost: fmtCurrency(Number(p.actual_cost) || undefined),
+        pctComplete: p.percent_complete !== undefined && p.percent_complete !== null
+          ? `${Math.round(Number(p.percent_complete) * 100)}%` : '-',
+        status: p.status,
+        dept: p.department_number || '-',
+        manager: p.manager_name || 'Unassigned',
+      })),
+      summaryRows: [
+        { label: 'Project Count', value: String(kpis.projectCount) },
+        { label: 'Total Contract Value', value: `$${(kpis.totalContractValue / 1000000).toFixed(1)}M` },
+        { label: 'Total Backlog', value: `$${(kpis.totalBacklog / 1000000).toFixed(1)}M` },
+        { label: 'Avg GM%', value: `${(kpis.avgGrossMargin * 100).toFixed(1)}%` },
+      ],
+    });
+  };
+
   // Multi-select handlers
   const handleSelectAll = () => {
     if (selectedIds.size === sortedProjects.length) {
@@ -523,7 +580,7 @@ const ProjectList: React.FC = () => {
             </svg>
             Labor Forecast
           </button>
-          <button className="sales-btn sales-btn-secondary">
+          <button className="sales-btn sales-btn-secondary" onClick={handleExportPdf}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
