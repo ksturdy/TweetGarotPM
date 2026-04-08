@@ -183,7 +183,7 @@ router.get('/with-estimates', async (req, res, next) => {
       LEFT JOIN opportunity_estimates oe ON oe.opportunity_id = o.id
       WHERE o.tenant_id = $1
         AND ps.name NOT IN ('Won', 'Lost', 'Passed')
-        AND NOT (ps.name = 'Awarded' AND o.awarded_status IN ('In Progress', 'Completed'))
+        AND NOT (ps.name = 'Awarded' AND COALESCE(o.awarded_status, '') IN ('In Progress', 'Completed'))
         AND o.estimated_value IS NOT NULL
         AND o.estimated_value > 0
       ORDER BY o.estimated_value DESC
