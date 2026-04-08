@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getCustomer,
   getCompanyMetrics,
@@ -8,9 +8,18 @@ import {
   getCompanyBids,
   getCompanyOpportunities,
   getCustomerWorkOrders,
-  getCustomerContacts
+  getCustomerContacts,
+  getCustomerLocations,
+  createCustomerLocation,
+  updateCustomerLocation,
+  deleteCustomerLocation,
+  createCustomerContact,
+  customersApi,
+  CustomerLocation
 } from '../services/customers';
 import CustomerFormModal from '../components/modals/CustomerFormModal';
+import AssessmentScoring from '../components/assessments/AssessmentScoring';
+import { assessmentsApi } from '../services/assessments';
 import './CustomerDetail.css';
 import '../styles/SalesPipeline.css';
 
@@ -38,8 +47,13 @@ const SortIcon: React.FC<{ active: boolean; direction: SortDirection }> = ({ act
 const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showAssessment, setShowAssessment] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState<string>('');
+  const [merging, setMerging] = useState(false);
 
   // Sorting state
   const [woSortField, setWoSortField] = useState<WorkOrderSortField>('work_order_number');
@@ -83,6 +97,145 @@ const CustomerDetail: React.FC = () => {
     queryKey: ['customer-contacts', id],
     queryFn: () => getCustomerContacts(id!),
   });
+
+  const { data: locations = [] } = useQuery<CustomerLocation[]>({
+    queryKey: ['customer-locations', id],
+    queryFn: () => getCustomerLocations(id!),
+  });
+
+  // Inline add state
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [addingContact, setAddingContact] = useState(false);
+  const [newContactFirst, setNewContactFirst] = useState('');
+  const [newContactLast, setNewContactLast] = useState('');
+  const [newContactTitle, setNewContactTitle] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
+  const [editLocName, setEditLocName] = useState('');
+  const [editLocAddress, setEditLocAddress] = useState('');
+  const [editLocCity, setEditLocCity] = useState('');
+  const [editLocState, setEditLocState] = useState('');
+  const [editLocZip, setEditLocZip] = useState('');
+  const [deleteLocConfirm, setDeleteLocConfirm] = useState<number | null>(null);
+  const locInputRef = useRef<HTMLInputElement>(null);
+  const editLocRef = useRef<HTMLInputElement>(null);
+  const contactInputRef = useRef<HTMLInputElement>(null);
+
+  const addLocationMutation = useMutation({
+    mutationFn: (name: string) => createCustomerLocation(id!, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-locations', id] });
+      setNewLocationName('');
+      setAddingLocation(false);
+    },
+  });
+
+  const updateLocationMutation = useMutation({
+    mutationFn: (data: { id: number; name: string; address?: string; city?: string; state?: string; zip_code?: string }) =>
+      updateCustomerLocation(data.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-locations', id] });
+      setEditingLocationId(null);
+    },
+  });
+
+  const deleteLocationMutation = useMutation({
+    mutationFn: (locationId: number) => deleteCustomerLocation(locationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-locations', id] });
+      setDeleteLocConfirm(null);
+    },
+    onError: () => {
+      alert('Failed to delete location. Please try again.');
+      setDeleteLocConfirm(null);
+    },
+  });
+
+  const startEditLocation = (loc: CustomerLocation) => {
+    setEditingLocationId(loc.id);
+    setEditLocName(loc.name);
+    setEditLocAddress(loc.address || '');
+    setEditLocCity(loc.city || '');
+    setEditLocState(loc.state || '');
+    setEditLocZip(loc.zip_code || '');
+    setTimeout(() => editLocRef.current?.focus(), 50);
+  };
+
+  const saveEditLocation = () => {
+    if (editingLocationId && editLocName.trim()) {
+      updateLocationMutation.mutate({
+        id: editingLocationId,
+        name: editLocName.trim(),
+        address: editLocAddress.trim() || undefined,
+        city: editLocCity.trim() || undefined,
+        state: editLocState.trim() || undefined,
+        zip_code: editLocZip.trim() || undefined,
+      });
+    }
+  };
+
+  const cancelEditLocation = () => {
+    setEditingLocationId(null);
+    setEditLocName('');
+    setEditLocAddress('');
+    setEditLocCity('');
+    setEditLocState('');
+    setEditLocZip('');
+  };
+
+  const addContactMutation = useMutation({
+    mutationFn: (data: { first_name: string; last_name: string; title?: string; email?: string; phone?: string }) =>
+      createCustomerContact(id!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-contacts', id] });
+      setNewContactFirst('');
+      setNewContactLast('');
+      setNewContactTitle('');
+      setNewContactEmail('');
+      setNewContactPhone('');
+      setAddingContact(false);
+    },
+  });
+
+  const { data: assessmentData } = useQuery({
+    queryKey: ['assessment', id],
+    queryFn: async () => {
+      try {
+        const res = await assessmentsApi.getCurrent(Number(id));
+        return res.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!customer,
+  });
+
+  // Fetch all customers for merge target selection (only if this is a prospect)
+  const { data: allCustomers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: () => customersApi.getAll(),
+    enabled: customer?.customer_type === 'prospect',
+  });
+
+  const mergeTargets = useMemo(() =>
+    allCustomers.filter((c: any) => c.customer_type !== 'prospect' && c.id !== Number(id)),
+    [allCustomers, id]
+  );
+
+  const handleMerge = async () => {
+    if (!mergeTargetId || merging) return;
+    setMerging(true);
+    try {
+      await customersApi.merge(Number(id), Number(mergeTargetId));
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      navigate(`/account-management/customers/${mergeTargetId}`);
+    } catch (err) {
+      console.error('Merge failed:', err);
+      setMerging(false);
+    }
+  };
 
   // Sort work orders
   const sortedWorkOrders = useMemo(() => {
@@ -174,7 +327,20 @@ const CustomerDetail: React.FC = () => {
               <Link to="/account-management/customers" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '10px' }}>
                 &larr; Back to Customers
               </Link>
-              <h1>👥 {displayName}</h1>
+              <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                👥 {displayName}
+                {customer.customer_type === 'prospect' && (
+                  <span style={{
+                    fontSize: '0.55em',
+                    padding: '2px 8px',
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    verticalAlign: 'middle'
+                  }}>PROSPECT</span>
+                )}
+              </h1>
               <div className="sales-subtitle">
                 {customer.city && customer.state ? `${customer.city}, ${customer.state}` : ''}
               </div>
@@ -188,6 +354,14 @@ const CustomerDetail: React.FC = () => {
             </div>
             <button className={`cd-info-toggle ${showInfoDrawer ? 'active' : ''}`} onClick={() => setShowInfoDrawer(!showInfoDrawer)}>
               ℹ️ Info
+            </button>
+            {customer.customer_type === 'prospect' && (
+              <button className="sales-btn sales-btn-secondary" onClick={() => setShowMergeModal(true)}>
+                Merge into Customer
+              </button>
+            )}
+            <button className="sales-btn sales-btn-secondary" onClick={() => setShowAssessment(true)}>
+              📊 Score
             </button>
             <button className="sales-btn sales-btn-secondary" onClick={() => setShowEditModal(true)}>
               ✏️ Edit
@@ -262,6 +436,19 @@ const CustomerDetail: React.FC = () => {
 
       {/* Row 3: KPI Strip */}
       <div className="cd-kpi-grid">
+        <div
+          className={`cd-kpi-card ${assessmentData ? (assessmentData.verdict === 'GO' ? 'green' : assessmentData.verdict === 'MAYBE' ? 'amber' : 'rose') : 'cyan'}`}
+          style={{ cursor: 'pointer' }}
+          onClick={() => setShowAssessment(true)}
+          title={assessmentData ? `${assessmentData.verdict.replace('_', ' ')}${assessmentData.tier ? ` — Tier ${assessmentData.tier}` : ''}${assessmentData.knockout ? ' (KNOCKOUT)' : ''}\nClick to edit` : 'Click to score this customer'}
+        >
+          <div className="cd-kpi-value">
+            {assessmentData
+              ? `${assessmentData.total_score}${assessmentData.tier ? ` · ${assessmentData.tier}` : ''}`
+              : '—'}
+          </div>
+          <div className="cd-kpi-label">Customer Score</div>
+        </div>
         <div className="cd-kpi-card green" title={`WO: ${formatCurrency(metrics?.wo_ytd_revenue)} | Proj: ${formatCurrency(metrics?.proj_ytd_revenue)}`}>
           <div className="cd-kpi-value">{formatCurrency(metrics?.ytd_revenue)}</div>
           <div className="cd-kpi-label">YTD Sales</div>
@@ -290,13 +477,260 @@ const CustomerDetail: React.FC = () => {
 
       {/* Row 4: Main Content */}
       <div className="cd-main-grid">
-        {/* Top: Projects (full width) */}
-        <div className="cd-module-card cd-projects-card">
+        {/* Left Column: Locations + Contacts */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+          {/* Locations */}
+          <div className="cd-locations-panel" style={{ flex: 1, minHeight: 0 }}>
+            <div className="cd-panel-header">
+              <h3><span className="cd-panel-icon">📍</span> Locations <span className="cd-count">{locations.length}</span></h3>
+              <button
+                className="cd-icon-btn"
+                onClick={() => { setAddingLocation(true); setTimeout(() => locInputRef.current?.focus(), 50); }}
+                title="Add location"
+                style={{ fontSize: '14px', width: '22px', height: '22px' }}
+              >+</button>
+            </div>
+            <div className="cd-locations-list">
+              {addingLocation && (
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '4px' }}>
+                  <input
+                    ref={locInputRef}
+                    type="text"
+                    value={newLocationName}
+                    onChange={(e) => setNewLocationName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newLocationName.trim()) addLocationMutation.mutate(newLocationName.trim());
+                      if (e.key === 'Escape') { setAddingLocation(false); setNewLocationName(''); }
+                    }}
+                    placeholder="Location name..."
+                    style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                  />
+                  <button
+                    onClick={() => newLocationName.trim() && addLocationMutation.mutate(newLocationName.trim())}
+                    disabled={!newLocationName.trim() || addLocationMutation.isPending}
+                    style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !newLocationName.trim() ? 0.5 : 1 }}
+                  >{addLocationMutation.isPending ? '...' : 'Add'}</button>
+                  <button
+                    onClick={() => { setAddingLocation(false); setNewLocationName(''); }}
+                    style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                  >Cancel</button>
+                </div>
+              )}
+              {locations.length === 0 && !addingLocation ? (
+                <div className="cd-empty-mini">No locations added</div>
+              ) : (
+                locations.map((loc: CustomerLocation) => (
+                  editingLocationId === loc.id ? (
+                    <div key={loc.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <input
+                        ref={editLocRef}
+                        type="text"
+                        value={editLocName}
+                        onChange={(e) => setEditLocName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
+                        placeholder="Name *"
+                        style={{ fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }}
+                      />
+                      <input
+                        type="text"
+                        value={editLocAddress}
+                        onChange={(e) => setEditLocAddress(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
+                        placeholder="Address"
+                        style={{ fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }}
+                      />
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input
+                          type="text"
+                          value={editLocCity}
+                          onChange={(e) => setEditLocCity(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
+                          placeholder="City"
+                          style={{ flex: 2, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="text"
+                          value={editLocState}
+                          onChange={(e) => setEditLocState(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
+                          placeholder="State"
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="text"
+                          value={editLocZip}
+                          onChange={(e) => setEditLocZip(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
+                          placeholder="Zip"
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={saveEditLocation}
+                          disabled={!editLocName.trim() || updateLocationMutation.isPending}
+                          style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !editLocName.trim() ? 0.5 : 1 }}
+                        >{updateLocationMutation.isPending ? '...' : 'Save'}</button>
+                        <button
+                          onClick={cancelEditLocation}
+                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                        >Cancel</button>
+                      </div>
+                    </div>
+                  ) : deleteLocConfirm === loc.id ? (
+                    <div key={loc.id} className="cd-location-item" style={{ background: '#fef2f2', borderLeftColor: '#ef4444' }}>
+                      <div className="cd-location-info">
+                        <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>Delete "{loc.name}"?</div>
+                        <div style={{ fontSize: '10px', color: '#b91c1c' }}>This cannot be undone. Opportunities linked to this location will be unlinked.</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        <button
+                          onClick={() => deleteLocationMutation.mutate(loc.id)}
+                          disabled={deleteLocationMutation.isPending}
+                          style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >{deleteLocationMutation.isPending ? '...' : 'Delete'}</button>
+                        <button
+                          onClick={() => setDeleteLocConfirm(null)}
+                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                        >Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={loc.id} className="cd-location-item" style={{ cursor: 'pointer' }} onClick={() => startEditLocation(loc)}>
+                      <div className="cd-location-info">
+                        <div className="cd-location-name">{loc.name}</div>
+                        {(loc.address || loc.city || loc.state) && (
+                          <div className="cd-location-address">
+                            {loc.address && <span>{loc.address}</span>}
+                            {loc.address && (loc.city || loc.state) && <span> · </span>}
+                            {[loc.city, loc.state, loc.zip_code].filter(Boolean).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="cd-icon-btn cd-loc-delete-btn"
+                        onClick={(e) => { e.stopPropagation(); setDeleteLocConfirm(loc.id); }}
+                        title="Delete location"
+                        style={{ fontSize: '11px', width: '20px', height: '20px', color: '#ef4444', opacity: 0 }}
+                      >✕</button>
+                    </div>
+                  )
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Contacts */}
+          <div className="cd-locations-panel" style={{ flex: 1, minHeight: 0 }}>
+            <div className="cd-panel-header">
+              <h3><span className="cd-panel-icon">👥</span> Contacts <span className="cd-count">{contacts.length}</span></h3>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  className="cd-icon-btn"
+                  onClick={() => { setAddingContact(true); setTimeout(() => contactInputRef.current?.focus(), 50); }}
+                  title="Add contact"
+                  style={{ fontSize: '14px', width: '22px', height: '22px' }}
+                >+</button>
+                <button
+                  className="cd-icon-btn"
+                  onClick={() => navigate(`/customers/${id}/contacts`)}
+                  title="View all contacts"
+                  style={{ fontSize: '11px', width: '22px', height: '22px' }}
+                >↗</button>
+              </div>
+            </div>
+            <div className="cd-locations-list">
+              {addingContact && (
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <input
+                      ref={contactInputRef}
+                      type="text"
+                      value={newContactFirst}
+                      onChange={(e) => setNewContactFirst(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); } }}
+                      placeholder="First name..."
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="text"
+                      value={newContactLast}
+                      onChange={(e) => setNewContactLast(e.target.value)}
+                      placeholder="Last name..."
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <input
+                      type="text"
+                      value={newContactTitle}
+                      onChange={(e) => setNewContactTitle(e.target.value)}
+                      placeholder="Title..."
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="email"
+                      value={newContactEmail}
+                      onChange={(e) => setNewContactEmail(e.target.value)}
+                      placeholder="Email..."
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    />
+                    <input
+                      type="tel"
+                      value={newContactPhone}
+                      onChange={(e) => setNewContactPhone(e.target.value)}
+                      placeholder="Phone..."
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => {
+                        if (newContactFirst.trim() || newContactLast.trim()) {
+                          addContactMutation.mutate({
+                            first_name: newContactFirst.trim(),
+                            last_name: newContactLast.trim(),
+                            title: newContactTitle.trim() || undefined,
+                            email: newContactEmail.trim() || undefined,
+                            phone: newContactPhone.trim() || undefined,
+                          });
+                        }
+                      }}
+                      disabled={(!newContactFirst.trim() && !newContactLast.trim()) || addContactMutation.isPending}
+                      style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: (!newContactFirst.trim() && !newContactLast.trim()) ? 0.5 : 1 }}
+                    >{addContactMutation.isPending ? '...' : 'Add'}</button>
+                    <button
+                      onClick={() => { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); }}
+                      style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                    >Cancel</button>
+                  </div>
+                </div>
+              )}
+              {contacts.length === 0 && !addingContact ? (
+                <div className="cd-empty-mini">No contacts added</div>
+              ) : (
+                contacts.map((contact: Contact) => (
+                  <div key={contact.id} className="cd-location-item" onClick={() => navigate(`/customers/${id}/contacts`)} style={{ cursor: 'pointer' }}>
+                    <div className="cd-location-info">
+                      <div className="cd-location-name">
+                        {contact.first_name} {contact.last_name}
+                        {contact.is_primary && <span style={{ fontSize: '8px', marginLeft: '4px', color: '#3b82f6', fontWeight: 600 }}>PRIMARY</span>}
+                      </div>
+                      <div className="cd-location-address">
+                        {[contact.title, contact.email, contact.phone].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Projects */}
+        <div className="cd-module-card">
           <div className="cd-module-header">
             <span className="cd-module-title">🏗️ Projects <span className="cd-count">{projects.length}</span></span>
-            <button className="cd-icon-btn" onClick={() => navigate(`/customers/${id}/contacts`)} title={`Contacts (${contacts.length})`}>
-              👥 Contacts ({contacts.length})
-            </button>
           </div>
           <div className="cd-module-body">
             {sortedProjects.length === 0 ? (
@@ -496,6 +930,61 @@ const CustomerDetail: React.FC = () => {
           onClose={() => setShowEditModal(false)}
           onDelete={() => navigate('/account-management/customers')}
         />
+      )}
+
+      {showAssessment && (
+        <AssessmentScoring
+          customerId={Number(id)}
+          customerName={displayName}
+          onClose={() => {
+            setShowAssessment(false);
+            queryClient.invalidateQueries({ queryKey: ['assessment', id] });
+          }}
+        />
+      )}
+
+      {showMergeModal && (
+        <div className="modal-overlay" onClick={() => setShowMergeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '1.1rem' }}>Merge Prospect into Customer</h2>
+              <button className="modal-close" onClick={() => setShowMergeModal(false)}>&times;</button>
+            </div>
+            <div style={{ padding: '1rem 1.5rem' }}>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
+                This will re-link all opportunities and estimates from <strong>{displayName}</strong> to
+                the selected customer, then delete this prospect record.
+              </p>
+              <div className="form-group">
+                <label className="form-label">Merge into:</label>
+                <select
+                  className="form-input"
+                  value={mergeTargetId}
+                  onChange={(e) => setMergeTargetId(e.target.value)}
+                >
+                  <option value="">-- Select a customer --</option>
+                  {mergeTargets.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.customer_number ? ` (#${c.customer_number})` : ''}{c.city && c.state ? ` — ${c.city}, ${c.state}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ padding: '0.75rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="sales-btn sales-btn-secondary" onClick={() => setShowMergeModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="sales-btn sales-btn-primary"
+                onClick={handleMerge}
+                disabled={!mergeTargetId || merging}
+              >
+                {merging ? 'Merging...' : 'Merge'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

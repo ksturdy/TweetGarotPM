@@ -1296,7 +1296,7 @@ export default function CampaignDetail() {
                         return (
                           <tr key={c.id} onClick={() => setSelected(c)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer', background: selected?.id === c.id ? '#fef3c7' : '#fff' }}>
                             <td style={{ padding: '12px' }}>
-                              <div style={{ fontWeight: 500 }}>{c.name}</div>
+                              <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDetail(c); }}>{c.name}</div>
                               <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.sector}</div>
                             </td>
                             <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -1340,14 +1340,9 @@ export default function CampaignDetail() {
                             </select>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                               <button onClick={(e) => { e.stopPropagation(); setAssessmentCustomer(c); setShowAssessment(true); }} style={{ background: '#fef3c7', color: '#f59e0b', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' }}>
                                 Score
                               </button>
-                              <button onClick={(e) => { e.stopPropagation(); openDetail(c); }} style={{ background: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' }}>
-                                View →
-                              </button>
-                            </div>
                           </td>
                         </tr>
                       );
@@ -1652,7 +1647,7 @@ export default function CampaignDetail() {
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#374151' }}>Company *</label>
                   <CompanyPicker
-                    companies={allCustomers.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                    companies={allCustomers.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
                     selectedId={newCustomer.linked_company_id?.toString() || ''}
                     textValue={newCustomer.name}
                     onSelectCompany={(id, name) => setNewCustomer(prev => ({ ...prev, linked_company_id: parseInt(id), name }))}

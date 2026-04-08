@@ -830,7 +830,64 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
             )}
           </div>
 
-          <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+          <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+            {isEditing && customer?.customer_type === 'prospect' ? (
+              !showDeleteConfirm ? (
+                <button
+                  type="button"
+                  style={{
+                    background: 'none',
+                    border: '1px solid #dc2626',
+                    color: '#dc2626',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                  }}
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete Prospect
+                </button>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#dc2626' }}>Delete this prospect?</span>
+                  <button
+                    type="button"
+                    style={{
+                      background: '#dc2626',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '4px',
+                      cursor: deleteMutation.isPending ? 'wait' : 'pointer',
+                      fontSize: '0.8rem',
+                      opacity: deleteMutation.isPending ? 0.6 : 1,
+                    }}
+                    onClick={() => deleteMutation.mutate()}
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending ? 'Deleting...' : 'Confirm'}
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: '#f3f4f6',
+                      color: '#6b7280',
+                      border: '1px solid #d1d5db',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                    }}
+                    onClick={() => setShowDeleteConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )
+            ) : (
+              <div />
+            )}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="button" className="btn-secondary" onClick={onClose}>
                 Cancel

@@ -235,7 +235,7 @@
 /* KPI Strip */
 .cd-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
   margin-bottom: 8px;
   flex-shrink: 0;
@@ -387,6 +387,10 @@
 
 .cd-location-item:hover {
   background: var(--bg-card-hover);
+}
+
+.cd-location-item:hover .cd-loc-delete-btn {
+  opacity: 1 !important;
 }
 
 .cd-location-item.selected {

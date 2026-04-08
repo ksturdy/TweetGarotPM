@@ -44,7 +44,7 @@ const opportunities = {
         creator.first_name || ' ' || creator.last_name as created_by_name,
         COALESCE(c.name, c.customer_owner) as customer_name,
         COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
-        COALESCE(fc.name, fc.customer_facility) as facility_customer_name,
+        cl.name as facility_location_name,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id) as activity_count,
         (SELECT COUNT(*) FROM opportunity_activities WHERE opportunity_id = o.id AND is_completed = false AND activity_type = 'task') as open_tasks_count
       FROM opportunities o
@@ -53,7 +53,7 @@ const opportunities = {
       LEFT JOIN users creator ON o.created_by = creator.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers gc ON o.gc_customer_id = gc.id
-      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
+      LEFT JOIN customer_locations cl ON o.facility_location_id = cl.id
       ${whereClause}
       ORDER BY o.last_activity_at DESC
     `;
@@ -129,7 +129,7 @@ const opportunities = {
         p.name as converted_project_name,
         COALESCE(c.name, c.customer_facility) as customer_name,
         COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
-        COALESCE(fc.name, fc.customer_facility) as facility_customer_name
+        cl.name as facility_location_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id
@@ -137,7 +137,7 @@ const opportunities = {
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers gc ON o.gc_customer_id = gc.id
-      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
+      LEFT JOIN customer_locations cl ON o.facility_location_id = cl.id
       WHERE o.id = $1
     `;
 
@@ -161,7 +161,7 @@ const opportunities = {
         p.name as converted_project_name,
         COALESCE(c.name, c.customer_facility) as customer_name,
         COALESCE(gc.name, gc.customer_facility) as gc_customer_name,
-        COALESCE(fc.name, fc.customer_facility) as facility_customer_name
+        cl.name as facility_location_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id
@@ -169,7 +169,7 @@ const opportunities = {
       LEFT JOIN projects p ON o.converted_to_project_id = p.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customers gc ON o.gc_customer_id = gc.id
-      LEFT JOIN customers fc ON o.facility_customer_id = fc.id
+      LEFT JOIN customer_locations cl ON o.facility_location_id = cl.id
       WHERE o.id = $1 AND o.tenant_id = $2
     `;
 
@@ -197,7 +197,7 @@ const opportunities = {
       estimated_end_date,
       construction_type, project_type, location, location_group, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-      facility_name, facility_customer_id
+      facility_name, facility_location_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -209,7 +209,7 @@ const opportunities = {
         estimated_end_date,
         construction_type, project_type, location, location_group, stage_id, priority, assigned_to, source,
         market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-        facility_name, facility_customer_id, created_by, tenant_id
+        facility_name, facility_location_id, created_by, tenant_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING *
     `;
@@ -219,7 +219,7 @@ const opportunities = {
       estimated_end_date || null,
       typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, source,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id || null, gc_customer_id || null,
-      facility_name, facility_customer_id || null, userId, tenantId
+      facility_name, facility_location_id || null, userId, tenantId
     ]);
 
     return result.rows[0];
@@ -234,7 +234,7 @@ const opportunities = {
       estimated_end_date,
       construction_type, project_type, location, location_group, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-      facility_name, facility_customer_id
+      facility_name, facility_location_id
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -266,7 +266,7 @@ const opportunities = {
         customer_id = $22,
         gc_customer_id = $23,
         facility_name = COALESCE($24, facility_name),
-        facility_customer_id = $25,
+        facility_location_id = $25,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $26 AND tenant_id = $27
       RETURNING *
@@ -277,7 +277,7 @@ const opportunities = {
       estimated_end_date || null,
       typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-      facility_name, facility_customer_id, id, tenantId
+      facility_name, facility_location_id, id, tenantId
     ]);
 
     return result.rows[0];

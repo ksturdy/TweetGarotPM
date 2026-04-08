@@ -18,12 +18,27 @@ export interface Customer {
   active_customer: boolean;
   notes?: string;
   source?: 'vista' | 'manual';
+  customer_type?: 'customer' | 'prospect';
   vp_customer_id?: number;
   // Deprecated — kept for backward compat during transition
   customer_facility?: string;
   customer_owner?: string;
   // Runtime
   isFavorited?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerLocation {
+  id: number;
+  customer_id: number;
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
+  notes?: string;
+  tenant_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -75,7 +90,51 @@ export const customersApi = {
 
   async toggleFavorite(id: number) {
     return favoritesService.toggle('customer', id);
+  },
+
+  async quickCreate(name: string) {
+    const response = await api.post<Customer>('/customers/quick', { name });
+    return response.data;
+  },
+
+  async checkMatch(name: string) {
+    const response = await api.get<Customer[]>('/customers/match', { params: { name } });
+    return response.data;
+  },
+
+  async merge(prospectId: number, targetCustomerId: number) {
+    const response = await api.post<Customer>(`/customers/${prospectId}/merge`, {
+      target_customer_id: targetCustomerId
+    });
+    return response.data;
   }
+};
+
+// ── Location API ──
+export const getCustomerLocations = async (customerId: number | string) => {
+  const response = await api.get<CustomerLocation[]>(`/customers/${customerId}/locations`);
+  return response.data;
+};
+
+export const createCustomerLocation = async (customerId: number | string, data: { name: string; address?: string; city?: string; state?: string; zip_code?: string; notes?: string }) => {
+  const response = await api.post<CustomerLocation>(`/customers/${customerId}/locations`, data);
+  return response.data;
+};
+
+export const updateCustomerLocation = async (locationId: number, data: { name: string; address?: string; city?: string; state?: string; zip_code?: string; notes?: string }) => {
+  const response = await api.put<CustomerLocation>(`/customers/locations/${locationId}`, data);
+  return response.data;
+};
+
+export const deleteCustomerLocation = async (locationId: number) => {
+  const response = await api.delete(`/customers/locations/${locationId}`);
+  return response.data;
+};
+
+// ── Contact API ──
+export const createCustomerContact = async (customerId: number | string, data: { first_name: string; last_name: string; title?: string; email?: string; phone?: string }) => {
+  const response = await api.post(`/customers/${customerId}/contacts`, data);
+  return response.data;
 };
 
 // Additional convenience functions

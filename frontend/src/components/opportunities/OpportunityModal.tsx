@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity } from '../../services/opportunities';
 import { employeesApi } from '../../services/employees';
@@ -6,6 +6,7 @@ import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
 import SearchableSelect from '../SearchableSelect';
 import CompanyPicker from '../CompanyPicker';
+import LocationPicker from '../LocationPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
 import TitanEstimate from './TitanEstimate';
@@ -60,7 +61,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     customer_id: opportunity?.customer_id || '',
     gc_customer_id: opportunity?.gc_customer_id || '',
     facility_name: opportunity?.facility_name || '',
-    facility_customer_id: opportunity?.facility_customer_id || ''
+    facility_location_id: opportunity?.facility_location_id || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments'>('details');
@@ -108,6 +109,15 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     });
     return Array.from(companyMap.values());
   }, [customers]);
+
+  // Clear facility/location when company changes (locations are scoped to company)
+  const prevCustomerId = useRef(formData.customer_id);
+  useEffect(() => {
+    if (prevCustomerId.current !== formData.customer_id) {
+      prevCustomerId.current = formData.customer_id;
+      setFormData(prev => ({ ...prev, facility_location_id: '', facility_name: '' }));
+    }
+  }, [formData.customer_id]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -212,7 +222,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     cleanedData.customer_id = formData.customer_id ? Number(formData.customer_id) : null;
     cleanedData.gc_customer_id = formData.gc_customer_id ? Number(formData.gc_customer_id) : null;
     if (formData.facility_name) cleanedData.facility_name = formData.facility_name;
-    cleanedData.facility_customer_id = formData.facility_customer_id ? Number(formData.facility_customer_id) : null;
+    cleanedData.facility_location_id = formData.facility_location_id ? Number(formData.facility_location_id) : null;
 
     // Add optional number fields if they have values
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
@@ -371,7 +381,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       <CompanyPicker
                         companies={uniqueCompanies.map((c: Customer) => ({
                           id: c.id,
-                          name: c.name || c.customer_owner || c.customer_facility || ''
+                          name: c.name || c.customer_owner || c.customer_facility || '',
+                          customer_type: c.customer_type
                         }))}
                         selectedId={formData.customer_id}
                         textValue={formData.owner}
@@ -379,6 +390,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         onManualEntry={(name) => setFormData(prev => ({ ...prev, customer_id: '', owner: name }))}
                         onClear={() => setFormData(prev => ({ ...prev, customer_id: '', owner: '' }))}
                         placeholder="Search companies..."
+                        onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
                       />
                     </div>
 
@@ -387,7 +399,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       <CompanyPicker
                         companies={uniqueCompanies.map((c: Customer) => ({
                           id: c.id,
-                          name: c.name || c.customer_owner || c.customer_facility || ''
+                          name: c.name || c.customer_owner || c.customer_facility || '',
+                          customer_type: c.customer_type
                         }))}
                         selectedId={formData.gc_customer_id}
                         textValue={formData.general_contractor}
@@ -395,6 +408,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         onManualEntry={(name) => setFormData(prev => ({ ...prev, gc_customer_id: '', general_contractor: name }))}
                         onClear={() => setFormData(prev => ({ ...prev, gc_customer_id: '', general_contractor: '' }))}
                         placeholder="Search companies..."
+                        onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
                       />
                     </div>
                   </div>
@@ -403,17 +417,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   <div className="form-row-3">
                     <div className="form-group">
                       <label htmlFor="facility_name">Facility/Location</label>
-                      <CompanyPicker
-                        companies={uniqueCompanies.map((c: Customer) => ({
-                          id: c.id,
-                          name: c.name || c.customer_owner || c.customer_facility || ''
-                        }))}
-                        selectedId={formData.facility_customer_id}
+                      <LocationPicker
+                        customerId={formData.customer_id || null}
+                        selectedLocationId={formData.facility_location_id}
                         textValue={formData.facility_name}
-                        onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, facility_customer_id: id, facility_name: name }))}
-                        onManualEntry={(name) => setFormData(prev => ({ ...prev, facility_customer_id: '', facility_name: name }))}
-                        onClear={() => setFormData(prev => ({ ...prev, facility_customer_id: '', facility_name: '' }))}
-                        placeholder="Search companies..."
+                        onSelectLocation={(id, name) => setFormData(prev => ({ ...prev, facility_location_id: id, facility_name: name }))}
+                        onManualEntry={(name) => setFormData(prev => ({ ...prev, facility_location_id: '', facility_name: name }))}
+                        onClear={() => setFormData(prev => ({ ...prev, facility_location_id: '', facility_name: '' }))}
                       />
                     </div>
 

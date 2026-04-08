@@ -199,7 +199,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
 
   const PI = ({ field }: { field: keyof OpportunityEstimateData }) => (
     <span className="te-pi">
-      <input type="number" value={p2d(pct[field])} onChange={(e) => updateField(field, d2p(e.target.value))} step="0.5" min="0" max="100" />
+      <input type="number" value={p2d(pct[field])} onChange={(e) => updateField(field, d2p(e.target.value))} step="any" min="0" max="100" />
       <span className="te-pct-sym">%</span>
     </span>
   );
@@ -294,7 +294,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
             <label key={t.key}>{t.key.toUpperCase()} $
               <input type="number" value={pct[`${t.key}_labor_rate` as keyof OpportunityEstimateData] || ''}
                 onChange={(e) => updateField(`${t.key}_labor_rate` as keyof OpportunityEstimateData, parseFloat(e.target.value) || 0)}
-                step="0.50" min="0" />
+                step="any" min="0" />
             </label>
           ))}
         </div>

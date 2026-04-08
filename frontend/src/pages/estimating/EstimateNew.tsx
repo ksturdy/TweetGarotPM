@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import CompanyPicker from '../../components/CompanyPicker';
+import LocationPicker from '../../components/LocationPicker';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
@@ -82,7 +83,7 @@ const EstimateNew: React.FC = () => {
     gc_customer_id: null,
     general_contractor: '',
     facility_name: '',
-    facility_customer_id: null,
+    facility_location_id: null as number | null,
     send_estimate_to: null,
   });
 
@@ -123,6 +124,15 @@ const EstimateNew: React.FC = () => {
     });
     return Array.from(companyMap.values());
   }, [customers]);
+
+  // Clear facility/location when company changes (locations are scoped to company)
+  const prevCustomerId = useRef(formData.customer_id);
+  useEffect(() => {
+    if (prevCustomerId.current !== formData.customer_id) {
+      prevCustomerId.current = formData.customer_id;
+      setFormData(prev => ({ ...prev, facility_location_id: null, facility_name: '' }));
+    }
+  }, [formData.customer_id]);
 
   const [sections, setSections] = useState<EstimateSection[]>(savedData?.sections || [
     {
@@ -839,7 +849,7 @@ const EstimateNew: React.FC = () => {
               <div className="form-group">
                 <label className="form-label">Company</label>
                 <CompanyPicker
-                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
                   selectedId={formData.customer_id?.toString() || ''}
                   textValue={formData.owner || ''}
                   onSelectCompany={(id, name) => {
@@ -858,6 +868,7 @@ const EstimateNew: React.FC = () => {
                     setCustomerSearch('');
                   }}
                   placeholder="Search companies..."
+                  onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
                 />
               </div>
 
@@ -865,29 +876,29 @@ const EstimateNew: React.FC = () => {
               <div className="form-group">
                 <label className="form-label">General Contractor</label>
                 <CompanyPicker
-                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
+                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
                   selectedId={formData.gc_customer_id?.toString() || ''}
                   textValue={formData.general_contractor || ''}
                   onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, gc_customer_id: Number(id), general_contractor: name }))}
                   onManualEntry={(name) => setFormData(prev => ({ ...prev, gc_customer_id: null, general_contractor: name }))}
                   onClear={() => setFormData(prev => ({ ...prev, gc_customer_id: null, general_contractor: '' }))}
                   placeholder="Search companies..."
+                  onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
                 />
               </div>
             </div>
 
             <div className="form-row">
-              {/* Facility/Location Name */}
+              {/* Facility/Location */}
               <div className="form-group">
-                <label className="form-label">Facility/Location Name</label>
-                <CompanyPicker
-                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name }))}
-                  selectedId={formData.facility_customer_id?.toString() || ''}
+                <label className="form-label">Facility/Location</label>
+                <LocationPicker
+                  customerId={formData.customer_id || null}
+                  selectedLocationId={formData.facility_location_id?.toString() || ''}
                   textValue={formData.facility_name || ''}
-                  onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, facility_customer_id: Number(id), facility_name: name }))}
-                  onManualEntry={(name) => setFormData(prev => ({ ...prev, facility_customer_id: null, facility_name: name }))}
-                  onClear={() => setFormData(prev => ({ ...prev, facility_customer_id: null, facility_name: '' }))}
-                  placeholder="Search companies..."
+                  onSelectLocation={(id, name) => setFormData(prev => ({ ...prev, facility_location_id: Number(id), facility_name: name }))}
+                  onManualEntry={(name) => setFormData(prev => ({ ...prev, facility_location_id: null, facility_name: name }))}
+                  onClear={() => setFormData(prev => ({ ...prev, facility_location_id: null, facility_name: '' }))}
                 />
               </div>
 

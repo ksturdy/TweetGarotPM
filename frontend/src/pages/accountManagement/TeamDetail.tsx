@@ -412,7 +412,7 @@ const TeamDetailPage: React.FC = () => {
                     >
                       <td style={{ fontWeight: 500 }}>{opp.title}</td>
                       <td>{opp.customer_id ? (opp.customer_name || '-') : (opp.owner || '-')}</td>
-                      <td>{opp.facility_customer_id ? (opp.facility_customer_name || '-') : (opp.facility_name || '-')}</td>
+                      <td>{opp.facility_location_name || opp.facility_name || '-'}</td>
                       <td>{formatCurrency(opp.estimated_value || 0)}</td>
                       <td>
                         <span

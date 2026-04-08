@@ -353,10 +353,10 @@ const campaignCompanies = {
 
       const effectiveTenantId = tenantId || campaignCompany.tenant_id;
 
-      // Create customer in main database
+      // Create as prospect in main database (can be merged into a Vista customer later)
       const customerQuery = `
-        INSERT INTO customers (name, market, address, active_customer, source, tenant_id)
-        VALUES ($1, $2, $3, true, 'manual', $4)
+        INSERT INTO customers (name, market, address, active_customer, source, customer_type, tenant_id)
+        VALUES ($1, $2, $3, true, 'manual', 'prospect', $4)
         RETURNING *
       `;
       const customerResult = await client.query(customerQuery, [

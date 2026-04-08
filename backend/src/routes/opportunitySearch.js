@@ -214,6 +214,25 @@ function classifyLead(lead) {
   };
 }
 
+// Call Anthropic API with retry on rate-limit (429) errors
+async function callAnthropicWithRetry(params, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await anthropic.messages.create(params);
+    } catch (err) {
+      const isRateLimit = err.status === 429 || err?.error?.type === 'rate_limit_error';
+      if (!isRateLimit || attempt === maxRetries) {
+        throw err;
+      }
+      // Use retry-after header if available, otherwise exponential backoff
+      const retryAfter = err.headers?.['retry-after'];
+      const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : Math.min(2000 * Math.pow(2, attempt), 30000);
+      console.log(`[Opportunity Search] Rate limited (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${waitMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+  }
+}
+
 // POST /api/opportunity-search/generate
 router.post('/generate', async (req, res, next) => {
   // Set longer timeout for AI generation + web search
@@ -245,7 +264,7 @@ router.post('/generate', async (req, res, next) => {
       min_value, max_value, keywords, additional_criteria
     });
 
-    const response = await anthropic.messages.create({
+    const response = await callAnthropicWithRetry({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 16000,
       system: SYSTEM_PROMPT,
@@ -312,6 +331,22 @@ router.post('/generate', async (req, res, next) => {
     });
   } catch (error) {
     console.error('[Opportunity Search] Error:', error);
+
+    // Return user-friendly messages for known API errors
+    const isRateLimit = error.status === 429 || error?.error?.type === 'rate_limit_error';
+    if (isRateLimit) {
+      return res.status(429).json({
+        error: 'AI search is temporarily rate limited. Please wait a minute and try again.'
+      });
+    }
+
+    const isAuth = error.status === 401 || error?.error?.type === 'authentication_error';
+    if (isAuth) {
+      return res.status(500).json({
+        error: 'AI service authentication failed. Please check the API key configuration.'
+      });
+    }
+
     next(error);
   }
 });

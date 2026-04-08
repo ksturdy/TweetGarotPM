@@ -509,7 +509,7 @@ const Dashboard: React.FC = () => {
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
-                              {opp.facility_customer_name || opp.facility_name || opp.client_name || '-'}
+                              {opp.facility_location_name || opp.facility_name || opp.client_name || '-'}
                             </span>
                             {(opp.customer_name || opp.owner || opp.client_company) && (
                               <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>

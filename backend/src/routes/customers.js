@@ -9,10 +9,13 @@ const { tenantContext, checkLimit } = require('../middleware/tenant');
 router.use(authenticate);
 router.use(tenantContext);
 
-// Get all customers
+// Get all customers (optional ?type=customer|prospect filter)
 router.get('/', async (req, res, next) => {
   try {
-    const customers = await Customer.findAllByTenant(req.tenantId);
+    let customers = await Customer.findAllByTenant(req.tenantId);
+    if (req.query.type) {
+      customers = customers.filter(c => c.customer_type === req.query.type);
+    }
     res.json(customers);
   } catch (error) {
     next(error);
@@ -65,6 +68,121 @@ router.get('/search', async (req, res, next) => {
     }
     const customers = await Customer.search(q, req.tenantId);
     res.json(customers);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Check if a name matches existing customers (for prospect dedup)
+router.get('/match', async (req, res, next) => {
+  try {
+    const { name } = req.query;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'name query param is required' });
+    }
+    const matches = await Customer.findPotentialMatches(name.trim(), req.tenantId);
+    res.json(matches);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Quick-create a prospect (minimal: just name)
+router.post('/quick', async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    const prospect = await Customer.createProspect(name.trim(), req.tenantId);
+    res.status(201).json(prospect);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Merge a prospect into an existing customer (re-links all FKs, deletes prospect)
+router.post('/:id/merge', async (req, res, next) => {
+  try {
+    const prospect = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!prospect) {
+      return res.status(404).json({ error: 'Prospect not found' });
+    }
+    if (prospect.customer_type !== 'prospect') {
+      return res.status(400).json({ error: 'Only prospects can be merged into a customer' });
+    }
+    const { target_customer_id } = req.body;
+    if (!target_customer_id) {
+      return res.status(400).json({ error: 'target_customer_id is required' });
+    }
+    const target = await Customer.findByIdAndTenant(target_customer_id, req.tenantId);
+    if (!target) {
+      return res.status(404).json({ error: 'Target customer not found' });
+    }
+    const result = await Customer.mergeProspect(parseInt(req.params.id), parseInt(target_customer_id), req.tenantId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Location routes (must be before /:id) ──
+
+// Get locations for a customer
+router.get('/:id/locations', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const locations = await Customer.getLocations(req.params.id);
+    res.json(locations);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create location for a customer
+router.post('/:id/locations', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Location name is required' });
+    }
+    const location = await Customer.createLocation(req.params.id, req.body, req.tenantId);
+    res.status(201).json(location);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update a location
+router.put('/locations/:locationId', async (req, res, next) => {
+  try {
+    const existing = await Customer.getLocationById(req.params.locationId, req.tenantId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    const location = await Customer.updateLocation(req.params.locationId, req.body);
+    res.json(location);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete a location
+router.delete('/locations/:locationId', async (req, res, next) => {
+  try {
+    const existing = await Customer.getLocationById(req.params.locationId, req.tenantId);
+    if (!existing) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    await Customer.deleteLocation(req.params.locationId);
+    res.json({ message: 'Location deleted successfully' });
   } catch (error) {
     next(error);
   }

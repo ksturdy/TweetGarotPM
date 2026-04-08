@@ -32,8 +32,8 @@ export interface Opportunity {
   gc_customer_id?: number;
   gc_customer_name?: string;
   facility_name?: string;
-  facility_customer_id?: number;
-  facility_customer_name?: string;
+  facility_location_id?: number;
+  facility_location_name?: string;
   contour_type?: string;
   user_adjusted_start_date?: string;
   user_adjusted_duration_months?: number;

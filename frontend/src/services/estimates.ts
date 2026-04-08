@@ -66,7 +66,7 @@ export interface Estimate {
   gc_customer_id?: number | null;
   general_contractor?: string;
   facility_name?: string;
-  facility_customer_id?: number | null;
+  facility_location_id?: number | null;
   send_estimate_to?: number | null;
   // Linked customer fields (from JOIN) — legacy; prefer customer_name
   customer_facility?: string;

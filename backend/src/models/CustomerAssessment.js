@@ -41,6 +41,8 @@ const CustomerAssessment = {
        RETURNING *`,
       [customerId, totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId]
     );
+    // Sync score to customers table so it shows in list views
+    await db.query('UPDATE customers SET customer_score = $1 WHERE id = $2', [totalScore, customerId]);
     return result.rows[0];
   },
 
@@ -56,6 +58,10 @@ const CustomerAssessment = {
        RETURNING *`,
       [totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId, id]
     );
+    // Sync score to customers table so it shows in list views
+    if (result.rows[0]?.customer_id) {
+      await db.query('UPDATE customers SET customer_score = $1 WHERE id = $2', [totalScore, result.rows[0].customer_id]);
+    }
     return result.rows[0];
   },
 

@@ -198,7 +198,7 @@ const SalesPipeline: React.FC = () => {
         initials: opp.assigned_to_name ? opp.assigned_to_name.split(' ').map(n => n[0]).join('') : 'U',
         color: getSalespersonColor(salespersonName)
       },
-      facilityLocationName: opp.facility_customer_id ? (opp.facility_customer_name || '') : (opp.facility_name || ''),
+      facilityLocationName: opp.facility_location_name || opp.facility_name || '',
       company: opp.customer_id ? (opp.customer_name || '') : (opp.owner || ''),
       market: opp.market || '',
       icon: getMarketIcon(opp.market),

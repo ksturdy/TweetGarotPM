@@ -11,6 +11,7 @@ const CustomerList: React.FC = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'customer' | 'prospect'>('all');
   const [filterState, setFilterState] = useState('all');
   const [filterManager, setFilterManager] = useState('all');
   const [sortColumn, setSortColumn] = useState<string>('name');
@@ -168,8 +169,15 @@ const CustomerList: React.FC = () => {
   const states = ['all', ...new Set(customers.map(c => c.state).filter(Boolean))];
   const managers = ['all', ...new Set(customers.map(c => c.account_manager).filter(Boolean))];
 
+  // Counts for type tabs
+  const customerCount = customers.filter(c => c.customer_type !== 'prospect').length;
+  const prospectCount = customers.filter(c => c.customer_type === 'prospect').length;
+
   // Filter customers
   const filteredCustomers = customers.filter(customer => {
+    const matchesType = filterType === 'all' ||
+      (filterType === 'prospect' ? customer.customer_type === 'prospect' : customer.customer_type !== 'prospect');
+
     const matchesSearch = !searchTerm ||
       customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -178,7 +186,7 @@ const CustomerList: React.FC = () => {
     const matchesState = filterState === 'all' || customer.state === filterState;
     const matchesManager = filterManager === 'all' || customer.account_manager === filterManager;
 
-    return matchesSearch && matchesState && matchesManager;
+    return matchesType && matchesSearch && matchesState && matchesManager;
   });
 
   // Sort customers - isFavoriteds at top on initial load only
@@ -346,7 +354,29 @@ const CustomerList: React.FC = () => {
       {/* Table Section */}
       <div className="sales-table-section">
         <div className="sales-table-header">
-          <div className="sales-table-title">All Customers</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {(['all', 'customer', 'prospect'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: filterType === type ? 600 : 400,
+                  background: filterType === type ? '#3b82f6' : 'transparent',
+                  color: filterType === type ? '#fff' : '#6b7280',
+                  border: filterType === type ? '1px solid #3b82f6' : '1px solid #e5e7eb',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {type === 'all' ? `All (${customers.length})` :
+                 type === 'customer' ? `Customers (${customerCount})` :
+                 `Prospects (${prospectCount})`}
+              </button>
+            ))}
+          </div>
           <div className="sales-table-controls">
             <div className="sales-search-box">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -454,7 +484,20 @@ const CustomerList: React.FC = () => {
                         {getMarketIcon(customer.market)}
                       </div>
                       <div className="sales-project-info">
-                        <h4>{customer.name || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}</h4>
+                        <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {customer.name || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}
+                          {customer.customer_type === 'prospect' && (
+                            <span style={{
+                              fontSize: '0.6rem',
+                              padding: '1px 5px',
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              borderRadius: '3px',
+                              fontWeight: 600,
+                              flexShrink: 0
+                            }}>PROSPECT</span>
+                          )}
+                        </h4>
                         <span>{customer.city && customer.state ? `${customer.city}, ${customer.state}` : (customer.city || customer.state || 'No location')}</span>
                       </div>
                     </div>

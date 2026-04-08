@@ -81,8 +81,8 @@ const Customer = {
         name, customer_owner, account_manager, field_leads,
         customer_number, address, city, state, zip_code,
         controls, department, market, customer_score, active_customer, notes,
-        source, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        source, customer_type, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         data.name, data.name, data.account_manager, data.field_leads,
@@ -91,10 +91,98 @@ const Customer = {
         data.active_customer !== undefined ? data.active_customer : true,
         data.notes,
         data.source || 'manual',
+        data.customer_type || 'customer',
         tenantId
       ]
     );
     return result.rows[0];
+  },
+
+  async createProspect(name, tenantId) {
+    // Return existing record if one with the same name already exists
+    const existing = await db.query(
+      `SELECT * FROM customers WHERE LOWER(name) = LOWER($1) AND tenant_id = $2 LIMIT 1`,
+      [name, tenantId]
+    );
+    if (existing.rows.length > 0) {
+      return { ...existing.rows[0], already_existed: true };
+    }
+    const result = await db.query(
+      `INSERT INTO customers (name, customer_owner, active_customer, source, customer_type, tenant_id)
+       VALUES ($1, $1, true, 'manual', 'prospect', $2)
+       RETURNING *`,
+      [name, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async findPotentialMatches(name, tenantId) {
+    const result = await db.query(
+      `SELECT id, name, customer_number, city, state, source, customer_type
+       FROM customers
+       WHERE tenant_id = $1
+         AND customer_type = 'customer'
+         AND (name ILIKE $2 OR name ILIKE $3)
+       ORDER BY
+         CASE WHEN LOWER(name) = LOWER($4) THEN 0 ELSE 1 END,
+         name ASC
+       LIMIT 10`,
+      [tenantId, `%${name}%`, `${name}%`, name]
+    );
+    return result.rows;
+  },
+
+  async mergeProspect(prospectId, customerId, tenantId) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Re-link all opportunities from prospect to the real customer
+      await client.query(
+        `UPDATE opportunities SET customer_id = $1 WHERE customer_id = $2 AND tenant_id = $3`,
+        [customerId, prospectId, tenantId]
+      );
+      await client.query(
+        `UPDATE opportunities SET gc_customer_id = $1 WHERE gc_customer_id = $2 AND tenant_id = $3`,
+        [customerId, prospectId, tenantId]
+      );
+      // Re-link customer_locations from prospect to real customer
+      await client.query(
+        `UPDATE customer_locations SET customer_id = $1 WHERE customer_id = $2 AND tenant_id = $3`,
+        [customerId, prospectId, tenantId]
+      );
+
+      // Re-link estimates
+      await client.query(
+        `UPDATE estimates SET customer_id = $1 WHERE customer_id = $2 AND tenant_id = $3`,
+        [customerId, prospectId, tenantId]
+      );
+      await client.query(
+        `UPDATE estimates SET gc_customer_id = $1 WHERE gc_customer_id = $2 AND tenant_id = $3`,
+        [customerId, prospectId, tenantId]
+      );
+
+      // Re-link campaign companies
+      await client.query(
+        `UPDATE campaign_companies SET linked_company_id = $1 WHERE linked_company_id = $2`,
+        [customerId, prospectId]
+      );
+
+      // Delete the prospect record
+      await client.query(
+        `DELETE FROM customers WHERE id = $1 AND tenant_id = $2 AND customer_type = 'prospect'`,
+        [prospectId, tenantId]
+      );
+
+      await client.query('COMMIT');
+
+      return this.findByIdAndTenant(customerId, tenantId);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   async update(id, data, tenantId) {
@@ -102,7 +190,8 @@ const Customer = {
     const allowedFields = [
       'name', 'account_manager', 'field_leads',
       'address', 'city', 'state', 'zip_code',
-      'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes'
+      'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes',
+      'customer_type'
     ];
 
     const updates = [];
@@ -136,11 +225,25 @@ const Customer = {
   },
 
   async delete(id, tenantId) {
-    const result = await db.query(
-      'DELETE FROM customers WHERE id = $1 AND tenant_id = $2 RETURNING id',
-      [id, tenantId]
-    );
-    return result.rows.length > 0;
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Unlink FK references before deleting
+      await client.query('UPDATE opportunities SET customer_id = NULL WHERE customer_id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query('UPDATE opportunities SET gc_customer_id = NULL WHERE gc_customer_id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query('UPDATE estimates SET customer_id = NULL WHERE customer_id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query('UPDATE estimates SET gc_customer_id = NULL WHERE gc_customer_id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query('DELETE FROM customer_locations WHERE customer_id = $1 AND tenant_id = $2', [id, tenantId]);
+      await client.query('UPDATE campaign_companies SET linked_company_id = NULL WHERE linked_company_id = $1', [id]);
+      const result = await client.query('DELETE FROM customers WHERE id = $1 AND tenant_id = $2 RETURNING id', [id, tenantId]);
+      await client.query('COMMIT');
+      return result.rows.length > 0;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   async getStats(tenantId) {
@@ -504,6 +607,58 @@ const Customer = {
 
   async deleteContact(contactId) {
     await db.query('DELETE FROM customer_contacts WHERE id = $1', [contactId]);
+  },
+
+  // ── Location CRUD ──
+
+  async getLocations(customerId) {
+    const result = await db.query(
+      `SELECT * FROM customer_locations
+       WHERE customer_id = $1
+       ORDER BY name ASC`,
+      [customerId]
+    );
+    return result.rows;
+  },
+
+  async createLocation(customerId, data, tenantId) {
+    const result = await db.query(
+      `INSERT INTO customer_locations (customer_id, name, address, city, state, zip_code, notes, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [customerId, data.name, data.address || null, data.city || null, data.state || null, data.zip_code || null, data.notes || null, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async getLocationById(locationId, tenantId) {
+    const result = await db.query(
+      `SELECT cl.*, c.name as customer_name
+       FROM customer_locations cl
+       LEFT JOIN customers c ON cl.customer_id = c.id
+       WHERE cl.id = $1 AND cl.tenant_id = $2`,
+      [locationId, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async updateLocation(locationId, data) {
+    const result = await db.query(
+      `UPDATE customer_locations SET
+        name = $1, address = $2, city = $3, state = $4, zip_code = $5, notes = $6,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7
+       RETURNING *`,
+      [data.name, data.address || null, data.city || null, data.state || null, data.zip_code || null, data.notes || null, locationId]
+    );
+    return result.rows[0];
+  },
+
+  async deleteLocation(locationId) {
+    // Unlink any opportunities/estimates referencing this location before deleting
+    await db.query('UPDATE opportunities SET facility_location_id = NULL WHERE facility_location_id = $1', [locationId]);
+    await db.query('UPDATE estimates SET facility_location_id = NULL WHERE facility_location_id = $1', [locationId]);
+    await db.query('DELETE FROM customer_locations WHERE id = $1', [locationId]);
   }
 };
 
