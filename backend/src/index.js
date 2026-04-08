@@ -98,6 +98,7 @@ const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
 const backlogReportRoutes = require('./routes/backlogReport');
 const estProductRoutes = require('./routes/estProducts');
+const estimateFileRoutes = require('./routes/estimateFiles');
 
 const app = express();
 
@@ -228,6 +229,7 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
 app.use('/api/backlog-report', backlogReportRoutes);
 app.use('/api/est-products', estProductRoutes);
+app.use('/api/estimate-files', estimateFileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

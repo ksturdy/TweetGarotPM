@@ -678,7 +678,7 @@ router.get('/:campaignId/opportunities', async (req, res, next) => {
   }
 });
 
-// GET opportunities for a company
+// GET opportunities for a company (campaign_opportunities + linked pipeline opportunities)
 router.get('/:campaignId/companies/:companyId/opportunities', async (req, res, next) => {
   try {
     // Verify campaign belongs to tenant
@@ -686,8 +686,68 @@ router.get('/:campaignId/companies/:companyId/opportunities', async (req, res, n
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const opportunities = await campaignOpportunities.getByCompanyId(req.params.companyId);
-    res.json(opportunities);
+
+    // Get campaign-specific opportunities
+    const campOpps = await campaignOpportunities.getByCompanyId(req.params.companyId);
+
+    // Also get pipeline opportunities linked to this campaign + company
+    // Match by: linked_company_id (FK), customer name, or client_company text field
+    const company = await campaignCompanies.getById(req.params.companyId);
+    let pipelineOpps = [];
+    if (company) {
+      const db = require('../config/database');
+      const params = [req.params.campaignId, req.tenantId];
+      const matchConditions = [];
+
+      // 1) Match by linked_company_id → customer_id/gc_customer_id FK
+      if (company.linked_company_id) {
+        params.push(company.linked_company_id);
+        matchConditions.push(`o.customer_id = $${params.length}`);
+        matchConditions.push(`o.gc_customer_id = $${params.length}`);
+      }
+
+      // 2) Match by name - use the linked company name if available, else the prospect name
+      //    Strip trailing "#NNN" patterns from prospect names for matching
+      const matchName = (company.linked_company_name || company.name || '')
+        .replace(/#\d+\s*$/, '').trim().toLowerCase();
+      if (matchName) {
+        params.push(matchName);
+        // Exact match on client_company or customer name
+        matchConditions.push(`LOWER(TRIM(o.client_company)) = $${params.length}`);
+        matchConditions.push(`LOWER(TRIM(c.name)) = $${params.length}`);
+        // Partial match: prospect name contained in client_company or vice versa
+        params.push('%' + matchName + '%');
+        matchConditions.push(`LOWER(o.client_company) LIKE $${params.length}`);
+        matchConditions.push(`LOWER(c.name) LIKE $${params.length}`);
+      }
+
+      if (matchConditions.length > 0) {
+        const pipelineQuery = `
+          SELECT DISTINCT ON (o.id) o.id, o.title as name, o.description,
+                 o.estimated_value as value,
+                 ps.name as stage,
+                 CASE ps.probability WHEN 'High' THEN 75 WHEN 'Medium' THEN 50 WHEN 'Low' THEN 25 ELSE 10 END as probability,
+                 o.estimated_start_date as close_date,
+                 CASE WHEN o.converted_to_project_id IS NOT NULL THEN true ELSE false END as is_converted,
+                 'pipeline' as source
+          FROM opportunities o
+          LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+          LEFT JOIN customers c ON o.customer_id = c.id
+          WHERE o.campaign_id = $1 AND o.tenant_id = $2
+            AND (${matchConditions.join(' OR ')})
+          ORDER BY o.id, o.created_at DESC
+        `;
+        const result = await db.query(pipelineQuery, params);
+        pipelineOpps = result.rows;
+      }
+    }
+
+    // Mark campaign opps with source, then combine
+    const combined = [
+      ...campOpps.map(o => ({ ...o, source: 'campaign' })),
+      ...pipelineOpps
+    ];
+    res.json(combined);
   } catch (error) {
     next(error);
   }

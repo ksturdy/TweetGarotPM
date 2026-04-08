@@ -13,6 +13,7 @@ import SearchableSelect from '../../components/SearchableSelect';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import EstimateFilesSidebar from '../../components/estimates/EstimateFilesSidebar';
 import '../../styles/SalesPipeline.css';
 
 const FITTING_LABELS: Record<string, string> = {
@@ -98,6 +99,7 @@ const EstimateDetail: React.FC = () => {
   const [showTakeoffPicker, setShowTakeoffPicker] = useState(false);
   const [selectedTakeoffId, setSelectedTakeoffId] = useState<number | ''>('');
   const [selectedImportMode, setSelectedImportMode] = useState<'summary' | 'detail'>('summary');
+  const [showFilesSidebar, setShowFilesSidebar] = useState(false);
 
 
   // Get unique companies from customers list
@@ -630,6 +632,13 @@ const EstimateDetail: React.FC = () => {
             onClick={() => setIsPreviewOpen(true)}
           >
             View Proposal
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => setShowFilesSidebar(prev => !prev)}
+            title="Project Files"
+          >
+            {'\u{1F4C1}'} Files
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
             <label style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</label>
@@ -1496,6 +1505,13 @@ const EstimateDetail: React.FC = () => {
         estimate={estimate}
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
+      />
+
+      {/* Project Files Sidebar */}
+      <EstimateFilesSidebar
+        estimateId={Number(id)}
+        isOpen={showFilesSidebar}
+        onClose={() => setShowFilesSidebar(false)}
       />
     </div>
   );

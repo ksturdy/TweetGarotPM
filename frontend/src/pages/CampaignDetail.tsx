@@ -2018,7 +2018,7 @@ export default function CampaignDetail() {
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Estimates</div>
                     </div>
                     <div style={{ padding: '14px', background: '#faf5ff', borderRadius: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#7c3aed' }}>${detailOpps.reduce((sum, o) => sum + (o.value || 0), 0).toLocaleString()}</div>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: '#7c3aed' }}>${Math.round(detailOpps.reduce((sum, o) => sum + (parseFloat(String(o.value)) || 0), 0)).toLocaleString()}</div>
                       <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Pipeline Value</div>
                     </div>
                   </div>
@@ -2051,7 +2051,7 @@ export default function CampaignDetail() {
                             <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{opp.name}</div>
                             <div style={{ fontSize: '11px', color: '#64748b' }}>{opp.stage?.replace('_', ' ')} · {opp.probability}% probability</div>
                           </div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#16a34a' }}>${(opp.value || 0).toLocaleString()}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: '#16a34a' }}>${Math.round(parseFloat(String(opp.value)) || 0).toLocaleString()}</div>
                         </div>
                       ))}
                     </div>
@@ -2207,13 +2207,16 @@ export default function CampaignDetail() {
                 return (
                   <div style={{ display: 'grid', gap: '10px' }}>
                     {detailOpps.length > 0 ? detailOpps.map(opp => (
-                      <div key={opp.id} style={{ padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                      <div key={`${opp.source || 'campaign'}-${opp.id}`} style={{ padding: '16px', background: opp.source === 'pipeline' ? '#f0f9ff' : '#f9fafb', borderRadius: '10px', border: `1px solid ${opp.source === 'pipeline' ? '#bae6fd' : '#e5e7eb'}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{opp.name}</div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {opp.name}
+                              {opp.source === 'pipeline' && <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1d4ed8' }}>Pipeline</span>}
+                            </div>
                             {opp.description && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{opp.description}</div>}
                           </div>
-                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#16a34a' }}>${(opp.value || 0).toLocaleString()}</div>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#16a34a' }}>${Math.round(parseFloat(String(opp.value)) || 0).toLocaleString()}</div>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '6px', background: (stageColors[opp.stage] || '#6b7280') + '18', color: stageColors[opp.stage] || '#6b7280' }}>
@@ -2223,6 +2226,7 @@ export default function CampaignDetail() {
                           {opp.close_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Close: {new Date(opp.close_date).toLocaleDateString()}</span>}
                           {opp.is_converted && <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a' }}>Converted</span>}
                         </div>
+                        {opp.source !== 'pipeline' && (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <button onClick={async () => {
                             if (confirm('Delete this opportunity?')) {
@@ -2231,6 +2235,7 @@ export default function CampaignDetail() {
                             }
                           }} style={{ ...btn, fontSize: '11px', padding: '3px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Remove</button>
                         </div>
+                        )}
                       </div>
                     )) : (
                       <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>No opportunities yet</div>

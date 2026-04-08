@@ -66,6 +66,8 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
     },
   });
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const deleteMutation = useMutation({
     mutationFn: () => customersApi.delete(customer!.id),
     onSuccess: () => {
@@ -73,6 +75,9 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
       queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
       onClose();
       onDelete?.();
+    },
+    onError: (error: any) => {
+      setDeleteError(error?.response?.data?.error || 'Failed to delete customer. Please try again.');
     },
   });
 
@@ -883,6 +888,9 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                   >
                     Cancel
                   </button>
+                  {deleteError && (
+                    <span style={{ fontSize: '0.8rem', color: '#dc2626' }}>{deleteError}</span>
+                  )}
                 </div>
               )
             ) : (

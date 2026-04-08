@@ -87,12 +87,13 @@ export interface CampaignOpportunity {
   name: string;
   description?: string;
   value: number;
-  stage: 'qualification' | 'discovery' | 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';
+  stage: 'qualification' | 'discovery' | 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost' | string;
   probability: number;
   close_date?: string;
   linked_opportunity_id?: number;
   linked_opportunity_name?: string;
   is_converted: boolean;
+  source?: 'campaign' | 'pipeline';
   created_at: string;
   updated_at: string;
 }
