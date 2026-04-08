@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/database');
 const opportunities = require('../models/opportunities');
 const opportunityActivities = require('../models/opportunityActivities');
 const OpportunityComment = require('../models/OpportunityComment');
@@ -101,6 +102,39 @@ router.get('/trend', async (req, res, next) => {
     const months = req.query.months || 7; // Default to 7 months
     const trendData = await opportunities.getPipelineTrend(months, req.tenantId);
     res.json(trendData);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Opportunities broken down by customer score tier
+// Optional query param: ?campaign_id=123 to scope to a single campaign
+router.get('/score-breakdown', async (req, res, next) => {
+  try {
+    const params = [req.tenantId];
+    let campaignFilter = '';
+    if (req.query.campaign_id) {
+      params.push(req.query.campaign_id);
+      campaignFilter = ` AND o.campaign_id = $${params.length}`;
+    }
+    const result = await db.query(`
+      SELECT
+        CASE
+          WHEN c.customer_score >= 85 THEN 'A'
+          WHEN c.customer_score >= 70 THEN 'B'
+          WHEN c.customer_score >= 50 THEN 'C'
+          WHEN c.customer_score IS NOT NULL AND c.customer_score < 50 THEN 'D'
+          ELSE 'Unscored'
+        END as tier,
+        COUNT(*) as count,
+        COALESCE(SUM(o.estimated_value), 0) as total_value
+      FROM opportunities o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.tenant_id = $1${campaignFilter}
+      GROUP BY tier
+      ORDER BY tier
+    `, params);
+    res.json(result.rows);
   } catch (error) {
     next(error);
   }

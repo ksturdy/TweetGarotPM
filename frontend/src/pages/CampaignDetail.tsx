@@ -80,6 +80,13 @@ export default function CampaignDetail() {
     enabled: !!id
   });
 
+  // Score breakdown for this campaign's opportunities
+  const { data: scoreBreakdown = [] } = useQuery({
+    queryKey: ['campaign-score-breakdown', id],
+    queryFn: () => opportunitiesService.getScoreBreakdown(parseInt(id || '0')),
+    enabled: !!id
+  });
+
   // Database queries for non-legacy campaigns
   const campaignId = parseInt(id || '0');
   const queryClient = useQueryClient();
@@ -878,6 +885,42 @@ export default function CampaignDetail() {
                 </div>
               ))}
             </div>
+
+            {/* Opportunities by Customer Score */}
+            {(() => {
+              const tierConfig: Record<string, { label: string; color: string; bg: string }> = {
+                A: { label: 'Tier A (85+)', color: '#059669', bg: '#ecfdf5' },
+                B: { label: 'Tier B (70–84)', color: '#2563eb', bg: '#eff6ff' },
+                C: { label: 'Tier C (50–69)', color: '#d97706', bg: '#fffbeb' },
+                D: { label: 'Below 50', color: '#dc2626', bg: '#fef2f2' },
+                Unscored: { label: 'Unscored', color: '#6b7280', bg: '#f9fafb' },
+              };
+              const tiers = ['A', 'B', 'C', 'D', 'Unscored'];
+              const breakdownMap = Object.fromEntries(scoreBreakdown.map((r: any) => [r.tier, r]));
+              const totalOpps = scoreBreakdown.reduce((sum: number, r: any) => sum + parseInt(r.count), 0);
+              return (
+                <div style={{ ...card, padding: '16px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: '#374151' }}>Opportunities by Customer Score</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiers.length + 1}, 1fr)`, gap: '8px' }}>
+                    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' }}>{totalOpps}</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '2px' }}>Total</div>
+                    </div>
+                    {tiers.map(tier => {
+                      const config = tierConfig[tier];
+                      const data = breakdownMap[tier];
+                      const count = data ? parseInt(data.count) : 0;
+                      return (
+                        <div key={tier} style={{ background: config.bg, border: `1px solid ${config.color}22`, borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '22px', fontWeight: 700, color: config.color }}>{count}</div>
+                          <div style={{ fontSize: '10px', color: config.color, fontWeight: 500, marginTop: '2px', opacity: 0.8 }}>{config.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Row 1: Status Breakdown (narrow) + Recent Activity (wide) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px' }}>

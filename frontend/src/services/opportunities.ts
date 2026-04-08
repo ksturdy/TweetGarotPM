@@ -233,6 +233,13 @@ const opportunitiesService = {
     return response.data;
   },
 
+  // Get opportunities broken down by customer score tier
+  async getScoreBreakdown(campaignId?: number): Promise<{ tier: string; count: string; total_value: string }[]> {
+    const params = campaignId ? { campaign_id: campaignId } : {};
+    const response = await api.get('/opportunities/score-breakdown', { params });
+    return response.data;
+  },
+
   // Update projection overrides (for revenue grid)
   async updateProjectionOverrides(
     id: number,
