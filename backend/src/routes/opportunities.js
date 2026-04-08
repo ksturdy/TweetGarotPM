@@ -166,6 +166,7 @@ router.get('/with-estimates', async (req, res, next) => {
         o.estimated_end_date, o.location_group, o.market, o.priority,
         o.contour_type, o.user_adjusted_start_date, o.user_adjusted_duration_months,
         o.stage_id, o.probability, o.assigned_to, o.customer_id,
+        o.awarded_status,
         ps.name as stage_name, ps.probability as stage_probability,
         e.first_name || ' ' || e.last_name as assigned_to_name,
         COALESCE(c.name, c.customer_owner) as customer_name,
@@ -181,7 +182,8 @@ router.get('/with-estimates', async (req, res, next) => {
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN opportunity_estimates oe ON oe.opportunity_id = o.id
       WHERE o.tenant_id = $1
-        AND ps.name NOT IN ('Won', 'Lost', 'Passed', 'Awarded')
+        AND ps.name NOT IN ('Won', 'Lost', 'Passed')
+        AND NOT (ps.name = 'Awarded' AND o.awarded_status IN ('In Progress', 'Completed'))
         AND o.estimated_value IS NOT NULL
         AND o.estimated_value > 0
       ORDER BY o.estimated_value DESC

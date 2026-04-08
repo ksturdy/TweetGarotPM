@@ -42,6 +42,7 @@ export interface Opportunity {
   converted_project_name?: string;
   converted_at?: string;
   lost_reason?: string;
+  awarded_status?: string;
   created_by?: number;
   created_by_name?: string;
   created_at: string;

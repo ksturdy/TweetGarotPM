@@ -279,6 +279,7 @@ const LaborForecast: React.FC = () => {
   // Opportunity overlay
   const [oppMode, setOppMode] = useState<'off' | 'all' | 'select'>('off');
   const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
+  const [oppWeighted, setOppWeighted] = useState(true);
 
   // Overrides (shared with revenue page)
   const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
@@ -746,7 +747,7 @@ const LaborForecast: React.FC = () => {
       const probability = opp.probability && qualitativeProbMap[opp.probability]
         ? qualitativeProbMap[opp.probability]
         : (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) || 0;
-      const probFactor = probability > 0 ? probability / 100 : 0;
+      const probFactor = oppWeighted ? (probability > 0 ? probability / 100 : 0) : 1;
 
       const weightedPf = filteredPf * probFactor;
       const weightedSm = filteredSm * probFactor;
@@ -820,7 +821,7 @@ const LaborForecast: React.FC = () => {
     }
 
     return results;
-  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules]);
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules, oppWeighted]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -998,8 +999,45 @@ const LaborForecast: React.FC = () => {
     });
     y += 42;
 
-    // Column headers for time periods
-    const colLabels = displayColumns.map(c => c.label);
+    // Column headers for time periods — aggregate to quarterly for wide horizons
+    const useQuarterly = timeHorizon > 12;
+    interface PdfColumn { label: string; keys: string[] }
+    let pdfTableColumns: PdfColumn[];
+    if (useQuarterly) {
+      // Group displayColumns into quarters
+      const qMap = new Map<string, PdfColumn>();
+      displayColumns.forEach(col => {
+        const colDate = new Date(col.key + '-01');
+        const qNum = Math.floor(colDate.getMonth() / 3) + 1;
+        const qKey = `Q${qNum} ${colDate.getFullYear()}`;
+        if (!qMap.has(qKey)) qMap.set(qKey, { label: qKey, keys: [] });
+        qMap.get(qKey)!.keys.push(col.key);
+      });
+      pdfTableColumns = Array.from(qMap.values());
+    } else {
+      pdfTableColumns = displayColumns.map(c => ({ label: c.label, keys: [c.key] }));
+    }
+    const colLabels = pdfTableColumns.map(c => c.label);
+
+    // Helper to aggregate hours across multiple month keys
+    const aggHours = (hours: Map<string, TradeMonthlyHours>, keys: string[]): TradeMonthlyHours => {
+      const agg: TradeMonthlyHours = { pf: 0, sm: 0, pl: 0, total: 0 };
+      keys.forEach(k => {
+        const h = hours.get(k);
+        if (h) { agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total; }
+      });
+      return agg;
+    };
+    // Helper to aggregate column totals
+    const aggColTotals = (totalsMap: Map<string, TradeMonthlyHours>, keys: string[]): TradeMonthlyHours => {
+      const agg: TradeMonthlyHours = { pf: 0, sm: 0, pl: 0, total: 0 };
+      keys.forEach(k => {
+        const h = totalsMap.get(k);
+        if (h) { agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total; }
+      });
+      return agg;
+    };
+
     const pgW = doc.internal.pageSize.getWidth();
     const pgH = doc.internal.pageSize.getHeight();
 
@@ -1232,7 +1270,7 @@ const LaborForecast: React.FC = () => {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
-    doc.text('Trade Summary', 40, y + 4);
+    doc.text(`Trade Summary${useQuarterly ? ' (Quarterly Hours)' : ''}`, 40, y + 4);
     y += 12;
 
     const tradeHeaders = ['Trade', 'Remaining Hours', ...colLabels];
@@ -1244,12 +1282,12 @@ const LaborForecast: React.FC = () => {
       const remaining = trade.key === 'total'
         ? fmtHours(grandTotalHours)
         : fmtHours(grandTotalsByTrade[trade.key as TradeName] || 0);
-      const monthlyCols = displayColumns.map(col => {
-        const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+      const periodCols = pdfTableColumns.map(pc => {
+        const ct = aggColTotals(columnTotals, pc.keys);
         const hours = trade.key === 'total' ? ct.total : ct[trade.key as TradeName] || 0;
-        return fmtHeadcount(hours, hpp);
+        return useQuarterly ? fmtHours(hours) : fmtHeadcount(hours, hpp);
       });
-      return [trade.label, remaining, ...monthlyCols];
+      return [trade.label, remaining, ...periodCols];
     });
 
     autoTable(doc, {
@@ -1281,7 +1319,7 @@ const LaborForecast: React.FC = () => {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
-    doc.text('Project Detail', 40, y + 4);
+    doc.text(`Project Detail${useQuarterly ? ' (Quarterly Hours)' : ''}`, 40, y + 4);
     y += 12;
 
     const pdfNow = startOfMonth(new Date());
@@ -1290,9 +1328,9 @@ const LaborForecast: React.FC = () => {
     const projRows = projections.map(p => {
       const desc = (p.contract.description || p.contract.customer_name || '-').substring(0, 30);
       const pm = (p.contract.project_manager_name || '-').split(',')[0].substring(0, 15);
-      const monthlyCols = displayColumns.map(col => {
-        const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
-        return fmtHeadcount(h.total, hpp);
+      const periodCols = pdfTableColumns.map(pc => {
+        const h = applyTradeFilter(aggHours(p.monthlyHours, pc.keys));
+        return useQuarterly ? fmtHours(h.total) : fmtHeadcount(h.total, hpp);
       });
       const filteredRemaining = p.tradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
       return [
@@ -1305,7 +1343,7 @@ const LaborForecast: React.FC = () => {
         p.pctComplete > 0 ? `${p.pctComplete.toFixed(0)}%` : '-',
         format(addMonths(pdfNow, p.startOffset), 'MMM yy'),
         format(addMonths(pdfNow, p.startOffset + p.remainingMonths), 'MMM yy'),
-        ...monthlyCols,
+        ...periodCols,
       ];
     });
 
@@ -1313,9 +1351,9 @@ const LaborForecast: React.FC = () => {
     if (oppMode !== 'off' && opportunityProjections.length > 0) {
       projRows.push(['', '', '', '', '', ...filteredTrades.map(() => ''), '', '', '', ...colLabels.map(() => '')]);  // spacer
       opportunityProjections.forEach(p => {
-        const monthlyCols = displayColumns.map(col => {
-          const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
-          return fmtHeadcount(h.total, hpp);
+        const periodCols = pdfTableColumns.map(pc => {
+          const h = applyTradeFilter(aggHours(p.monthlyHours, pc.keys));
+          return useQuarterly ? fmtHours(h.total) : fmtHeadcount(h.total, hpp);
         });
         const filteredRemaining = p.weightedTradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
         projRows.push([
@@ -1328,7 +1366,7 @@ const LaborForecast: React.FC = () => {
           '-',
           format(p.projectedStart, 'MMM yy'),
           format(addMonths(p.projectedStart, p.workDurationMonths), 'MMM yy'),
-          ...monthlyCols,
+          ...periodCols,
         ]);
       });
     }
@@ -1403,7 +1441,7 @@ const LaborForecast: React.FC = () => {
             )}
             {oppMode !== 'off' && opportunityProjections.length > 0 && (
               <span style={{ color: '#f59e0b', fontWeight: 500 }}>
-                {' '}| +{opportunityProjections.length} opportunities ({fmtHours(oppGrandTotalHours)} hrs weighted)
+                {' '}| +{opportunityProjections.length} opportunities ({fmtHours(oppGrandTotalHours)} hrs{oppWeighted ? ' weighted' : ''})
               </span>
             )}
           </div>
@@ -1706,8 +1744,8 @@ const LaborForecast: React.FC = () => {
           <MultiSearchableSelect
             options={opportunitiesWithEstimates.map(o => ({
               value: String(o.id),
-              label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})`,
-              searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''}`,
+              label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
+              searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''} ${o.stage_name || ''}`,
             }))}
             value={selectedOppIds.map(String)}
             onChange={(vals: string[]) => setSelectedOppIds(vals.map(Number))}
@@ -1715,9 +1753,20 @@ const LaborForecast: React.FC = () => {
             style={{ minWidth: '280px', fontSize: '0.75rem' }}
           />
         )}
+        {oppMode !== 'off' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.75rem', color: '#92400e' }}>
+            <input
+              type="checkbox"
+              checked={oppWeighted}
+              onChange={(e) => setOppWeighted(e.target.checked)}
+              style={{ accentColor: '#f59e0b' }}
+            />
+            Probability weighted
+          </label>
+        )}
         {oppMode !== 'off' && opportunityProjections.length > 0 && (
           <span style={{ fontSize: '0.75rem', color: '#92400e', marginLeft: 'auto' }}>
-            {opportunityProjections.length} opportunities | {fmtHours(oppGrandTotalHours)} weighted hrs
+            {opportunityProjections.length} opportunities | {fmtHours(oppGrandTotalHours)} {oppWeighted ? 'weighted' : 'actual'} hrs
           </span>
         )}
       </div>
@@ -2032,7 +2081,7 @@ const LaborForecast: React.FC = () => {
                   <>
                     <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
                       <td colSpan={7 + displayColumns.length} style={{ padding: '0.4rem 0.5rem', position: 'sticky', left: 0, background: '#fffbeb', color: '#b45309', fontWeight: 600, fontSize: '0.7rem' }}>
-                        + Opportunities ({opportunityProjections.length}) — probability-weighted hours
+                        + Opportunities ({opportunityProjections.length}) — {oppWeighted ? 'probability-weighted' : 'actual'} hours
                       </td>
                     </tr>
                     {opportunityProjections.map(p => (
@@ -2362,7 +2411,7 @@ const LaborForecast: React.FC = () => {
                     background: 'repeating-linear-gradient(45deg, #f59e0b, #f59e0b 1px, transparent 1px, transparent 3px)',
                     border: '1px solid #f59e0b', borderRadius: '2px'
                   }} />
-                  Opportunities (weighted)
+                  Opportunities ({oppWeighted ? 'weighted' : 'actual'})
                 </span>
               )}
             </div>
@@ -2546,7 +2595,7 @@ const LaborForecast: React.FC = () => {
                     <>
                       <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
                         <td colSpan={7} style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontWeight: 600, fontSize: '0.7rem' }}>
-                          Opportunities (probability-weighted)
+                          Opportunities ({oppWeighted ? 'probability-weighted' : 'actual hours'})
                         </td>
                       </tr>
                       {drillDownOpps.map(({ projection: p, hours: h }) => {

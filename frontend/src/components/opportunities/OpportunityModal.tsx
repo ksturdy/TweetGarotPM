@@ -63,7 +63,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     customer_id: opportunity?.customer_id || '',
     gc_customer_id: opportunity?.gc_customer_id || '',
     facility_name: opportunity?.facility_name || '',
-    facility_location_id: opportunity?.facility_location_id || ''
+    facility_location_id: opportunity?.facility_location_id || '',
+    awarded_status: opportunity?.awarded_status || ''
   });
 
   const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments'>('details');
@@ -232,6 +233,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     // Always include assigned_to so it can be cleared (null = unassigned)
     cleanedData.assigned_to = formData.assigned_to ? Number(formData.assigned_to) : null;
     if (formData.probability) cleanedData.probability = formData.probability;
+    cleanedData.awarded_status = formData.awarded_status || null;
     // Always include campaign_id (even if empty string, convert to null for clearing)
     if (formData.campaign_id && formData.campaign_id !== '') {
       cleanedData.campaign_id = Number(formData.campaign_id);
@@ -361,6 +363,24 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         ))}
                       </select>
                     </div>
+                    {stages.find((s: any) => String(s.id) === String(formData.stage_id))?.name === 'Awarded' && (
+                      <div className="form-group">
+                        <label htmlFor="awarded_status">Awarded Status</label>
+                        <select
+                          id="awarded_status"
+                          name="awarded_status"
+                          value={formData.awarded_status}
+                          onChange={handleChange}
+                          style={{
+                            borderColor: formData.awarded_status === 'Completed' ? '#16a34a' : formData.awarded_status === 'In Progress' ? '#f59e0b' : '#ef4444',
+                          }}
+                        >
+                          <option value="">Not in Vista</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+                      </div>
+                    )}
                     <div className="form-group">
                       <label htmlFor="probability">Win Probability</label>
                       <select
