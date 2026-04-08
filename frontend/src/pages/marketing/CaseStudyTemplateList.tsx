@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const CaseStudyTemplateList: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { confirm } = useTitanFeedback();
   const [categoryFilter, setCategoryFilter] = useState<string>('');
 
   const { data: templates, isLoading } = useQuery({
@@ -34,8 +36,9 @@ const CaseStudyTemplateList: React.FC = () => {
     },
   });
 
-  const handleDelete = (template: CaseStudyTemplate) => {
-    if (window.confirm(`Delete template "${template.name}"?`)) {
+  const handleDelete = async (template: CaseStudyTemplate) => {
+    const ok = await confirm({ message: `Delete template "${template.name}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(template.id);
     }
   };

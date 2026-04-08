@@ -915,7 +915,15 @@ router.get('/:campaignId/companies/:companyId/assessment', async (req, res, next
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    const assessment = await CustomerAssessment.findByCampaignCompanyId(req.params.companyId);
+    // First check for a campaign-specific assessment
+    let assessment = await CustomerAssessment.findByCampaignCompanyId(req.params.companyId);
+    // If none, fall back to the linked customer's assessment
+    if (!assessment) {
+      const company = await campaignCompanies.getById(req.params.companyId);
+      if (company && company.linked_company_id) {
+        assessment = await CustomerAssessment.findByCustomerId(company.linked_company_id);
+      }
+    }
     if (!assessment) {
       return res.status(404).json({ error: 'No assessment found' });
     }
@@ -932,10 +940,14 @@ router.post('/:campaignId/companies/:companyId/assessment', async (req, res, nex
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
+    // Look up linked customer so score syncs bidirectionally
+    const company = await campaignCompanies.getById(req.params.companyId);
+    const linkedCustomerId = company?.linked_company_id || null;
     const assessment = await CustomerAssessment.createForCampaignCompany(
       req.params.companyId,
       req.body,
-      req.user.id
+      req.user.id,
+      linkedCustomerId
     );
     res.status(201).json(assessment);
   } catch (error) {
@@ -950,10 +962,14 @@ router.put('/:campaignId/companies/:companyId/assessment/:assessmentId', async (
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
+    // Look up linked customer so score syncs bidirectionally
+    const company = await campaignCompanies.getById(req.params.companyId);
+    const linkedCustomerId = company?.linked_company_id || null;
     const assessment = await CustomerAssessment.update(
       req.params.assessmentId,
       req.body,
-      req.user.id
+      req.user.id,
+      linkedCustomerId
     );
     if (!assessment) {
       return res.status(404).json({ error: 'Assessment not found' });

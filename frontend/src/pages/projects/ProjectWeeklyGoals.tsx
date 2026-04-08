@@ -3,10 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { weeklyGoalPlansApi, WeeklyGoalPlan, WeeklyGoalTask, DailyTradeActual } from '../../services/weeklyGoalPlans';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const ProjectWeeklyGoals: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   // State
   const [selectedWeekStart, setSelectedWeekStart] = useState<string>(() => {
@@ -93,7 +95,7 @@ const ProjectWeeklyGoals: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Create task error:', error);
-      alert(`Error creating task: ${error.response?.data?.error || error.message}`);
+      toast.error(`Error creating task: ${error.response?.data?.error || error.message}`);
     }
   });
 
@@ -107,7 +109,7 @@ const ProjectWeeklyGoals: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Update task error:', error);
-      alert(`Error updating task: ${error.response?.data?.error || error.message}`);
+      toast.error(`Error updating task: ${error.response?.data?.error || error.message}`);
     }
   });
 
@@ -185,7 +187,7 @@ const ProjectWeeklyGoals: React.FC = () => {
     const dayData = tasksByDateAndTrade[date];
 
     if (!dayData || !project) {
-      alert('No tasks to report for this day');
+      toast.warning('No tasks to report for this day');
       return;
     }
 
@@ -1401,19 +1403,19 @@ const ProjectWeeklyGoals: React.FC = () => {
 
               if (!incompleteTaskId || !currentPlan) {
                 console.log('ERROR: Missing task or plan information');
-                alert('Error: Missing task or plan information');
+                toast.error('Error: Missing task or plan information');
                 return;
               }
 
               if (!reason) {
                 console.log('ERROR: No reason selected');
-                alert('Please select a reason');
+                toast.warning('Please select a reason');
                 return;
               }
 
               if (!notes || notes.trim() === '') {
                 console.log('ERROR: No notes provided');
-                alert('Please provide additional notes explaining why this task was not completed');
+                toast.warning('Please provide additional notes explaining why this task was not completed');
                 return;
               }
 
@@ -1426,7 +1428,7 @@ const ProjectWeeklyGoals: React.FC = () => {
                 if (newDate) {
                   const task = tasks?.find(t => t.id === incompleteTaskId);
                   if (!task) {
-                    alert('Error: Task not found');
+                    toast.error('Error: Task not found');
                     return;
                   }
 
@@ -1533,7 +1535,7 @@ const ProjectWeeklyGoals: React.FC = () => {
                 console.error('Error response data:', error?.response?.data);
                 console.error('Error message:', error?.message);
                 const errorMsg = error?.response?.data?.error || error?.message || 'Unknown error';
-                alert(`Error updating task: ${errorMsg}`);
+                toast.error(`Error updating task: ${errorMsg}`);
               }
             }}>
               <div style={{ marginBottom: '16px' }}>
@@ -1922,8 +1924,9 @@ const ProjectWeeklyGoals: React.FC = () => {
               {(editingTask.status === 'complete' || editingTask.incomplete_reason) && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm('Reset this task to planned status? This will clear any completion or incomplete reasons.')) {
+                  onClick={async () => {
+                    const ok = await confirm('Reset this task to planned status? This will clear any completion or incomplete reasons.');
+                    if (ok) {
                       updateTaskStatusMutation.mutate({
                         taskId: editingTask.id,
                         status: 'incomplete',
@@ -1953,8 +1956,9 @@ const ProjectWeeklyGoals: React.FC = () => {
               {/* Delete Task Button */}
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+                onClick={async () => {
+                  const ok = await confirm({ message: 'Are you sure you want to delete this task? This action cannot be undone.', danger: true });
+                  if (ok) {
                     deleteTaskMutation.mutate(editingTask.id);
                     setEditingTask(null);
                   }
@@ -2281,7 +2285,7 @@ const ProjectWeeklyGoals: React.FC = () => {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(reportContent).then(() => {
-                    alert('✓ Report copied to clipboard!\n\nYou can now paste it into an email or document.');
+                    toast.success('Report copied to clipboard! You can now paste it into an email or document.');
                     setShowReportPreview(false);
                   });
                 }}

@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { drawingsApi, Drawing, CreateDrawingData } from '../../services/drawings';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const ProjectDrawings: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [disciplineFilter, setDisciplineFilter] = useState('');
   const [showAllVersions, setShowAllVersions] = useState(false);
@@ -79,8 +81,9 @@ const ProjectDrawings: React.FC = () => {
     uploadMutation.mutate(formDataToSend);
   };
 
-  const handleDelete = (drawing: Drawing) => {
-    if (window.confirm(`Delete drawing "${drawing.drawing_number}"?`)) {
+  const handleDelete = async (drawing: Drawing) => {
+    const ok = await confirm({ message: `Delete drawing "${drawing.drawing_number}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(drawing.id);
     }
   };

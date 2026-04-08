@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { SellSheet, SellSheetImage, sellSheetsApi } from '../../services/sellSheets';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import SellSheetPreview from './SellSheetPreview';
 
 interface SellSheetPreviewModalProps {
@@ -14,6 +15,8 @@ const SellSheetPreviewModal: React.FC<SellSheetPreviewModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { toast } = useTitanFeedback();
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -34,7 +37,7 @@ const SellSheetPreviewModal: React.FC<SellSheetPreviewModalProps> = ({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download PDF. Please try Print / PDF instead.');
+      toast.error('Failed to download PDF. Please try Print / PDF instead.');
     }
   };
 

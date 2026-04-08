@@ -22,6 +22,7 @@ import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore
 import { ContourType, getContourMultipliers, getDefaultContour } from '../../utils/contours';
 import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
 import api from '../../services/api';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const REGIONS = [
   { prefix: '10', label: 'NE Wisconsin', color: '#3b82f6' },
@@ -120,6 +121,7 @@ const defaultSettings: BacklogFitSettings = {
 const BacklogFitAnalysis: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const [capacityTarget, setCapacityTarget] = useState<number>(defaultSettings.capacityTarget);
   const [horizonMonths, setHorizonMonths] = useState<number>(defaultSettings.horizonMonths);
   const [marketFilter, setMarketFilter] = useState<string>('');
@@ -147,7 +149,7 @@ const BacklogFitAnalysis: React.FC = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('PDF download failed:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setPdfLoading(false);
     }

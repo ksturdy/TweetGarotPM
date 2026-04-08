@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { TitanFeedbackProvider } from './context/TitanFeedbackContext';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import './index.css';
 
@@ -22,9 +23,11 @@ root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <TitanFeedbackProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </TitanFeedbackProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

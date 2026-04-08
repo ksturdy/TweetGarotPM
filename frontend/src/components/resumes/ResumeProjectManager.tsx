@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ResumeProject } from '../../services/employeeResumes';
 import api from '../../services/api';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ResumeProjectManager.css';
 
 interface Props {
@@ -151,6 +152,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, onCha
 };
 
 const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) => {
+  const { confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [marketFilter, setMarketFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
@@ -243,8 +245,9 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) 
     onChange([...value, newProject as ResumeProject]);
   };
 
-  const handleRemove = (projectId: number) => {
-    if (window.confirm('Remove this project from resume?')) {
+  const handleRemove = async (projectId: number) => {
+    const ok = await confirm({ message: 'Remove this project from resume?', danger: true });
+    if (ok) {
       onChange(value.filter(p => p.project_id !== projectId));
     }
   };

@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { officeLocationsApi, OfficeLocation, OfficeLocationInput } from '../../services/officeLocations';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const LocationList: React.FC = () => {
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<OfficeLocationInput>({
@@ -47,7 +49,7 @@ const LocationList: React.FC = () => {
     },
     onError: (error: any) => {
       const message = error.response?.data?.error || 'Failed to delete location';
-      alert(message);
+      toast.error(message);
     },
   });
 
@@ -79,8 +81,9 @@ const LocationList: React.FC = () => {
     setFormData({ name: '', address: '', city: '', state: '', zipCode: '', phone: '' });
   };
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
+  const handleDelete = async (id: number, name: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete ${name}?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import { getTenant, updateTenant, updateTenantSettings, uploadLogo, deleteLogo, TenantInfo } from '../services/tenant';
 import ImageCropper from '../components/common/ImageCropper';
 import '../components/common/ImageCropper.css';
@@ -8,6 +9,7 @@ import '../styles/SalesPipeline.css';
 
 const TenantSettings: React.FC = () => {
   const { user } = useAuth();
+  const { confirm } = useTitanFeedback();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -162,8 +164,9 @@ const TenantSettings: React.FC = () => {
     setOriginalFileName('');
   };
 
-  const handleDeleteLogo = () => {
-    if (window.confirm('Are you sure you want to remove the company logo?')) {
+  const handleDeleteLogo = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to remove the company logo?', danger: true });
+    if (ok) {
       deleteLogoMutation.mutate();
     }
   };

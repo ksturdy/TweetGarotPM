@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 interface CustomerContact {
@@ -49,6 +50,7 @@ const emptyContact: Omit<CustomerContact, 'id' | 'created_at' | 'updated_at'> = 
 
 const AccountManagementContacts: React.FC = () => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [companySearch, setCompanySearch] = useState('');
   const [facilitySearch, setFacilitySearch] = useState('');
@@ -161,8 +163,9 @@ const AccountManagementContacts: React.FC = () => {
     setShowEditModal(true);
   };
 
-  const handleDelete = (contact: CustomerContact) => {
-    if (window.confirm(`Are you sure you want to delete ${contact.first_name} ${contact.last_name}?`)) {
+  const handleDelete = async (contact: CustomerContact) => {
+    const ok = await confirm({ message: `Are you sure you want to delete ${contact.first_name} ${contact.last_name}?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(contact.id);
     }
   };

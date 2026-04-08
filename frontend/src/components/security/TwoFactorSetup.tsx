@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import securityApi from '../../services/security';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const TwoFactorSetup: React.FC = () => {
+  const { toast } = useTitanFeedback();
   const [step, setStep] = useState<'status' | 'setup' | 'verify' | 'backup-codes'>('status');
   const [secret, setSecret] = useState('');
   const [qrCode, setQrCode] = useState('');
@@ -48,7 +50,7 @@ const TwoFactorSetup: React.FC = () => {
   const disableMutation = useMutation({
     mutationFn: () => securityApi.disable2FA(disablePassword),
     onSuccess: () => {
-      alert('2FA has been disabled');
+      toast.success('2FA has been disabled');
       setStep('status');
       setDisablePassword('');
       setError('');
@@ -64,7 +66,7 @@ const TwoFactorSetup: React.FC = () => {
     onSuccess: (response) => {
       setBackupCodes(response.data.backupCodes);
       setStep('backup-codes');
-      alert('Backup codes regenerated successfully');
+      toast.success('Backup codes regenerated successfully');
     },
     onError: (err: any) => {
       setError(err.response?.data?.error || 'Failed to regenerate backup codes');
@@ -100,7 +102,7 @@ const TwoFactorSetup: React.FC = () => {
 
   const copyBackupCodes = () => {
     navigator.clipboard.writeText(backupCodes.join('\n'));
-    alert('Backup codes copied to clipboard');
+    toast.success('Backup codes copied to clipboard');
   };
 
   if (step === 'status') {

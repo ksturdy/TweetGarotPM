@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { CaseStudy, CaseStudyImage, caseStudiesApi } from '../../services/caseStudies';
 import { CaseStudyTemplate } from '../../services/caseStudyTemplates';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import CaseStudyPreview from './CaseStudyPreview';
 
 interface CaseStudyPreviewModalProps {
@@ -17,6 +18,8 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { toast } = useTitanFeedback();
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -37,7 +40,7 @@ const CaseStudyPreviewModal: React.FC<CaseStudyPreviewModalProps> = ({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download PDF. Please try Print / PDF instead.');
+      toast.error('Failed to download PDF. Please try Print / PDF instead.');
     }
   };
 

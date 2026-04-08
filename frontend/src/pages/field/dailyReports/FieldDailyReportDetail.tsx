@@ -11,6 +11,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import { dailyReportsApi, DailyReport, DailyReportCrew } from '../../../services/dailyReports';
 import { generateDailyReportPdf } from '../../../utils/dailyReportPdfClient';
 import { useAuth } from '../../../context/AuthContext';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const formatDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -52,6 +53,7 @@ const FieldDailyReportDetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant, user } = useAuth();
+  const { toast, confirm } = useTitanFeedback();
   // Use API proxy for logo to avoid R2 CORS issues in PDF generation
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
 
@@ -89,17 +91,19 @@ const FieldDailyReportDetail: React.FC = () => {
     },
   });
 
-  const handleSubmitReport = () => {
+  const handleSubmitReport = async () => {
     const msg = report?.status === 'revision'
       ? 'Resubmit this daily report?'
       : 'Submit this daily report? It cannot be edited after submission.';
-    if (window.confirm(msg)) {
+    const ok = await confirm(msg);
+    if (ok) {
       submitMutation.mutate();
     }
   };
 
-  const handleRecallReport = () => {
-    if (window.confirm('Recall this report for editing? It will need to be resubmitted.')) {
+  const handleRecallReport = async () => {
+    const ok = await confirm('Recall this report for editing? It will need to be resubmitted.');
+    if (ok) {
       reviseMutation.mutate();
     }
   };
@@ -139,7 +143,7 @@ const FieldDailyReportDetail: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to download PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -176,7 +180,7 @@ const FieldDailyReportDetail: React.FC = () => {
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       console.error('Failed to share daily report:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setSendingEmail(false);
     }

@@ -30,6 +30,7 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import EmailIcon from '@mui/icons-material/Email';
 import api from '../../services/api';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 import './ExecutiveReport.css';
 
@@ -182,6 +183,7 @@ const CategoryCard: React.FC<{ category: ExecutiveReportCategory; hasPrevious: b
 
 const ExecutiveReport: React.FC = () => {
   const navigate = useNavigate();
+  const { toast } = useTitanFeedback();
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -219,7 +221,7 @@ const ExecutiveReport: React.FC = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error downloading PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setPdfLoading(false);
     }

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sellSheetsApi } from '../../services/sellSheets';
 import SellSheetPreviewModal from '../../components/sellSheets/SellSheetPreviewModal';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const getImageUrl = (filePath: string) => {
@@ -19,6 +20,7 @@ const SellSheetDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [showPreview, setShowPreview] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -68,21 +70,23 @@ const SellSheetDetail: React.FC = () => {
     },
   });
 
-  const handleWorkflowAction = (action: string) => {
+  const handleWorkflowAction = async (action: string) => {
     const labels: Record<string, string> = {
       publish: 'publish this sell sheet',
       archive: 'archive this sell sheet',
       unarchive: 'un-archive this sell sheet (moves back to draft)',
     };
-    if (window.confirm(`Are you sure you want to ${labels[action]}?`)) {
+    const ok = await confirm(`Are you sure you want to ${labels[action]}?`);
+    if (ok) {
       if (action === 'publish') publishMutation.mutate();
       if (action === 'archive') archiveMutation.mutate();
       if (action === 'unarchive') unarchiveMutation.mutate();
     }
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this sell sheet? This action cannot be undone.')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this sell sheet? This action cannot be undone.', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };
@@ -101,7 +105,7 @@ const SellSheetDetail: React.FC = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error downloading PDF:', err);
-      alert('Failed to download PDF');
+      toast.error('Failed to download PDF');
     }
   };
 
@@ -118,7 +122,7 @@ const SellSheetDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['sellSheet', id] });
     } catch (err) {
       console.error('Error uploading image:', err);
-      alert('Failed to upload image');
+      toast.error('Failed to upload image');
     } finally {
       setUploadingImage(false);
     }
@@ -376,8 +380,9 @@ const SellSheetDetail: React.FC = () => {
                   </div>
                 )}
                 <button
-                  onClick={() => {
-                    if (window.confirm('Delete this image?')) {
+                  onClick={async () => {
+                    const ok = await confirm({ message: 'Delete this image?', danger: true });
+                    if (ok) {
                       deleteImageMutation.mutate(image.id);
                     }
                   }}

@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { departmentsApi, Department, DepartmentInput } from '../../services/departments';
 import { employeesApi } from '../../services/employees';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const DepartmentList: React.FC = () => {
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState<DepartmentInput>({
@@ -57,7 +59,7 @@ const DepartmentList: React.FC = () => {
     },
     onError: (error: any) => {
       const message = error.response?.data?.error || 'Failed to delete department';
-      alert(message);
+      toast.error(message);
     },
   });
 
@@ -87,8 +89,9 @@ const DepartmentList: React.FC = () => {
     setFormData({ name: '', description: '', managerId: undefined });
   };
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
+  const handleDelete = async (id: number, name: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete ${name}?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

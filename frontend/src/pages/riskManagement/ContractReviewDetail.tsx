@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractReviewsApi, ContractRiskFinding, ContractAnnotation } from '../../services/contractReviews';
 import ContractViewerNew from '../../components/contractReview/ContractViewerNew';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 import './ContractReviewDetail.css';
 
@@ -10,6 +11,7 @@ const ContractReviewDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const [reviewNotes, setReviewNotes] = useState('');
   const [approvalNotes, setApprovalNotes] = useState('');
@@ -70,8 +72,9 @@ const ContractReviewDetail: React.FC = () => {
     });
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this contract review?')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this contract review?', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };

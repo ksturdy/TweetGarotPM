@@ -9,6 +9,7 @@ import CompanyPicker from '../../components/CompanyPicker';
 import LocationPicker from '../../components/LocationPicker';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 type BuildStep = 'info' | 'build-method' | 'manual' | 'excel';
@@ -17,6 +18,7 @@ const EstimateNew: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   // Multi-step flow state
   const [currentStep, setCurrentStep] = useState<BuildStep>('info');
@@ -199,7 +201,7 @@ const EstimateNew: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to create estimate:', error);
-      alert(`Failed to create estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to create estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -214,7 +216,7 @@ const EstimateNew: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to create estimate:', error);
-      alert(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}. Your work has been auto-saved and you can try again.`);
+      toast.error(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}. Your work has been auto-saved and you can try again.`);
     },
   });
 
@@ -227,7 +229,7 @@ const EstimateNew: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to update estimate:', error);
-      alert(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to save estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -459,7 +461,7 @@ const EstimateNew: React.FC = () => {
   // Handler for proceeding to build method selection
   const handleProceedToBuildMethod = () => {
     if (!formData.project_name) {
-      alert('Please enter a project name');
+      toast.error('Please enter a project name');
       return;
     }
 
@@ -695,8 +697,9 @@ const EstimateNew: React.FC = () => {
               📝 Draft restored from {new Date(savedData.lastSaved).toLocaleString()}
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Are you sure you want to clear the saved draft?')) {
+                onClick={async () => {
+                  const ok = await confirm('Are you sure you want to clear the saved draft?');
+                  if (ok) {
                     localStorage.removeItem('estimateInProgress');
                     window.location.reload();
                   }

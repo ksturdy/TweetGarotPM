@@ -7,6 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { pipingFittingOrdersApi, PipingFittingOrder, PipingFittingOrderItem } from '../../../services/pipingFittingOrders';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 type Category = 'fittings' | 'hangers' | 'hardware';
 
@@ -127,6 +128,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
+  const { toast } = useTitanFeedback();
 
   // Order header
   const [form, setForm] = useState<Partial<PipingFittingOrder>>({
@@ -316,11 +318,11 @@ const FieldPipingFittingOrderForm: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.title?.trim()) {
-      window.alert('Title is required.');
+      toast.error('Title is required.');
       return;
     }
     if (lineItems.length === 0) {
-      window.alert('Add at least one fitting to the order.');
+      toast.error('Add at least one fitting to the order.');
       return;
     }
     setSaving(true);
@@ -388,7 +390,7 @@ const FieldPipingFittingOrderForm: React.FC = () => {
       navigate(`/field/projects/${projectId}/piping-fitting-orders`);
     } catch (err) {
       console.error('Failed to save:', err);
-      window.alert('Failed to save. Please try again.');
+      toast.error('Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }

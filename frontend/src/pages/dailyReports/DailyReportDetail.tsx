@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dailyReportsApi, DailyReportCrew } from '../../services/dailyReports';
 import { projectsApi } from '../../services/projects';
 import { format, parseISO } from 'date-fns';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const tradeLabel = (trade: string): string => {
@@ -25,6 +26,7 @@ const DailyReportDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -105,8 +107,9 @@ const DailyReportDetail: React.FC = () => {
             <>
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  if (window.confirm('Approve this daily report?')) {
+                onClick={async () => {
+                  const ok = await confirm('Approve this daily report?');
+                  if (ok) {
                     approveMutation.mutate();
                   }
                 }}

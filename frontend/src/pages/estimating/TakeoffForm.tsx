@@ -11,6 +11,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import { takeoffsApi, Takeoff, TakeoffItem } from '../../services/takeoffs';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import { usersApi, User } from '../../services/users';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const FITTING_TYPES = [
   { value: '90', label: '90\u00B0 Elbow', rateKey: '90_elbow' },
@@ -103,6 +104,7 @@ const TakeoffForm: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const isEdit = Boolean(id);
   const takeoffType = searchParams.get('type') === 'traceover' ? 'traceover' : 'manual';
 
@@ -318,7 +320,7 @@ const TakeoffForm: React.FC = () => {
   // Save
   const handleSave = async () => {
     if (!form.name.trim()) {
-      window.alert('Name is required.');
+      toast.error('Name is required.');
       return;
     }
     setSaving(true);
@@ -409,7 +411,7 @@ const TakeoffForm: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to save:', err);
-      window.alert('Failed to save. Please try again.');
+      toast.error('Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }

@@ -20,6 +20,7 @@ import {
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
 import { assessmentsApi } from '../services/assessments';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import './CustomerDetail.css';
 import '../styles/SalesPipeline.css';
 
@@ -48,6 +49,7 @@ const CustomerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -148,7 +150,7 @@ const CustomerDetail: React.FC = () => {
       setDeleteLocConfirm(null);
     },
     onError: () => {
-      alert('Failed to delete location. Please try again.');
+      toast.error('Failed to delete location. Please try again.');
       setDeleteLocConfirm(null);
     },
   });
@@ -901,7 +903,7 @@ const CustomerDetail: React.FC = () => {
                   </thead>
                   <tbody>
                     {opportunities.map((opp: any) => (
-                      <tr key={opp.id} onClick={() => navigate('/sales', { state: { opportunityId: opp.id } })} style={{ cursor: 'pointer' }}>
+                      <tr key={opp.id} onClick={() => navigate('/sales', { state: { selectedOpportunityId: opp.id } })} style={{ cursor: 'pointer' }}>
                         <td>{formatDate(opp.created_at)}</td>
                         <td className="cd-truncate"><strong>{opp.title}</strong></td>
                         <td className="cd-truncate">{opp.assigned_to_name || '-'}</td>

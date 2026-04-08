@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { EmployeeResume, ResumeProject, employeeResumesApi } from '../../services/employeeResumes';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ResumePreview from './ResumePreview';
 
 interface ResumePreviewModalProps {
@@ -18,6 +19,8 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
   onClose,
   photoPreviewUrl,
 }) => {
+  const { toast } = useTitanFeedback();
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -375,7 +378,7 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download PDF. Please try Print / PDF instead.');
+      toast.error('Failed to download PDF. Please try Print / PDF instead.');
     }
   };
 

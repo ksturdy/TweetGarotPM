@@ -6,10 +6,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { takeoffsApi, Takeoff } from '../../services/takeoffs';
 import NewTakeoffDialog from '../../components/estimates/NewTakeoffDialog';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const TakeoffsList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewDialog, setShowNewDialog] = useState(false);
@@ -53,9 +55,10 @@ const TakeoffsList: React.FC = () => {
   const totalAdjustedHours = takeoffs.reduce((sum: number, t: Takeoff) => sum + Number(t.total_adjusted_hours || 0), 0);
   const completeCount = takeoffs.filter((t: Takeoff) => t.status === 'complete').length;
 
-  const handleDelete = (e: React.MouseEvent, id: number) => {
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
-    if (window.confirm('Delete this takeoff?')) {
+    const ok = await confirm({ message: 'Delete this takeoff?', danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

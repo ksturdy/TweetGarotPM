@@ -7,6 +7,7 @@ import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
 import { sellSheetsApi } from '../../services/sellSheets';
 import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalDetail.css';
 import '../../styles/SalesPipeline.css';
 
@@ -15,6 +16,7 @@ const ProposalDetail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
   const [showPreview, setShowPreview] = useState(false);
   const [csSearch, setCsSearch] = useState('');
@@ -128,14 +130,16 @@ const ProposalDetail: React.FC = () => {
     enabled: isEditing,
   });
 
-  const handleStatusChange = (status: string) => {
-    if (window.confirm(`Change proposal status to "${status}"?`)) {
+  const handleStatusChange = async (status: string) => {
+    const ok = await confirm(`Change proposal status to "${status}"?`);
+    if (ok) {
       updateStatusMutation.mutate({ status });
     }
   };
 
-  const handleCreateRevision = () => {
-    if (window.confirm('Create a new revision of this proposal?')) {
+  const handleCreateRevision = async () => {
+    const ok = await confirm('Create a new revision of this proposal?');
+    if (ok) {
       createRevisionMutation.mutate();
     }
   };

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { proposalTemplatesApi, ProposalTemplate } from '../../services/proposalTemplates';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalTemplateList.css';
 import '../../styles/SalesPipeline.css';
 
 const ProposalTemplateList: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { confirm } = useTitanFeedback();
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [activeFilter, setActiveFilter] = useState<string>('all');
 
@@ -44,8 +46,9 @@ const ProposalTemplateList: React.FC = () => {
     },
   });
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete the template "${name}"?`)) {
+  const handleDelete = async (id: number, name: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete the template "${name}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

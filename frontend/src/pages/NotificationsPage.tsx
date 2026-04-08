@@ -5,6 +5,7 @@ import DoneAllIcon from '@mui/icons-material/DoneAll';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { notificationsApi, Notification } from '../services/notifications';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import './NotificationsPage.css';
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ function formatDate(dateStr: string): string {
 const NotificationsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const { data, isLoading } = useQuery({
     queryKey: ['notifications-page'],
@@ -81,8 +83,9 @@ const NotificationsPage: React.FC = () => {
     deleteNotification.mutate(id);
   }
 
-  function handleClearAll() {
-    if (window.confirm('Delete all notifications? This cannot be undone.')) {
+  async function handleClearAll() {
+    const ok = await confirm({ message: 'Delete all notifications? This cannot be undone.', danger: true });
+    if (ok) {
       deleteAll.mutate();
     }
   }

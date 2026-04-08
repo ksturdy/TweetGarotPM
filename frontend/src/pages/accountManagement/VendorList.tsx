@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vendorsService, Vendor } from '../../services/vendors';
 import { PlacesSearch } from '../../components/PlacesSearch';
 import { Place } from '../../services/places';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 interface DuplicateMatch {
@@ -15,6 +16,7 @@ interface DuplicateMatch {
 
 const VendorList: React.FC = () => {
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [vendorTypeFilter, setVendorTypeFilter] = useState<string>('');
@@ -127,19 +129,19 @@ const VendorList: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       setShowImportModal(false);
       setSelectedFile(null);
-      alert(`Successfully imported ${data.count} vendors`);
+      toast.success(`Successfully imported ${data.count} vendors`);
     },
     onError: (error: any) => {
-      alert(`Import failed: ${error.response?.data?.message || error.message}`);
+      toast.error(`Import failed: ${error.response?.data?.message || error.message}`);
     },
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     // Check if there's a duplicate warning that hasn't been acknowledged
     if (duplicateWarning.length > 0 && !duplicateAcknowledged) {
-      const confirmCreate = window.confirm(
+      const confirmCreate = await confirm(
         `A vendor with the company name "${duplicateWarning[0].company_name}" already exists. Are you sure you want to create another one?`
       );
       if (!confirmCreate) return;
@@ -190,7 +192,7 @@ const VendorList: React.FC = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      alert('Failed to download template');
+      toast.error('Failed to download template');
     }
   };
 

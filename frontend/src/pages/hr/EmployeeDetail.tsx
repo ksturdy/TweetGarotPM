@@ -7,12 +7,14 @@ import { officeLocationsApi } from '../../services/officeLocations';
 import { usersApi } from '../../services/users';
 import { useAuth } from '../../context/AuthContext';
 import { format } from 'date-fns';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const EmployeeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const { user } = useAuth();
   const hasWriteAccess = user?.role === 'admin' || user?.hrAccess === 'write';
   const [isEditing, setIsEditing] = useState(false);
@@ -120,8 +122,9 @@ const EmployeeDetail: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this employee? This action cannot be undone.')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this employee? This action cannot be undone.', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };

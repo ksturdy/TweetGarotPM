@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sellSheetsApi, SellSheet, SellSheetImage } from '../../services/sellSheets';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const SERVICE_SUGGESTIONS = [
@@ -27,6 +28,7 @@ const SellSheetForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const isEditMode = !!id;
 
   const [formData, setFormData] = useState({
@@ -182,7 +184,8 @@ const SellSheetForm: React.FC = () => {
   };
 
   const handleDeleteImage = async (imageId: number) => {
-    if (!window.confirm('Delete this image?')) return;
+    const ok = await confirm({ message: 'Delete this image?', danger: true });
+    if (!ok) return;
     try {
       await sellSheetsApi.deleteImage(imageId);
       setImages(prev => prev.filter(img => img.id !== imageId));

@@ -2,10 +2,12 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { budgetsApi, Budget, BudgetStats } from '../../services/budgets';
 import './BudgetsList.css';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const BudgetsList: React.FC = () => {
   const navigate = useNavigate();
+  const { toast, confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState('');
   const [buildingTypeFilter, setBuildingTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,7 +47,8 @@ const BudgetsList: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this budget?')) return;
+    const ok = await confirm({ message: 'Are you sure you want to delete this budget?', danger: true });
+    if (!ok) return;
 
     try {
       await budgetsApi.delete(id);
@@ -56,7 +59,7 @@ const BudgetsList: React.FC = () => {
       }
     } catch (err) {
       console.error('Error deleting budget:', err);
-      alert('Failed to delete budget');
+      toast.error('Failed to delete budget');
     }
   };
 
@@ -67,7 +70,7 @@ const BudgetsList: React.FC = () => {
       setShowPreview(true);
     } catch (err) {
       console.error('Error loading budget details:', err);
-      alert('Failed to load budget details');
+      toast.error('Failed to load budget details');
     }
   };
 

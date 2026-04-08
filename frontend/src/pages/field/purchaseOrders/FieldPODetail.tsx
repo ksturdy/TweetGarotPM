@@ -9,6 +9,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import { fieldPurchaseOrdersApi, FieldPurchaseOrder, FieldPurchaseOrderItem, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
 import { generateFieldPoPdf } from '../../../utils/fieldPoPdfClient';
 import { useAuth } from '../../../context/AuthContext';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
@@ -32,6 +33,7 @@ const FieldPODetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useAuth();
+  const { toast, confirm } = useTitanFeedback();
   // Use API proxy for logo to avoid R2 CORS issues in PDF generation
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -72,12 +74,13 @@ const FieldPODetail: React.FC = () => {
     submitMutation.mutate(po.id);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!po) return;
     const msg = po.status !== 'draft'
       ? `⚠️ This purchase order has status "${po.status}". Are you sure you want to permanently delete it?`
       : 'Are you sure you want to delete this purchase order?';
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({ message: msg, danger: true });
+    if (!ok) return;
     setActionLoading('delete');
     deleteMutation.mutate(po.id);
   };
@@ -117,7 +120,7 @@ const FieldPODetail: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to download PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -164,7 +167,7 @@ const FieldPODetail: React.FC = () => {
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       console.error('Failed to share PO:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setSendingEmail(false);
     }

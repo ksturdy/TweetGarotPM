@@ -15,6 +15,7 @@ import {
   SafetyJsaSignature,
 } from '../../../services/safetyJsa';
 import { generateJsaPdf } from '../../../utils/jsaPdfClient';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00');
@@ -41,6 +42,7 @@ const FieldJSADetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   const [showWorkerForm, setShowWorkerForm] = useState(false);
   const [newWorkerName, setNewWorkerName] = useState('');
@@ -105,8 +107,9 @@ const FieldJSADetail: React.FC = () => {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this JSA?')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this JSA?', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };
@@ -158,7 +161,7 @@ const FieldJSADetail: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to download PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -196,7 +199,7 @@ const FieldJSADetail: React.FC = () => {
       // User cancelled the share sheet — not an error
       if (err?.name === 'AbortError') return;
       console.error('Failed to share JSA:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setSendingEmail(false);
     }

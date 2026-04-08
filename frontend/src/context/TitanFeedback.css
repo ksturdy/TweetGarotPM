@@ -1,0 +1,257 @@
+/* ── Toast Container ─────────────────────────────────────────────────────── */
+
+.titan-toast-container {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  max-width: 420px;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+
+.titan-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(26, 35, 50, 0.18), 0 2px 8px rgba(26, 35, 50, 0.08);
+  border-left: 4px solid transparent;
+  animation: titanToastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.titan-toast--exit {
+  animation: titanToastOut 0.3s ease-in forwards;
+}
+
+.titan-toast--success { border-left-color: #10b981; }
+.titan-toast--error   { border-left-color: #ef4444; }
+.titan-toast--warning { border-left-color: #f59e0b; }
+.titan-toast--info    { border-left-color: #1a56db; }
+
+@keyframes titanToastIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes titanToastOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%) scale(0.95);
+  }
+}
+
+/* ── Toast Icon ──────────────────────────────────────────────────────────── */
+
+.titan-toast__icon {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.125rem;
+}
+
+.titan-toast--success .titan-toast__icon { color: #10b981; }
+.titan-toast--error   .titan-toast__icon { color: #ef4444; }
+.titan-toast--warning .titan-toast__icon { color: #f59e0b; }
+.titan-toast--info    .titan-toast__icon { color: #1a56db; }
+
+.titan-toast__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Toast Content ───────────────────────────────────────────────────────── */
+
+.titan-toast__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.titan-toast__brand {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: linear-gradient(135deg, #1a2332, #2c3e50);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.125rem;
+}
+
+.titan-toast__message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #1f2937;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ── Toast Close ─────────────────────────────────────────────────────────── */
+
+.titan-toast__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: #9ca3af;
+  transition: color 0.15s;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.titan-toast__close:hover {
+  color: #374151;
+}
+
+.titan-toast__close svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Confirm Overlay ─────────────────────────────────────────────────────── */
+
+.titan-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 35, 50, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* ── Confirm Dialog ──────────────────────────────────────────────────────── */
+
+.titan-confirm {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(26, 35, 50, 0.3);
+  max-width: 440px;
+  width: 90%;
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+.titan-confirm__header {
+  background: linear-gradient(135deg, #1a2332 0%, #2c3e50 50%, #34495e 100%);
+  padding: 1.25rem 1.5rem;
+}
+
+.titan-confirm__brand {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: linear-gradient(to right, #7eb3d5, #a8d5f0, #7eb3d5);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.25rem;
+}
+
+.titan-confirm__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.titan-confirm__body {
+  padding: 1.5rem;
+}
+
+.titan-confirm__body p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #374151;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.titan-confirm__footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+/* ── Confirm Buttons ─────────────────────────────────────────────────────── */
+
+.titan-confirm__btn {
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.titan-confirm__btn--cancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.titan-confirm__btn--cancel:hover {
+  background: #e5e7eb;
+}
+
+.titan-confirm__btn--confirm {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+}
+
+.titan-confirm__btn--confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.titan-confirm__btn--danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+}
+
+.titan-confirm__btn--danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .titan-toast-container {
+    left: 0.75rem;
+    right: 0.75rem;
+    max-width: none;
+  }
+
+  .titan-confirm {
+    width: 95%;
+  }
+}

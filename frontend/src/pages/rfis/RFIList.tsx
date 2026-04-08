@@ -14,10 +14,12 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import SendIcon from '@mui/icons-material/Send';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const RFIList: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const { toast } = useTitanFeedback();
   const [previewRFI, setPreviewRFI] = useState<RFI | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [sendingRFI, setSendingRFI] = useState<number | null>(null);
@@ -88,7 +90,7 @@ const RFIList: React.FC = () => {
       window.open(emlUrl, '_blank');
 
     } catch (error) {
-      alert('Failed to prepare email. Please try again.');
+      toast.error('Failed to prepare email. Please try again.');
       console.error('Error preparing email:', error);
     } finally {
       setSendingRFI(null);
@@ -114,14 +116,14 @@ const RFIList: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
       console.error('Error generating PDF:', error);
     }
   };
 
   const handleGenerateReport = () => {
     if (!rfis || rfis.length === 0) {
-      alert('No RFIs to include in the report.');
+      toast.warning('No RFIs to include in the report.');
       return;
     }
 
@@ -137,7 +139,7 @@ const RFIList: React.FC = () => {
         };
       }
     } catch (error) {
-      alert('Failed to generate report. Please try again.');
+      toast.error('Failed to generate report. Please try again.');
       console.error('Error generating report:', error);
     }
   };

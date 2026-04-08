@@ -159,14 +159,37 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
   if (mode === 'select') {
     return (
       <div>
-        <SearchableSelect
-          options={options}
-          value={selectedId?.toString() || ''}
-          onChange={handleSelectCompany}
-          placeholder={placeholder}
-          disabled={disabled}
-          onSearchTermChange={setSearchTerm}
-        />
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'stretch' }}>
+          <div style={{ flex: 1 }}>
+            <SearchableSelect
+              options={options}
+              value={selectedId?.toString() || ''}
+              onChange={handleSelectCompany}
+              placeholder={placeholder}
+              disabled={disabled}
+              onSearchTermChange={setSearchTerm}
+            />
+          </div>
+          {selectedId && (
+            <button
+              type="button"
+              onClick={() => window.open(`/customers/${selectedId}`, '_blank')}
+              title="Open customer page"
+              style={{
+                background: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                borderRadius: '6px',
+                padding: '0 8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                color: '#0284c7',
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
+              }}
+            >↗</button>
+          )}
+        </div>
         {!selectOnly && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
             <button

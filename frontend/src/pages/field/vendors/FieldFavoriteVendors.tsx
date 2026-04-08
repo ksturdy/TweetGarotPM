@@ -10,6 +10,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import PersonIcon from '@mui/icons-material/Person';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import { fieldFavoriteVendorsApi, FieldFavoriteVendor } from '../../../services/fieldFavoriteVendors';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 interface VendorFormData {
   name: string;
@@ -25,6 +26,7 @@ const hasContactsApi = 'contacts' in navigator && 'ContactsManager' in window;
 
 const FieldFavoriteVendors: React.FC = () => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<VendorFormData>(emptyForm);
@@ -61,8 +63,9 @@ const FieldFavoriteVendors: React.FC = () => {
     setShowForm(true);
   };
 
-  const handleDelete = (vendor: FieldFavoriteVendor) => {
-    if (window.confirm(`Delete "${vendor.name}" from favorites?`)) {
+  const handleDelete = async (vendor: FieldFavoriteVendor) => {
+    const ok = await confirm({ message: `Delete "${vendor.name}" from favorites?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(vendor.id);
     }
   };

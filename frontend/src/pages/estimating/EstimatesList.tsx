@@ -16,6 +16,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './EstimatesList.css';
 
 ChartJS.register(
@@ -33,6 +34,7 @@ ChartJS.register(
 const EstimatesList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('activity');
@@ -53,7 +55,7 @@ const EstimatesList: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to update status:', error);
-      alert(`Failed to update status: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to update status: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -65,7 +67,7 @@ const EstimatesList: React.FC = () => {
       setIsPreviewOpen(true);
     } catch (error) {
       console.error('Failed to load estimate:', error);
-      alert('Failed to load estimate preview');
+      toast.error('Failed to load estimate preview');
     }
   };
 

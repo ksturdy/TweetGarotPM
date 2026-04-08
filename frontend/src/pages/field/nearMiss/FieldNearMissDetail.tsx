@@ -9,6 +9,7 @@ import ShareIcon from '@mui/icons-material/Share';
 import { nearMissReportsApi, REPORT_TYPE_LABELS } from '../../../services/nearMissReports';
 import { generateNearMissPdf } from '../../../utils/nearMissPdfClient';
 import { useAuth } from '../../../context/AuthContext';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00');
@@ -25,6 +26,7 @@ const FieldNearMissDetail: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useAuth();
+  const { toast, confirm } = useTitanFeedback();
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -54,8 +56,9 @@ const FieldNearMissDetail: React.FC = () => {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this report?')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this report?', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };
@@ -94,7 +97,7 @@ const FieldNearMissDetail: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to download PDF:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -138,7 +141,7 @@ const FieldNearMissDetail: React.FC = () => {
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
       console.error('Failed to share report:', err);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setSendingEmail(false);
     }

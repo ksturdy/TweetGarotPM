@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceOfferingsApi, ServiceOffering } from '../../services/serviceOfferings';
 import './ServiceOfferingList.css';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const ServiceOfferingList: React.FC = () => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOffering, setEditingOffering] = useState<ServiceOffering | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
@@ -122,8 +124,9 @@ const ServiceOfferingList: React.FC = () => {
     }
   };
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
+  const handleDelete = async (id: number, name: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete "${name}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

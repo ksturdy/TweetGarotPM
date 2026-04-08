@@ -13,6 +13,7 @@ import TitanEstimate from './TitanEstimate';
 import FollowButton from './FollowButton';
 import { MARKETS } from '../../constants/markets';
 import { LOCATION_GROUPS } from '../../constants/locationGroups';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/OpportunityModal.css';
 
 interface OpportunityModalProps {
@@ -29,6 +30,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   defaultCampaignId
 }) => {
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const isEditMode = !!opportunity;
 
   const [formData, setFormData] = useState({
@@ -142,7 +144,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
         errorMessage = error.message;
       }
 
-      alert(`Error: ${errorMessage}`);
+      toast.error(`Error: ${errorMessage}`);
     }
   });
 
@@ -156,7 +158,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     },
     onError: (error: any) => {
       console.error('Failed to update opportunity:', error);
-      alert(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to update opportunity');
+      toast.error(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to update opportunity');
     }
   });
 
@@ -170,7 +172,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     },
     onError: (error: any) => {
       console.error('Failed to delete opportunity:', error);
-      alert(error.response?.data?.error || 'Failed to delete opportunity');
+      toast.error(error.response?.data?.error || 'Failed to delete opportunity');
     }
   });
 
@@ -248,8 +250,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   };
 
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this opportunity? This action cannot be undone.')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this opportunity? This action cannot be undone.', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };

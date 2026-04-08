@@ -5,8 +5,9 @@ import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary }
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { format } from 'date-fns';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
-const fmt = (value: number | string | null | undefined): string => {
+const fmt =(value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '-';
@@ -142,6 +143,7 @@ const LaborRow: React.FC<{
 const ProjectFinancials: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const [showSnapshotSuccess, setShowSnapshotSuccess] = useState(false);
   const [showOverrideInputs, setShowOverrideInputs] = useState(false);
   const [marginOverride, setMarginOverride] = useState('');
@@ -203,7 +205,7 @@ const ProjectFinancials: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Error capturing snapshot:', error);
-      alert(error.response?.data?.error || 'Failed to capture snapshot. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to capture snapshot. Please try again.');
     },
   });
 
@@ -224,7 +226,7 @@ const ProjectFinancials: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Error saving margin overrides:', error);
-      alert('Failed to save overrides.');
+      toast.error('Failed to save overrides.');
     },
   });
 
@@ -232,11 +234,11 @@ const ProjectFinancials: React.FC = () => {
     mutationFn: () => projectSnapshotsApi.backfillMargin(Number(projectId)),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['projectSnapshots', projectId] });
-      alert(`Updated ${res.data.snapshotsUpdated} historical snapshot(s) with margin overrides.`);
+      toast.success(`Updated ${res.data.snapshotsUpdated} historical snapshot(s) with margin overrides.`);
     },
     onError: (error: any) => {
       console.error('Error backfilling snapshots:', error);
-      alert(error.response?.data?.error || 'Failed to update past snapshots.');
+      toast.error(error.response?.data?.error || 'Failed to update past snapshots.');
     },
   });
 

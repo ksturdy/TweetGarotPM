@@ -6,6 +6,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { takeoffsApi, Takeoff, TakeoffItem } from '../../services/takeoffs';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const FITTING_LABELS: Record<string, string> = {
   '90': '90\u00B0 Elbow', '45': '45\u00B0 Elbow', tee: 'Tee', wye: 'Wye',
@@ -22,6 +23,7 @@ const TakeoffDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   const { data: takeoff, isLoading } = useQuery({
     queryKey: ['takeoff', id],
@@ -37,8 +39,9 @@ const TakeoffDetail: React.FC = () => {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this takeoff?')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this takeoff?', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };

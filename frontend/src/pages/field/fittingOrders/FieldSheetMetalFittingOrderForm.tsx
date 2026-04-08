@@ -7,6 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { sheetMetalFittingOrdersApi, SheetMetalFittingOrder, SheetMetalFittingOrderItem } from '../../../services/sheetMetalFittingOrders';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 type Category = 'fittings' | 'accessories' | 'hardware';
 
@@ -124,6 +125,7 @@ const FieldSheetMetalFittingOrderForm: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
+  const { toast } = useTitanFeedback();
 
   const [form, setForm] = useState<Partial<SheetMetalFittingOrder>>({
     project_id: Number(projectId),
@@ -296,11 +298,11 @@ const FieldSheetMetalFittingOrderForm: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.title?.trim()) {
-      window.alert('Title is required.');
+      toast.error('Title is required.');
       return;
     }
     if (lineItems.length === 0) {
-      window.alert('Add at least one item to the order.');
+      toast.error('Add at least one item to the order.');
       return;
     }
     setSaving(true);
@@ -365,7 +367,7 @@ const FieldSheetMetalFittingOrderForm: React.FC = () => {
       navigate(`/field/projects/${projectId}/sheet-metal-fitting-orders`);
     } catch (err) {
       console.error('Failed to save:', err);
-      window.alert('Failed to save. Please try again.');
+      toast.error('Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }

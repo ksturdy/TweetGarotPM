@@ -7,6 +7,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { pipeSpecsApi, type PipeSpec } from '../../services/pipeSpecs';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const JOINT_METHOD_LABELS: Record<string, string> = {
   BW: 'Butt Weld',
@@ -93,6 +94,7 @@ const emptyForm: SpecFormData = {
 
 const PipeSpecsManager: React.FC = () => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -359,8 +361,8 @@ const PipeSpecsManager: React.FC = () => {
                             </button>
                             <button
                               title="Delete"
-                              onClick={() => {
-                                if (window.confirm(`Delete "${spec.name}"?`)) deleteMutation.mutate(spec.id);
+                              onClick={async () => {
+                                const ok = await confirm({ message: `Delete "${spec.name}"?`, danger: true }); if (ok) deleteMutation.mutate(spec.id);
                               }}
                               style={{ padding: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}
                             >

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import securityApi from '../../services/security';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../pages/Login.css';
 
 interface ChangePasswordModalProps {
@@ -10,6 +11,7 @@ interface ChangePasswordModalProps {
 }
 
 const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose, forceChange = false }) => {
+  const { toast } = useTitanFeedback();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -21,7 +23,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   const changePasswordMutation = useMutation({
     mutationFn: () => securityApi.changePassword(currentPassword, newPassword),
     onSuccess: () => {
-      alert('Password changed successfully!');
+      toast.success('Password changed successfully!');
       onClose();
       setCurrentPassword('');
       setNewPassword('');

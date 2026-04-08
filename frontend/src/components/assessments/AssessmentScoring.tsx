@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { assessmentsApi, AssessmentCriteria, CustomerAssessment } from '../../services/assessments';
 import { getCampaignCompanyAssessment, createCampaignCompanyAssessment, updateCampaignCompanyAssessment } from '../../services/campaigns';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './AssessmentScoring.css';
 
 interface AssessmentScoringProps {
@@ -79,6 +80,7 @@ const CATEGORIES: CategoryConfig[] = [
 const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, customerName, onClose, campaignId, campaignCompanyId }) => {
   const isCampaignAssessment = !!(campaignId && campaignCompanyId);
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(CATEGORIES.map(c => c.title)));
   const [notes, setNotes] = useState('');
   const [criteria, setCriteria] = useState<AssessmentCriteria>({
@@ -199,12 +201,12 @@ const AssessmentScoring: React.FC<AssessmentScoringProps> = ({ customerId, custo
         queryClient.invalidateQueries({ queryKey: ['assessment', customerId] });
         queryClient.invalidateQueries({ queryKey: ['campaign-assessments'] });
       }
-      alert('Assessment saved successfully!');
+      toast.success('Assessment saved successfully!');
       onClose();
     },
     onError: (error: any) => {
       console.error('Failed to save assessment:', error);
-      alert('Failed to save assessment: ' + (error?.response?.data?.error || error.message));
+      toast.error('Failed to save assessment: ' + (error?.response?.data?.error || error.message));
     },
   });
 
@@ -252,7 +254,7 @@ ${notes ? `\nNotes:\n${notes}` : ''}
 `.trim();
 
     navigator.clipboard.writeText(summary);
-    alert('Summary copied to clipboard!');
+    toast.success('Summary copied to clipboard!');
   };
 
   return (

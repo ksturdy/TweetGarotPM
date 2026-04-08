@@ -7,9 +7,10 @@ import { projectsApi } from '../../services/projects';
 import { employeesApi } from '../../services/employees';
 import { customersApi } from '../../services/customers';
 import { departmentsApi } from '../../services/departments';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
-type EntityType = 'contracts' | 'work-orders' | 'employees' | 'customers' | 'vendors' | 'departments' | 'facilities';
+type EntityType ='contracts' | 'work-orders' | 'employees' | 'customers' | 'vendors' | 'departments' | 'facilities';
 type FilterType = 'all' | 'unmatched' | 'auto_matched' | 'manual_matched' | 'ignored' | 'titan_only';
 type ViewMode = 'matches' | 'data';
 
@@ -187,6 +188,7 @@ const VistaLinkingManager: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [expandedEntity, setExpandedEntity] = useState<EntityType | null>(
@@ -1078,9 +1080,10 @@ const VistaLinkingManager: React.FC = () => {
       );
     }
 
-    const handleDeleteAll = () => {
+    const handleDeleteAll = async () => {
       const entityName = expandedEntity === 'contracts' ? 'projects' : expandedEntity;
-      if (window.confirm(`Are you sure you want to DELETE ALL ${data.length} Titan-only ${entityName}? This action cannot be undone.`)) {
+      const ok = await confirm({ message: `Are you sure you want to DELETE ALL ${data.length} Titan-only ${entityName}? This action cannot be undone.`, danger: true });
+      if (ok) {
         if (expandedEntity === 'contracts') {
           deleteTitanOnlyProjectsMutation.mutate();
         } else if (expandedEntity === 'employees') {

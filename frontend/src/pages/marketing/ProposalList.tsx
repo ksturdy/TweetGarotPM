@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { proposalsApi, Proposal } from '../../services/proposals';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalList.css';
 import '../../styles/SalesPipeline.css';
 
 const ProposalList: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Fetch proposals
@@ -31,8 +33,9 @@ const ProposalList: React.FC = () => {
     },
   });
 
-  const handleDelete = (id: number, proposalNumber: string) => {
-    if (window.confirm(`Are you sure you want to delete proposal "${proposalNumber}"?`)) {
+  const handleDelete = async (id: number, proposalNumber: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete proposal "${proposalNumber}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

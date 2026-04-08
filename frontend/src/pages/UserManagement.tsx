@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
 import securityApi from '../services/security';
 import { useAuth } from '../context/AuthContext';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import '../styles/SalesPipeline.css';
 
 const UserManagement: React.FC = () => {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
+  const { toast, confirm } = useTitanFeedback();
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
@@ -63,30 +65,30 @@ const UserManagement: React.FC = () => {
     mutationFn: (userId: number) => securityApi.resetUserPassword(userId, true),
     onSuccess: (response) => {
       const { temporaryPassword, email } = response.data;
-      alert(
+      toast.success(
         `Password reset successful!\n\nEmail: ${email}\nTemporary Password: ${temporaryPassword}\n\nThe user will be required to change their password on next login.\n\nPlease share this temporary password securely with the user.`
       );
     },
     onError: (err: any) => {
-      alert(`Failed to reset password: ${err.response?.data?.error || 'Unknown error'}`);
+      toast.error(`Failed to reset password: ${err.response?.data?.error || 'Unknown error'}`);
     },
   });
 
   const disable2FAMutation = useMutation({
     mutationFn: (userId: number) => securityApi.disable2FAForUser(userId),
     onSuccess: () => {
-      alert('2FA has been disabled for this user');
+      toast.success('2FA has been disabled for this user');
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
     onError: (err: any) => {
-      alert(`Failed to disable 2FA: ${err.response?.data?.error || 'Unknown error'}`);
+      toast.error(`Failed to disable 2FA: ${err.response?.data?.error || 'Unknown error'}`);
     },
   });
 
   const forcePasswordChangeMutation = useMutation({
     mutationFn: (userId: number) => securityApi.forcePasswordChange(userId),
     onSuccess: () => {
-      alert('User will be required to change password on next login');
+      toast.success('User will be required to change password on next login');
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
@@ -113,32 +115,37 @@ const UserManagement: React.FC = () => {
     setEditingUser(null);
   };
 
-  const handleToggleStatus = (user: User) => {
-    if (window.confirm(`Are you sure you want to ${user.is_active ? 'deactivate' : 'activate'} ${user.first_name} ${user.last_name}?`)) {
+  const handleToggleStatus = async (user: User) => {
+    const ok = await confirm({ message: `Are you sure you want to ${user.is_active ? 'deactivate' : 'activate'} ${user.first_name} ${user.last_name}?`, danger: true });
+    if (ok) {
       updateStatusMutation.mutate({ id: user.id, is_active: !user.is_active });
     }
   };
 
-  const handleDelete = (user: User) => {
-    if (window.confirm(`Are you sure you want to delete ${user.first_name} ${user.last_name}? This action cannot be undone.`)) {
+  const handleDelete = async (user: User) => {
+    const ok = await confirm({ message: `Are you sure you want to delete ${user.first_name} ${user.last_name}? This action cannot be undone.`, danger: true });
+    if (ok) {
       deleteMutation.mutate(user.id);
     }
   };
 
-  const handleResetPassword = (user: User) => {
-    if (window.confirm(`Reset password for ${user.first_name} ${user.last_name}?\n\nA temporary password will be generated and the user will be required to change it on next login.`)) {
+  const handleResetPassword = async (user: User) => {
+    const ok = await confirm(`Reset password for ${user.first_name} ${user.last_name}?\n\nA temporary password will be generated and the user will be required to change it on next login.`);
+    if (ok) {
       resetPasswordMutation.mutate(user.id);
     }
   };
 
-  const handleDisable2FA = (user: User) => {
-    if (window.confirm(`Disable 2FA for ${user.first_name} ${user.last_name}?\n\nThis will remove their two-factor authentication protection.`)) {
+  const handleDisable2FA = async (user: User) => {
+    const ok = await confirm({ message: `Disable 2FA for ${user.first_name} ${user.last_name}?\n\nThis will remove their two-factor authentication protection.`, danger: true });
+    if (ok) {
       disable2FAMutation.mutate(user.id);
     }
   };
 
-  const handleForcePasswordChange = (user: User) => {
-    if (window.confirm(`Force password change for ${user.first_name} ${user.last_name}?\n\nThey will be required to change their password on next login.`)) {
+  const handleForcePasswordChange = async (user: User) => {
+    const ok = await confirm(`Force password change for ${user.first_name} ${user.last_name}?\n\nThey will be required to change their password on next login.`);
+    if (ok) {
       forcePasswordChangeMutation.mutate(user.id);
     }
   };

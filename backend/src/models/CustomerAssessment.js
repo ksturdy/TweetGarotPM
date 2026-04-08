@@ -46,21 +46,30 @@ const CustomerAssessment = {
     return result.rows[0];
   },
 
-  // Update existing assessment
-  async update(id, assessmentData, userId) {
+  // Update existing assessment (syncs score bidirectionally)
+  async update(id, assessmentData, userId, linkedCustomerId = null) {
     const { totalScore, verdict, tier, knockout, knockoutReason, criteria, notes } = assessmentData;
+
+    // If a linkedCustomerId is provided and the row doesn't have one yet, set it
+    let extraSet = '';
+    const params = [totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId, id];
+    if (linkedCustomerId) {
+      extraSet = ', customer_id = COALESCE(customer_id, $10)';
+      params.push(linkedCustomerId);
+    }
 
     const result = await db.query(
       `UPDATE customer_assessments
        SET total_score = $1, verdict = $2, tier = $3, knockout = $4,
-           knockout_reason = $5, criteria = $6, notes = $7, assessed_by = $8
+           knockout_reason = $5, criteria = $6, notes = $7, assessed_by = $8${extraSet}
        WHERE id = $9
        RETURNING *`,
-      [totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId, id]
+      params
     );
-    // Sync score to customers table so it shows in list views
-    if (result.rows[0]?.customer_id) {
-      await db.query('UPDATE customers SET customer_score = $1 WHERE id = $2', [totalScore, result.rows[0].customer_id]);
+    // Sync score to linked customer record
+    const customerId = result.rows[0]?.customer_id;
+    if (customerId) {
+      await db.query('UPDATE customers SET customer_score = $1 WHERE id = $2', [totalScore, customerId]);
     }
     return result.rows[0];
   },
@@ -103,17 +112,21 @@ const CustomerAssessment = {
     return result.rows[0];
   },
 
-  // Create assessment for a campaign company
-  async createForCampaignCompany(campaignCompanyId, assessmentData, userId) {
+  // Create assessment for a campaign company (with optional linked customer sync)
+  async createForCampaignCompany(campaignCompanyId, assessmentData, userId, linkedCustomerId = null) {
     const { totalScore, verdict, tier, knockout, knockoutReason, criteria, notes } = assessmentData;
 
     const result = await db.query(
       `INSERT INTO customer_assessments
-       (campaign_company_id, total_score, verdict, tier, knockout, knockout_reason, criteria, notes, assessed_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (campaign_company_id, customer_id, total_score, verdict, tier, knockout, knockout_reason, criteria, notes, assessed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [campaignCompanyId, totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId]
+      [campaignCompanyId, linkedCustomerId, totalScore, verdict, tier, knockout, knockoutReason, JSON.stringify(criteria), notes, userId]
     );
+    // Sync score to linked customer record
+    if (linkedCustomerId) {
+      await db.query('UPDATE customers SET customer_score = $1 WHERE id = $2', [totalScore, linkedCustomerId]);
+    }
     return result.rows[0];
   },
 

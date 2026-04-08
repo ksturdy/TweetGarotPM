@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { attachmentsApi, Attachment } from '../../services/attachments';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 interface FieldPhotoUploadProps {
   entityType: string;
@@ -11,6 +12,7 @@ interface FieldPhotoUploadProps {
 
 const FieldPhotoUpload: React.FC<FieldPhotoUploadProps> = ({ entityType, entityId }) => {
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -48,7 +50,7 @@ const FieldPhotoUpload: React.FC<FieldPhotoUploadProps> = ({ entityType, entityI
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      alert('Failed to upload photo. Please try again.');
+      toast.error('Failed to upload photo. Please try again.');
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -57,8 +59,9 @@ const FieldPhotoUpload: React.FC<FieldPhotoUploadProps> = ({ entityType, entityI
     }
   };
 
-  const handleDelete = (att: Attachment) => {
-    if (window.confirm('Delete this photo?')) {
+  const handleDelete = async (att: Attachment) => {
+    const ok = await confirm({ message: 'Delete this photo?', danger: true });
+    if (ok) {
       deleteMutation.mutate(att.id);
     }
   };

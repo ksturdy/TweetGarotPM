@@ -12,6 +12,7 @@ import LocationPicker from '../../components/LocationPicker';
 import SearchableSelect from '../../components/SearchableSelect';
 import './EstimateNew.css';
 import { MARKETS } from '../../constants/markets';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const FITTING_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ const EstimateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   const { data: estimate, isLoading, error } = useQuery({
     queryKey: ['estimate', id],
@@ -181,11 +183,11 @@ const EstimateDetail: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['estimate', id] });
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
-      alert('Estimate updated successfully!');
+      toast.success('Estimate updated successfully!');
     },
     onError: (error: any) => {
       console.error('Failed to update estimate:', error);
-      alert(`Failed to update estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to update estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -197,7 +199,7 @@ const EstimateDetail: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to update status:', error);
-      alert(`Failed to update status: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to update status: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -209,7 +211,7 @@ const EstimateDetail: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Failed to delete estimate:', error);
-      alert(`Failed to delete estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to delete estimate: ${error.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -354,8 +356,9 @@ const EstimateDetail: React.FC = () => {
     );
   };
 
-  const deleteSection = (sectionIndex: number) => {
-    if (window.confirm('Are you sure you want to remove this section?')) {
+  const deleteSection = async (sectionIndex: number) => {
+    const ok = await confirm({ message: 'Are you sure you want to remove this section?', danger: true });
+    if (ok) {
       setSections((prev) => prev.filter((_, i) => i !== sectionIndex));
     }
   };
@@ -506,8 +509,9 @@ const EstimateDetail: React.FC = () => {
     updateMutation.mutate(estimateData as Estimate);
   };
 
-  const handleStatusChange = (newStatus: string) => {
-    if (window.confirm(`Are you sure you want to change status to "${newStatus}"?`)) {
+  const handleStatusChange = async (newStatus: string) => {
+    const ok = await confirm(`Are you sure you want to change status to "${newStatus}"?`);
+    if (ok) {
       updateStatusMutation.mutate(newStatus);
     }
   };

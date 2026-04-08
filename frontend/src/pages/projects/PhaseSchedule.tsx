@@ -7,6 +7,7 @@ import { ContourType, contourOptions, getContourMultipliers, ContourVisual } fro
 import { format, addMonths, addDays, startOfMonth, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -461,6 +462,7 @@ const EditItemPanel: React.FC<{
   onDelete: (id: number) => void;
   onClose: () => void;
 }> = ({ item, months, onSave, onDelete, onClose }) => {
+  const { confirm } = useTitanFeedback();
   const [name, setName] = useState(item.name);
   const [startDate, setStartDate] = useState(item.start_date || '');
   const [endDate, setEndDate] = useState(item.end_date || '');
@@ -620,7 +622,7 @@ const EditItemPanel: React.FC<{
       </div>
 
       <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => { if (window.confirm('Delete this schedule item?')) onDelete(item.id); }}
+        <button onClick={async () => { const ok = await confirm({ message: 'Delete this schedule item?', danger: true }); if (ok) onDelete(item.id); }}
           style={{ padding: '0.5rem 1rem', border: '1px solid #fca5a5', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '0.85rem' }}>
           Delete
         </button>

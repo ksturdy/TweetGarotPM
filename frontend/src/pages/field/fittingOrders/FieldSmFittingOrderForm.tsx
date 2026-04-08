@@ -6,6 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { smFittingOrdersApi, SmFittingOrder, SmFittingOrderItem } from '../../../services/smFittingOrders';
 import { FittingTypeReference } from './FittingTypeDiagrams';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const FITTING_TYPES: { value: number; label: string }[] = [
   { value: 1, label: '1-St. Joint' },
@@ -65,6 +66,7 @@ const FieldSmFittingOrderForm: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isEdit = Boolean(id);
+  const { toast } = useTitanFeedback();
 
   // Header fields
   const [title, setTitle] = useState('');
@@ -167,7 +169,7 @@ const FieldSmFittingOrderForm: React.FC = () => {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      window.alert('Title is required to save the fitting order.');
+      toast.error('Title is required to save the fitting order.');
       return;
     }
     setSaving(true);
@@ -266,7 +268,7 @@ const FieldSmFittingOrderForm: React.FC = () => {
       navigate(`/field/projects/${projectId}/sm-fitting-orders`);
     } catch (err) {
       console.error('Failed to save fitting order:', err);
-      window.alert('Failed to save fitting order. Please try again.');
+      toast.error('Failed to save fitting order. Please try again.');
     } finally {
       setSaving(false);
     }

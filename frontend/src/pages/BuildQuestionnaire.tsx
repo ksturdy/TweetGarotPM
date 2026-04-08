@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 
 const BuildQuestionnaire: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useTitanFeedback();
   const [submitting, setSubmitting] = useState(false);
   const [expandedSections, setExpandedSections] = useState<{[key: string]: boolean}>({
     overview: true,
@@ -140,11 +142,11 @@ const BuildQuestionnaire: React.FC = () => {
         submittedAt: new Date().toISOString(),
       });
 
-      alert('Questionnaire submitted successfully! We will be in touch soon.');
+      toast.success('Questionnaire submitted successfully! We will be in touch soon.');
       navigate('/welcome');
     } catch (error) {
       console.error('Error submitting questionnaire:', error);
-      alert('Failed to submit questionnaire. Please try again.');
+      toast.error('Failed to submit questionnaire. Please try again.');
     } finally {
       setSubmitting(false);
     }

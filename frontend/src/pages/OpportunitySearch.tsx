@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import opportunitySearchService, { SearchCriteria, GeneratedLead, SearchSummary, SavedSearchListItem } from '../services/opportunitySearch';
 import opportunitiesService from '../services/opportunities';
 import '../styles/SalesPipeline.css';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import '../styles/OpportunitySearch.css';
 
 import { MARKET_VALUES as MARKET_OPTIONS } from '../constants/markets';
@@ -91,6 +92,7 @@ function generateSearchName(criteria: SearchCriteria): string {
 const OpportunitySearch: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const [formData, setFormData] = useState<SearchCriteria>({
     market_sector: '',
@@ -491,8 +493,9 @@ const OpportunitySearch: React.FC = () => {
                   <button
                     className="opp-saved-delete-btn"
                     disabled={bulkDeleteMutation.isPending}
-                    onClick={() => {
-                      if (window.confirm(`Delete ${selectedSavedSearches.size} search${selectedSavedSearches.size > 1 ? 'es' : ''}?`)) {
+                    onClick={async () => {
+                      const ok = await confirm({ message: `Delete ${selectedSavedSearches.size} search${selectedSavedSearches.size > 1 ? 'es' : ''}?`, danger: true });
+                      if (ok) {
                         const ids = Array.from(selectedSavedSearches);
                         if (viewingSavedId && ids.includes(viewingSavedId)) {
                           setViewingSavedId(null);
@@ -576,9 +579,10 @@ const OpportunitySearch: React.FC = () => {
                         </button>
                         <button
                           className="opp-saved-delete-btn"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm('Delete this search?')) {
+                            const ok = await confirm({ message: 'Delete this search?', danger: true });
+                            if (ok) {
                               deleteSavedMutation.mutate(item.id);
                               if (viewingSavedId === item.id) {
                                 setViewingSavedId(null);

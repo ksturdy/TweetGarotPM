@@ -22,6 +22,7 @@ import {
   CampaignContact, CampaignOpportunity, CampaignEstimate
 } from '../services/campaigns';
 import { useAuth } from '../context/AuthContext';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import SearchableSelect from '../components/SearchableSelect';
 import '../styles/SalesPipeline.css';
 
@@ -53,6 +54,7 @@ export default function CampaignDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useTitanFeedback();
 
   const [contacts, setContacts] = useState<Record<number, CampaignContact[]>>({});
   const [estimates, setEstimates] = useState<any[]>([]);
@@ -232,7 +234,7 @@ export default function CampaignDetail() {
     },
     onError: (error: any) => {
       console.error('Failed to add prospect:', error);
-      alert(error.response?.data?.error || 'Failed to add prospect');
+      toast.error(error.response?.data?.error || 'Failed to add prospect');
     }
   });
 
@@ -482,6 +484,7 @@ export default function CampaignDetail() {
   const [currentWeek, setCurrentWeek] = useState(1);
   const [filter, setFilter] = useState({ team: 'all', status: 'all', tier: 'all' });
   const [prospectSearch, setProspectSearch] = useState('');
+  const [prospectView, setProspectView] = useState<'table' | 'kanban'>('table');
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -825,7 +828,7 @@ export default function CampaignDetail() {
                 await downloadCampaignReport(campaignId, activeCampaignInfo.name || 'Campaign');
               } catch (err: any) {
                 console.error('Report generation error:', err);
-                alert(err?.message || 'Failed to generate report. Please try again.');
+                toast.error(err?.message || 'Failed to generate report. Please try again.');
               } finally {
                 setDownloadingReport(false);
               }
@@ -865,26 +868,51 @@ export default function CampaignDetail() {
 
         {tab === 'dashboard' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-              {(() => {
-                const originalCount = activeData.filter((c: any) => c.source === 'seed').length;
-                const addedCount = activeData.filter((c: any) => c.source === 'manual').length;
-                return [
-                  { label: 'Total Prospects', value: activeData.length, color: '#6366f1', sub: addedCount > 0 ? `${originalCount} original + ${addedCount} added` : undefined },
-                  { label: 'Contacted', value: stats.contacted, color: '#3b82f6' },
-                  { label: 'New Opportunities', value: stats.opportunities, color: '#10b981' },
-                  { label: 'Opportunities Value', value: '$' + stats.totalOppValue.toLocaleString('en-US'), color: '#8b5cf6' },
-                  { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' },
-                  ...(addedCount > 0 ? [{ label: 'Prospects Added', value: addedCount, color: '#06b6d4', sub: 'Discovered during campaign' }] : [])
-                ];
-              })().map((k: any, i: number) => (
-                <div key={i} style={{ ...card, padding: '16px' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>{k.label}</div>
-                  <div style={{ fontSize: '28px', fontWeight: 700, color: k.color }}>{k.value}</div>
-                  {k.sub && <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{k.sub}</div>}
-                </div>
-              ))}
-            </div>
+            {(() => {
+              const originalCount = activeData.filter((c: any) => c.source === 'seed').length;
+              const addedCount = activeData.filter((c: any) => c.source === 'manual').length;
+              const goalTouchpoints = dbCampaign?.target_touchpoints || 0;
+              const goalOpportunities = dbCampaign?.target_opportunities || 0;
+              const goalEstimates = dbCampaign?.target_estimates || 0;
+              const goalAwards = dbCampaign?.target_awards || 0;
+              const goalPipelineValue = dbCampaign?.target_pipeline_value || 0;
+              const estimateCount = estimates.filter((e: any) => e.campaignId === dbCampaign?.id).length;
+              const awardCount = opportunities.filter((o: any) => o.status === 'won').length;
+              const kpiCards = [
+                { label: 'Total Prospects', value: activeData.length, color: '#6366f1', sub: addedCount > 0 ? `${originalCount} original + ${addedCount} added` : undefined },
+                { label: 'Contacted', value: stats.contacted, color: '#3b82f6', target: goalTouchpoints || undefined },
+                { label: 'Opportunities', value: stats.opportunities, color: '#10b981', target: goalOpportunities || undefined },
+                { label: 'Opp. Value', value: '$' + Math.round(stats.totalOppValue).toLocaleString('en-US'), color: '#8b5cf6', target: goalPipelineValue || undefined, isValue: true, rawValue: stats.totalOppValue },
+                { label: 'Follow Up Needed', value: stats.byStatus.follow_up || 0, color: '#f59e0b' },
+                ...(goalEstimates > 0 ? [{ label: 'Estimates', value: estimateCount, color: '#0ea5e9', target: goalEstimates }] : []),
+                ...(goalAwards > 0 ? [{ label: 'Awards Won', value: awardCount, color: '#16a34a', target: goalAwards }] : []),
+                ...(addedCount > 0 ? [{ label: 'Prospects Added', value: addedCount, color: '#06b6d4', sub: 'Discovered during campaign' }] : [])
+              ];
+              return (
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${kpiCards.length}, 1fr)`, gap: '10px' }}>
+                {kpiCards.map((k: any, i: number) => {
+                  const pct = k.target ? Math.min(100, ((k.isValue ? k.rawValue : (typeof k.value === 'number' ? k.value : 0)) / k.target) * 100) : 0;
+                  return (
+                  <div key={i} style={{ ...card, padding: '12px', minWidth: 0, overflow: 'hidden' }}>
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.label}</div>
+                    <div style={{ fontSize: k.isValue ? '20px' : '28px', fontWeight: 700, color: k.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.value}</div>
+                    {k.target && (
+                      <div style={{ marginTop: '6px' }}>
+                        <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Goal: {k.isValue ? '$' + Math.round(k.target).toLocaleString('en-US') : k.target} ({Math.round(pct)}%)
+                        </div>
+                        <div style={{ background: '#e5e7eb', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{ background: pct >= 100 ? '#16a34a' : k.color, height: '100%', width: `${pct}%`, borderRadius: '2px', transition: 'width 0.3s ease' }} />
+                        </div>
+                      </div>
+                    )}
+                    {k.sub && <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.sub}</div>}
+                  </div>
+                  );
+                })}
+              </div>
+              );
+            })()}
 
             {/* Opportunities by Customer Score */}
             {(() => {
@@ -1283,8 +1311,87 @@ export default function CampaignDetail() {
                     Clear All
                   </button>
                 )}
+                <div style={{ marginLeft: 'auto', display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                  <button
+                    onClick={() => setProspectView('table')}
+                    style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'table' ? '#fff' : 'transparent', color: prospectView === 'table' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
+                      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                    Table
+                  </button>
+                  <button
+                    onClick={() => setProspectView('kanban')}
+                    style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'kanban' ? '#fff' : 'transparent', color: prospectView === 'kanban' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'kanban' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
+                      <rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="13" rx="1"/><rect x="17" y="3" width="5" height="16" rx="1"/>
+                    </svg>
+                    Kanban
+                  </button>
+                </div>
               </div>
 
+              {prospectView === 'kanban' ? (() => {
+                const tierDefs = [
+                  { key: 'A', label: 'Tier A', sub: 'Score 85+', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+                  { key: 'B', label: 'Tier B', sub: 'Score 70–84', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+                  { key: 'C', label: 'Tier C', sub: 'Score 50–69', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+                  { key: 'D', label: 'Tier D', sub: 'Below 50', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+                  { key: 'none', label: 'Unscored', sub: 'No score', color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' }
+                ];
+                const getTier = (c: any) => {
+                  const score = c.score || 0;
+                  if (score >= 85) return 'A';
+                  if (score >= 70) return 'B';
+                  if (score >= 50) return 'C';
+                  if (score > 0) return 'D';
+                  return 'none';
+                };
+                const grouped: Record<string, any[]> = { A: [], B: [], C: [], D: [], none: [] };
+                filtered.forEach((c: any) => { grouped[getTier(c)].push(c); });
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tierDefs.length}, 1fr)`, gap: '12px', alignItems: 'start' }}>
+                    {tierDefs.map(tier => (
+                      <div key={tier.key} style={{ background: tier.bg, borderRadius: '10px', border: `1px solid ${tier.border}`, minHeight: '200px' }}>
+                        <div style={{ padding: '12px 14px', borderBottom: `1px solid ${tier.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '13px', color: tier.color }}>{tier.label}</div>
+                            <div style={{ fontSize: '10px', color: tier.color, opacity: 0.7 }}>{tier.sub}</div>
+                          </div>
+                          <div style={{ background: tier.color, color: '#fff', borderRadius: '10px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{grouped[tier.key].length}</div>
+                        </div>
+                        <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '65vh', overflowY: 'auto' }}>
+                          {grouped[tier.key].map((c: any) => {
+                            const status = statuses.find(s => s.key === c.status);
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => openDetail(c)}
+                                style={{ background: '#fff', borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', border: '1px solid #e5e7eb', transition: 'box-shadow 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)')}
+                                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                              >
+                                <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                                {c.sector && <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '6px' }}>{c.sector}</div>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ background: tier.bg, color: tier.color, padding: '1px 6px', borderRadius: '4px', fontWeight: 600, fontSize: '10px', border: `1px solid ${tier.border}` }}>{c.score}</span>
+                                  {status && <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 500, background: status.color + '18', color: status.color }}>{status.label}</span>}
+                                </div>
+                                {c.assignedTo && <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>{c.assignedTo}</div>}
+                              </div>
+                            );
+                          })}
+                          {grouped[tier.key].length === 0 && (
+                            <div style={{ textAlign: 'center', padding: '20px 8px', color: '#94a3b8', fontSize: '12px' }}>No prospects</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })() : (
               <div style={{ ...card, overflow: 'hidden' }}>
                 <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -1300,7 +1407,7 @@ export default function CampaignDetail() {
                           style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
                           onClick={() => handleSort('prospectScore')}
                         >
-                          Prospect Score {sortConfig?.key === 'prospectScore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
+                          Research Score {sortConfig?.key === 'prospectScore' ? (sortConfig.direction === 'asc' ? '↑' : '↓') : '↕'}
                         </th>
                         <th
                           style={{ padding: '12px', textAlign: 'center', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
@@ -1337,7 +1444,7 @@ export default function CampaignDetail() {
                         const tgTier = tgScore ? getTierFromScore(tgScore) : null;
 
                         return (
-                          <tr key={c.id} onClick={() => setSelected(c)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer', background: selected?.id === c.id ? '#fef3c7' : '#fff' }}>
+                          <tr key={c.id} onClick={() => openDetail(c)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer', background: '#fff' }}>
                             <td style={{ padding: '12px' }}>
                               <div style={{ fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openDetail(c); }}>{c.name}</div>
                               <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.sector}</div>
@@ -1394,42 +1501,9 @@ export default function CampaignDetail() {
                   </table>
                 </div>
               </div>
+              )}
             </div>
 
-            {selected && (
-              <div style={{ ...card, width: '300px', padding: '20px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: 600 }}>{selected.name}</h3>
-                  <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-                </div>
-                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
-                  <div>{selected.sector}</div>
-                  <div style={{ marginTop: '6px' }}>{selected.address}</div>
-                  <a href={'tel:'+selected.phone} style={{ color: '#2563eb', fontWeight: 600, fontSize: '15px', display: 'block', marginTop: '8px' }}>{selected.phone}</a>
-                </div>
-
-                <button onClick={() => openDetail(selected)} style={{ ...btn, width: '100%', marginBottom: '16px', fontSize: '12px' }}>View Full Details →</button>
-
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Log Conversation</label>
-                  <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Enter notes..." style={{ ...input, minHeight: '60px', resize: 'vertical' }} />
-                  <button onClick={addNote} style={{ ...btn, marginTop: '8px', width: '100%', fontSize: '13px' }}>Add Note</button>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '6px' }}>History</label>
-                  <div style={{ maxHeight: '140px', overflow: 'auto' }}>
-                    {activeLogs.filter((l: any) => l.cid === selected.id).map((l: any) => (
-                      <div key={l.id} style={{ padding: '6px 8px', background: '#f9fafb', borderRadius: '4px', marginBottom: '4px', fontSize: '11px' }}>
-                        {l.text}
-                        <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>{new Date(l.time).toLocaleString()}</div>
-                      </div>
-                    ))}
-                    {activeLogs.filter((l: any) => l.cid === selected.id).length === 0 && <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>No history</div>}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 

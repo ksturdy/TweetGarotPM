@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { teamsApi, Team } from '../../services/teams';
 import { employeesApi, AssignableEmployee } from '../../services/employees';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const TeamList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortColumn, setSortColumn] = useState<string>('name');
@@ -51,7 +53,7 @@ const TeamList: React.FC = () => {
       resetForm();
     },
     onError: (error: any) => {
-      alert(`Failed to create team: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to create team: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -64,7 +66,7 @@ const TeamList: React.FC = () => {
       resetForm();
     },
     onError: (error: any) => {
-      alert(`Failed to update team: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to update team: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -75,7 +77,7 @@ const TeamList: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
     },
     onError: (error: any) => {
-      alert(`Failed to delete team: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to delete team: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -119,9 +121,10 @@ const TeamList: React.FC = () => {
     setShowCreateModal(true);
   };
 
-  const handleDelete = (id: number, e: React.MouseEvent) => {
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this team?')) {
+    const ok = await confirm({ message: 'Are you sure you want to delete this team?', danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

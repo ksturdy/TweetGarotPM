@@ -6,6 +6,7 @@ import AirIcon from '@mui/icons-material/Air';
 import DeleteIcon from '@mui/icons-material/Delete';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { smFittingOrdersApi, SmFittingOrder } from '../../../services/smFittingOrders';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const statusOptions = ['all', 'draft', 'submitted', 'in_fabrication', 'ready', 'delivered', 'installed'];
 
@@ -46,6 +47,7 @@ const FieldSmFittingOrderList: React.FC = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState('all');
   const [swipedOpenId, setSwipedOpenId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<SmFittingOrder | null>(null);
@@ -70,7 +72,7 @@ const FieldSmFittingOrderList: React.FC = () => {
       setSwipedOpenId(null);
     },
     onError: () => {
-      window.alert('Failed to delete. Only draft orders can be deleted.');
+      toast.error('Failed to delete. Only draft orders can be deleted.');
       setConfirmDelete(null);
     },
   });

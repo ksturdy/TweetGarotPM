@@ -5,12 +5,14 @@ import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams'
 import { employeesApi, AssignableEmployee } from '../../services/employees';
 import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const TeamDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const teamId = parseInt(id || '0');
 
   const [activeTab, setActiveTab] = useState<'members' | 'opportunities' | 'customers' | 'estimates'>('members');
@@ -107,7 +109,7 @@ const TeamDetailPage: React.FC = () => {
       setSelectedRole('member');
     },
     onError: (error: any) => {
-      alert(`Failed to add member: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to add member: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -120,7 +122,7 @@ const TeamDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
     },
     onError: (error: any) => {
-      alert(`Failed to remove member: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to remove member: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -132,7 +134,7 @@ const TeamDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['teams', teamId, 'members'] });
     },
     onError: (error: any) => {
-      alert(`Failed to update role: ${error.response?.data?.error || error.message}`);
+      toast.error(`Failed to update role: ${error.response?.data?.error || error.message}`);
     },
   });
 
@@ -349,8 +351,9 @@ const TeamDetailPage: React.FC = () => {
                       </td>
                       <td>
                         <button
-                          onClick={() => {
-                            if (window.confirm(`Remove ${member.first_name} ${member.last_name} from the team?`)) {
+                          onClick={async () => {
+                            const ok = await confirm({ message: `Remove ${member.first_name} ${member.last_name} from the team?`, danger: true });
+                            if (ok) {
                               removeMemberMutation.mutate(member.employee_id);
                             }
                           }}

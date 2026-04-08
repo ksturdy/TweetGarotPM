@@ -5,12 +5,14 @@ import { format } from 'date-fns';
 import { changeOrdersApi, ChangeOrder } from '../../services/changeOrders';
 import { projectsApi } from '../../services/projects';
 import { useAuth } from '../../context/AuthContext';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const ChangeOrderDetail: React.FC = () => {
   const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { confirm } = useTitanFeedback();
 
   const [isEditing, setIsEditing] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -122,17 +124,19 @@ const ChangeOrderDetail: React.FC = () => {
     }
   };
 
-  const handleSubmitForApproval = () => {
-    if (window.confirm('Submit this change order for approval?')) {
+  const handleSubmitForApproval = async () => {
+    const ok = await confirm('Submit this change order for approval?');
+    if (ok) {
       submitMutation.mutate();
     }
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const amountText = changeOrder?.amount
       ? formatCurrency(changeOrder.amount)
       : '$0.00';
-    if (window.confirm(`Approve this change order for ${amountText}?`)) {
+    const ok = await confirm(`Approve this change order for ${amountText}?`);
+    if (ok) {
       approveMutation.mutate();
     }
   };

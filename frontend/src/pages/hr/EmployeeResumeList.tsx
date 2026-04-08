@@ -4,11 +4,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { employeeResumesApi, EmployeeResume, ResumeProject } from '../../services/employeeResumes';
 import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
 import '../../styles/SalesPipeline.css';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './EmployeeResumeList.css';
 
 const EmployeeResumeList: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [previewResumeId, setPreviewResumeId] = useState<number | null>(null);
@@ -76,8 +78,9 @@ const EmployeeResumeList: React.FC = () => {
     },
   });
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete the resume for "${name}"?`)) {
+  const handleDelete = async (id: number, name: string) => {
+    const ok = await confirm({ message: `Are you sure you want to delete the resume for "${name}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(id);
     }
   };

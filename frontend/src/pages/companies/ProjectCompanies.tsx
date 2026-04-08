@@ -6,11 +6,13 @@ import { contactsApi, Contact } from '../../services/contacts';
 import { projectsApi } from '../../services/projects';
 import CompanyForm from './CompanyForm';
 import ContactForm from './ContactForm';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const ProjectCompanies: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showCompanyForm, setShowCompanyForm] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [editingCompany, setEditingCompany] = useState<ProjectCompany | null>(null);
@@ -47,14 +49,16 @@ const ProjectCompanies: React.FC = () => {
     },
   });
 
-  const handleRemoveCompany = (projectCompanyId: number, companyName: string) => {
-    if (window.confirm(`Remove ${companyName} from this project?`)) {
+  const handleRemoveCompany = async (projectCompanyId: number, companyName: string) => {
+    const ok = await confirm({ message: `Remove ${companyName} from this project?`, danger: true });
+    if (ok) {
       removeCompanyMutation.mutate(projectCompanyId);
     }
   };
 
-  const handleDeleteContact = (contactId: number, contactName: string) => {
-    if (window.confirm(`Delete contact ${contactName}?`)) {
+  const handleDeleteContact = async (contactId: number, contactName: string) => {
+    const ok = await confirm({ message: `Delete contact ${contactName}?`, danger: true });
+    if (ok) {
       deleteContactMutation.mutate(contactId);
     }
   };

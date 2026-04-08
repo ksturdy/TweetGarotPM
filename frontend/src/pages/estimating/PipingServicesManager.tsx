@@ -10,6 +10,7 @@ import {
   SERVICE_CATEGORY_PRESETS,
 } from '../../services/pipingServices';
 import { pipeSpecsApi, type PipeSpec } from '../../services/pipeSpecs';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const headerStyle: React.CSSProperties = {
   padding: '8px 12px',
@@ -88,6 +89,7 @@ const emptyForm: ServiceFormData = {
 
 const PipingServicesManager: React.FC = () => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -338,8 +340,8 @@ const PipingServicesManager: React.FC = () => {
                             </button>
                             <button
                               title="Delete"
-                              onClick={() => {
-                                if (window.confirm(`Delete "${svc.name}"?`)) deleteMutation.mutate(svc.id);
+                              onClick={async () => {
+                                const ok = await confirm({ message: `Delete "${svc.name}"?`, danger: true }); if (ok) deleteMutation.mutate(svc.id);
                               }}
                               style={{ padding: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}
                             >

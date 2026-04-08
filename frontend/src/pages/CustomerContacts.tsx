@@ -5,6 +5,7 @@ import { getCustomer, getCustomerTouchpoints } from '../services/customers';
 import api from '../services/api';
 import ContactModal from '../components/modals/ContactModal';
 import TouchpointModal from '../components/modals/TouchpointModal';
+import { useTitanFeedback } from '../context/TitanFeedbackContext';
 import './CustomerDetail.css';
 import '../styles/SalesPipeline.css';
 
@@ -25,6 +26,7 @@ interface CustomerContact {
 const CustomerContacts: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showContactModal, setShowContactModal] = useState(false);
   const [showTouchpointModal, setShowTouchpointModal] = useState(false);
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
@@ -74,8 +76,9 @@ const CustomerContacts: React.FC = () => {
     setShowEditModal(true);
   };
 
-  const handleDelete = (contactId: number) => {
-    if (window.confirm('Are you sure you want to delete this contact?')) {
+  const handleDelete = async (contactId: number) => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this contact?', danger: true });
+    if (ok) {
       deleteMutation.mutate(contactId);
     }
   };

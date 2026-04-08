@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, BidFormInfo, BidFormPreview } from '../../services/estimates';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 interface BidFormUploadProps {
   estimateId: number;
@@ -9,6 +10,7 @@ interface BidFormUploadProps {
 
 const BidFormUpload: React.FC<BidFormUploadProps> = ({ estimateId, onUploadComplete }) => {
   const queryClient = useQueryClient();
+  const { toast } = useTitanFeedback();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [previewData, setPreviewData] = useState<BidFormPreview | null>(null);
@@ -94,7 +96,7 @@ const BidFormUpload: React.FC<BidFormUploadProps> = ({ estimateId, onUploadCompl
     const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 
     if (!validTypes.includes(file.type) && !validExtensions.includes(extension)) {
-      alert('Please select an Excel file (.xlsm, .xlsx, or .xls)');
+      toast.warning('Please select an Excel file (.xlsm, .xlsx, or .xls)');
       return;
     }
 
@@ -124,7 +126,7 @@ const BidFormUpload: React.FC<BidFormUploadProps> = ({ estimateId, onUploadCompl
       document.body.removeChild(link);
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Failed to download bid form');
+      toast.error('Failed to download bid form');
     }
   };
 

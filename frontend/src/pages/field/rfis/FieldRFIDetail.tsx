@@ -5,6 +5,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { rfisApi } from '../../../services/rfis';
 import FieldPhotoUpload from '../../../components/field/FieldPhotoUpload';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const priorityColors: Record<string, { bg: string; text: string; border: string }> = {
   low: { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
@@ -17,6 +18,7 @@ const FieldRFIDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const { data: rfi, isLoading } = useQuery({
     queryKey: ['field-rfi', id],
@@ -154,8 +156,9 @@ const FieldRFIDetail: React.FC = () => {
         )}
         <button
           className="field-btn field-btn-danger field-btn-sm"
-          onClick={() => {
-            if (window.confirm('Are you sure you want to delete this RFI?')) {
+          onClick={async () => {
+            const ok = await confirm({ message: 'Are you sure you want to delete this RFI?', danger: true });
+            if (ok) {
               rfisApi.delete(Number(id)).then(() => {
                 queryClient.invalidateQueries({ queryKey: ['field-rfis', projectId] });
                 navigate(`/field/projects/${projectId}/rfis`);

@@ -14,6 +14,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import { smFittingOrdersApi, SmFittingOrderItem } from '../../../services/smFittingOrders';
 import { FittingTypeReference } from './FittingTypeDiagrams';
 import { generateFittingOrderPdf } from '../../../utils/fittingOrderPdfClient';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const formatDate = (dateStr: string | Date | null | undefined): string => {
   if (!dateStr) return '-';
@@ -41,6 +42,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -62,7 +64,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     mutationFn: () => smFittingOrdersApi.submit(Number(id)),
     onSuccess: invalidateOrder,
     onError: () => {
-      window.alert('Failed to submit order. Please try again.');
+      toast.error('Failed to submit order. Please try again.');
     },
   });
 
@@ -71,7 +73,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
       smFittingOrdersApi.updateStatus(Number(id), data),
     onSuccess: invalidateOrder,
     onError: () => {
-      window.alert('Failed to update status. Please try again.');
+      toast.error('Failed to update status. Please try again.');
     },
   });
 
@@ -83,23 +85,26 @@ const FieldSmFittingOrderDetail: React.FC = () => {
     },
   });
 
-  const handleSubmit = () => {
-    if (window.confirm('Submit this fitting order to the shop?')) {
+  const handleSubmit = async () => {
+    const ok = await confirm('Submit this fitting order to the shop?');
+    if (ok) {
       submitMutation.mutate();
     }
   };
 
-  const handleStatusChange = (status: string, label: string, extraData?: Record<string, any>) => {
-    if (window.confirm(`${label}?`)) {
+  const handleStatusChange = async (status: string, label: string, extraData?: Record<string, any>) => {
+    const ok = await confirm(`${label}?`);
+    if (ok) {
       statusMutation.mutate({ status, ...extraData });
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const msg = order && order.status !== 'draft'
       ? `⚠️ This fitting order has status "${order.status.replace(/_/g, ' ')}". Are you sure you want to permanently delete it?`
       : 'Delete this fitting order? This cannot be undone.';
-    if (window.confirm(msg)) {
+    const ok = await confirm({ message: msg, danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };
@@ -146,7 +151,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
-      window.alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -187,7 +192,7 @@ const FieldSmFittingOrderDetail: React.FC = () => {
         }, 100);
       }
     } catch {
-      window.alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }

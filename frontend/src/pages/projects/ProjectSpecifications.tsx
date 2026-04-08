@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { specificationsApi, Specification, CreateSpecificationData } from '../../services/specifications';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const ProjectSpecifications: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showAllVersions, setShowAllVersions] = useState(false);
@@ -73,8 +75,9 @@ const ProjectSpecifications: React.FC = () => {
     uploadMutation.mutate(formDataToSend);
   };
 
-  const handleDelete = (spec: Specification) => {
-    if (window.confirm(`Delete "${spec.title}"?`)) {
+  const handleDelete = async (spec: Specification) => {
+    const ok = await confirm({ message: `Delete "${spec.title}"?`, danger: true });
+    if (ok) {
       deleteMutation.mutate(spec.id);
     }
   };

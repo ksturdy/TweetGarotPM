@@ -4,6 +4,7 @@ import { Proposal, proposalsApi } from '../../services/proposals';
 import { CaseStudy, CaseStudyImage, caseStudiesApi } from '../../services/caseStudies';
 import { CaseStudyTemplate, caseStudyTemplatesApi } from '../../services/caseStudyTemplates';
 import { SellSheet, SellSheetImage, sellSheetsApi } from '../../services/sellSheets';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import CaseStudyPreview from '../caseStudies/CaseStudyPreview';
 import SellSheetPreview from '../sellSheets/SellSheetPreview';
 
@@ -23,6 +24,7 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { toast } = useTitanFeedback();
   const [fullCaseStudies, setFullCaseStudies] = useState<FullCaseStudy[]>([]);
   const [fullSellSheets, setFullSellSheets] = useState<(SellSheet & { images?: SellSheetImage[] })[]>([]);
   const [loadingCs, setLoadingCs] = useState(false);
@@ -157,7 +159,7 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      alert('Failed to download PDF. Please try Print / PDF instead.');
+      toast.error('Failed to download PDF. Please try Print / PDF instead.');
     }
   };
 

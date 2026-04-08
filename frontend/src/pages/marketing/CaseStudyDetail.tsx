@@ -5,6 +5,7 @@ import { caseStudiesApi } from '../../services/caseStudies';
 import { caseStudyTemplatesApi } from '../../services/caseStudyTemplates';
 import CaseStudyForm from './CaseStudyForm';
 import CaseStudyPreviewModal from '../../components/caseStudies/CaseStudyPreviewModal';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const getImageUrl = (filePath: string) => {
@@ -22,6 +23,7 @@ const CaseStudyDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -64,13 +66,14 @@ const CaseStudyDetail: React.FC = () => {
     },
   });
 
-  const handleWorkflowAction = (action: string) => {
+  const handleWorkflowAction = async (action: string) => {
     const labels: Record<string, string> = {
       publish: 'publish this case study',
       archive: 'archive this case study',
       unarchive: 'un-archive this case study (moves back to draft)',
     };
-    if (window.confirm(`Are you sure you want to ${labels[action]}?`)) {
+    const ok = await confirm(`Are you sure you want to ${labels[action]}?`);
+    if (ok) {
       if (action === 'publish') publishMutation.mutate();
       if (action === 'archive') archiveMutation.mutate();
       if (action === 'unarchive') unarchiveMutation.mutate();
@@ -97,7 +100,7 @@ const CaseStudyDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert('Failed to upload image');
+      toast.error('Failed to upload image');
     } finally {
       setUploadingImage(false);
     }
@@ -454,8 +457,9 @@ const CaseStudyDetail: React.FC = () => {
                   </div>
                 )}
                 <button
-                  onClick={() => {
-                    if (window.confirm('Delete this image?')) {
+                  onClick={async () => {
+                    const ok = await confirm({ message: 'Delete this image?', danger: true });
+                    if (ok) {
                       deleteImageMutation.mutate(image.id);
                     }
                   }}

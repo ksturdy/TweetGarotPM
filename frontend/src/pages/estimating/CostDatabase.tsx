@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { historicalProjectsService } from '../../services/historicalProjects';
 import './CostDatabase.css';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
 const CostDatabase: React.FC = () => {
+  const { toast, confirm } = useTitanFeedback();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -176,13 +178,13 @@ const CostDatabase: React.FC = () => {
       } catch (error) {
         console.error('Error parsing Excel:', error);
         setUploadProgress('');
-        alert('Error parsing Excel file. Please check the file format.');
+        toast.error('Error parsing Excel file. Please check the file format.');
       }
     };
 
     reader.onerror = () => {
       setUploadProgress('');
-      alert('Error reading file');
+      toast.error('Error reading file');
     };
 
     reader.readAsBinaryString(file);
@@ -190,7 +192,7 @@ const CostDatabase: React.FC = () => {
 
   const handleImportSubmit = async () => {
     if (previewData.length === 0) {
-      alert('Please select a file first');
+      toast.error('Please select a file first');
       return;
     }
 
@@ -200,12 +202,12 @@ const CostDatabase: React.FC = () => {
       setUploadProgress('');
       setPreviewData([]);
       setShowImportModal(false);
-      alert(`Successfully imported ${result.count} projects to the database!`);
+      toast.success(`Successfully imported ${result.count} projects to the database!`);
       loadProjects(); // Reload the projects list
     } catch (error: any) {
       console.error('Error importing projects:', error);
       setUploadProgress('');
-      alert('Error saving projects to database: ' + (error.response?.data?.error || error.message));
+      toast.error('Error saving projects to database: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -216,17 +218,18 @@ const CostDatabase: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+    const ok = await confirm({ message: 'Are you sure you want to delete this project? This action cannot be undone.', danger: true });
+    if (!ok) {
       return;
     }
 
     try {
       await historicalProjectsService.delete(id);
       loadProjects(); // Reload the list
-      alert('Project deleted successfully');
+      toast.success('Project deleted successfully');
     } catch (error: any) {
       console.error('Error deleting project:', error);
-      alert('Error deleting project: ' + (error.response?.data?.error || error.message));
+      toast.error('Error deleting project: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -250,10 +253,10 @@ const CostDatabase: React.FC = () => {
 
       setEditingProject(null);
       loadProjects(); // Reload the list
-      alert('Project updated successfully');
+      toast.success('Project updated successfully');
     } catch (error: any) {
       console.error('Error updating project:', error);
-      alert('Error updating project: ' + (error.response?.data?.error || error.message));
+      toast.error('Error updating project: ' + (error.response?.data?.error || error.message));
     }
   };
 

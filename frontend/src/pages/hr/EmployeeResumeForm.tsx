@@ -5,11 +5,13 @@ import { employeeResumesApi, Certification, Language, Reference, ResumeProject, 
 import ResumeProjectManager from '../../components/resumes/ResumeProjectManager';
 import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
 import '../../styles/SalesPipeline.css';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './EmployeeResumeForm.css';
 
 const EmployeeResumeForm: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { toast } = useTitanFeedback();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
 
@@ -185,7 +187,7 @@ const EmployeeResumeForm: React.FC = () => {
       navigate('/employee-resumes');
     },
     onError: (error: any) => {
-      alert(`Failed to create resume: ${error?.response?.data?.message || error.message || 'Unknown error'}`);
+      toast.error(`Failed to create resume: ${error?.response?.data?.message || error.message || 'Unknown error'}`);
     },
   });
 
@@ -263,7 +265,7 @@ const EmployeeResumeForm: React.FC = () => {
     },
     onError: (error: any) => {
       console.error('Update mutation error:', error);
-      alert(`Failed to update resume: ${error?.response?.data?.message || error?.response?.data?.error || error.message || 'Unknown error'}`);
+      toast.error(`Failed to update resume: ${error?.response?.data?.message || error?.response?.data?.error || error.message || 'Unknown error'}`);
     },
   });
 
@@ -314,7 +316,7 @@ const EmployeeResumeForm: React.FC = () => {
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      alert(`Error preparing form data: ${error}`);
+      toast.error(`Error preparing form data: ${error}`);
     }
   };
 
@@ -409,7 +411,7 @@ const EmployeeResumeForm: React.FC = () => {
         await refetch();
       } catch (error) {
         console.error('Failed to delete photo:', error);
-        alert('Failed to delete photo. Please try again.');
+        toast.error('Failed to delete photo. Please try again.');
         return;
       }
     }

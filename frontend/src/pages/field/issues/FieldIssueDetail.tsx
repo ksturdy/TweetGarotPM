@@ -6,6 +6,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { fieldIssuesApi, TRADE_OPTIONS, PRIORITY_OPTIONS } from '../../../services/fieldIssues';
 import FieldPhotoUpload from '../../../components/field/FieldPhotoUpload';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const priorityColors: Record<string, { bg: string; text: string; border: string }> = {
   low: { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
@@ -18,6 +19,7 @@ const FieldIssueDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
 
   const { data: issue, isLoading } = useQuery({
     queryKey: ['field-issue', id],
@@ -44,8 +46,9 @@ const FieldIssueDetail: React.FC = () => {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this issue?')) {
+  const handleDelete = async () => {
+    const ok = await confirm({ message: 'Are you sure you want to delete this issue?', danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };

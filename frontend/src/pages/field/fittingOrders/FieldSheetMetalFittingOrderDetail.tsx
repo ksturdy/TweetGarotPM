@@ -13,6 +13,7 @@ import { sheetMetalFittingOrdersApi, SheetMetalFittingOrder, SheetMetalFittingOr
 import { fieldPurchaseOrdersApi, FieldPurchaseOrder, formatFpoNumber } from '../../../services/fieldPurchaseOrders';
 import { fieldFavoriteVendorsApi, FieldFavoriteVendor } from '../../../services/fieldFavoriteVendors';
 import { generateSheetMetalFittingOrderPdf } from '../../../utils/sheetMetalFittingOrderPdfClient';
+import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 
 const FITTING_LABELS: Record<string, string> = {
   '90': '90\u00B0 Elbow',
@@ -93,6 +94,7 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
   const { projectId, id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
 
   const [isDownloading, setIsDownloading] = useState(false);
   const [showPoModal, setShowPoModal] = useState(false);
@@ -134,11 +136,12 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
     },
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const msg = order && order.status !== 'draft'
       ? `\u26A0\uFE0F This fitting order has status "${order.status.replace(/_/g, ' ')}". Are you sure you want to permanently delete it?`
       : 'Delete this fitting order? This cannot be undone.';
-    if (window.confirm(msg)) {
+    const ok = await confirm({ message: msg, danger: true });
+    if (ok) {
       deleteMutation.mutate();
     }
   };
@@ -185,7 +188,7 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return;
-      window.alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -224,7 +227,7 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
         }, 100);
       }
     } catch {
-      window.alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -263,7 +266,7 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
       navigate(`/field/projects/${projectId}/purchase-orders/${newPoId}/edit`);
     } catch (err) {
       console.error('Failed to create PO:', err);
-      window.alert('Failed to create purchase order. Please try again.');
+      toast.error('Failed to create purchase order. Please try again.');
     } finally {
       setCreatingPo(false);
     }
@@ -296,7 +299,7 @@ const FieldSheetMetalFittingOrderDetail: React.FC = () => {
       navigate(`/field/projects/${projectId}/purchase-orders/${poId}/edit`);
     } catch (err) {
       console.error('Failed to add items to PO:', err);
-      window.alert('Failed to add items to purchase order. Please try again.');
+      toast.error('Failed to add items to purchase order. Please try again.');
     } finally {
       setCreatingPo(false);
     }

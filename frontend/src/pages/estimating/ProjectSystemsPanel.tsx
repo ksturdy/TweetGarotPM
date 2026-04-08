@@ -10,6 +10,7 @@ import {
   type PipingService,
   SERVICE_CATEGORY_PRESETS,
 } from '../../services/pipingServices';
+import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
 const headerStyle: React.CSSProperties = {
   padding: '8px 12px',
@@ -85,6 +86,7 @@ const emptyForm: SystemFormData = {
 
 const ProjectSystemsPanel: React.FC<Props> = ({ takeoffId }) => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<SystemFormData>(emptyForm);
@@ -303,8 +305,8 @@ const ProjectSystemsPanel: React.FC<Props> = ({ takeoffId }) => {
                         </button>
                         <button
                           title="Delete"
-                          onClick={() => {
-                            if (window.confirm(`Delete system "${sys.name}"?`)) deleteMutation.mutate(sys.id);
+                          onClick={async () => {
+                            const ok = await confirm({ message: `Delete system "${sys.name}"?`, danger: true }); if (ok) deleteMutation.mutate(sys.id);
                           }}
                           style={{ padding: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}
                         >
