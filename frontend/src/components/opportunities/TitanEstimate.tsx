@@ -44,6 +44,77 @@ function fmtHrs(v: number): string { return v.toLocaleString(undefined, { maximu
 function p2d(pct: number): string { return (pct * 100).toFixed(1); }
 function d2p(s: string): number { const v = parseFloat(s); return isNaN(v) ? 0 : Math.max(0, Math.min(100, v)) / 100; }
 
+const PercentInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const focused = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!focused.current && inputRef.current) {
+      inputRef.current.value = p2d(value);
+    }
+  }, [value]);
+
+  return (
+    <span className="te-pi">
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        defaultValue={p2d(value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+            onChangeRef.current(d2p(raw));
+          }
+        }}
+        onFocus={(e) => { focused.current = true; e.target.select(); }}
+        onBlur={() => {
+          focused.current = false;
+          if (inputRef.current) inputRef.current.value = p2d(value);
+        }}
+      />
+      <span className="te-pct-sym">%</span>
+    </span>
+  );
+};
+
+const RateInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const focused = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!focused.current && inputRef.current) {
+      inputRef.current.value = String(value || '');
+    }
+  }, [value]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="decimal"
+      defaultValue={value || ''}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+          onChangeRef.current(parseFloat(raw) || 0);
+        }
+      }}
+      onFocus={(e) => { focused.current = true; e.target.select(); }}
+      onBlur={() => {
+        focused.current = false;
+        if (inputRef.current) inputRef.current.value = String(value || '');
+      }}
+    />
+  );
+};
+
 const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedValue }) => {
   const queryClient = useQueryClient();
   const [pct, setPct] = useState<OpportunityEstimateData>(DEFAULT_ESTIMATE);
@@ -197,13 +268,6 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
     return { laborAmt, materialAmt, subAmt, rentAmt, mepAmt, gcAmt, costTotal, trades, costPctSum, tradePctSum, totalHrs };
   }, [estimatedValue, pct]);
 
-  const PI = ({ field }: { field: keyof OpportunityEstimateData }) => (
-    <span className="te-pi">
-      <input type="number" value={p2d(pct[field])} onChange={(e) => updateField(field, d2p(e.target.value))} step="any" min="0" max="100" />
-      <span className="te-pct-sym">%</span>
-    </span>
-  );
-
   if (!estimatedValue) {
     return (
       <div className="titan-estimate">
@@ -224,12 +288,12 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
       <table className="te-tbl">
         <thead><tr><th></th><th>%</th><th className="r">Amount</th></tr></thead>
         <tbody>
-          <tr><td>Labor</td><td><PI field="labor_pct" /></td><td className="r">{fmtCur(calc.laborAmt)}</td></tr>
-          <tr><td>Material</td><td><PI field="material_pct" /></td><td className="r">{fmtCur(calc.materialAmt)}</td></tr>
-          <tr><td>Subcontracts</td><td><PI field="subcontracts_pct" /></td><td className="r">{fmtCur(calc.subAmt)}</td></tr>
-          <tr><td>Rentals</td><td><PI field="rentals_pct" /></td><td className="r">{fmtCur(calc.rentAmt)}</td></tr>
-          <tr><td>MEP Equip</td><td><PI field="mep_equip_pct" /></td><td className="r">{fmtCur(calc.mepAmt)}</td></tr>
-          <tr><td>Gen. Cond.</td><td><PI field="general_conditions_pct" /></td><td className="r">{fmtCur(calc.gcAmt)}</td></tr>
+          <tr><td>Labor</td><td><PercentInput value={pct.labor_pct} onChange={(v) => updateField('labor_pct', v)} /></td><td className="r">{fmtCur(calc.laborAmt)}</td></tr>
+          <tr><td>Material</td><td><PercentInput value={pct.material_pct} onChange={(v) => updateField('material_pct', v)} /></td><td className="r">{fmtCur(calc.materialAmt)}</td></tr>
+          <tr><td>Subcontracts</td><td><PercentInput value={pct.subcontracts_pct} onChange={(v) => updateField('subcontracts_pct', v)} /></td><td className="r">{fmtCur(calc.subAmt)}</td></tr>
+          <tr><td>Rentals</td><td><PercentInput value={pct.rentals_pct} onChange={(v) => updateField('rentals_pct', v)} /></td><td className="r">{fmtCur(calc.rentAmt)}</td></tr>
+          <tr><td>MEP Equip</td><td><PercentInput value={pct.mep_equip_pct} onChange={(v) => updateField('mep_equip_pct', v)} /></td><td className="r">{fmtCur(calc.mepAmt)}</td></tr>
+          <tr><td>Gen. Cond.</td><td><PercentInput value={pct.general_conditions_pct} onChange={(v) => updateField('general_conditions_pct', v)} /></td><td className="r">{fmtCur(calc.gcAmt)}</td></tr>
         </tbody>
         <tfoot>
           <tr className="te-tbl-total">
@@ -262,10 +326,10 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
                       {trade.label}
                     </label>
                   </td>
-                  <td>{t.enabled && <PI field={`${t.key}_labor_pct` as keyof OpportunityEstimateData} />}</td>
+                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_labor_pct` as keyof OpportunityEstimateData, v)} />}</td>
                   <td className="r">{t.enabled ? fmtCur(t.amt) : '—'}</td>
                   <td className="r">{t.enabled ? fmtHrs(t.hrs) : '—'}</td>
-                  <td>{t.enabled && <PI field={`${t.key}_shop_pct` as keyof OpportunityEstimateData} />}</td>
+                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_shop_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_shop_pct` as keyof OpportunityEstimateData, v)} />}</td>
                 </tr>
                 {t.enabled && (
                   <tr className="te-sf-detail">
@@ -292,9 +356,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
         <div className="te-rates-row">
           {TRADES.map(t => (
             <label key={t.key}>{t.key.toUpperCase()} $
-              <input type="number" value={pct[`${t.key}_labor_rate` as keyof OpportunityEstimateData] || ''}
-                onChange={(e) => updateField(`${t.key}_labor_rate` as keyof OpportunityEstimateData, parseFloat(e.target.value) || 0)}
-                step="any" min="0" />
+              <RateInput value={pct[`${t.key}_labor_rate` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_labor_rate` as keyof OpportunityEstimateData, v)} />
             </label>
           ))}
         </div>

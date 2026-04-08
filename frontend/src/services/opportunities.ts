@@ -148,6 +148,22 @@ export interface OpportunityEstimate extends OpportunityEstimateData {
   updated_at: string;
 }
 
+export interface OpportunityWithEstimate extends Opportunity {
+  labor_pct: number | null;
+  pf_labor_pct: number | null;
+  sm_labor_pct: number | null;
+  pl_labor_pct: number | null;
+  pf_shop_pct: number | null;
+  pf_field_pct: number | null;
+  sm_shop_pct: number | null;
+  sm_field_pct: number | null;
+  pl_shop_pct: number | null;
+  pl_field_pct: number | null;
+  pf_labor_rate: number | null;
+  sm_labor_rate: number | null;
+  pl_labor_rate: number | null;
+}
+
 const opportunitiesService = {
   // Get all opportunities
   async getAll(filters?: OpportunityFilters): Promise<Opportunity[]> {
@@ -159,6 +175,12 @@ const opportunitiesService = {
 
     const queryString = params.toString();
     const response = await api.get(`/opportunities${queryString ? `?${queryString}` : ''}`);
+    return response.data;
+  },
+
+  // Get active pipeline opportunities with estimate data (for labor forecast overlay)
+  async getWithEstimates(): Promise<OpportunityWithEstimate[]> {
+    const response = await api.get('/opportunities/with-estimates');
     return response.data;
   },
 

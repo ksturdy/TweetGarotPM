@@ -2,11 +2,13 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
+import opportunitiesService, { OpportunityWithEstimate } from '../../services/opportunities';
+import { getForecastRules, ForecastDurationRule } from '../../services/tenant';
 import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import '../../components/modals/Modal.css';
-import { format, addMonths, addWeeks, startOfMonth, startOfWeek } from 'date-fns';
+import { format, addMonths, addWeeks, startOfMonth, startOfWeek, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -41,6 +43,13 @@ const fmtHours = (value: number): string => {
   if (value === 0) return '-';
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}K`;
   return value.toFixed(0);
+};
+
+const fmtCompact = (value: number): string => {
+  if (value === 0) return '-';
+  if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
 };
 
 const fmtHeadcount = (hours: number, hrsPerPerson: number): string => {
@@ -202,6 +211,42 @@ interface ProjectLaborProjection {
   monthlyHours: Map<string, TradeMonthlyHours>;
 }
 
+interface OpportunityLaborProjection {
+  opportunity: OpportunityWithEstimate;
+  projectedStart: Date;
+  workDurationMonths: number;
+  contour: ContourType;
+  probability: number;
+  weightedTradeHours: TradeHours[];
+  weightedTotalHours: number;
+  monthlyHours: Map<string, TradeMonthlyHours>;
+}
+
+// Default pursuit-to-award rules (how long from now until opportunity becomes a contract)
+const defaultPursuitRules: ForecastDurationRule[] = [
+  { minValue: 0, maxValue: 500000, months: 2, label: '$0 - $500K' },
+  { minValue: 500000, maxValue: 2000000, months: 4, label: '$500K - $2M' },
+  { minValue: 2000000, maxValue: 5000000, months: 6, label: '$2M - $5M' },
+  { minValue: 5000000, maxValue: 10000000, months: 9, label: '$5M - $10M' },
+  { minValue: 10000000, maxValue: Infinity, months: 12, label: '$10M+' },
+];
+
+// Default work duration rules (how long the mechanical work takes once awarded)
+const defaultWorkDurationRules: ForecastDurationRule[] = [
+  { minValue: 0, maxValue: 500000, months: 3, label: '$0 - $500K' },
+  { minValue: 500000, maxValue: 2000000, months: 6, label: '$500K - $2M' },
+  { minValue: 2000000, maxValue: 5000000, months: 8, label: '$2M - $5M' },
+  { minValue: 5000000, maxValue: 10000000, months: 12, label: '$5M - $10M' },
+  { minValue: 10000000, maxValue: Infinity, months: 24, label: '$10M+' },
+];
+
+const getOppDurationForValue = (value: number, rules: ForecastDurationRule[]): number => {
+  for (const rule of rules) {
+    if (value >= rule.minValue && value < rule.maxValue) return rule.months;
+  }
+  return 24;
+};
+
 // ═══════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════
@@ -220,6 +265,20 @@ const LaborForecast: React.FC = () => {
   const [locationGroupFilter, setLocationGroupFilter] = useState<string[]>([]);
   const [locationFilter, setLocationFilter] = useState<'both' | 'shop' | 'field'>('both');
   const [drillDownCol, setDrillDownCol] = useState<{ key: string; label: string; monthKey: string } | null>(null);
+
+  // Trade filter
+  const [tradeFilter, setTradeFilter] = useState<TradeName[]>(['pf', 'sm', 'pl']);
+  const filteredTrades = TRADES.filter(t => tradeFilter.includes(t.key));
+  const applyTradeFilter = (h: TradeMonthlyHours): TradeMonthlyHours => {
+    const pf = tradeFilter.includes('pf') ? h.pf : 0;
+    const sm = tradeFilter.includes('sm') ? h.sm : 0;
+    const pl = tradeFilter.includes('pl') ? h.pl : 0;
+    return { pf, sm, pl, total: pf + sm + pl };
+  };
+
+  // Opportunity overlay
+  const [oppMode, setOppMode] = useState<'off' | 'all' | 'select'>('off');
+  const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
 
   // Overrides (shared with revenue page)
   const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
@@ -277,6 +336,19 @@ const LaborForecast: React.FC = () => {
   const { data: shopFieldData } = useQuery({
     queryKey: ['vpShopFieldHours'],
     queryFn: () => vistaDataService.getShopFieldHours(),
+  });
+
+  // Opportunity data (lazy-loaded when overlay is enabled)
+  const { data: opportunitiesWithEstimates } = useQuery({
+    queryKey: ['opportunities', 'withEstimates'],
+    queryFn: () => opportunitiesService.getWithEstimates(),
+    enabled: oppMode !== 'off',
+  });
+
+  const { data: forecastRules } = useQuery({
+    queryKey: ['forecastRules'],
+    queryFn: getForecastRules,
+    enabled: oppMode !== 'off',
   });
 
   // Build lookup: contractNumber -> { trade -> { shop: {est,jtd}, field: {est,jtd} } }
@@ -623,6 +695,133 @@ const LaborForecast: React.FC = () => {
     return results;
   }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap]);
 
+  // ─── Opportunity projections ──────────────────────────────
+
+  const opportunityProjections = useMemo((): OpportunityLaborProjection[] => {
+    if (oppMode === 'off' || !opportunitiesWithEstimates) return [];
+
+    const now = startOfMonth(new Date());
+    const pursuitRules = forecastRules?.pursuitRules || defaultPursuitRules;
+    const workRules = forecastRules?.workDurationRules || defaultWorkDurationRules;
+    const results: OpportunityLaborProjection[] = [];
+
+    const filtered = opportunitiesWithEstimates.filter(opp => {
+      if (oppMode === 'select' && !selectedOppIds.includes(opp.id)) return false;
+      if (locationGroupFilter.length > 0) {
+        if (!opp.location_group || !locationGroupFilter.includes(opp.location_group)) return false;
+      }
+      if (!opp.labor_pct || parseNum(opp.labor_pct) <= 0) return false;
+      return true;
+    });
+
+    for (const opp of filtered) {
+      const estimatedValue = parseNum(opp.estimated_value);
+      const laborPct = parseNum(opp.labor_pct);
+      const totalLaborDollars = estimatedValue * laborPct;
+
+      // Calculate hours per trade
+      const pfRate = parseNum(opp.pf_labor_rate) || 85;
+      const smRate = parseNum(opp.sm_labor_rate) || 82;
+      const plRate = parseNum(opp.pl_labor_rate) || 78;
+
+      const pfHours = parseNum(opp.pf_labor_pct) > 0 && pfRate > 0
+        ? (totalLaborDollars * parseNum(opp.pf_labor_pct)) / pfRate : 0;
+      const smHours = parseNum(opp.sm_labor_pct) > 0 && smRate > 0
+        ? (totalLaborDollars * parseNum(opp.sm_labor_pct)) / smRate : 0;
+      const plHours = parseNum(opp.pl_labor_pct) > 0 && plRate > 0
+        ? (totalLaborDollars * parseNum(opp.pl_labor_pct)) / plRate : 0;
+
+      // Apply shop/field proportional scaling
+      const applyLocationFilter = (hours: number, shopPct: number, fieldPct: number): number => {
+        if (locationFilter === 'both') return hours;
+        return locationFilter === 'shop' ? hours * shopPct : hours * fieldPct;
+      };
+
+      const filteredPf = applyLocationFilter(pfHours, parseNum(opp.pf_shop_pct), parseNum(opp.pf_field_pct));
+      const filteredSm = applyLocationFilter(smHours, parseNum(opp.sm_shop_pct), parseNum(opp.sm_field_pct));
+      const filteredPl = applyLocationFilter(plHours, parseNum(opp.pl_shop_pct), parseNum(opp.pl_field_pct));
+
+      // Apply probability weighting (stage_probability is 'Low'/'Medium'/'High' text)
+      const qualitativeProbMap: Record<string, number> = { 'High': 75, 'Medium': 50, 'Low': 25 };
+      const probability = opp.probability && qualitativeProbMap[opp.probability]
+        ? qualitativeProbMap[opp.probability]
+        : (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) || 0;
+      const probFactor = probability > 0 ? probability / 100 : 0;
+
+      const weightedPf = filteredPf * probFactor;
+      const weightedSm = filteredSm * probFactor;
+      const weightedPl = filteredPl * probFactor;
+      const weightedTotal = weightedPf + weightedSm + weightedPl;
+
+      if (weightedTotal <= 0) continue;
+
+      // Determine projected start date
+      let projectedStart: Date;
+      if (opp.user_adjusted_start_date) {
+        projectedStart = startOfMonth(parseISO(opp.user_adjusted_start_date));
+      } else if (opp.estimated_start_date && !isBefore(parseISO(opp.estimated_start_date), now)) {
+        projectedStart = startOfMonth(parseISO(opp.estimated_start_date));
+      } else {
+        const pursuitMonths = getOppDurationForValue(estimatedValue, pursuitRules);
+        projectedStart = addMonths(now, pursuitMonths);
+      }
+
+      // Determine work duration
+      let workDurationMonths: number;
+      if (opp.user_adjusted_duration_months != null) {
+        workDurationMonths = opp.user_adjusted_duration_months;
+      } else if (opp.estimated_end_date && opp.estimated_start_date) {
+        workDurationMonths = Math.max(1, differenceInMonths(parseISO(opp.estimated_end_date), projectedStart));
+      } else {
+        workDurationMonths = getOppDurationForValue(estimatedValue, workRules);
+      }
+      workDurationMonths = Math.max(1, Math.min(36, workDurationMonths));
+
+      // Contour
+      const contour: ContourType = (opp.contour_type as ContourType) || 'scurve';
+
+      // Distribute weighted hours across months
+      const monthlyHours = new Map<string, TradeMonthlyHours>();
+      const multipliers = getContourMultipliers(workDurationMonths, contour);
+      const monthsUntilStart = Math.max(0, differenceInMonths(projectedStart, now));
+
+      for (let i = 0; i < workDurationMonths; i++) {
+        const monthDate = addMonths(now, monthsUntilStart + i);
+        const monthKey = format(monthDate, 'yyyy-MM');
+        const mult = multipliers[i];
+
+        const pfM = (weightedPf / workDurationMonths) * mult;
+        const smM = (weightedSm / workDurationMonths) * mult;
+        const plM = (weightedPl / workDurationMonths) * mult;
+
+        const existing = monthlyHours.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
+        monthlyHours.set(monthKey, {
+          pf: existing.pf + pfM,
+          sm: existing.sm + smM,
+          pl: existing.pl + plM,
+          total: existing.total + pfM + smM + plM,
+        });
+      }
+
+      results.push({
+        opportunity: opp,
+        projectedStart,
+        workDurationMonths,
+        contour,
+        probability,
+        weightedTradeHours: [
+          { key: 'pf' as TradeName, remaining: weightedPf },
+          { key: 'sm' as TradeName, remaining: weightedSm },
+          { key: 'pl' as TradeName, remaining: weightedPl },
+        ],
+        weightedTotalHours: weightedTotal,
+        monthlyHours,
+      });
+    }
+
+    return results;
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules]);
+
   // ─── Aggregations ────────────────────────────────────────
 
   const columnTotals = useMemo(() => {
@@ -633,21 +832,49 @@ const LaborForecast: React.FC = () => {
         const h = getHoursForColumn(p.monthlyHours, col);
         agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total;
       });
-      totals.set(col.key, agg);
+      totals.set(col.key, applyTradeFilter(agg));
     });
     return totals;
-  }, [projections, displayColumns, getHoursForColumn]);
+  }, [projections, displayColumns, getHoursForColumn, tradeFilter]);
 
-  const grandTotalHours = useMemo(() =>
-    projections.reduce((sum, p) => sum + p.totalRemainingHours, 0), [projections]);
+  const grandTotalHours = useMemo(() => {
+    let total = 0;
+    projections.forEach(p => {
+      p.tradeHours.forEach(t => { if (tradeFilter.includes(t.key)) total += t.remaining; });
+    });
+    return total;
+  }, [projections, tradeFilter]);
 
   const grandTotalsByTrade = useMemo(() => {
     const totals = { pf: 0, sm: 0, pl: 0 };
     projections.forEach(p => {
-      p.tradeHours.forEach(t => { totals[t.key] += t.remaining; });
+      p.tradeHours.forEach(t => { if (tradeFilter.includes(t.key)) totals[t.key] += t.remaining; });
     });
     return totals;
-  }, [projections]);
+  }, [projections, tradeFilter]);
+
+  // ─── Opportunity aggregations ─────────────────────────────
+
+  const oppColumnTotals = useMemo(() => {
+    const totals = new Map<string, TradeMonthlyHours>();
+    displayColumns.forEach(col => {
+      const agg: TradeMonthlyHours = { pf: 0, sm: 0, pl: 0, total: 0 };
+      opportunityProjections.forEach(p => {
+        const h = getHoursForColumn(p.monthlyHours, col);
+        agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total;
+      });
+      totals.set(col.key, applyTradeFilter(agg));
+    });
+    return totals;
+  }, [opportunityProjections, displayColumns, getHoursForColumn, tradeFilter]);
+
+  const oppGrandTotalHours = useMemo(() => {
+    let total = 0;
+    opportunityProjections.forEach(p => {
+      p.weightedTradeHours.forEach(t => { if (tradeFilter.includes(t.key)) total += t.remaining; });
+    });
+    return total;
+  }, [opportunityProjections, tradeFilter]);
 
   // ─── Drill-down data ────────────────────────────────────
 
@@ -662,6 +889,17 @@ const LaborForecast: React.FC = () => {
       .sort((a, b) => b.hours.total - a.hours.total);
   }, [drillDownCol, projections, getHoursForColumn]);
 
+  const drillDownOpps = useMemo(() => {
+    if (oppMode === 'off' || !drillDownCol) return [];
+    return opportunityProjections
+      .map(p => {
+        const h = getHoursForColumn(p.monthlyHours, drillDownCol);
+        return { projection: p, hours: h };
+      })
+      .filter(d => d.hours.total > 0)
+      .sort((a, b) => b.hours.total - a.hours.total);
+  }, [drillDownCol, opportunityProjections, oppMode, getHoursForColumn]);
+
   // Close drill-down when filters change
   useEffect(() => {
     setDrillDownCol(null);
@@ -671,7 +909,10 @@ const LaborForecast: React.FC = () => {
 
   const cellTooltip = (h: TradeMonthlyHours): string => {
     const hpp = hoursPerPersonPerMonth;
-    return `PF: ${(h.pf / hpp).toFixed(1)} (${fmtHours(h.pf)} hrs)\nSM: ${(h.sm / hpp).toFixed(1)} (${fmtHours(h.sm)} hrs)\nPL: ${(h.pl / hpp).toFixed(1)} (${fmtHours(h.pl)} hrs)\nTotal: ${(h.total / hpp).toFixed(1)} (${fmtHours(h.total)} hrs)`;
+    const fh = applyTradeFilter(h);
+    const lines = filteredTrades.map(t => `${t.label}: ${(fh[t.key] / hpp).toFixed(1)} (${fmtHours(fh[t.key])} hrs)`);
+    lines.push(`Total: ${(fh.total / hpp).toFixed(1)} (${fmtHours(fh.total)} hrs)`);
+    return lines.join('\n');
   };
 
   // ─── PDF Export ─────────────────────────────────────────
@@ -690,8 +931,10 @@ const LaborForecast: React.FC = () => {
     if (marketFilter) filters.push(`Market: ${marketFilter}`);
     if (pmFilter) filters.push(`PM: ${pmFilter}`);
     if (searchFilter) filters.push(`Search: "${searchFilter}"`);
+    if (tradeFilter.length < 3) filters.push(`Trades: ${filteredTrades.map(t => t.label).join(', ')}`);
     if (projectFilter.length > 0) filters.push(`${projectFilter.length} project(s) selected`);
     if (locationFilter !== 'both') filters.push(locationFilter === 'shop' ? 'Shop Only' : 'Field Only');
+    if (oppMode !== 'off') filters.push(`+${opportunityProjections.length} opportunities`);
 
     // Logo (top-right)
     if (logoUrl) {
@@ -736,7 +979,7 @@ const LaborForecast: React.FC = () => {
       { label: 'Projects', value: String(projections.length) },
       { label: 'Total Remaining', value: `${fmtHours(grandTotalHours)} hrs` },
       { label: 'Peak Headcount', value: `${peakHC.toFixed(1)} people` },
-      { label: 'PF / SM / PL', value: `${fmtHours(grandTotalsByTrade.pf)} / ${fmtHours(grandTotalsByTrade.sm)} / ${fmtHours(grandTotalsByTrade.pl)}` },
+      { label: filteredTrades.map(t => t.key.toUpperCase()).join(' / '), value: filteredTrades.map(t => fmtHours(grandTotalsByTrade[t.key])).join(' / ') },
     ];
     const stripWidth = pageWidth - 80;
     const cellW = stripWidth / kpis.length;
@@ -794,7 +1037,11 @@ const LaborForecast: React.FC = () => {
     });
 
     let pdfMaxHC = 0;
-    pdfGraphData.forEach(d => { if (d.totalHC > pdfMaxHC) pdfMaxHC = d.totalHC; });
+    pdfGraphData.forEach((d, i) => {
+      const oppHC = oppMode !== 'off' ? ((oppColumnTotals.get(displayColumns[i].key)?.total || 0) / hpp) : 0;
+      const combined = d.totalHC + oppHC;
+      if (combined > pdfMaxHC) pdfMaxHC = combined;
+    });
     pdfMaxHC = Math.ceil(pdfMaxHC / 5) * 5;
     if (pdfMaxHC === 0) pdfMaxHC = 10;
 
@@ -839,6 +1086,21 @@ const LaborForecast: React.FC = () => {
         doc.rect(bx, cBottom - plBarH - smBarH - pfBarH, pdfBarW, pfBarH, 'F');
       }
 
+      // Opportunity overlay bar
+      if (oppMode !== 'off') {
+        const ot = oppColumnTotals.get(displayColumns[i].key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+        const oppHC = ot.total / hpp;
+        const oppBarH = pdfMaxHC > 0 ? (oppHC / pdfMaxHC) * cH : 0;
+        if (oppBarH > 0.5) {
+          const committedH = plBarH + smBarH + pfBarH;
+          doc.setFillColor(245, 158, 11);
+          doc.setDrawColor(245, 158, 11);
+          doc.setLineWidth(0.3);
+          // Hatched pattern approximation: filled rect with lower opacity
+          doc.rect(bx, cBottom - committedH - oppBarH, pdfBarW, oppBarH, 'FD');
+        }
+      }
+
       const pdfLabelEvery = pdfBarCount <= 12 ? 1 : pdfBarCount <= 18 ? 2 : 3;
       if (i % pdfLabelEvery === 0) {
         doc.setFontSize(6.5);
@@ -849,14 +1111,22 @@ const LaborForecast: React.FC = () => {
 
     // Legend
     const lgY = cBottom + 20;
-    const tLabels = ['Pipefitter', 'Sheet Metal', 'Plumber'];
     let lgX = cLeft;
-    for (let ti = 0; ti < tColors.length; ti++) {
-      doc.setFillColor(tColors[ti][0], tColors[ti][1], tColors[ti][2]);
+    filteredTrades.forEach((trade, ti) => {
+      const colorIdx = TRADES.findIndex(t => t.key === trade.key);
+      doc.setFillColor(tColors[colorIdx][0], tColors[colorIdx][1], tColors[colorIdx][2]);
       doc.rect(lgX, lgY - 4, 10, 6, 'F');
       doc.setFontSize(7);
       doc.setTextColor(100, 116, 139);
-      doc.text(tLabels[ti], lgX + 13, lgY + 1);
+      doc.text(trade.label, lgX + 13, lgY + 1);
+      lgX += 70;
+    });
+    if (oppMode !== 'off') {
+      doc.setFillColor(245, 158, 11);
+      doc.rect(lgX, lgY - 4, 10, 6, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Opportunities', lgX + 13, lgY + 1);
       lgX += 70;
     }
 
@@ -868,12 +1138,12 @@ const LaborForecast: React.FC = () => {
     doc.text('Total Remaining Hours by Trade', 40, y);
     y += 12;
 
-    const mxTradeHrs = Math.max(grandTotalsByTrade.pf, grandTotalsByTrade.sm, grandTotalsByTrade.pl, 1);
+    const mxTradeHrs = Math.max(...filteredTrades.map(t => grandTotalsByTrade[t.key]), 1);
     // Measure longest label text to reserve space on the right
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     let maxLabelW = 0;
-    TRADES.forEach((trade) => {
+    filteredTrades.forEach((trade) => {
       const hrs = grandTotalsByTrade[trade.key];
       const lbl = `${fmtHours(hrs)} hrs (${(hrs / hpp).toFixed(0)} person-months)`;
       const tw = doc.getTextWidth(lbl);
@@ -881,19 +1151,20 @@ const LaborForecast: React.FC = () => {
     });
     const hbMaxW = cW - 80 - maxLabelW - 15; // 80 for trade name, 15 for padding
 
-    TRADES.forEach((trade, i) => {
+    filteredTrades.forEach((trade) => {
       const hrs = grandTotalsByTrade[trade.key];
       const bw = (hrs / mxTradeHrs) * hbMaxW;
+      const colorIdx = TRADES.findIndex(t => t.key === trade.key);
 
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
-      doc.setTextColor(tColors[i][0], tColors[i][1], tColors[i][2]);
+      doc.setTextColor(tColors[colorIdx][0], tColors[colorIdx][1], tColors[colorIdx][2]);
       doc.text(trade.label, cLeft, y + 8);
 
       doc.setFillColor(226, 232, 240);
       doc.rect(cLeft + 70, y, hbMaxW, 12, 'F');
       if (bw > 0) {
-        doc.setFillColor(tColors[i][0], tColors[i][1], tColors[i][2]);
+        doc.setFillColor(tColors[colorIdx][0], tColors[colorIdx][1], tColors[colorIdx][2]);
         doc.rect(cLeft + 70, y, Math.max(bw, 2), 12, 'F');
       }
 
@@ -922,7 +1193,7 @@ const LaborForecast: React.FC = () => {
         const key = format(monthDate, 'yyyy-MM');
         projections.forEach(p => {
           const h = p.monthlyHours.get(key);
-          if (h) total += h.total;
+          if (h) { const fh = applyTradeFilter(h); total += fh.total; }
         });
       }
       const avgHC = (total / 3) / hpp;
@@ -966,7 +1237,7 @@ const LaborForecast: React.FC = () => {
 
     const tradeHeaders = ['Trade', 'Remaining Hours', ...colLabels];
     const tradeEntries: { key: string; label: string }[] = [
-      ...TRADES.map(t => ({ key: t.key, label: t.label })),
+      ...filteredTrades.map(t => ({ key: t.key, label: t.label })),
       { key: 'total', label: 'TOTAL' },
     ];
     const tradeRows = tradeEntries.map(trade => {
@@ -996,7 +1267,7 @@ const LaborForecast: React.FC = () => {
       },
       didParseCell: (data: any) => {
         // Bold the TOTAL row
-        if (data.section === 'body' && data.row.index === 3) {
+        if (data.section === 'body' && data.row.index === filteredTrades.length) {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.fillColor = [241, 245, 249];
         }
@@ -1014,29 +1285,53 @@ const LaborForecast: React.FC = () => {
     y += 12;
 
     const pdfNow = startOfMonth(new Date());
-    const projHeaders = ['Contract', 'Description', 'PM', 'Dept', 'Rem. Hrs', 'PF', 'SM', 'PL', '% Comp', 'Start', 'End', ...colLabels];
+    const tradeColHeaders = filteredTrades.map(t => t.key.toUpperCase());
+    const projHeaders = ['Contract', 'Description', 'PM', 'Dept', 'Rem. Hrs', ...tradeColHeaders, '% Comp', 'Start', 'End', ...colLabels];
     const projRows = projections.map(p => {
       const desc = (p.contract.description || p.contract.customer_name || '-').substring(0, 30);
       const pm = (p.contract.project_manager_name || '-').split(',')[0].substring(0, 15);
       const monthlyCols = displayColumns.map(col => {
-        const h = getHoursForColumn(p.monthlyHours, col);
+        const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
         return fmtHeadcount(h.total, hpp);
       });
+      const filteredRemaining = p.tradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
       return [
         p.contract.contract_number || '',
         desc,
         pm,
         p.contract.department_code || '-',
-        fmtHours(p.totalRemainingHours),
-        fmtHours(p.tradeHours[0].remaining),
-        fmtHours(p.tradeHours[1].remaining),
-        fmtHours(p.tradeHours[2].remaining),
+        fmtHours(filteredRemaining),
+        ...filteredTrades.map(t => fmtHours(p.tradeHours.find(th => th.key === t.key)?.remaining || 0)),
         p.pctComplete > 0 ? `${p.pctComplete.toFixed(0)}%` : '-',
         format(addMonths(pdfNow, p.startOffset), 'MMM yy'),
         format(addMonths(pdfNow, p.startOffset + p.remainingMonths), 'MMM yy'),
         ...monthlyCols,
       ];
     });
+
+    // Add opportunity rows if active
+    if (oppMode !== 'off' && opportunityProjections.length > 0) {
+      projRows.push(['', '', '', '', '', ...filteredTrades.map(() => ''), '', '', '', ...colLabels.map(() => '')]);  // spacer
+      opportunityProjections.forEach(p => {
+        const monthlyCols = displayColumns.map(col => {
+          const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
+          return fmtHeadcount(h.total, hpp);
+        });
+        const filteredRemaining = p.weightedTradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
+        projRows.push([
+          'OPP',
+          `${p.opportunity.title} (${p.probability}%)`.substring(0, 35),
+          '-',
+          p.opportunity.location_group || '-',
+          fmtHours(filteredRemaining),
+          ...filteredTrades.map(t => fmtHours(p.weightedTradeHours.find(th => th.key === t.key)?.remaining || 0)),
+          '-',
+          format(p.projectedStart, 'MMM yy'),
+          format(addMonths(p.projectedStart, p.workDurationMonths), 'MMM yy'),
+          ...monthlyCols,
+        ]);
+      });
+    }
 
     autoTable(doc, {
       startY: y,
@@ -1052,13 +1347,18 @@ const LaborForecast: React.FC = () => {
         2: { halign: 'left', cellWidth: 48 },     // PM
         3: { halign: 'center', cellWidth: 26 },   // Dept
         4: { halign: 'right', cellWidth: 36 },    // Rem. Hrs
-        5: { halign: 'right', cellWidth: 26 },    // PF
-        6: { halign: 'right', cellWidth: 26 },    // SM
-        7: { halign: 'right', cellWidth: 26 },    // PL
-        8: { halign: 'right', cellWidth: 28 },    // % Comp
-        9: { halign: 'center', cellWidth: 32 },   // Start
-        10: { halign: 'center', cellWidth: 32 },  // End
-        ...Object.fromEntries(colLabels.map((_, i) => [i + 11, { halign: 'right' as const }])),
+        ...Object.fromEntries(filteredTrades.map((_, i) => [5 + i, { halign: 'right' as const, cellWidth: 26 }])),
+        [5 + filteredTrades.length]: { halign: 'right', cellWidth: 28 },    // % Comp
+        [6 + filteredTrades.length]: { halign: 'center', cellWidth: 32 },   // Start
+        [7 + filteredTrades.length]: { halign: 'center', cellWidth: 32 },   // End
+        ...Object.fromEntries(colLabels.map((_, i) => [i + 8 + filteredTrades.length, { halign: 'right' as const }])),
+      },
+      didParseCell: (data: any) => {
+        // Highlight opportunity rows with amber
+        if (data.section === 'body' && data.row.raw && data.row.raw[0] === 'OPP') {
+          data.cell.styles.textColor = [146, 64, 14];
+          data.cell.styles.fillColor = [255, 251, 235];
+        }
       },
       didDrawPage: (data: any) => {
         const pageCount = (doc as any).internal.getNumberOfPages();
@@ -1101,6 +1401,11 @@ const LaborForecast: React.FC = () => {
                 {' '}| {locationFilter === 'shop' ? 'Shop Only' : 'Field Only'}
               </span>
             )}
+            {oppMode !== 'off' && opportunityProjections.length > 0 && (
+              <span style={{ color: '#f59e0b', fontWeight: 500 }}>
+                {' '}| +{opportunityProjections.length} opportunities ({fmtHours(oppGrandTotalHours)} hrs weighted)
+              </span>
+            )}
           </div>
         </div>
         <div>
@@ -1123,7 +1428,7 @@ const LaborForecast: React.FC = () => {
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Contract, customer..."
-              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '150px' }}
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', width: '130px' }}
             />
           </div>
           <div>
@@ -1140,8 +1445,8 @@ const LaborForecast: React.FC = () => {
               options={filterOptions.departments.map(d => ({ value: d, label: d }))}
               value={departmentFilter}
               onChange={setDepartmentFilter}
-              placeholder="All Departments"
-              style={{ minWidth: '160px', fontSize: '0.8rem' }}
+              placeholder="All Depts"
+              style={{ minWidth: '120px', fontSize: '0.8rem' }}
             />
           </div>
           <div>
@@ -1151,7 +1456,17 @@ const LaborForecast: React.FC = () => {
               value={locationGroupFilter}
               onChange={setLocationGroupFilter}
               placeholder="All Locations"
-              style={{ minWidth: '140px', fontSize: '0.8rem' }}
+              style={{ minWidth: '120px', fontSize: '0.8rem' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Trade</label>
+            <MultiSearchableSelect
+              options={TRADES.map(t => ({ value: t.key, label: t.label }))}
+              value={tradeFilter}
+              onChange={(vals: string[]) => setTradeFilter(vals.length > 0 ? vals as TradeName[] : ['pf', 'sm', 'pl'])}
+              placeholder="All Trades"
+              style={{ minWidth: '120px', fontSize: '0.8rem' }}
             />
           </div>
           <div>
@@ -1168,7 +1483,7 @@ const LaborForecast: React.FC = () => {
               value={pmFilter}
               onChange={setPmFilter}
               placeholder="All PMs"
-              style={{ minWidth: '180px', fontSize: '0.8rem' }}
+              style={{ minWidth: '130px', fontSize: '0.8rem' }}
             />
           </div>
           <div>
@@ -1178,13 +1493,13 @@ const LaborForecast: React.FC = () => {
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="All Projects"
-              style={{ minWidth: '200px', fontSize: '0.8rem' }}
+              style={{ minWidth: '140px', fontSize: '0.8rem' }}
             />
           </div>
 
-          {(searchFilter || departmentFilter.length > 0 || locationGroupFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
+          {(searchFilter || departmentFilter.length > 0 || locationGroupFilter.length > 0 || tradeFilter.length < 3 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
             <button
-              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setLocationGroupFilter([]); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
+              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setLocationGroupFilter([]); setTradeFilter(['pf', 'sm', 'pl']); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
               style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}
             >
               Clear Filters
@@ -1356,6 +1671,55 @@ const LaborForecast: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Opportunities Overlay Toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '1rem',
+        padding: '0.5rem 1rem', marginBottom: '0.75rem',
+        background: oppMode !== 'off' ? '#fffbeb' : '#f8fafc',
+        border: `1px solid ${oppMode !== 'off' ? '#fcd34d' : '#e2e8f0'}`,
+        borderRadius: '8px',
+      }}>
+        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: oppMode !== 'off' ? '#92400e' : '#64748b' }}>
+          Pipeline Opportunities
+        </span>
+        <div style={{ display: 'flex', gap: '0' }}>
+          {(['off', 'all', 'select'] as const).map((mode, i, arr) => (
+            <button
+              key={mode}
+              onClick={() => { setOppMode(mode); if (mode === 'off') setSelectedOppIds([]); }}
+              style={{
+                padding: '0.35rem 0.75rem', fontSize: '0.75rem',
+                background: oppMode === mode ? '#f59e0b' : '#fff',
+                color: oppMode === mode ? '#fff' : '#64748b',
+                border: '1px solid #e2e8f0',
+                borderRadius: i === 0 ? '4px 0 0 4px' : i === arr.length - 1 ? '0 4px 4px 0' : '0',
+                cursor: 'pointer', fontWeight: oppMode === mode ? 600 : 400,
+              }}
+            >
+              {mode === 'off' ? 'Off' : mode === 'all' ? 'All Opps' : 'Select...'}
+            </button>
+          ))}
+        </div>
+        {oppMode === 'select' && opportunitiesWithEstimates && (
+          <MultiSearchableSelect
+            options={opportunitiesWithEstimates.map(o => ({
+              value: String(o.id),
+              label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})`,
+              searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''}`,
+            }))}
+            value={selectedOppIds.map(String)}
+            onChange={(vals: string[]) => setSelectedOppIds(vals.map(Number))}
+            placeholder="Select opportunities..."
+            style={{ minWidth: '280px', fontSize: '0.75rem' }}
+          />
+        )}
+        {oppMode !== 'off' && opportunityProjections.length > 0 && (
+          <span style={{ fontSize: '0.75rem', color: '#92400e', marginLeft: 'auto' }}>
+            {opportunityProjections.length} opportunities | {fmtHours(oppGrandTotalHours)} weighted hrs
+          </span>
+        )}
       </div>
 
       {/* Settings Panel */}
@@ -1605,7 +1969,7 @@ const LaborForecast: React.FC = () => {
                         </div>
                       </td>
                       {displayColumns.map(col => {
-                        const h = getHoursForColumn(p.monthlyHours, col);
+                        const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
                         return (
                           <td key={col.key} title={h.total > 0 ? cellTooltip(h) : ''}
                             style={{
@@ -1622,7 +1986,7 @@ const LaborForecast: React.FC = () => {
                   ))
                 ) : (
                   /* ─── TRADE SUMMARY ROWS ─── */
-                  [...TRADES, { key: 'total' as any, label: 'TOTAL', color: '#1e293b' }].map((trade) => (
+                  [...filteredTrades, { key: 'total' as any, label: 'TOTAL', color: '#1e293b' }].map((trade) => (
                     <tr key={trade.key} style={{
                       borderBottom: '1px solid #f1f5f9',
                       fontWeight: trade.key === 'total' ? 600 : 400,
@@ -1663,30 +2027,146 @@ const LaborForecast: React.FC = () => {
                     </tr>
                   ))
                 )}
+                {/* ─── OPPORTUNITY ROWS (both views) ─── */}
+                {oppMode !== 'off' && opportunityProjections.length > 0 && dataView === 'project' && (
+                  <>
+                    <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
+                      <td colSpan={7 + displayColumns.length} style={{ padding: '0.4rem 0.5rem', position: 'sticky', left: 0, background: '#fffbeb', color: '#b45309', fontWeight: 600, fontSize: '0.7rem' }}>
+                        + Opportunities ({opportunityProjections.length}) — probability-weighted hours
+                      </td>
+                    </tr>
+                    {opportunityProjections.map(p => (
+                      <tr key={`opp-${p.opportunity.id}`} style={{ borderBottom: '1px solid #fde68a', background: '#fffbeb', borderLeft: '3px solid #f59e0b' }}>
+                        <td style={{ padding: '0.4rem 0.5rem', position: 'sticky', left: 0, background: '#fffbeb' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ background: '#f59e0b', color: '#fff', fontSize: '0.55rem', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>OPP</span>
+                            <div>
+                              <div style={{ fontWeight: 500, fontSize: '0.75rem', color: '#92400e' }}>{p.opportunity.title}</div>
+                              <div style={{ fontSize: '0.6rem', color: '#b45309' }}>
+                                {fmtCompact(parseNum(p.opportunity.estimated_value))}
+                                {' | '}{p.probability}% prob
+                                {p.opportunity.location_group && ` | ${p.opportunity.location_group}`}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 500, color: '#92400e' }}>
+                          {fmtHours(p.weightedTotalHours)}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
+                          <span style={{ color: TRADES[0].color }}>{fmtHours(p.weightedTradeHours[0].remaining)}</span>
+                          {' / '}
+                          <span style={{ color: TRADES[1].color }}>{fmtHours(p.weightedTradeHours[1].remaining)}</span>
+                          {' / '}
+                          <span style={{ color: TRADES[2].color }}>{fmtHours(p.weightedTradeHours[2].remaining)}</span>
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#b45309' }}>-</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem', color: '#b45309' }}>
+                          {format(p.projectedStart, 'MMM yy')}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem', color: '#b45309' }}>
+                          {format(addMonths(p.projectedStart, p.workDurationMonths), 'MMM yy')}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                          <ContourVisual contour={p.contour} />
+                        </td>
+                        {displayColumns.map(col => {
+                          const h = applyTradeFilter(getHoursForColumn(p.monthlyHours, col));
+                          return (
+                            <td key={col.key} style={{
+                              padding: '0.4rem 0.5rem', textAlign: 'right',
+                              color: h.total > 0 ? '#92400e' : '#fcd34d',
+                              fontWeight: h.total > 0 ? 500 : 400,
+                              fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
+                            }}>
+                              {fmtHeadcount(h.total, hoursPerPersonPerMonth)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </>
+                )}
+                {/* ─── OPPORTUNITY DELTA ROW (By Trade view) ─── */}
+                {oppMode !== 'off' && oppGrandTotalHours > 0 && dataView === 'trade' && (
+                  <>
+                    <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
+                      <td style={{ padding: '0.5rem', position: 'sticky', left: 0, background: '#fffbeb', borderLeft: '3px solid #f59e0b' }}>
+                        <span style={{ fontWeight: 600, color: '#b45309', fontSize: '0.75rem' }}>
+                          + Opps ({opportunityProjections.length})
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 500, color: '#b45309' }}>
+                        {fmtHours(oppGrandTotalHours)}
+                      </td>
+                      {displayColumns.map(col => {
+                        const ot = oppColumnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        return (
+                          <td key={col.key} style={{
+                            padding: '0.5rem', textAlign: 'right',
+                            color: ot.total > 0 ? '#b45309' : '#fcd34d',
+                            fontWeight: ot.total > 0 ? 500 : 400,
+                            background: '#fffbeb',
+                            fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
+                          }}>
+                            {fmtHeadcount(ot.total, hoursPerPersonPerMonth)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr style={{ background: '#fef3c7' }}>
+                      <td style={{ padding: '0.5rem', position: 'sticky', left: 0, background: '#fef3c7' }}>
+                        <span style={{ fontWeight: 700, color: '#92400e', fontSize: '0.75rem' }}>COMBINED TOTAL</span>
+                      </td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>
+                        {fmtHours(grandTotalHours + oppGrandTotalHours)}
+                      </td>
+                      {displayColumns.map(col => {
+                        const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        const ot = oppColumnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        const combined = ct.total + ot.total;
+                        return (
+                          <td key={col.key} style={{
+                            padding: '0.5rem', textAlign: 'right',
+                            color: combined > 0 ? '#92400e' : '#fcd34d',
+                            fontWeight: 700,
+                            background: '#fef3c7',
+                            fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem',
+                          }}>
+                            {fmtHeadcount(combined, hoursPerPersonPerMonth)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </>
+                )}
               </tbody>
               {dataView === 'project' && (
                 <tfoot>
                   <tr style={{ background: '#f1f5f9', fontWeight: 600 }}>
                     <td style={{ padding: '0.5rem', position: 'sticky', left: 0, background: '#f1f5f9' }}>
-                      TOTAL ({projections.length} projects)
+                      TOTAL ({projections.length} projects{oppMode !== 'off' && opportunityProjections.length > 0 && ` + ${opportunityProjections.length} opps`})
                     </td>
-                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>{fmtHours(grandTotalHours)}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>{fmtHours(grandTotalHours + (oppMode !== 'off' ? oppGrandTotalHours : 0))}</td>
                     <td style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
-                      <span style={{ color: TRADES[0].color }}>{fmtHours(grandTotalsByTrade.pf)}</span>
-                      {' / '}
-                      <span style={{ color: TRADES[1].color }}>{fmtHours(grandTotalsByTrade.sm)}</span>
-                      {' / '}
-                      <span style={{ color: TRADES[2].color }}>{fmtHours(grandTotalsByTrade.pl)}</span>
+                      {filteredTrades.map((t, i) => (
+                        <span key={t.key}>
+                          {i > 0 && ' / '}
+                          <span style={{ color: t.color }}>{fmtHours(grandTotalsByTrade[t.key])}</span>
+                        </span>
+                      ))}
                     </td>
                     <td style={{ padding: '0.5rem' }}>-</td>
                     <td style={{ padding: '0.5rem' }}>-</td>
                     <td style={{ padding: '0.5rem' }}>-</td>
                     {displayColumns.map(col => {
                       const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const ot = oppMode !== 'off' ? (oppColumnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const combined = { pf: ct.pf + ot.pf, sm: ct.sm + ot.sm, pl: ct.pl + ot.pl, total: ct.total + ot.total };
                       return (
-                        <td key={col.key} title={ct.total > 0 ? cellTooltip(ct) : ''}
+                        <td key={col.key} title={combined.total > 0 ? cellTooltip(combined) : ''}
                           style={{ padding: '0.5rem', textAlign: 'right', background: '#f1f5f9', fontSize: granularity === 'weekly' ? '0.65rem' : '0.75rem' }}>
-                          {fmtHeadcount(ct.total, hoursPerPersonPerMonth)}
+                          {fmtHeadcount(combined.total, hoursPerPersonPerMonth)}
                         </td>
                       );
                     })}
@@ -1703,7 +2183,7 @@ const LaborForecast: React.FC = () => {
             <br />
             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', alignItems: 'center' }}>
               <strong>Trades:</strong>
-              {TRADES.map(t => (
+              {filteredTrades.map(t => (
                 <span key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                   <span style={{ display: 'inline-block', width: '10px', height: '10px', background: t.color, borderRadius: '2px' }} />
                   {t.label}
@@ -1732,8 +2212,10 @@ const LaborForecast: React.FC = () => {
 
                 let maxValue = 0;
                 graphData.forEach(d => {
-                  const hc = d.total / hoursPerPersonPerMonth;
-                  if (hc > maxValue) maxValue = hc;
+                  const contractHC = d.total / hoursPerPersonPerMonth;
+                  const oppHC = oppMode !== 'off' ? ((oppColumnTotals.get(d.key)?.total || 0) / hoursPerPersonPerMonth) : 0;
+                  const combined = contractHC + oppHC;
+                  if (combined > maxValue) maxValue = combined;
                 });
                 maxValue = Math.ceil(maxValue / 5) * 5;
                 if (maxValue === 0) maxValue = 10;
@@ -1765,6 +2247,13 @@ const LaborForecast: React.FC = () => {
 
                 return (
                   <svg width="100%" height={chartHeight + 50} style={{ overflow: 'visible' }}>
+                    {oppMode !== 'off' && (
+                      <defs>
+                        <pattern id="opp-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+                          <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(245,158,11,0.7)" strokeWidth="2" />
+                        </pattern>
+                      </defs>
+                    )}
                     {/* Y-axis */}
                     <text x="0" y="10" fontSize="10" fill="#64748b">{maxValue} ppl</text>
                     <text x="0" y={chartHeight / 2} fontSize="10" fill="#64748b">{(maxValue / 2).toFixed(0)}</text>
@@ -1807,6 +2296,28 @@ const LaborForecast: React.FC = () => {
                             <rect x={`${xPercent}%`} y={chartHeight - plH - smH - pfH} width={`${barWidth * 0.8}%`} height={pfH} fill={TRADES[0].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
                             </rect>
+                            {oppMode !== 'off' && (() => {
+                              const ot = oppColumnTotals.get(d.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                              const oppHC = ot.total / hoursPerPersonPerMonth;
+                              const oppBarH = maxValue > 0 ? (oppHC / maxValue) * chartHeight : 0;
+                              if (oppBarH <= 0.5) return null;
+                              const committedH = plH + smH + pfH;
+                              return (
+                                <rect
+                                  x={`${xPercent}%`}
+                                  y={chartHeight - committedH - oppBarH}
+                                  width={`${barWidth * 0.8}%`}
+                                  height={oppBarH}
+                                  fill="url(#opp-hatch)"
+                                  stroke="#f59e0b"
+                                  strokeWidth="0.5"
+                                  opacity="0.85"
+                                  rx="1"
+                                >
+                                  <title>{d.label}: +{oppHC.toFixed(1)} people from opportunities ({fmtHours(ot.total)} hrs)</title>
+                                </rect>
+                              );
+                            })()}
                             {showLabel && (
                               <text x={`${xPercent + barWidth * 0.4}%`} y={chartHeight + 14} fontSize={isWeekly ? '8' : '9'} fill="#64748b" textAnchor="middle">
                                 {d.label}
@@ -1838,12 +2349,22 @@ const LaborForecast: React.FC = () => {
             </div>
             {/* Legend */}
             <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem' }}>
-              {TRADES.map(t => (
+              {filteredTrades.map(t => (
                 <span key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{ display: 'inline-block', width: '12px', height: '12px', background: t.color, borderRadius: '2px' }} />
                   {t.label}
                 </span>
               ))}
+              {oppMode !== 'off' && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{
+                    display: 'inline-block', width: '12px', height: '12px',
+                    background: 'repeating-linear-gradient(45deg, #f59e0b, #f59e0b 1px, transparent 1px, transparent 3px)',
+                    border: '1px solid #f59e0b', borderRadius: '2px'
+                  }} />
+                  Opportunities (weighted)
+                </span>
+              )}
             </div>
           </div>
 
@@ -1853,9 +2374,9 @@ const LaborForecast: React.FC = () => {
               Total Remaining Hours by Trade
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {TRADES.map(trade => {
+              {filteredTrades.map(trade => {
                 const hrs = grandTotalsByTrade[trade.key];
-                const maxHrs = Math.max(grandTotalsByTrade.pf, grandTotalsByTrade.sm, grandTotalsByTrade.pl, 1);
+                const maxHrs = Math.max(...filteredTrades.map(t => grandTotalsByTrade[t.key]), 1);
                 return (
                   <div key={trade.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: '100px', fontSize: '0.75rem', fontWeight: 500, color: trade.color }}>{trade.label}</div>
@@ -1954,10 +2475,11 @@ const LaborForecast: React.FC = () => {
             <div className="modal-subtitle">
               {(() => {
                 const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                const ot = oppMode !== 'off' ? (oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
                 const hpp = hoursPerPersonPerMonth;
                 return (
                   <>
-                    <strong>{(ct.total / hpp).toFixed(1)}</strong> total headcount ({fmtHours(ct.total)} hrs)
+                    <strong>{(ct.total / hpp).toFixed(1)}</strong> committed headcount ({fmtHours(ct.total)} hrs)
                     {' — '}
                     <span style={{ color: TRADES[0].color }}>PF {(ct.pf / hpp).toFixed(1)}</span>
                     {' / '}
@@ -1965,6 +2487,9 @@ const LaborForecast: React.FC = () => {
                     {' / '}
                     <span style={{ color: TRADES[2].color }}>PL {(ct.pl / hpp).toFixed(1)}</span>
                     <span style={{ color: '#64748b' }}> — {drillDownProjects.length} projects</span>
+                    {drillDownOpps.length > 0 && (
+                      <span style={{ color: '#f59e0b' }}> + {(ot.total / hpp).toFixed(1)} from {drillDownOpps.length} opportunities</span>
+                    )}
                   </>
                 );
               })()}
@@ -2017,6 +2542,44 @@ const LaborForecast: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {drillDownOpps.length > 0 && (
+                    <>
+                      <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
+                        <td colSpan={7} style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontWeight: 600, fontSize: '0.7rem' }}>
+                          Opportunities (probability-weighted)
+                        </td>
+                      </tr>
+                      {drillDownOpps.map(({ projection: p, hours: h }) => {
+                        const hpp = hoursPerPersonPerMonth;
+                        return (
+                          <tr key={`opp-${p.opportunity.id}`} style={{ borderBottom: '1px solid #fde68a', background: '#fffbeb' }}>
+                            <td style={{ padding: '0.4rem 0.5rem', whiteSpace: 'nowrap' }}>
+                              <span style={{ background: '#f59e0b', color: '#fff', fontSize: '0.55rem', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, marginRight: '0.25rem' }}>OPP</span>
+                              <span style={{ fontWeight: 500, color: '#92400e' }}>{p.opportunity.title}</span>
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontSize: '0.7rem' }}>
+                              {fmtCompact(parseNum(p.opportunity.estimated_value))} | {p.probability}%
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontSize: '0.7rem' }}>
+                              {p.opportunity.assigned_to_name || '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pf > 0 ? '#b45309' : '#fcd34d' }}>
+                              {h.pf > 0 ? (h.pf / hpp).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.sm > 0 ? '#b45309' : '#fcd34d' }}>
+                              {h.sm > 0 ? (h.sm / hpp).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pl > 0 ? '#b45309' : '#fcd34d' }}>
+                              {h.pl > 0 ? (h.pl / hpp).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600, color: '#92400e' }}>
+                              {(h.total / hpp).toFixed(1)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: '#f1f5f9', fontWeight: 600 }}>

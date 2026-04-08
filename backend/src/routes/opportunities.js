@@ -157,6 +157,41 @@ router.get('/estimate-defaults', async (req, res, next) => {
   }
 });
 
+// Get all active pipeline opportunities with their estimate data (for labor forecast overlay)
+router.get('/with-estimates', async (req, res, next) => {
+  try {
+    const result = await db.query(`
+      SELECT
+        o.id, o.title, o.estimated_value, o.estimated_start_date, o.estimated_duration_days,
+        o.estimated_end_date, o.location_group, o.market, o.priority,
+        o.contour_type, o.user_adjusted_start_date, o.user_adjusted_duration_months,
+        o.stage_id, o.probability, o.assigned_to, o.customer_id,
+        ps.name as stage_name, ps.probability as stage_probability,
+        e.first_name || ' ' || e.last_name as assigned_to_name,
+        COALESCE(c.name, c.customer_owner) as customer_name,
+        oe.labor_pct,
+        oe.pf_labor_pct, oe.sm_labor_pct, oe.pl_labor_pct,
+        oe.pf_shop_pct, oe.pf_field_pct,
+        oe.sm_shop_pct, oe.sm_field_pct,
+        oe.pl_shop_pct, oe.pl_field_pct,
+        oe.pf_labor_rate, oe.sm_labor_rate, oe.pl_labor_rate
+      FROM opportunities o
+      LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN opportunity_estimates oe ON oe.opportunity_id = o.id
+      WHERE o.tenant_id = $1
+        AND ps.name NOT IN ('Won', 'Lost', 'Passed', 'Awarded')
+        AND o.estimated_value IS NOT NULL
+        AND o.estimated_value > 0
+      ORDER BY o.estimated_value DESC
+    `, [req.tenantId]);
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single opportunity
 router.get('/:id', async (req, res, next) => {
   try {
