@@ -2226,7 +2226,6 @@ export default function CampaignDetail() {
                           {opp.close_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Close: {new Date(opp.close_date).toLocaleDateString()}</span>}
                           {opp.is_converted && <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a' }}>Converted</span>}
                         </div>
-                        {opp.source !== 'pipeline' && (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <button onClick={async () => {
                             if (confirm('Delete this opportunity?')) {
@@ -2235,7 +2234,6 @@ export default function CampaignDetail() {
                             }
                           }} style={{ ...btn, fontSize: '11px', padding: '3px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>Remove</button>
                         </div>
-                        )}
                       </div>
                     )) : (
                       <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '13px' }}>No opportunities yet</div>

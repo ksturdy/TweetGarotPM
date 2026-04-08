@@ -2,25 +2,41 @@ const db = require('../config/database');
 
 const campaignCompanies = {
   // Get all companies for a campaign
-  getByCampaignId: async (campaignId, filters = {}) => {
+  getByCampaignId: async (campaignId, filters = {}, tenantId = null) => {
     let query = `
       SELECT
         cc.*,
         CONCAT(e.first_name, ' ', e.last_name) as assigned_to_name,
-        COUNT(DISTINCT cco.id) as contact_count,
-        COUNT(DISTINCT co.id) as opportunity_count,
-        COALESCE(SUM(co.value), 0) as total_opportunity_value,
-        cust.name as linked_company_name
+        cust.name as linked_company_name,
+        -- Contact count: real customer_contacts if linked, else campaign_contacts
+        CASE WHEN cc.linked_company_id IS NOT NULL
+          THEN (SELECT COUNT(*) FROM customer_contacts WHERE customer_id = cc.linked_company_id)
+          ELSE (SELECT COUNT(*) FROM campaign_contacts WHERE campaign_company_id = cc.id)
+        END as contact_count,
+        -- Opportunity count: legacy campaign_opportunities + real pipeline opportunities
+        (
+          (SELECT COUNT(*) FROM campaign_opportunities WHERE campaign_company_id = cc.id) +
+          CASE WHEN cc.linked_company_id IS NOT NULL
+            THEN (SELECT COUNT(*) FROM opportunities WHERE (customer_id = cc.linked_company_id OR gc_customer_id = cc.linked_company_id OR campaign_id = cc.campaign_id) AND tenant_id = COALESCE($2, cc.campaign_id) AND campaign_id = cc.campaign_id)
+            ELSE 0
+          END
+        ) as opportunity_count,
+        -- Opportunity value: legacy + real
+        (
+          COALESCE((SELECT SUM(value) FROM campaign_opportunities WHERE campaign_company_id = cc.id), 0) +
+          CASE WHEN cc.linked_company_id IS NOT NULL
+            THEN COALESCE((SELECT SUM(estimated_value) FROM opportunities WHERE (customer_id = cc.linked_company_id OR gc_customer_id = cc.linked_company_id) AND campaign_id = cc.campaign_id AND tenant_id = COALESCE($2, 0)), 0)
+            ELSE 0
+          END
+        ) as total_opportunity_value
       FROM campaign_companies cc
       LEFT JOIN employees e ON cc.assigned_to_id = e.id
-      LEFT JOIN campaign_contacts cco ON cc.id = cco.campaign_company_id
-      LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
       LEFT JOIN customers cust ON cc.linked_company_id = cust.id
       WHERE cc.campaign_id = $1
     `;
 
-    const params = [campaignId];
-    let paramIndex = 2;
+    const params = [campaignId, tenantId];
+    let paramIndex = 3;
 
     // Apply filters
     if (filters.assigned_to_id) {
@@ -45,7 +61,6 @@ const campaignCompanies = {
     }
 
     query += `
-      GROUP BY cc.id, e.first_name, e.last_name, cust.name
       ORDER BY cc.tier, cc.score DESC, cc.name
     `;
 

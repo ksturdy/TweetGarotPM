@@ -12,6 +12,7 @@ const OpportunityKanban: React.FC = () => {
   const [draggedItem, setDraggedItem] = useState<Opportunity | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Fetch Kanban data
   const { data: stages = [], isLoading } = useQuery({
@@ -122,6 +123,30 @@ const OpportunityKanban: React.FC = () => {
     }).format(value);
   };
 
+  // Filter stages based on search term
+  const filteredStages = stages.map(stage => {
+    if (!searchTerm) return stage;
+    const term = searchTerm.toLowerCase();
+    const filtered = stage.opportunities.filter(opp => {
+      const valueStr = opp.estimated_value ? formatCurrency(opp.estimated_value) : '';
+      return (
+        opp.title.toLowerCase().includes(term) ||
+        (opp.description && opp.description.toLowerCase().includes(term)) ||
+        (opp.owner && opp.owner.toLowerCase().includes(term)) ||
+        (opp.location && opp.location.toLowerCase().includes(term)) ||
+        (opp.market && opp.market.toLowerCase().includes(term)) ||
+        (opp.construction_type && opp.construction_type.toLowerCase().includes(term)) ||
+        (opp.assigned_to_name && opp.assigned_to_name.toLowerCase().includes(term)) ||
+        (opp.customer_name && opp.customer_name.toLowerCase().includes(term)) ||
+        (opp.general_contractor && opp.general_contractor.toLowerCase().includes(term)) ||
+        (opp.source && opp.source.toLowerCase().includes(term)) ||
+        (opp.facility_name && opp.facility_name.toLowerCase().includes(term)) ||
+        valueStr.toLowerCase().includes(term)
+      );
+    });
+    return { ...stage, opportunities: filtered };
+  });
+
   if (isLoading) {
     return (
       <div className="kanban-loading">
@@ -147,15 +172,34 @@ const OpportunityKanban: React.FC = () => {
             </span>
           </div>
         </div>
-        <button className="btn-create-opportunity" onClick={handleCreateNew}>
-          <span className="btn-icon">+</span>
-          <span className="btn-text">New Lead</span>
-        </button>
+        <div className="kanban-actions">
+          <div className="kanban-search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search opportunities..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button className="search-clear-btn" onClick={() => setSearchTerm('')}>
+                &times;
+              </button>
+            )}
+          </div>
+          <button className="btn-create-opportunity" onClick={handleCreateNew}>
+            <span className="btn-icon">+</span>
+            <span className="btn-text">New Lead</span>
+          </button>
+        </div>
       </div>
 
       {/* Kanban Board */}
       <div className="kanban-board" ref={scrollContainerRef}>
-        {stages.map(stage => (
+        {filteredStages.map(stage => (
           <div
             key={stage.stage_id}
             className="kanban-column"

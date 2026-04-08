@@ -257,7 +257,7 @@ router.get('/:id/report-pdf', async (req, res, next) => {
 
     const db = require('../config/database');
     const [companiesList, weeksList, teamList, campaignOppsList, mainOppsResult] = await Promise.all([
-      campaignCompanies.getByCampaignId(req.params.id),
+      campaignCompanies.getByCampaignId(req.params.id, {}, req.tenantId),
       campaigns.getWeeks(req.params.id),
       campaigns.getTeamMembers(req.params.id),
       campaignOpportunities.getByCampaignId(req.params.id),
@@ -396,7 +396,7 @@ router.get('/:campaignId/companies', async (req, res, next) => {
       tier: req.query.tier,
       target_week: req.query.target_week
     };
-    const companies = await campaignCompanies.getByCampaignId(req.params.campaignId, filters);
+    const companies = await campaignCompanies.getByCampaignId(req.params.campaignId, filters, req.tenantId);
     res.json(companies);
   } catch (error) {
     next(error);
@@ -592,18 +592,51 @@ router.delete('/:campaignId/companies/:id', async (req, res, next) => {
   }
 });
 
-// ===== CAMPAIGN CONTACTS =====
+// ===== CAMPAIGN CONTACTS (routes to customer_contacts when linked) =====
+
+// Helper: ensure campaign company is linked to a real customer, auto-create if needed
+async function ensureLinkedCustomer(companyId, userId, tenantId) {
+  const company = await campaignCompanies.getById(companyId);
+  if (!company) throw new Error('Campaign company not found');
+  if (company.linked_company_id) return company;
+  // Auto-add to database
+  const result = await campaignCompanies.addToDatabase(companyId, userId, tenantId);
+  return result.campaignCompany;
+}
+
+// Helper: map customer_contacts row to campaign contact shape
+function mapCustomerContact(c, companyId) {
+  return {
+    id: c.id,
+    campaign_company_id: parseInt(companyId),
+    name: [c.first_name, c.last_name].filter(Boolean).join(' '),
+    title: c.title,
+    email: c.email,
+    phone: c.phone || c.mobile,
+    is_primary: c.is_primary,
+    notes: c.notes,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+    source: 'customer_contacts'
+  };
+}
 
 // GET contacts for a company
 router.get('/:campaignId/companies/:companyId/contacts', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await campaignCompanies.getById(req.params.companyId);
+    if (company && company.linked_company_id) {
+      const Customer = require('../models/Customer');
+      const realContacts = await Customer.getContacts(company.linked_company_id);
+      res.json(realContacts.map(c => mapCustomerContact(c, req.params.companyId)));
+    } else {
+      // Fallback: not linked yet
+      const contacts = await campaignContacts.getByCompanyId(req.params.companyId);
+      res.json(contacts);
     }
-    const contacts = await campaignContacts.getByCompanyId(req.params.companyId);
-    res.json(contacts);
   } catch (error) {
     next(error);
   }
@@ -612,14 +645,22 @@ router.get('/:campaignId/companies/:companyId/contacts', async (req, res, next) 
 // CREATE contact
 router.post('/:campaignId/companies/:companyId/contacts', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const data = { ...req.body, campaign_company_id: req.params.companyId };
-    const contact = await campaignContacts.create(data);
-    res.status(201).json(contact);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await ensureLinkedCustomer(req.params.companyId, req.user.id, req.tenantId);
+    const Customer = require('../models/Customer');
+    const nameParts = (req.body.name || '').trim().split(/\s+/);
+    const contact = await Customer.createContact(company.linked_company_id, {
+      first_name: nameParts[0] || '',
+      last_name: nameParts.slice(1).join(' ') || '',
+      title: req.body.title,
+      email: req.body.email,
+      phone: req.body.phone,
+      is_primary: req.body.is_primary || false,
+      notes: req.body.notes
+    }, req.tenantId);
+    res.status(201).json(mapCustomerContact(contact, req.params.companyId));
   } catch (error) {
     next(error);
   }
@@ -628,16 +669,31 @@ router.post('/:campaignId/companies/:companyId/contacts', async (req, res, next)
 // UPDATE contact
 router.put('/:campaignId/companies/:companyId/contacts/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await campaignCompanies.getById(req.params.companyId);
+    if (company && company.linked_company_id) {
+      const Customer = require('../models/Customer');
+      const nameParts = (req.body.name || '').trim().split(/\s+/);
+      const contact = await Customer.updateContact(req.params.id, {
+        customer_id: company.linked_company_id,
+        first_name: nameParts[0] || '',
+        last_name: nameParts.slice(1).join(' ') || '',
+        title: req.body.title,
+        email: req.body.email,
+        phone: req.body.phone,
+        mobile: req.body.phone,
+        is_primary: req.body.is_primary,
+        notes: req.body.notes
+      });
+      if (!contact) return res.status(404).json({ error: 'Contact not found' });
+      res.json(mapCustomerContact(contact, req.params.companyId));
+    } else {
+      const contact = await campaignContacts.update(req.params.id, req.body);
+      if (!contact) return res.status(404).json({ error: 'Contact not found' });
+      res.json(contact);
     }
-    const contact = await campaignContacts.update(req.params.id, req.body);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
-    }
-    res.json(contact);
   } catch (error) {
     next(error);
   }
@@ -646,14 +702,16 @@ router.put('/:campaignId/companies/:companyId/contacts/:id', async (req, res, ne
 // DELETE contact
 router.delete('/:campaignId/companies/:companyId/contacts/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const contact = await campaignContacts.delete(req.params.id);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await campaignCompanies.getById(req.params.companyId);
+    if (company && company.linked_company_id) {
+      const Customer = require('../models/Customer');
+      await Customer.deleteContact(req.params.id);
+    } else {
+      const contact = await campaignContacts.delete(req.params.id);
+      if (!contact) return res.status(404).json({ error: 'Contact not found' });
     }
     res.json({ message: 'Contact deleted successfully' });
   } catch (error) {
@@ -661,109 +719,133 @@ router.delete('/:campaignId/companies/:companyId/contacts/:id', async (req, res,
   }
 });
 
-// ===== CAMPAIGN OPPORTUNITIES =====
+// ===== CAMPAIGN OPPORTUNITIES (routes to real opportunities table when linked) =====
 
-// GET opportunities for a campaign
+// GET opportunities for a campaign (aggregate)
 router.get('/:campaignId/opportunities', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const opportunities = await campaignOpportunities.getByCampaignId(req.params.campaignId);
-    res.json(opportunities);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const db = require('../config/database');
+    // Get legacy campaign_opportunities
+    const campOpps = await campaignOpportunities.getByCampaignId(req.params.campaignId);
+    // Get real pipeline opportunities linked to this campaign
+    const realResult = await db.query(`
+      SELECT o.id, o.title as name, o.description, o.estimated_value as value,
+             ps.name as stage, o.probability,
+             c.name as company_name,
+             CASE WHEN o.converted_to_project_id IS NOT NULL THEN true ELSE false END as is_converted,
+             'pipeline' as source, o.created_at, o.updated_at
+      FROM opportunities o
+      LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+      LEFT JOIN customers c ON o.customer_id = c.id
+      WHERE o.campaign_id = $1 AND o.tenant_id = $2
+      ORDER BY o.estimated_value DESC
+    `, [req.params.campaignId, req.tenantId]);
+    res.json([...campOpps.map(o => ({ ...o, source: 'campaign' })), ...realResult.rows]);
   } catch (error) {
     next(error);
   }
 });
 
-// GET opportunities for a company (campaign_opportunities + linked pipeline opportunities)
+// GET opportunities for a company
 router.get('/:campaignId/companies/:companyId/opportunities', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
-    // Get campaign-specific opportunities
+    const company = await campaignCompanies.getById(req.params.companyId);
+    const db = require('../config/database');
+
+    // Legacy campaign-specific opportunities
     const campOpps = await campaignOpportunities.getByCompanyId(req.params.companyId);
 
-    // Also get pipeline opportunities linked to this campaign + company
-    // Match by: linked_company_id (FK), customer name, or client_company text field
-    const company = await campaignCompanies.getById(req.params.companyId);
+    // Real pipeline opportunities for this customer/campaign
     let pipelineOpps = [];
-    if (company) {
-      const db = require('../config/database');
-      const params = [req.params.campaignId, req.tenantId];
-      const matchConditions = [];
-
-      // 1) Match by linked_company_id → customer_id/gc_customer_id FK
-      if (company.linked_company_id) {
-        params.push(company.linked_company_id);
-        matchConditions.push(`o.customer_id = $${params.length}`);
-        matchConditions.push(`o.gc_customer_id = $${params.length}`);
-      }
-
-      // 2) Match by name - use the linked company name if available, else the prospect name
-      //    Strip trailing "#NNN" patterns from prospect names for matching
-      const matchName = (company.linked_company_name || company.name || '')
-        .replace(/#\d+\s*$/, '').trim().toLowerCase();
-      if (matchName) {
-        params.push(matchName);
-        // Exact match on client_company or customer name
-        matchConditions.push(`LOWER(TRIM(o.client_company)) = $${params.length}`);
-        matchConditions.push(`LOWER(TRIM(c.name)) = $${params.length}`);
-        // Partial match: prospect name contained in client_company or vice versa
-        params.push('%' + matchName + '%');
-        matchConditions.push(`LOWER(o.client_company) LIKE $${params.length}`);
-        matchConditions.push(`LOWER(c.name) LIKE $${params.length}`);
-      }
-
-      if (matchConditions.length > 0) {
-        const pipelineQuery = `
-          SELECT DISTINCT ON (o.id) o.id, o.title as name, o.description,
-                 o.estimated_value as value,
-                 ps.name as stage,
-                 CASE ps.probability WHEN 'High' THEN 75 WHEN 'Medium' THEN 50 WHEN 'Low' THEN 25 ELSE 10 END as probability,
-                 o.estimated_start_date as close_date,
-                 CASE WHEN o.converted_to_project_id IS NOT NULL THEN true ELSE false END as is_converted,
-                 'pipeline' as source
-          FROM opportunities o
-          LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-          LEFT JOIN customers c ON o.customer_id = c.id
-          WHERE o.campaign_id = $1 AND o.tenant_id = $2
-            AND (${matchConditions.join(' OR ')})
-          ORDER BY o.id, o.created_at DESC
-        `;
-        const result = await db.query(pipelineQuery, params);
-        pipelineOpps = result.rows;
-      }
+    if (company && company.linked_company_id) {
+      const result = await db.query(`
+        SELECT DISTINCT ON (o.id) o.id, o.title as name, o.description,
+               o.estimated_value as value,
+               ps.name as stage,
+               COALESCE(o.probability, CASE ps.probability WHEN 'High' THEN 75 WHEN 'Medium' THEN 50 WHEN 'Low' THEN 25 ELSE 10 END) as probability,
+               o.estimated_start_date as close_date,
+               CASE WHEN o.converted_to_project_id IS NOT NULL THEN true ELSE false END as is_converted,
+               'pipeline' as source, o.created_at, o.updated_at
+        FROM opportunities o
+        LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1
+          AND (o.customer_id = $2 OR o.gc_customer_id = $2 OR o.campaign_id = $3)
+        ORDER BY o.id, o.created_at DESC
+      `, [req.tenantId, company.linked_company_id, req.params.campaignId]);
+      pipelineOpps = result.rows;
     }
 
-    // Mark campaign opps with source, then combine
-    const combined = [
+    res.json([
       ...campOpps.map(o => ({ ...o, source: 'campaign' })),
       ...pipelineOpps
-    ];
-    res.json(combined);
+    ]);
   } catch (error) {
     next(error);
   }
 });
 
-// CREATE opportunity
+// CREATE opportunity → creates in real opportunities table
 router.post('/:campaignId/companies/:companyId/opportunities', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await ensureLinkedCustomer(req.params.companyId, req.user.id, req.tenantId);
+    const Opportunity = require('../models/opportunities');
+    const db = require('../config/database');
+
+    // Get default stage
+    const stageResult = await db.query(
+      `SELECT id FROM pipeline_stages WHERE LOWER(name) = 'qualification' AND tenant_id = $1 LIMIT 1`,
+      [req.tenantId]
+    );
+
+    const opp = await Opportunity.create({
+      title: req.body.name,
+      description: req.body.description || null,
+      estimated_value: req.body.value || 0,
+      campaign_id: parseInt(req.params.campaignId),
+      customer_id: company.linked_company_id,
+      stage_id: stageResult.rows[0]?.id || null,
+      priority: 'medium',
+      source: 'campaign'
+    }, req.user.id, req.tenantId);
+
+    // Auto-update company status to new_opp
+    const companyData = await campaignCompanies.getById(req.params.companyId);
+    if (companyData && (companyData.status === 'prospect' || companyData.status === 'follow_up')) {
+      await db.query('UPDATE campaign_companies SET status = $1 WHERE id = $2', ['new_opp', req.params.companyId]);
     }
-    const data = { ...req.body, campaign_company_id: req.params.companyId };
-    const opportunity = await campaignOpportunities.create(data, req.user.id);
-    res.status(201).json(opportunity);
+
+    // Log activity
+    await db.query(
+      `INSERT INTO campaign_activity_logs (campaign_id, campaign_company_id, user_id, activity_type, description, metadata)
+       VALUES ($1, $2, $3, 'opportunity_created', $4, $5)`,
+      [req.params.campaignId, req.params.companyId, req.user.id,
+       `New opportunity created: ${opp.title} ($${opp.estimated_value || 0})`,
+       JSON.stringify({ opportunity_id: opp.id })]
+    );
+
+    // Return in campaign opportunity shape
+    res.status(201).json({
+      id: opp.id,
+      name: opp.title,
+      description: opp.description,
+      value: opp.estimated_value,
+      stage: 'Qualification',
+      probability: 10,
+      close_date: opp.estimated_start_date,
+      is_converted: false,
+      source: 'pipeline',
+      created_at: opp.created_at,
+      updated_at: opp.updated_at
+    });
   } catch (error) {
     next(error);
   }
@@ -772,16 +854,27 @@ router.post('/:campaignId/companies/:companyId/opportunities', async (req, res, 
 // UPDATE opportunity
 router.put('/:campaignId/companies/:companyId/opportunities/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    // Try real opportunities table first
+    const Opportunity = require('../models/opportunities');
+    const db = require('../config/database');
+    const realCheck = await db.query('SELECT id FROM opportunities WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+    if (realCheck.rows.length > 0) {
+      const updated = await Opportunity.update(req.params.id, {
+        title: req.body.name,
+        description: req.body.description,
+        estimated_value: req.body.value,
+        estimated_start_date: req.body.close_date
+      }, req.tenantId);
+      res.json({ ...updated, name: updated.title, value: updated.estimated_value, source: 'pipeline' });
+    } else {
+      // Legacy campaign_opportunities
+      const opportunity = await campaignOpportunities.update(req.params.id, req.body);
+      if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
+      res.json(opportunity);
     }
-    const opportunity = await campaignOpportunities.update(req.params.id, req.body);
-    if (!opportunity) {
-      return res.status(404).json({ error: 'Opportunity not found' });
-    }
-    res.json(opportunity);
   } catch (error) {
     next(error);
   }
@@ -790,14 +883,18 @@ router.put('/:campaignId/companies/:companyId/opportunities/:id', async (req, re
 // DELETE opportunity
 router.delete('/:campaignId/companies/:companyId/opportunities/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const opportunity = await campaignOpportunities.delete(req.params.id);
-    if (!opportunity) {
-      return res.status(404).json({ error: 'Opportunity not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    // Try real opportunities table first
+    const Opportunity = require('../models/opportunities');
+    const db = require('../config/database');
+    const realCheck = await db.query('SELECT id FROM opportunities WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+    if (realCheck.rows.length > 0) {
+      await Opportunity.delete(req.params.id, req.tenantId);
+    } else {
+      const opportunity = await campaignOpportunities.delete(req.params.id);
+      if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
     }
     res.json({ message: 'Opportunity deleted successfully' });
   } catch (error) {
@@ -805,18 +902,45 @@ router.delete('/:campaignId/companies/:companyId/opportunities/:id', async (req,
   }
 });
 
-// ===== CAMPAIGN ESTIMATES =====
+// ===== CAMPAIGN ESTIMATES (routes to real estimates table when linked) =====
 
-// GET estimates for a campaign
+// Helper: map real estimate to campaign estimate shape
+function mapRealEstimate(e, companyId) {
+  return {
+    id: e.id,
+    campaign_company_id: parseInt(companyId),
+    estimate_number: e.estimate_number,
+    name: e.project_name || e.name,
+    amount: parseFloat(e.total_cost || e.amount || 0),
+    status: e.status === 'in progress' ? 'draft' : e.status,
+    sent_date: e.sent_date || null,
+    valid_until: e.valid_until || null,
+    notes: e.notes || null,
+    source: 'estimates',
+    created_at: e.created_at,
+    updated_at: e.updated_at
+  };
+}
+
+// GET estimates for a campaign (aggregate)
 router.get('/:campaignId/estimates', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const estimates = await campaignEstimates.getByCampaignId(req.params.campaignId);
-    res.json(estimates);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const db = require('../config/database');
+    const campEsts = await campaignEstimates.getByCampaignId(req.params.campaignId);
+    const realResult = await db.query(`
+      SELECT e.id, e.estimate_number, e.project_name as name,
+             COALESCE(e.total_cost, 0) as amount, e.status,
+             c.name as company_name,
+             'estimates' as source, e.created_at, e.updated_at
+      FROM estimates e
+      LEFT JOIN customers c ON e.customer_id = c.id
+      WHERE e.campaign_id = $1 AND e.tenant_id = $2
+      ORDER BY e.created_at DESC
+    `, [req.params.campaignId, req.tenantId]);
+    res.json([...campEsts, ...realResult.rows]);
   } catch (error) {
     next(error);
   }
@@ -825,29 +949,64 @@ router.get('/:campaignId/estimates', async (req, res, next) => {
 // GET estimates for a company
 router.get('/:campaignId/companies/:companyId/estimates', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await campaignCompanies.getById(req.params.companyId);
+    const db = require('../config/database');
+
+    let realEstimates = [];
+    if (company && company.linked_company_id) {
+      const result = await db.query(`
+        SELECT e.id, e.estimate_number, e.project_name, e.total_cost, e.status,
+               e.notes, e.created_at, e.updated_at
+        FROM estimates e
+        WHERE (e.customer_id = $1 OR e.campaign_id = $2) AND e.tenant_id = $3
+        ORDER BY e.created_at DESC
+      `, [company.linked_company_id, req.params.campaignId, req.tenantId]);
+      realEstimates = result.rows.map(e => mapRealEstimate(e, req.params.companyId));
     }
-    const estimates = await campaignEstimates.getByCompanyId(req.params.companyId);
-    res.json(estimates);
+
+    // Include legacy campaign_estimates for backward compat
+    const legacyEstimates = await campaignEstimates.getByCompanyId(req.params.companyId);
+
+    res.json([...realEstimates, ...legacyEstimates]);
   } catch (error) {
     next(error);
   }
 });
 
-// CREATE estimate
+// CREATE estimate → creates in real estimates table
 router.post('/:campaignId/companies/:companyId/estimates', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const data = { ...req.body, campaign_company_id: req.params.companyId };
-    const estimate = await campaignEstimates.create(data, req.user.id);
-    res.status(201).json(estimate);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const company = await ensureLinkedCustomer(req.params.companyId, req.user.id, req.tenantId);
+    const Estimate = require('../models/Estimate');
+    const db = require('../config/database');
+
+    const estimateNumber = await Estimate.getNextEstimateNumber(req.tenantId);
+    const estimate = await Estimate.create({
+      estimate_number: estimateNumber,
+      project_name: req.body.name,
+      customer_id: company.linked_company_id,
+      customer_name: company.linked_company_name || company.name,
+      status: 'in progress',
+      campaign_id: parseInt(req.params.campaignId),
+      created_by: req.user.id
+    }, req.tenantId);
+
+    // Log activity
+    await db.query(
+      `INSERT INTO campaign_activity_logs (campaign_id, campaign_company_id, user_id, activity_type, description, metadata)
+       VALUES ($1, $2, $3, 'estimate_sent', $4, $5)`,
+      [req.params.campaignId, req.params.companyId, req.user.id,
+       `New estimate created: ${estimate.estimate_number} - ${estimate.project_name}`,
+       JSON.stringify({ estimate_id: estimate.id })]
+    );
+
+    res.status(201).json(mapRealEstimate(estimate, req.params.companyId));
   } catch (error) {
     next(error);
   }
@@ -856,16 +1015,24 @@ router.post('/:campaignId/companies/:companyId/estimates', async (req, res, next
 // UPDATE estimate
 router.put('/:campaignId/companies/:companyId/estimates/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const db = require('../config/database');
+    const realCheck = await db.query('SELECT id FROM estimates WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+    if (realCheck.rows.length > 0) {
+      const Estimate = require('../models/Estimate');
+      const updated = await Estimate.update(req.params.id, {
+        project_name: req.body.name,
+        status: req.body.status === 'draft' ? 'in progress' : req.body.status,
+        notes: req.body.notes
+      }, req.tenantId);
+      res.json(mapRealEstimate(updated, req.params.companyId));
+    } else {
+      const estimate = await campaignEstimates.update(req.params.id, req.body);
+      if (!estimate) return res.status(404).json({ error: 'Estimate not found' });
+      res.json(estimate);
     }
-    const estimate = await campaignEstimates.update(req.params.id, req.body);
-    if (!estimate) {
-      return res.status(404).json({ error: 'Estimate not found' });
-    }
-    res.json(estimate);
   } catch (error) {
     next(error);
   }
@@ -874,14 +1041,16 @@ router.put('/:campaignId/companies/:companyId/estimates/:id', async (req, res, n
 // DELETE estimate
 router.delete('/:campaignId/companies/:companyId/estimates/:id', async (req, res, next) => {
   try {
-    // Verify campaign belongs to tenant
     const campaign = await campaigns.getByIdAndTenant(req.params.campaignId, req.tenantId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const estimate = await campaignEstimates.delete(req.params.id);
-    if (!estimate) {
-      return res.status(404).json({ error: 'Estimate not found' });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const db = require('../config/database');
+    const realCheck = await db.query('SELECT id FROM estimates WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+    if (realCheck.rows.length > 0) {
+      await db.query('DELETE FROM estimates WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+    } else {
+      const estimate = await campaignEstimates.delete(req.params.id);
+      if (!estimate) return res.status(404).json({ error: 'Estimate not found' });
     }
     res.json({ message: 'Estimate deleted successfully' });
   } catch (error) {

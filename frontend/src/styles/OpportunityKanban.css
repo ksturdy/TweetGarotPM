@@ -48,6 +48,64 @@
   background-clip: text;
 }
 
+.kanban-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kanban-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.625rem 1rem;
+  flex: 1;
+  min-width: 200px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.kanban-search-box:focus-within {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  background: white;
+}
+
+.kanban-search-box svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.kanban-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: #1f2937;
+  width: 100%;
+}
+
+.kanban-search-box input::placeholder {
+  color: #94a3b8;
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.search-clear-btn:hover {
+  color: #64748b;
+}
+
 .btn-create-opportunity {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -231,8 +289,19 @@
     font-size: 1.5rem;
   }
 
+  .kanban-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .kanban-search-box {
+    min-width: unset;
+    width: 100%;
+  }
+
   .btn-create-opportunity {
     padding: 0.875rem 1.5rem;
+    width: 100%;
   }
 
   .btn-text {
