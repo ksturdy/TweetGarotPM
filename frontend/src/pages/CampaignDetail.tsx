@@ -485,6 +485,7 @@ export default function CampaignDetail() {
   const [filter, setFilter] = useState({ team: 'all', status: 'all', tier: 'all' });
   const [prospectSearch, setProspectSearch] = useState('');
   const [prospectView, setProspectView] = useState<'table' | 'kanban'>('table');
+  const [kanbanScoreType, setKanbanScoreType] = useState<'research' | 'tg'>('research');
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -1311,25 +1312,43 @@ export default function CampaignDetail() {
                     Clear All
                   </button>
                 )}
-                <div style={{ marginLeft: 'auto', display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
-                  <button
-                    onClick={() => setProspectView('table')}
-                    style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'table' ? '#fff' : 'transparent', color: prospectView === 'table' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
-                      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-                    </svg>
-                    Table
-                  </button>
-                  <button
-                    onClick={() => setProspectView('kanban')}
-                    style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'kanban' ? '#fff' : 'transparent', color: prospectView === 'kanban' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'kanban' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
-                      <rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="13" rx="1"/><rect x="17" y="3" width="5" height="16" rx="1"/>
-                    </svg>
-                    Kanban
-                  </button>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  {prospectView === 'kanban' && (
+                    <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                      <button
+                        onClick={() => setKanbanScoreType('research')}
+                        style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: kanbanScoreType === 'research' ? '#fff' : 'transparent', color: kanbanScoreType === 'research' ? '#1e293b' : '#64748b', boxShadow: kanbanScoreType === 'research' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                      >
+                        Research Score
+                      </button>
+                      <button
+                        onClick={() => setKanbanScoreType('tg')}
+                        style={{ padding: '5px 10px', fontSize: '11px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: kanbanScoreType === 'tg' ? '#fff' : 'transparent', color: kanbanScoreType === 'tg' ? '#1e293b' : '#64748b', boxShadow: kanbanScoreType === 'tg' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                      >
+                        TG Score
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                    <button
+                      onClick={() => setProspectView('table')}
+                      style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'table' ? '#fff' : 'transparent', color: prospectView === 'table' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'table' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
+                        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                      </svg>
+                      Table
+                    </button>
+                    <button
+                      onClick={() => setProspectView('kanban')}
+                      style={{ padding: '5px 10px', fontSize: '12px', fontWeight: 500, border: 'none', borderRadius: '4px', cursor: 'pointer', background: prospectView === 'kanban' ? '#fff' : 'transparent', color: prospectView === 'kanban' ? '#1e293b' : '#64748b', boxShadow: prospectView === 'kanban' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
+                        <rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="13" rx="1"/><rect x="17" y="3" width="5" height="16" rx="1"/>
+                      </svg>
+                      Kanban
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1341,8 +1360,12 @@ export default function CampaignDetail() {
                   { key: 'D', label: 'Tier D', sub: 'Below 50', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
                   { key: 'none', label: 'Unscored', sub: 'No score', color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' }
                 ];
+                const scoreForCard = (c: any) => {
+                  if (kanbanScoreType === 'tg') return assessmentsMap[c.id] || 0;
+                  return c.score || 0;
+                };
                 const getTier = (c: any) => {
-                  const score = c.score || 0;
+                  const score = scoreForCard(c);
                   if (score >= 85) return 'A';
                   if (score >= 70) return 'B';
                   if (score >= 50) return 'C';
@@ -1365,6 +1388,9 @@ export default function CampaignDetail() {
                         <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '65vh', overflowY: 'auto' }}>
                           {grouped[tier.key].map((c: any) => {
                             const status = statuses.find(s => s.key === c.status);
+                            const displayScore = scoreForCard(c);
+                            const tgScore = assessmentsMap[c.id];
+                            const researchScore = c.score || 0;
                             return (
                               <div
                                 key={c.id}
@@ -1376,7 +1402,13 @@ export default function CampaignDetail() {
                                 <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
                                 {c.sector && <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '6px' }}>{c.sector}</div>}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span style={{ background: tier.bg, color: tier.color, padding: '1px 6px', borderRadius: '4px', fontWeight: 600, fontSize: '10px', border: `1px solid ${tier.border}` }}>{c.score}</span>
+                                  <span style={{ background: tier.bg, color: tier.color, padding: '1px 6px', borderRadius: '4px', fontWeight: 600, fontSize: '10px', border: `1px solid ${tier.border}` }}>{displayScore || '—'}</span>
+                                  {kanbanScoreType === 'tg' && researchScore > 0 && (
+                                    <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 500, background: '#f1f5f9', color: '#64748b' }}>R: {researchScore}</span>
+                                  )}
+                                  {kanbanScoreType === 'research' && tgScore && (
+                                    <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 500, background: '#fef3c7', color: '#b45309' }}>TG: {tgScore}</span>
+                                  )}
                                   {status && <span style={{ padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 500, background: status.color + '18', color: status.color }}>{status.label}</span>}
                                 </div>
                                 {c.assignedTo && <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>{c.assignedTo}</div>}
