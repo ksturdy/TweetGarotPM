@@ -577,6 +577,11 @@
   white-space: nowrap;
 }
 
+.sales-table td:has(.sales-project-cell) {
+  white-space: normal;
+  overflow: visible;
+}
+
 /* Column widths - managed per-table via colgroup or inline styles */
 
 /* Resizable column handle */
@@ -643,8 +648,13 @@
 }
 
 .sales-project-info span {
+  display: block;
   font-size: 12px;
   color: var(--text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .sales-value-cell {

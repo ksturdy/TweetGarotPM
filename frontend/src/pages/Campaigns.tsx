@@ -234,6 +234,16 @@ const Campaigns: React.FC = () => {
           </div>
         </div>
         <table className="sales-table">
+          <colgroup>
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '28%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '10%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th className="sales-sortable" onClick={() => handleSort('start_date')}>

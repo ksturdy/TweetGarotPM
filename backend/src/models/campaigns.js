@@ -7,16 +7,27 @@ const campaigns = {
       SELECT
         c.*,
         CONCAT(e.first_name, ' ', e.last_name) as owner_name,
-        COUNT(DISTINCT cc.id) as company_count,
-        COUNT(DISTINCT CASE WHEN cc.status != 'prospect' THEN cc.id END) as contacted,
-        COUNT(DISTINCT co.id) as opportunities,
-        COALESCE(SUM(co.value), 0) as pipeline_value
+        COALESCE(cc_agg.company_count, 0) as company_count,
+        COALESCE(cc_agg.contacted_count, 0) as contacted_count,
+        COALESCE(o_agg.opportunities, 0) as opportunities,
+        COALESCE(o_agg.total_opportunity_value, 0) as total_opportunity_value
       FROM campaigns c
       LEFT JOIN employees e ON c.owner_id = e.id
-      LEFT JOIN campaign_companies cc ON c.id = cc.campaign_id
-      LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as company_count,
+          COUNT(*) FILTER (WHERE cc.status != 'prospect') as contacted_count
+        FROM campaign_companies cc
+        WHERE cc.campaign_id = c.id
+      ) cc_agg ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as opportunities,
+          COALESCE(SUM(o.estimated_value), 0) as total_opportunity_value
+        FROM opportunities o
+        WHERE o.campaign_id = c.id
+      ) o_agg ON true
       WHERE c.tenant_id = $1
-      GROUP BY c.id, e.first_name, e.last_name
       ORDER BY c.created_at DESC
     `;
     const result = await db.query(query, [tenantId]);
@@ -30,16 +41,27 @@ const campaigns = {
         c.*,
         CONCAT(e.first_name, ' ', e.last_name) as owner_name,
         e.email as owner_email,
-        COUNT(DISTINCT cc.id) as company_count,
-        COUNT(DISTINCT CASE WHEN cc.status != 'prospect' THEN cc.id END) as contacted,
-        COUNT(DISTINCT co.id) as opportunities,
-        COALESCE(SUM(co.value), 0) as pipeline_value
+        COALESCE(cc_agg.company_count, 0) as company_count,
+        COALESCE(cc_agg.contacted_count, 0) as contacted_count,
+        COALESCE(o_agg.opportunities, 0) as opportunities,
+        COALESCE(o_agg.total_opportunity_value, 0) as total_opportunity_value
       FROM campaigns c
       LEFT JOIN employees e ON c.owner_id = e.id
-      LEFT JOIN campaign_companies cc ON c.id = cc.campaign_id
-      LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as company_count,
+          COUNT(*) FILTER (WHERE cc.status != 'prospect') as contacted_count
+        FROM campaign_companies cc
+        WHERE cc.campaign_id = c.id
+      ) cc_agg ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as opportunities,
+          COALESCE(SUM(o.estimated_value), 0) as total_opportunity_value
+        FROM opportunities o
+        WHERE o.campaign_id = c.id
+      ) o_agg ON true
       WHERE c.id = $1
-      GROUP BY c.id, e.first_name, e.last_name, e.email
     `;
     const result = await db.query(query, [id]);
     return result.rows[0];
@@ -52,16 +74,27 @@ const campaigns = {
         c.*,
         CONCAT(e.first_name, ' ', e.last_name) as owner_name,
         e.email as owner_email,
-        COUNT(DISTINCT cc.id) as company_count,
-        COUNT(DISTINCT CASE WHEN cc.status != 'prospect' THEN cc.id END) as contacted,
-        COUNT(DISTINCT co.id) as opportunities,
-        COALESCE(SUM(co.value), 0) as pipeline_value
+        COALESCE(cc_agg.company_count, 0) as company_count,
+        COALESCE(cc_agg.contacted_count, 0) as contacted_count,
+        COALESCE(o_agg.opportunities, 0) as opportunities,
+        COALESCE(o_agg.total_opportunity_value, 0) as total_opportunity_value
       FROM campaigns c
       LEFT JOIN employees e ON c.owner_id = e.id
-      LEFT JOIN campaign_companies cc ON c.id = cc.campaign_id
-      LEFT JOIN campaign_opportunities co ON cc.id = co.campaign_company_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as company_count,
+          COUNT(*) FILTER (WHERE cc.status != 'prospect') as contacted_count
+        FROM campaign_companies cc
+        WHERE cc.campaign_id = c.id
+      ) cc_agg ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) as opportunities,
+          COALESCE(SUM(o.estimated_value), 0) as total_opportunity_value
+        FROM opportunities o
+        WHERE o.campaign_id = c.id
+      ) o_agg ON true
       WHERE c.id = $1 AND c.tenant_id = $2
-      GROUP BY c.id, e.first_name, e.last_name, e.email
     `;
     const result = await db.query(query, [id, tenantId]);
     return result.rows[0];

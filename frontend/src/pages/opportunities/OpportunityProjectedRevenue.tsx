@@ -228,7 +228,7 @@ const OpportunityProjectedRevenue: React.FC = () => {
 
   // Excluded stages (Won, Lost, Passed)
   const excludedStageNames = useMemo(() => {
-    return new Set(['Won', 'Lost', 'Passed', 'Awarded']);
+    return new Set(['Won', 'Lost', 'Passed']);
   }, []);
 
   // Generate column headers (next 12 months + years)
@@ -274,6 +274,9 @@ const OpportunityProjectedRevenue: React.FC = () => {
     const filtered = opportunities.filter(o => {
       // Exclude Won, Lost, Passed stages
       if (o.stage_name && excludedStageNames.has(o.stage_name)) return false;
+
+      // Exclude Awarded opportunities already in Vista (In Progress or Completed)
+      if (o.stage_name === 'Awarded' && ['In Progress', 'Completed'].includes(o.awarded_status || '')) return false;
 
       // Must have an estimated value
       if (!o.estimated_value || parseNum(o.estimated_value) <= 0) return false;

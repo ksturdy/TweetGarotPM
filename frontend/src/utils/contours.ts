@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Work Contour types - define how work is distributed over time
-export type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown';
+export type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown' | 'gradual';
 
 export const contourOptions: { value: ContourType; label: string; icon: string }[] = [
   { value: 'flat', label: 'Flat', icon: '▬' },
@@ -15,6 +15,7 @@ export const contourOptions: { value: ContourType; label: string; icon: string }
   { value: 'scurve', label: 'S-Curve', icon: '∫' },
   { value: 'rampup', label: 'Ramp Up', icon: '⟋' },
   { value: 'rampdown', label: 'Ramp Dn', icon: '⟍' },
+  { value: 'gradual', label: 'Gradual', icon: '◠' },
 ];
 
 // Generate contour multipliers for distributing work over N months
@@ -58,6 +59,11 @@ export const getContourMultipliers = (months: number, contour: ContourType): num
         break;
       case 'rampdown':
         weight = 2 - position * 1.9;
+        break;
+      case 'gradual':
+        // sin²(πx) — starts near zero, slow ramp up, peaks mid-project, slow ramp down
+        // Mimics real construction staffing: mobilize → build up → peak → wind down → demobilize
+        weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2;
         break;
       case 'flat':
       default:
@@ -112,6 +118,8 @@ export const getContourPoints = (contour: ContourType): string => {
       return '0,14 24,2';
     case 'rampdown':
       return '0,2 24,14';
+    case 'gradual':
+      return '0,15 3,14 6,12 10,6 14,3 18,6 21,12 24,15';
     default:
       return '0,8 24,8';
   }

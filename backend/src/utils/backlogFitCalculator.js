@@ -79,6 +79,9 @@ function getContourMultipliers(months, contour) {
       case 'rampdown':
         weight = 2 - position * 1.9;
         break;
+      case 'gradual':
+        weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2;
+        break;
       case 'flat':
       default:
         weight = 1;

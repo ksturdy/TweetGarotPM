@@ -61,7 +61,7 @@ const fmtHeadcount = (hours: number, hrsPerPerson: number): string => {
 
 // ─── Contour types ─────────────────────────────────────────
 
-type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown';
+type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown' | 'gradual';
 
 const contourOptions: { value: ContourType; label: string; icon: string }[] = [
   { value: 'flat', label: 'Flat', icon: '▬' },
@@ -75,6 +75,7 @@ const contourOptions: { value: ContourType; label: string; icon: string }[] = [
   { value: 'scurve', label: 'S-Curve', icon: '∫' },
   { value: 'rampup', label: 'Ramp Up', icon: '⟋' },
   { value: 'rampdown', label: 'Ramp Dn', icon: '⟍' },
+  { value: 'gradual', label: 'Gradual', icon: '◠' },
 ];
 
 const getContourMultipliers = (months: number, contour: ContourType): number[] => {
@@ -98,6 +99,7 @@ const getContourMultipliers = (months: number, contour: ContourType): number[] =
       case 'scurve': weight = Math.exp(-Math.pow((position - 0.5) * 2.5, 2)) * 1.2 + 0.4; break;
       case 'rampup': weight = 0.1 + position * 1.9; break;
       case 'rampdown': weight = 2 - position * 1.9; break;
+      case 'gradual': weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2; break;
       case 'flat': default: weight = 1; break;
     }
     multipliers.push(weight);
@@ -128,6 +130,7 @@ const ContourVisual: React.FC<{ contour: ContourType }> = ({ contour }) => {
       case 'scurve': return '0,13 4,12 8,8 12,4 16,4 20,8 24,13';
       case 'rampup': return '0,14 24,2';
       case 'rampdown': return '0,2 24,14';
+      case 'gradual': return '0,15 3,14 6,12 10,6 14,3 18,6 21,12 24,15';
       default: return '0,8 24,8';
     }
   })();
@@ -1124,18 +1127,37 @@ const LaborForecast: React.FC = () => {
         doc.rect(bx, cBottom - plBarH - smBarH - pfBarH, pdfBarW, pfBarH, 'F');
       }
 
-      // Opportunity overlay bar
+      // Opportunity overlay bar with diagonal hatch pattern
       if (oppMode !== 'off') {
         const ot = oppColumnTotals.get(displayColumns[i].key) || { pf: 0, sm: 0, pl: 0, total: 0 };
         const oppHC = ot.total / hpp;
         const oppBarH = pdfMaxHC > 0 ? (oppHC / pdfMaxHC) * cH : 0;
         if (oppBarH > 0.5) {
           const committedH = plBarH + smBarH + pfBarH;
-          doc.setFillColor(245, 158, 11);
+          const oppY = cBottom - committedH - oppBarH;
+
+          // Light orange fill background with border
+          doc.setFillColor(255, 251, 235);
           doc.setDrawColor(245, 158, 11);
           doc.setLineWidth(0.3);
-          // Hatched pattern approximation: filled rect with lower opacity
-          doc.rect(bx, cBottom - committedH - oppBarH, pdfBarW, oppBarH, 'FD');
+          doc.rect(bx, oppY, pdfBarW, oppBarH, 'FD');
+
+          // Draw diagonal hatch lines clipped to bar area
+          doc.saveGraphicsState();
+          // Build clip path using moveTo/lineTo
+          (doc as any).moveTo(bx, oppY);
+          (doc as any).lineTo(bx + pdfBarW, oppY);
+          (doc as any).lineTo(bx + pdfBarW, oppY + oppBarH);
+          (doc as any).lineTo(bx, oppY + oppBarH);
+          (doc as any).clip();
+          (doc as any).discardPath();
+          doc.setDrawColor(245, 158, 11);
+          doc.setLineWidth(0.5);
+          const hatchSpacing = 3;
+          for (let h = -oppBarH; h < pdfBarW + oppBarH; h += hatchSpacing) {
+            doc.line(bx + h, oppY + oppBarH, bx + h + oppBarH, oppY);
+          }
+          doc.restoreGraphicsState();
         }
       }
 
@@ -1160,8 +1182,24 @@ const LaborForecast: React.FC = () => {
       lgX += 70;
     });
     if (oppMode !== 'off') {
-      doc.setFillColor(245, 158, 11);
-      doc.rect(lgX, lgY - 4, 10, 6, 'F');
+      // Hatched legend swatch matching the bar style
+      doc.setFillColor(255, 251, 235);
+      doc.setDrawColor(245, 158, 11);
+      doc.setLineWidth(0.3);
+      doc.rect(lgX, lgY - 4, 10, 6, 'FD');
+      doc.saveGraphicsState();
+      (doc as any).moveTo(lgX, lgY - 4);
+      (doc as any).lineTo(lgX + 10, lgY - 4);
+      (doc as any).lineTo(lgX + 10, lgY + 2);
+      (doc as any).lineTo(lgX, lgY + 2);
+      (doc as any).clip();
+      (doc as any).discardPath();
+      doc.setDrawColor(245, 158, 11);
+      doc.setLineWidth(0.5);
+      for (let h = -6; h < 16; h += 2.5) {
+        doc.line(lgX + h, lgY + 2, lgX + h + 6, lgY - 4);
+      }
+      doc.restoreGraphicsState();
       doc.setFontSize(7);
       doc.setTextColor(100, 116, 139);
       doc.text('Opportunities', lgX + 13, lgY + 1);
@@ -1742,7 +1780,9 @@ const LaborForecast: React.FC = () => {
         </div>
         {oppMode === 'select' && opportunitiesWithEstimates && (
           <MultiSearchableSelect
-            options={opportunitiesWithEstimates.map(o => ({
+            options={opportunitiesWithEstimates
+              .filter(o => locationGroupFilter.length === 0 || (o.location_group && locationGroupFilter.includes(o.location_group)))
+              .map(o => ({
               value: String(o.id),
               label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
               searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''} ${o.stage_name || ''}`,
@@ -2323,6 +2363,8 @@ const LaborForecast: React.FC = () => {
                         const smHC = d.sm / hpp;
                         const plHC = d.pl / hpp;
                         const totalHC = pfHC + smHC + plHC;
+                        const oppHCForBar = oppMode !== 'off' ? ((oppColumnTotals.get(d.key)?.total || 0) / hpp) : 0;
+                        const clickableHC = totalHC + oppHCForBar;
 
                         const pfH = maxValue > 0 ? (pfHC / maxValue) * chartHeight : 0;
                         const smH = maxValue > 0 ? (smHC / maxValue) * chartHeight : 0;
@@ -2333,8 +2375,8 @@ const LaborForecast: React.FC = () => {
 
                         return (
                           <g key={d.key}
-                            onClick={() => totalHC > 0 && setDrillDownCol({ key: d.key, label: d.label, monthKey: d.monthKey || d.key })}
-                            style={{ cursor: totalHC > 0 ? 'pointer' : 'default' }}
+                            onClick={() => clickableHC > 0 && setDrillDownCol({ key: d.key, label: d.label, monthKey: d.monthKey || d.key })}
+                            style={{ cursor: clickableHC > 0 ? 'pointer' : 'default' }}
                           >
                             <rect x={`${xPercent}%`} y={chartHeight - plH} width={`${barWidth * 0.8}%`} height={plH} fill={TRADES[2].color} rx="1">
                               <title>{d.label}: PL {plHC.toFixed(1)}, SM {smHC.toFixed(1)}, PF {pfHC.toFixed(1)} = {totalHC.toFixed(1)} people</title>
