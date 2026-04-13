@@ -16,9 +16,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
-import { officeLocationsApi } from '../services/officeLocations';
-import { usersApi } from '../services/users';
-import { employeesApi } from '../services/employees';
+import { LOCATION_GROUPS } from '../constants/locationGroups';
 import '../styles/SalesPipeline.css';
 import { exportListToPdf } from '../utils/listExportPdf';
 
@@ -66,7 +64,7 @@ const SalesPipeline: React.FC = () => {
   const [selectedOpportunity, setSelectedOpportunity] = useState<OpportunityType | null>(null);
   const [sortColumn, setSortColumn] = useState<string>('activity');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [selectedOfficeLocation, setSelectedOfficeLocation] = useState<string>('all');
+  const [selectedLocationGroup, setSelectedLocationGroup] = useState<string>('');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
   const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
@@ -102,25 +100,6 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => opportunitiesService.getStages()
   });
 
-  // Fetch office locations
-  const { data: officeLocationsData } = useQuery({
-    queryKey: ['office-locations'],
-    queryFn: async () => {
-      const response = await officeLocationsApi.getAll();
-      return response.data?.data || [];
-    }
-  });
-  const officeLocations = Array.isArray(officeLocationsData) ? officeLocationsData : [];
-
-  // Fetch employees for office location mapping (no HR access needed)
-  const { data: employeesData } = useQuery({
-    queryKey: ['employees', 'assignable'],
-    queryFn: async () => {
-      const response = await employeesApi.getAssignable();
-      return response.data?.data || [];
-    }
-  });
-  const employees = Array.isArray(employeesData) ? employeesData : [];
 
   // Helper function to get market icon
   const getMarketIcon = (market?: string): string => {
@@ -233,18 +212,6 @@ const SalesPipeline: React.FC = () => {
     return Array.from(uniqueSalespeople).sort();
   }, [apiOpportunities]);
 
-  // Create a mapping of salespeople to their office locations (from employees data)
-  const salespersonToOffice = useMemo(() => {
-    const mapping: Record<string, number | null> = {};
-    if (employees && Array.isArray(employees)) {
-      employees.forEach((emp: any) => {
-        const fullName = `${emp.first_name} ${emp.last_name}`;
-        mapping[fullName] = emp.office_location_id;
-      });
-    }
-    return mapping;
-  }, [employees]);
-
   // Filter opportunities based on selected filters
   const filteredApiOpportunities = useMemo(() => {
     return apiOpportunities.filter(opp => {
@@ -258,25 +225,14 @@ const SalesPipeline: React.FC = () => {
         return false;
       }
 
-      // Filter by office location
-      if (selectedOfficeLocation !== 'all') {
-        const officeId = parseInt(selectedOfficeLocation);
-
-        // If filtering by office, check if this opportunity's salesperson belongs to that office
-        if (opp.assigned_to_name) {
-          const salespersonOfficeId = salespersonToOffice[opp.assigned_to_name];
-          if (salespersonOfficeId !== officeId) {
-            return false;
-          }
-        } else {
-          // If no salesperson assigned, exclude from office filter
-          return false;
-        }
+      // Filter by location group
+      if (selectedLocationGroup && opp.location_group !== selectedLocationGroup) {
+        return false;
       }
 
       return true;
     });
-  }, [apiOpportunities, selectedSalesperson, selectedOfficeLocation, salespersonToOffice, excludedStages]);
+  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -715,9 +671,9 @@ const SalesPipeline: React.FC = () => {
     };
 
     const filters: string[] = [];
-    if (selectedOfficeLocation !== 'all') {
-      const loc = officeLocations.find((o: any) => String(o.id) === selectedOfficeLocation);
-      if (loc) filters.push(`Office: ${(loc as any).name}`);
+    if (selectedLocationGroup) {
+      const loc = LOCATION_GROUPS.find(g => g.value === selectedLocationGroup);
+      if (loc) filters.push(`Location: ${loc.longLabel}`);
     }
     if (selectedSalesperson !== 'all') filters.push(`Salesperson: ${selectedSalesperson}`);
     if (excludedStages.size > 0) {
@@ -970,8 +926,8 @@ const SalesPipeline: React.FC = () => {
             </div>
             <div className="sales-table-controls">
               <select
-                value={selectedOfficeLocation}
-                onChange={(e) => setSelectedOfficeLocation(e.target.value)}
+                value={selectedLocationGroup}
+                onChange={(e) => setSelectedLocationGroup(e.target.value)}
                 style={{
                   padding: '5px 8px',
                   borderRadius: '6px',
@@ -980,9 +936,9 @@ const SalesPipeline: React.FC = () => {
                   minWidth: '120px'
                 }}
               >
-                <option value="all">All Offices</option>
-                {officeLocations.map((office: any) => (
-                  <option key={office.id} value={office.id}>{office.name}</option>
+                <option value="">All Groups</option>
+                {LOCATION_GROUPS.map((group) => (
+                  <option key={group.value} value={group.value}>{group.longLabel}</option>
                 ))}
               </select>
               <select
