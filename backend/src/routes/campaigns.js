@@ -256,7 +256,7 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     }
 
     const db = require('../config/database');
-    const [companiesList, weeksList, teamList, campaignOppsList, mainOppsResult] = await Promise.all([
+    const [companiesList, weeksList, teamList, campaignOppsList, mainOppsResult, scoreBreakdownResult] = await Promise.all([
       campaignCompanies.getByCampaignId(req.params.id, {}, req.tenantId),
       campaigns.getWeeks(req.params.id),
       campaigns.getTeamMembers(req.params.id),
@@ -268,7 +268,24 @@ router.get('/:id/report-pdf', async (req, res, next) => {
         LEFT JOIN users u ON o.assigned_to = u.id
         WHERE o.campaign_id = $1
         ORDER BY o.estimated_value DESC
-      `, [req.params.id])
+      `, [req.params.id]),
+      db.query(`
+        SELECT
+          CASE
+            WHEN c.customer_score >= 85 THEN 'A'
+            WHEN c.customer_score >= 70 THEN 'B'
+            WHEN c.customer_score >= 50 THEN 'C'
+            WHEN c.customer_score IS NOT NULL AND c.customer_score < 50 THEN 'D'
+            ELSE 'Unscored'
+          END as tier,
+          COUNT(*) as count,
+          COALESCE(SUM(o.estimated_value), 0) as total_value
+        FROM opportunities o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        WHERE o.tenant_id = $1 AND o.campaign_id = $2
+        GROUP BY tier
+        ORDER BY tier
+      `, [req.tenantId, req.params.id])
     ]);
     console.log('[Report] Data loaded - companies:', companiesList.length, 'weeks:', weeksList.length, 'team:', teamList.length);
     if (teamList.length > 0) {
@@ -330,7 +347,7 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const { fetchLogoBase64 } = require('../utils/logoFetcher');
 
     const logoBase64 = await fetchLogoBase64(req.tenantId);
-    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList, logoBase64);
+    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList, logoBase64, scoreBreakdownResult.rows);
     console.log('[Report] HTML generated, length:', html.length);
 
     const { launchBrowser } = require('../utils/launchBrowser');

@@ -42,15 +42,17 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     estimated_start_date: opportunity?.estimated_start_date
       ? new Date(opportunity.estimated_start_date).toISOString().split('T')[0]
       : '',
-    estimated_duration_days: opportunity?.estimated_duration_days || '',
+    estimated_duration_months: opportunity?.estimated_duration_days
+      ? Math.round(Number(opportunity.estimated_duration_days) / 30).toString()
+      : '',
     estimated_end_date: opportunity?.estimated_end_date
       ? new Date(opportunity.estimated_end_date).toISOString().split('T')[0]
       : '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
     location_group: opportunity?.location_group || '',
-    stage_id: opportunity?.stage_id || 1,
-    priority: opportunity?.priority || 'medium',
+    stage_id: opportunity?.stage_id || '',
+    priority: opportunity?.priority || '',
     probability: opportunity?.probability || opportunity?.stage_probability || '',
     assigned_to: opportunity?.assigned_to || '',
     source: opportunity?.source || '',
@@ -200,10 +202,60 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate required fields that aren't handled by HTML5 validation
+    if (!formData.owner) {
+      toast.error('Company is required');
+      return;
+    }
+    if (!formData.estimated_value) {
+      toast.error('Estimated Value is required');
+      return;
+    }
+    if (!formData.priority) {
+      toast.error('Priority is required');
+      return;
+    }
+    if (!formData.stage_id) {
+      toast.error('Stage is required');
+      return;
+    }
+    if (!formData.construction_type) {
+      toast.error('Construction Type is required');
+      return;
+    }
+    if (!formData.market) {
+      toast.error('Market is required');
+      return;
+    }
+    if (!formData.location_group) {
+      toast.error('Location Group is required');
+      return;
+    }
+    if (!formData.location) {
+      toast.error('Location is required');
+      return;
+    }
+    if (!formData.source) {
+      toast.error('Lead Source is required');
+      return;
+    }
+    if (!formData.estimated_duration_months) {
+      toast.error('Duration is required');
+      return;
+    }
+    if (!formData.assigned_to) {
+      toast.error('Assign To is required');
+      return;
+    }
+    if (!formData.probability) {
+      toast.error('Win Probability is required');
+      return;
+    }
+
     // Clean up form data: only include fields that have values
     const cleanedData: any = {
       title: formData.title,
-      stage_id: formData.stage_id,
+      stage_id: Number(formData.stage_id),
       priority: formData.priority
     };
 
@@ -229,7 +281,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
     // Add optional number fields if they have values
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
-    if (formData.estimated_duration_days) cleanedData.estimated_duration_days = Number(formData.estimated_duration_days);
+    // Convert months to days for backend storage (30 days per month)
+    if (formData.estimated_duration_months) cleanedData.estimated_duration_days = Math.round(Number(formData.estimated_duration_months) * 30);
     // Always include assigned_to so it can be cleared (null = unassigned)
     cleanedData.assigned_to = formData.assigned_to ? Number(formData.assigned_to) : null;
     if (formData.probability) cleanedData.probability = formData.probability;
@@ -307,6 +360,22 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
               <div className="opportunity-form-columns">
                 {/* Left column: form fields */}
                 <div className="opportunity-form-left">
+                  {/* Required fields note */}
+                  <div style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '6px',
+                    padding: '0.75rem',
+                    marginBottom: '1rem',
+                    fontSize: '0.8rem',
+                    color: '#1e40af'
+                  }}>
+                    <strong>Required fields are marked with *</strong>
+                    <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#3b82f6' }}>
+                      Optional: Facility/Location, Architect, Engineer, General Contractor, Sales Campaign
+                    </div>
+                  </div>
+
                   {/* Row 1: Title */}
                   <div className="form-group">
                     <label htmlFor="title">Opportunity Title *</label>
@@ -324,7 +393,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   {/* Row 2: Value, Priority, Stage, Probability */}
                   <div className="form-row-4">
                     <div className="form-group">
-                      <label htmlFor="estimated_value">Estimated Value</label>
+                      <label htmlFor="estimated_value">Estimated Value *</label>
                       <input
                         type="text"
                         id="estimated_value"
@@ -332,16 +401,19 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         value={formatNumberWithCommas(formData.estimated_value)}
                         onChange={handleChange}
                         placeholder="$"
+                        required
                       />
                     </div>
                     <div className="form-group">
-                      <label htmlFor="priority">Priority</label>
+                      <label htmlFor="priority">Priority *</label>
                       <select
                         id="priority"
                         name="priority"
                         value={formData.priority}
                         onChange={handleChange}
+                        required
                       >
+                        <option value="">Select priority</option>
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
                         <option value="high">High</option>
@@ -349,13 +421,15 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </select>
                     </div>
                     <div className="form-group">
-                      <label htmlFor="stage_id">Stage</label>
+                      <label htmlFor="stage_id">Stage *</label>
                       <select
                         id="stage_id"
                         name="stage_id"
                         value={formData.stage_id}
                         onChange={handleChange}
+                        required
                       >
+                        <option value="">Select stage</option>
                         {stages.map((stage) => (
                           <option key={stage.id} value={stage.id}>
                             {stage.name}
@@ -382,12 +456,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </div>
                     )}
                     <div className="form-group">
-                      <label htmlFor="probability">Win Probability</label>
+                      <label htmlFor="probability">Win Probability *</label>
                       <select
                         id="probability"
                         name="probability"
                         value={formData.probability}
                         onChange={handleChange}
+                        required
                       >
                         <option value="">Select probability</option>
                         <option value="Low">Low</option>
@@ -400,7 +475,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   {/* Row 3: Company + GC side by side */}
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="owner">Company</label>
+                      <label htmlFor="owner">Company *</label>
                       <CompanyPicker
                         companies={uniqueCompanies.map((c: Customer) => ({
                           id: c.id,
@@ -478,12 +553,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   {/* Row 5: Construction Type, Market, Location Group, Location, Source */}
                   <div className="form-row-5">
                     <div className="form-group">
-                      <label htmlFor="construction_type">Construction Type</label>
+                      <label htmlFor="construction_type">Construction Type *</label>
                       <select
                         id="construction_type"
                         name="construction_type"
                         value={formData.construction_type}
                         onChange={handleChange}
+                        required
                       >
                         <option value="">Select type</option>
                         <option value="New Construction">New Construction</option>
@@ -493,12 +569,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="market">Market</label>
+                      <label htmlFor="market">Market *</label>
                       <select
                         id="market"
                         name="market"
                         value={formData.market}
                         onChange={handleChange}
+                        required
                       >
                         <option value="">Select market</option>
                         {MARKETS.map(m => (
@@ -508,12 +585,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="location_group">Location Group</label>
+                      <label htmlFor="location_group">Location Group *</label>
                       <select
                         id="location_group"
                         name="location_group"
                         value={formData.location_group}
                         onChange={handleChange}
+                        required
                       >
                         <option value="">Select group</option>
                         {LOCATION_GROUPS.map(g => (
@@ -523,7 +601,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="location">Location</label>
+                      <label htmlFor="location">Location *</label>
                       <input
                         type="text"
                         id="location"
@@ -531,16 +609,18 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         value={formData.location}
                         onChange={handleChange}
                         placeholder="City, State"
+                        required
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="source">Lead Source</label>
+                      <label htmlFor="source">Lead Source *</label>
                       <select
                         id="source"
                         name="source"
                         value={formData.source}
                         onChange={handleChange}
+                        required
                       >
                         <option value="">Select source</option>
                         <option value="referral">Referral</option>
@@ -568,9 +648,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         onChange={(e) => {
                           handleChange(e);
                           // Auto-calculate end date if duration is set
-                          if (formData.estimated_duration_days && e.target.value) {
+                          if (formData.estimated_duration_months && e.target.value) {
                             const start = new Date(e.target.value);
-                            const months = Math.round(Number(formData.estimated_duration_days) / 30);
+                            const months = Number(formData.estimated_duration_months);
                             if (months > 0) {
                               const end = new Date(start);
                               end.setMonth(end.getMonth() + months);
@@ -583,7 +663,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="estimated_end_date">Est. End Date</label>
+                      <label htmlFor="estimated_end_date">Est. End Date *</label>
                       <input
                         type="date"
                         id="estimated_end_date"
@@ -596,47 +676,52 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                             const start = new Date(formData.estimated_start_date);
                             const end = new Date(e.target.value);
                             const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                            if (diffDays > 0) {
-                              setFormData(prev => ({ ...prev, estimated_end_date: e.target.value, estimated_duration_days: diffDays.toString() as any }));
+                            const diffMonths = Math.round(diffDays / 30);
+                            if (diffMonths > 0) {
+                              setFormData(prev => ({ ...prev, estimated_end_date: e.target.value, estimated_duration_months: diffMonths.toString() as any }));
                             }
                           }
                         }}
                         min={formData.estimated_start_date || undefined}
+                        required
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="estimated_duration_days">Duration (days)</label>
+                      <label htmlFor="estimated_duration_months">Duration (months) *</label>
                       <input
                         type="number"
-                        id="estimated_duration_days"
-                        name="estimated_duration_days"
-                        value={formData.estimated_duration_days}
+                        id="estimated_duration_months"
+                        name="estimated_duration_months"
+                        value={formData.estimated_duration_months}
                         onChange={(e) => {
                           handleChange(e);
                           // Auto-calculate end date from start + duration
                           if (formData.estimated_start_date && e.target.value) {
                             const start = new Date(formData.estimated_start_date);
-                            const days = Number(e.target.value);
-                            if (days > 0) {
+                            const months = Number(e.target.value);
+                            if (months > 0) {
                               const end = new Date(start);
-                              end.setDate(end.getDate() + days);
-                              setFormData(prev => ({ ...prev, estimated_duration_days: e.target.value as any, estimated_end_date: end.toISOString().split('T')[0] }));
+                              end.setMonth(end.getMonth() + months);
+                              setFormData(prev => ({ ...prev, estimated_duration_months: e.target.value as any, estimated_end_date: end.toISOString().split('T')[0] }));
                             }
                           }
                         }}
-                        placeholder="90"
+                        onFocus={(e) => e.target.select()}
+                        placeholder="3"
                         min="1"
+                        step="0.5"
+                        required
                       />
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="assigned_to">Assign To</label>
+                      <label htmlFor="assigned_to">Assign To *</label>
                       <SearchableSelect
                         options={employeeOptions}
                         value={formData.assigned_to?.toString() || ''}
                         onChange={(val) => setFormData(prev => ({ ...prev, assigned_to: val }))}
-                        placeholder="Unassigned"
+                        placeholder="Select assignee"
                       />
                     </div>
 

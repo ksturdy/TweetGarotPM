@@ -6,6 +6,7 @@ import { getForecastRules, saveForecastRules } from '../../services/tenant';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 import { LOCATION_GROUPS } from '../../constants/locationGroups';
+import OpportunityModal from '../../components/opportunities/OpportunityModal';
 
 // Formatting helpers (same as ProjectedRevenue)
 const fmt = (value: number | null | undefined): string => {
@@ -130,6 +131,10 @@ const OpportunityProjectedRevenue: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<'name' | 'value' | 'probability' | 'start'>('value');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Opportunity modal
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const handleSort = (column: typeof sortColumn) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -206,6 +211,31 @@ const OpportunityProjectedRevenue: React.FC = () => {
     } catch (err) {
       console.error('Failed to save projection override:', err);
     }
+  }, []);
+
+  // Update location group
+  const updateLocationGroup = useCallback(async (opportunityId: number, locationGroup: string) => {
+    try {
+      await opportunitiesService.update(opportunityId, { location_group: locationGroup });
+      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+    } catch (err) {
+      console.error('Failed to update location group:', err);
+    }
+  }, [queryClient]);
+
+  // Modal handlers
+  const handleOpenModal = useCallback((opportunity: Opportunity) => {
+    setSelectedOpportunity(opportunity);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleSaveModal = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+  }, [queryClient]);
+
+  const handleCloseModal = useCallback(() => {
+    setSelectedOpportunity(null);
+    setIsModalOpen(false);
   }, []);
 
   // Filter options
@@ -714,6 +744,9 @@ const OpportunityProjectedRevenue: React.FC = () => {
               >
                 Opportunity<SortIndicator column="name" />
               </th>
+              <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '70px' }}>
+                Location
+              </th>
               <th
                 onClick={() => handleSort('value')}
                 style={{
@@ -771,7 +804,13 @@ const OpportunityProjectedRevenue: React.FC = () => {
                         &#9888;
                       </span>
                     )}
-                    {p.opportunity.title}
+                    <span
+                      onClick={() => handleOpenModal(p.opportunity)}
+                      style={{ color: '#3b82f6', cursor: 'pointer', textDecoration: 'underline' }}
+                      title="Click to view opportunity details"
+                    >
+                      {p.opportunity.title}
+                    </span>
                   </div>
                   <div style={{ fontSize: '0.65rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
                     {p.opportunity.owner || p.opportunity.general_contractor || p.opportunity.market}
@@ -779,6 +818,28 @@ const OpportunityProjectedRevenue: React.FC = () => {
                   <div style={{ fontSize: '0.6rem', color: '#94a3b8' }}>
                     {p.opportunity.stage_name} | {p.opportunity.assigned_to_name || 'Unassigned'}
                   </div>
+                </td>
+
+                {/* Location Group */}
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                  <select
+                    value={p.opportunity.location_group || ''}
+                    onChange={(e) => updateLocationGroup(p.opportunity.id, e.target.value)}
+                    style={{
+                      padding: '0.15rem 0.25rem', fontSize: '0.65rem',
+                      border: p.opportunity.location_group ? '1px solid #e2e8f0' : '1px solid #ef4444',
+                      borderRadius: '3px',
+                      background: p.opportunity.location_group ? 'transparent' : '#fef2f2',
+                      color: p.opportunity.location_group ? '#64748b' : '#ef4444',
+                      cursor: 'pointer', width: '70px'
+                    }}
+                    title={p.opportunity.location_group ? 'Location group' : 'No location group assigned'}
+                  >
+                    <option value="">None</option>
+                    {LOCATION_GROUPS.map(g => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
                 </td>
 
                 {/* Value */}
@@ -903,6 +964,7 @@ const OpportunityProjectedRevenue: React.FC = () => {
               <td style={{ padding: '0.5rem', position: 'sticky', left: 0, background: '#f1f5f9' }}>
                 TOTAL ({projections.length} opportunities)
               </td>
+              <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
               <td style={{ padding: '0.5rem', textAlign: 'right' }}>
                 {fmtCompact(grandTotalUnweighted)}
               </td>
@@ -941,6 +1003,15 @@ const OpportunityProjectedRevenue: React.FC = () => {
         <span style={{ fontStyle: 'italic', border: '1px dashed #94a3b8', padding: '0 2px', borderRadius: '2px', marginLeft: '0.25rem' }}>dashed</span> = auto-selected |
         <span style={{ border: '1px solid #f59e0b', padding: '0 2px', borderRadius: '2px', background: '#fef3c7', color: '#92400e', marginLeft: '0.25rem' }}>amber</span> = stale date auto-adjusted
       </div>
+
+      {/* Opportunity Modal */}
+      {isModalOpen && selectedOpportunity && (
+        <OpportunityModal
+          opportunity={selectedOpportunity}
+          onClose={handleCloseModal}
+          onSave={handleSaveModal}
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities, logoBase64 = '') => {
+const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities, logoBase64 = '', scoreBreakdown = []) => {
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -335,6 +335,39 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       <span style="color: #666;"> — Started with ${originalProspects} original targets, team identified ${addedProspects} additional prospect${addedProspects !== 1 ? 's' : ''} through outreach.</span>
     </div>
     ` : ''}
+
+    <!-- Opportunities by Customer Score -->
+    ${(() => {
+      const tierConfig = {
+        A: { label: 'Tier A (85+)', color: '#059669', bg: '#ecfdf5' },
+        B: { label: 'Tier B (70–84)', color: '#2563eb', bg: '#eff6ff' },
+        C: { label: 'Tier C (50–69)', color: '#d97706', bg: '#fffbeb' },
+        D: { label: 'Below 50', color: '#dc2626', bg: '#fef2f2' },
+        Unscored: { label: 'Unscored', color: '#6b7280', bg: '#f9fafb' },
+      };
+      const tiers = ['A', 'B', 'C', 'D', 'Unscored'];
+      const breakdownMap = Object.fromEntries(scoreBreakdown.map(r => [r.tier, r]));
+      const totalOpps = scoreBreakdown.reduce((sum, r) => sum + parseInt(r.count), 0);
+      if (totalOpps === 0) return '';
+      return `
+      <div class="section-title">Opportunities by Customer Score</div>
+      <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+        <div style="flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; text-align: center;">
+          <div style="font-size: 16pt; font-weight: 700; color: #111827;">${totalOpps}</div>
+          <div style="font-size: 7pt; color: #6b7280; margin-top: 2px;">Total</div>
+        </div>
+        ${tiers.map(tier => {
+          const config = tierConfig[tier];
+          const data = breakdownMap[tier];
+          const count = data ? parseInt(data.count) : 0;
+          return `
+          <div style="flex: 1; background: ${config.bg}; border: 1px solid ${config.color}22; border-radius: 6px; padding: 10px; text-align: center;">
+            <div style="font-size: 16pt; font-weight: 700; color: ${config.color};">${count}</div>
+            <div style="font-size: 7pt; color: ${config.color}; margin-top: 2px; opacity: 0.8;">${config.label}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    })()}
 
     <!-- Status Breakdown -->
     <div class="section-title">Status Breakdown</div>

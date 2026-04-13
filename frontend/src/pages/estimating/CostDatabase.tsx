@@ -22,18 +22,6 @@ const CostDatabase: React.FC = () => {
   const [filterBidType, setFilterBidType] = useState('all');
   const [sortField, setSortField] = useState<string>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [columnWidths, setColumnWidths] = useState<{[key: string]: number}>({
-    name: 180,
-    bid_date: 120,
-    building_type: 150,
-    project_type: 150,
-    bid_type: 120,
-    total_cost: 120,
-    total_sqft: 100,
-    cost_per_sqft: 120,
-    actions: 150
-  });
-  const [resizing, setResizing] = useState<{column: string, startX: number, startWidth: number} | null>(null);
 
   // Load historical projects on component mount
   useEffect(() => {
@@ -67,43 +55,6 @@ const CostDatabase: React.FC = () => {
     }
   };
 
-  // Handle column resize
-  const handleResizeStart = (column: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizing({
-      column,
-      startX: e.clientX,
-      startWidth: columnWidths[column]
-    });
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (resizing) {
-        const delta = e.clientX - resizing.startX;
-        const newWidth = Math.max(50, resizing.startWidth + delta);
-        setColumnWidths(prev => ({
-          ...prev,
-          [resizing.column]: newWidth
-        }));
-      }
-    };
-
-    const handleMouseUp = () => {
-      setResizing(null);
-    };
-
-    if (resizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizing]);
 
   // Filter and sort projects
   const filteredProjects = projects
@@ -344,15 +295,18 @@ const CostDatabase: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter Controls */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div className="filter-section">
-          <div className="filter-group">
-            <label>Building Type</label>
+      {/* Table Section */}
+      <div className="cd-table-section">
+        <div className="sales-table-header">
+          <div className="sales-table-title">
+            Historical Projects
+            <span className="cd-table-count">{filteredProjects.length} of {projects.length}</span>
+          </div>
+          <div className="sales-table-controls">
             <select
-              className="form-input"
               value={filterBuildingType}
               onChange={(e) => setFilterBuildingType(e.target.value)}
+              className="cd-filter-select"
             >
               {buildingTypes.map(type => (
                 <option key={type} value={type}>
@@ -360,13 +314,10 @@ const CostDatabase: React.FC = () => {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="filter-group">
-            <label>Project Type</label>
             <select
-              className="form-input"
               value={filterProjectType}
               onChange={(e) => setFilterProjectType(e.target.value)}
+              className="cd-filter-select"
             >
               {projectTypes.map(type => (
                 <option key={type} value={type}>
@@ -374,13 +325,10 @@ const CostDatabase: React.FC = () => {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="filter-group">
-            <label>Bid Type</label>
             <select
-              className="form-input"
               value={filterBidType}
               onChange={(e) => setFilterBidType(e.target.value)}
+              className="cd-filter-select"
             >
               {bidTypes.map(type => (
                 <option key={type} value={type}>
@@ -388,30 +336,20 @@ const CostDatabase: React.FC = () => {
                 </option>
               ))}
             </select>
+            <div className="sales-search-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search projects..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="search-section">
-          <div className="search-input-wrapper">
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Search by project name, building type, or project type..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="search-count">
-            Showing {filteredProjects.length} of {projects.length} projects
-          </div>
-        </div>
-      </div>
-
-      {/* Historical Projects Table */}
-      <div className="card">
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem' }}>
             <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
@@ -438,109 +376,63 @@ const CostDatabase: React.FC = () => {
             </div>
           </div>
         ) : (
-          <table className="data-table resizable-table">
+          <table className="data-table">
             <thead>
               <tr>
-                <th style={{ width: columnWidths.name, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>
-                    Project Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('name', e)} />
+                <th className="cd-col-name" onClick={() => handleSort('name')}>
+                  Project Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.bid_date, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('bid_date')}>
-                    Bid Date {sortField === 'bid_date' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('bid_date', e)} />
+                <th className="cd-col-date" onClick={() => handleSort('bid_date')}>
+                  Bid Date {sortField === 'bid_date' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.building_type, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('building_type')}>
-                    Building Type {sortField === 'building_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('building_type', e)} />
+                <th className="cd-col-btype" onClick={() => handleSort('building_type')}>
+                  Building Type {sortField === 'building_type' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.project_type, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('project_type')}>
-                    Project Type {sortField === 'project_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('project_type', e)} />
+                <th className="cd-col-ptype" onClick={() => handleSort('project_type')}>
+                  Project Type {sortField === 'project_type' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.bid_type, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('bid_type')}>
-                    Bid Type {sortField === 'bid_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('bid_type', e)} />
+                <th className="cd-col-bid" onClick={() => handleSort('bid_type')}>
+                  Bid Type {sortField === 'bid_type' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.total_cost, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('total_cost')}>
-                    Total Cost {sortField === 'total_cost' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('total_cost', e)} />
+                <th className="cd-col-cost" onClick={() => handleSort('total_cost')}>
+                  Total Cost {sortField === 'total_cost' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.total_sqft, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('total_sqft')}>
-                    SqFt {sortField === 'total_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('total_sqft', e)} />
+                <th className="cd-col-sqft" onClick={() => handleSort('total_sqft')}>
+                  SqFt {sortField === 'total_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.cost_per_sqft, position: 'relative' }}>
-                  <div style={{ cursor: 'pointer' }} onClick={() => handleSort('total_cost_per_sqft')}>
-                    Cost/SqFt {sortField === 'total_cost_per_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </div>
-                  <div className="resize-handle" onMouseDown={(e) => handleResizeStart('cost_per_sqft', e)} />
+                <th className="cd-col-costsf" onClick={() => handleSort('total_cost_per_sqft')}>
+                  Cost/SqFt {sortField === 'total_cost_per_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th style={{ width: columnWidths.actions }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredProjects.map((project) => (
                 <tr key={project.id}>
-                  <td><strong>{project.name}</strong></td>
-                  <td>{project.bid_date ? new Date(project.bid_date).toLocaleDateString() : '-'}</td>
-                  <td>
+                  <td className="cd-col-name">
+                    <span className="cd-project-link" onClick={() => setSelectedProject(project)}>
+                      {project.name}
+                    </span>
+                  </td>
+                  <td className="cd-col-date">{project.bid_date ? new Date(project.bid_date).toLocaleDateString() : '-'}</td>
+                  <td className="cd-col-btype">
                     {project.building_type && (
                       <span className="badge badge-info">{project.building_type}</span>
                     )}
                   </td>
-                  <td>
+                  <td className="cd-col-ptype">
                     {project.project_type && (
                       <span className="badge badge-secondary">{project.project_type}</span>
                     )}
                   </td>
-                  <td>{project.bid_type || '-'}</td>
-                  <td>
+                  <td className="cd-col-bid">{project.bid_type || '-'}</td>
+                  <td className="cd-col-cost">
                     {project.total_cost ? `$${Math.round(project.total_cost).toLocaleString()}` : '-'}
                   </td>
-                  <td>
+                  <td className="cd-col-sqft">
                     {project.total_sqft ? Math.round(project.total_sqft).toLocaleString() : '-'}
                   </td>
-                  <td>
+                  <td className="cd-col-costsf">
                     {project.total_cost_per_sqft ? `$${parseFloat(project.total_cost_per_sqft).toFixed(2)}` : '-'}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setSelectedProject(project)}
-                        title="View Details"
-                      >
-                        👁️
-                      </button>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => setEditingProject({...project})}
-                        title="Edit"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(project.id)}
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
-                    </div>
                   </td>
                 </tr>
               ))}
