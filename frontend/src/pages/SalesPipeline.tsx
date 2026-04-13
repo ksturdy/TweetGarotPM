@@ -620,6 +620,13 @@ const SalesPipeline: React.FC = () => {
         aValue = a.company.toLowerCase();
         bValue = b.company.toLowerCase();
         break;
+      case 'locationGroup': {
+        const aApiOpp = apiOpportunities.find(o => o.id === a.id);
+        const bApiOpp = apiOpportunities.find(o => o.id === b.id);
+        aValue = aApiOpp?.location_group || '';
+        bValue = bApiOpp?.location_group || '';
+        break;
+      }
       case 'value':
         aValue = a.value;
         bValue = b.value;
@@ -691,18 +698,25 @@ const SalesPipeline: React.FC = () => {
         { header: 'Activity', key: 'activity', width: 1 },
         { header: 'Opportunity', key: 'name', width: 3 },
         { header: 'Company', key: 'company', width: 2 },
+        { header: 'Location', key: 'location', width: 1 },
         { header: 'Value', key: 'value', align: 'right', width: 1 },
         { header: 'Stage', key: 'stage', width: 1.5 },
         { header: 'Salesperson', key: 'salesperson', width: 1.5 },
       ],
-      rows: sortedOpportunities.map(opp => ({
-        activity: new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        name: opp.name,
-        company: opp.company || '-',
-        value: fmtCurrency(opp.value),
-        stage: opp.stageName,
-        salesperson: opp.salesperson.name,
-      })),
+      rows: sortedOpportunities.map(opp => {
+        const apiOpp = apiOpportunities.find(a => a.id === opp.id);
+        const locationGroup = LOCATION_GROUPS.find(g => g.value === apiOpp?.location_group);
+
+        return {
+          activity: new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          name: opp.name,
+          company: opp.company || '-',
+          location: locationGroup?.label || '-',
+          value: fmtCurrency(opp.value),
+          stage: opp.stageName,
+          salesperson: opp.salesperson.name,
+        };
+      }),
       summaryRows: [
         { label: 'Opportunities', value: String(sortedOpportunities.length) },
         { label: 'Pipeline Value', value: fmtCurrency(totalPipeline) },
@@ -998,6 +1012,7 @@ const SalesPipeline: React.FC = () => {
               <col style={{ width: '70px' }} />
               <col />
               <col />
+              <col style={{ width: '90px' }} />
               <col style={{ width: '80px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '140px' }} />
@@ -1013,6 +1028,9 @@ const SalesPipeline: React.FC = () => {
                 <th className="sales-sortable" onClick={() => handleSort('company')}>
                   Company <span className="sales-sort-icon">{sortColumn === 'company' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
+                <th className="sales-sortable" onClick={() => handleSort('locationGroup')}>
+                  Location <span className="sales-sort-icon">{sortColumn === 'locationGroup' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                </th>
                 <th className="sales-sortable" onClick={() => handleSort('value')}>
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
@@ -1025,51 +1043,58 @@ const SalesPipeline: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedOpportunities.map((opp) => (
-                <tr
-                  key={opp.id}
-                  onClick={() => {
-                    // Find the actual API opportunity
-                    const apiOpp = apiOpportunities.find(a => a.id === opp.id);
-                    if (apiOpp) {
-                      setSelectedOpportunity(apiOpp);
-                      setIsModalOpen(true);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td className="sales-date-cell">{new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                  <td>
-                    <div className="sales-project-cell">
-                      <div className="sales-project-icon" style={{ background: opp.iconGradient }}>
-                        {opp.icon}
+              {sortedOpportunities.map((opp) => {
+                const apiOpp = apiOpportunities.find(a => a.id === opp.id);
+                const locationGroup = LOCATION_GROUPS.find(g => g.value === apiOpp?.location_group);
+
+                return (
+                  <tr
+                    key={opp.id}
+                    onClick={() => {
+                      // Find the actual API opportunity
+                      if (apiOpp) {
+                        setSelectedOpportunity(apiOpp);
+                        setIsModalOpen(true);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td className="sales-date-cell">{new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                    <td>
+                      <div className="sales-project-cell">
+                        <div className="sales-project-icon" style={{ background: opp.iconGradient }}>
+                          {opp.icon}
+                        </div>
+                        <div className="sales-project-info">
+                          <h4>{opp.name}</h4>
+                        </div>
                       </div>
-                      <div className="sales-project-info">
-                        <h4>{opp.name}</h4>
+                    </td>
+                    <td>{opp.company || '-'}</td>
+                    <td style={{ fontSize: '12px', color: locationGroup ? locationGroup.color : '#9ca3af', fontWeight: 600 }}>
+                      {locationGroup?.label || '-'}
+                    </td>
+                    <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
+                    <td>
+                      <span className={`sales-stage-badge ${opp.stage}`}>
+                        <span className="sales-stage-dot"></span>
+                        {opp.stageName}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="sales-salesperson-cell">
+                        <div
+                          className="sales-salesperson-avatar"
+                          style={{ background: opp.salesperson.color }}
+                        >
+                          {opp.salesperson.initials}
+                        </div>
+                        {opp.salesperson.name}
                       </div>
-                    </div>
-                  </td>
-                  <td>{opp.company || '-'}</td>
-                  <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
-                  <td>
-                    <span className={`sales-stage-badge ${opp.stage}`}>
-                      <span className="sales-stage-dot"></span>
-                      {opp.stageName}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="sales-salesperson-cell">
-                      <div
-                        className="sales-salesperson-avatar"
-                        style={{ background: opp.salesperson.color }}
-                      >
-                        {opp.salesperson.initials}
-                      </div>
-                      {opp.salesperson.name}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           </div>
