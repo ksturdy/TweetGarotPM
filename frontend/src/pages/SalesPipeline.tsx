@@ -13,9 +13,10 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
+import { employeesApi } from '../services/employees';
 import { LOCATION_GROUPS } from '../constants/locationGroups';
 import '../styles/SalesPipeline.css';
 import { exportListToPdf } from '../utils/listExportPdf';
@@ -58,6 +59,7 @@ interface SalesOpportunity {
 const SalesPipeline: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [view, setView] = useState<'table' | 'board'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -98,6 +100,22 @@ const SalesPipeline: React.FC = () => {
   const { data: pipelineStages = [], isLoading: isStagesLoading } = useQuery({
     queryKey: ['pipeline-stages'],
     queryFn: () => opportunitiesService.getStages()
+  });
+
+  // Fetch employees for salesperson assignment
+  const { data: employeesResponse } = useQuery({
+    queryKey: ['employees', 'assignable'],
+    queryFn: () => employeesApi.getAssignable()
+  });
+  const employees = (employeesResponse?.data as any)?.data || [];
+
+  // Mutation for quick updates from table
+  const updateOpportunityMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<OpportunityType> }) =>
+      opportunitiesService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+    }
   });
 
 
@@ -738,6 +756,14 @@ const SalesPipeline: React.FC = () => {
     // Data will be automatically refreshed
   };
 
+  // Quick update handlers for inline edits
+  const handleQuickUpdate = (opportunityId: number, field: string, value: any) => {
+    updateOpportunityMutation.mutate({
+      id: opportunityId,
+      data: { [field]: value }
+    });
+  };
+
   // Show loading state
   if (isLoading) {
     return (
@@ -1050,8 +1076,9 @@ const SalesPipeline: React.FC = () => {
                 return (
                   <tr
                     key={opp.id}
-                    onClick={() => {
-                      // Find the actual API opportunity
+                    onClick={(e) => {
+                      // Don't open modal if clicking on a select element
+                      if ((e.target as HTMLElement).tagName === 'SELECT') return;
                       if (apiOpp) {
                         setSelectedOpportunity(apiOpp);
                         setIsModalOpen(true);
@@ -1071,26 +1098,79 @@ const SalesPipeline: React.FC = () => {
                       </div>
                     </td>
                     <td>{opp.company || '-'}</td>
-                    <td style={{ fontSize: '12px', color: locationGroup ? locationGroup.color : '#9ca3af', fontWeight: 600 }}>
-                      {locationGroup?.label || '-'}
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={apiOpp?.location_group || ''}
+                        onChange={(e) => handleQuickUpdate(opp.id, 'location_group', e.target.value || null)}
+                        style={{
+                          padding: '2px 4px',
+                          fontSize: '11px',
+                          border: '1px solid transparent',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          color: locationGroup ? locationGroup.color : '#9ca3af',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                      >
+                        <option value="">-</option>
+                        {LOCATION_GROUPS.map((group) => (
+                          <option key={group.value} value={group.value}>{group.label}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
-                    <td>
-                      <span className={`sales-stage-badge ${opp.stage}`}>
-                        <span className="sales-stage-dot"></span>
-                        {opp.stageName}
-                      </span>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={apiOpp?.stage_id || ''}
+                        onChange={(e) => handleQuickUpdate(opp.id, 'stage_id', parseInt(e.target.value))}
+                        className={`sales-stage-badge ${opp.stage}`}
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: '11px',
+                          border: '1px solid transparent',
+                          borderRadius: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          outline: 'none',
+                          appearance: 'none',
+                          backgroundImage: 'none'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                      >
+                        {pipelineStages.map((stage) => (
+                          <option key={stage.id} value={stage.id}>{stage.name}</option>
+                        ))}
+                      </select>
                     </td>
-                    <td>
-                      <div className="sales-salesperson-cell">
-                        <div
-                          className="sales-salesperson-avatar"
-                          style={{ background: opp.salesperson.color }}
-                        >
-                          {opp.salesperson.initials}
-                        </div>
-                        {opp.salesperson.name}
-                      </div>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={apiOpp?.assigned_to || ''}
+                        onChange={(e) => handleQuickUpdate(opp.id, 'assigned_to', e.target.value ? parseInt(e.target.value) : null)}
+                        style={{
+                          padding: '2px 4px',
+                          fontSize: '12px',
+                          border: '1px solid transparent',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          outline: 'none',
+                          maxWidth: '140px'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                      >
+                        <option value="">Unassigned</option>
+                        {employees.map((emp: any) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.first_name} {emp.last_name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 );
