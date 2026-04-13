@@ -1175,8 +1175,8 @@ const SalesPipeline: React.FC = () => {
                         </div>
                         <input
                           list={`employees-${opp.id}`}
-                          value={apiOpp?.assigned_to ? employees.find((e: any) => e.id === apiOpp.assigned_to)?.first_name + ' ' + employees.find((e: any) => e.id === apiOpp.assigned_to)?.last_name : ''}
-                          onChange={(e) => {
+                          defaultValue={apiOpp?.assigned_to ? employees.find((e: any) => e.id === apiOpp.assigned_to)?.first_name + ' ' + employees.find((e: any) => e.id === apiOpp.assigned_to)?.last_name : ''}
+                          onBlur={(e) => {
                             const selectedEmp = employees.find((emp: any) =>
                               `${emp.first_name} ${emp.last_name}` === e.target.value
                             );
@@ -1184,6 +1184,10 @@ const SalesPipeline: React.FC = () => {
                               handleQuickUpdate(opp.id, 'assigned_to', selectedEmp.id);
                             } else if (e.target.value === '') {
                               handleQuickUpdate(opp.id, 'assigned_to', null);
+                            } else {
+                              // Reset to original value if invalid
+                              const currentEmp = employees.find((e: any) => e.id === apiOpp.assigned_to);
+                              e.target.value = currentEmp ? `${currentEmp.first_name} ${currentEmp.last_name}` : '';
                             }
                           }}
                           placeholder="Unassigned"
@@ -1201,8 +1205,10 @@ const SalesPipeline: React.FC = () => {
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
                           onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                          onFocus={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-                          onBlur={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                          onFocus={(e) => {
+                            e.currentTarget.style.borderColor = '#3b82f6';
+                            e.currentTarget.select();
+                          }}
                         />
                         <datalist id={`employees-${opp.id}`}>
                           <option value="">Unassigned</option>
