@@ -1048,14 +1048,14 @@ const SalesPipeline: React.FC = () => {
           <div className="sales-table-scroll-wrapper">
           <table className="sales-table">
             <colgroup>
-              <col style={{ width: '70px' }} />
-              <col style={{ minWidth: '200px' }} />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '65px' }} />
-              <col style={{ width: '85px' }} />
-              <col style={{ width: '115px' }} />
-              <col style={{ width: '150px' }} />
+              <col style={{ width: '80px' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '90px' }} />
+              <col style={{ width: '100px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '180px' }} />
             </colgroup>
             <thead>
               <tr>
