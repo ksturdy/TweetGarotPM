@@ -1166,29 +1166,45 @@ const SalesPipeline: React.FC = () => {
                       </select>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={apiOpp?.assigned_to || ''}
-                        onChange={(e) => handleQuickUpdate(opp.id, 'assigned_to', e.target.value ? parseInt(e.target.value) : null)}
-                        style={{
-                          padding: '2px 4px',
-                          fontSize: '12px',
-                          border: '1px solid transparent',
-                          borderRadius: '4px',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          outline: 'none',
-                          maxWidth: '140px'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                      >
-                        <option value="">Unassigned</option>
-                        {employees.map((emp: any) => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.first_name} {emp.last_name}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+                        <div
+                          className="sales-salesperson-avatar"
+                          style={{ background: opp.salesperson.color }}
+                        >
+                          {opp.salesperson.initials}
+                        </div>
+                        <select
+                          value={apiOpp?.assigned_to || ''}
+                          onChange={(e) => handleQuickUpdate(opp.id, 'assigned_to', e.target.value ? parseInt(e.target.value) : null)}
+                          style={{
+                            padding: '2px 4px',
+                            fontSize: '12px',
+                            border: '1px solid transparent',
+                            borderRadius: '4px',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            flex: 1,
+                            minWidth: 0
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                          onFocus={(e) => {
+                            // Enable search on focus - browser will allow typing to search
+                            e.currentTarget.size = Math.min(employees.length + 1, 10);
+                          }}
+                          onBlur={(e) => {
+                            e.currentTarget.size = 1;
+                          }}
+                        >
+                          <option value="">Unassigned</option>
+                          {employees.map((emp: any) => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.first_name} {emp.last_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
                   </tr>
                 );
