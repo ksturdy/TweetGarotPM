@@ -1049,13 +1049,13 @@ const SalesPipeline: React.FC = () => {
           <table className="sales-table">
             <colgroup>
               <col style={{ width: '70px' }} />
-              <col />
-              <col style={{ width: '150px' }} />
-              <col style={{ width: '150px' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '80px' }} />
-              <col style={{ width: '110px' }} />
+              <col style={{ minWidth: '200px' }} />
               <col style={{ width: '140px' }} />
+              <col style={{ width: '140px' }} />
+              <col style={{ width: '65px' }} />
+              <col style={{ width: '85px' }} />
+              <col style={{ width: '115px' }} />
+              <col style={{ width: '150px' }} />
             </colgroup>
             <thead>
               <tr>
