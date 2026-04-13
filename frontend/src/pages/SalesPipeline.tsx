@@ -953,7 +953,21 @@ const SalesPipeline: React.FC = () => {
       {view === 'table' && (
         <div className="sales-table-section">
           <div className="sales-table-header">
-            <div className="sales-table-title">All Opportunities</div>
+            <div className="sales-table-title">
+              All Opportunities
+              <div className="sales-search-box" style={{ marginLeft: '16px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
             <div className="sales-table-controls">
               <select
                 value={selectedOfficeLocation}
@@ -1019,18 +1033,6 @@ const SalesPipeline: React.FC = () => {
                     ))}
                   </div>
                 )}
-              </div>
-              <div className="sales-search-box">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8"/>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
               </div>
             </div>
           </div>
