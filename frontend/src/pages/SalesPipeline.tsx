@@ -1184,7 +1184,7 @@ const SalesPipeline: React.FC = () => {
                               handleQuickUpdate(opp.id, 'assigned_to', selectedEmp.id);
                             } else if (e.target.value === '') {
                               handleQuickUpdate(opp.id, 'assigned_to', null);
-                            } else {
+                            } else if (apiOpp) {
                               // Reset to original value if invalid
                               const currentEmp = employees.find((e: any) => e.id === apiOpp.assigned_to);
                               e.target.value = currentEmp ? `${currentEmp.first_name} ${currentEmp.last_name}` : '';
