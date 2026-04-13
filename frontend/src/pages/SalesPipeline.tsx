@@ -1173,9 +1173,20 @@ const SalesPipeline: React.FC = () => {
                         >
                           {opp.salesperson.initials}
                         </div>
-                        <select
-                          value={apiOpp?.assigned_to || ''}
-                          onChange={(e) => handleQuickUpdate(opp.id, 'assigned_to', e.target.value ? parseInt(e.target.value) : null)}
+                        <input
+                          list={`employees-${opp.id}`}
+                          value={apiOpp?.assigned_to ? employees.find((e: any) => e.id === apiOpp.assigned_to)?.first_name + ' ' + employees.find((e: any) => e.id === apiOpp.assigned_to)?.last_name : ''}
+                          onChange={(e) => {
+                            const selectedEmp = employees.find((emp: any) =>
+                              `${emp.first_name} ${emp.last_name}` === e.target.value
+                            );
+                            if (selectedEmp) {
+                              handleQuickUpdate(opp.id, 'assigned_to', selectedEmp.id);
+                            } else if (e.target.value === '') {
+                              handleQuickUpdate(opp.id, 'assigned_to', null);
+                            }
+                          }}
+                          placeholder="Unassigned"
                           style={{
                             padding: '2px 4px',
                             fontSize: '12px',
@@ -1185,23 +1196,24 @@ const SalesPipeline: React.FC = () => {
                             cursor: 'pointer',
                             outline: 'none',
                             flex: 1,
-                            minWidth: 0
+                            minWidth: 0,
+                            width: '100%'
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
                           onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                          title="Click to change, or start typing to search"
-                        >
+                          onFocus={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
+                          onBlur={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                        />
+                        <datalist id={`employees-${opp.id}`}>
                           <option value="">Unassigned</option>
                           {employees.sort((a: any, b: any) => {
                             const aName = `${a.first_name} ${a.last_name}`;
                             const bName = `${b.first_name} ${b.last_name}`;
                             return aName.localeCompare(bName);
                           }).map((emp: any) => (
-                            <option key={emp.id} value={emp.id}>
-                              {emp.first_name} {emp.last_name}
-                            </option>
+                            <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`} />
                           ))}
-                        </select>
+                        </datalist>
                       </div>
                     </td>
                   </tr>
