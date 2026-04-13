@@ -604,13 +604,17 @@ const SalesPipeline: React.FC = () => {
   };
 
   // Filter opportunities based on search term (on top of filter selections)
-  const searchFilteredOpportunities = filteredOpportunities.filter(opp =>
-    opp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.salesperson.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.facilityLocationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opp.company.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const searchFilteredOpportunities = filteredOpportunities.filter(opp => {
+    const apiOpp = apiOpportunities.find(a => a.id === opp.id);
+    return (
+      opp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.salesperson.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.facilityLocationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      opp.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (apiOpp?.general_contractor || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   // Sort opportunities
   const sortedOpportunities = [...searchFilteredOpportunities].sort((a, b) => {
@@ -638,6 +642,13 @@ const SalesPipeline: React.FC = () => {
         aValue = a.company.toLowerCase();
         bValue = b.company.toLowerCase();
         break;
+      case 'gc': {
+        const aApiOpp = apiOpportunities.find(o => o.id === a.id);
+        const bApiOpp = apiOpportunities.find(o => o.id === b.id);
+        aValue = (aApiOpp?.general_contractor || '').toLowerCase();
+        bValue = (bApiOpp?.general_contractor || '').toLowerCase();
+        break;
+      }
       case 'locationGroup': {
         const aApiOpp = apiOpportunities.find(o => o.id === a.id);
         const bApiOpp = apiOpportunities.find(o => o.id === b.id);
@@ -714,11 +725,12 @@ const SalesPipeline: React.FC = () => {
       fileName: `Opportunities_${new Date().toISOString().slice(0, 10)}.pdf`,
       columns: [
         { header: 'Activity', key: 'activity', width: 1 },
-        { header: 'Opportunity', key: 'name', width: 3 },
-        { header: 'Company', key: 'company', width: 2 },
-        { header: 'Location', key: 'location', width: 1 },
+        { header: 'Opportunity', key: 'name', width: 2.5 },
+        { header: 'Company', key: 'company', width: 1.5 },
+        { header: 'GC', key: 'gc', width: 1.5 },
+        { header: 'Location', key: 'location', width: 0.8 },
         { header: 'Value', key: 'value', align: 'right', width: 1 },
-        { header: 'Stage', key: 'stage', width: 1.5 },
+        { header: 'Stage', key: 'stage', width: 1.2 },
         { header: 'Salesperson', key: 'salesperson', width: 1.5 },
       ],
       rows: sortedOpportunities.map(opp => {
@@ -729,6 +741,7 @@ const SalesPipeline: React.FC = () => {
           activity: new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           name: opp.name,
           company: opp.company || '-',
+          gc: apiOpp?.general_contractor || '-',
           location: locationGroup?.label || '-',
           value: fmtCurrency(opp.value),
           stage: opp.stageName,
@@ -1037,7 +1050,8 @@ const SalesPipeline: React.FC = () => {
             <colgroup>
               <col style={{ width: '70px' }} />
               <col />
-              <col />
+              <col style={{ width: '150px' }} />
+              <col style={{ width: '150px' }} />
               <col style={{ width: '90px' }} />
               <col style={{ width: '80px' }} />
               <col style={{ width: '110px' }} />
@@ -1053,6 +1067,9 @@ const SalesPipeline: React.FC = () => {
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('company')}>
                   Company <span className="sales-sort-icon">{sortColumn === 'company' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                </th>
+                <th className="sales-sortable" onClick={() => handleSort('gc')}>
+                  General Contractor <span className="sales-sort-icon">{sortColumn === 'gc' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('locationGroup')}>
                   Location <span className="sales-sort-icon">{sortColumn === 'locationGroup' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -1098,6 +1115,7 @@ const SalesPipeline: React.FC = () => {
                       </div>
                     </td>
                     <td>{opp.company || '-'}</td>
+                    <td style={{ fontSize: '12px', color: '#64748b' }}>{apiOpp?.general_contractor || '-'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select
                         value={apiOpp?.location_group || ''}
