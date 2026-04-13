@@ -1189,16 +1189,14 @@ const SalesPipeline: React.FC = () => {
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
                           onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                          onFocus={(e) => {
-                            // Enable search on focus - browser will allow typing to search
-                            e.currentTarget.size = Math.min(employees.length + 1, 10);
-                          }}
-                          onBlur={(e) => {
-                            e.currentTarget.size = 1;
-                          }}
+                          title="Click to change, or start typing to search"
                         >
                           <option value="">Unassigned</option>
-                          {employees.map((emp: any) => (
+                          {employees.sort((a: any, b: any) => {
+                            const aName = `${a.first_name} ${a.last_name}`;
+                            const bName = `${b.first_name} ${b.last_name}`;
+                            return aName.localeCompare(bName);
+                          }).map((emp: any) => (
                             <option key={emp.id} value={emp.id}>
                               {emp.first_name} {emp.last_name}
                             </option>
