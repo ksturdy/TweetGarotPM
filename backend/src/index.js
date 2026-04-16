@@ -97,6 +97,7 @@ const { templateRouter: assemblyTemplateRoutes, instanceRouter: assemblyInstance
 const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
 const backlogReportRoutes = require('./routes/backlogReport');
+const cashFlowReportRoutes = require('./routes/cashFlowReport');
 const estProductRoutes = require('./routes/estProducts');
 const estimateFileRoutes = require('./routes/estimateFiles');
 
@@ -228,6 +229,7 @@ app.use('/api/piping-services', pipingServiceRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
 app.use('/api/backlog-report', backlogReportRoutes);
+app.use('/api/reports/cash-flow', cashFlowReportRoutes);
 app.use('/api/est-products', estProductRoutes);
 app.use('/api/estimate-files', estimateFileRoutes);
 

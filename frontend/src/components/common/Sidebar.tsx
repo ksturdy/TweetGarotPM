@@ -133,6 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
       children: [
         { label: 'Executive Report', path: '/executive-report' },
         { label: 'Backlog Fit', path: '/reports/backlog-fit' },
+        { label: 'Cash Flow', path: '/reports/cash-flow' },
       ],
     },
   ];

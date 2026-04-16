@@ -18,6 +18,7 @@ const TeamDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'members' | 'opportunities' | 'customers' | 'estimates'>('members');
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [employeeSearchText, setEmployeeSearchText] = useState('');
   const [selectedRole, setSelectedRole] = useState('member');
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -106,6 +107,7 @@ const TeamDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
       setShowAddMemberModal(false);
       setSelectedEmployeeId('');
+      setEmployeeSearchText('');
       setSelectedRole('member');
     },
     onError: (error: any) => {
@@ -615,9 +617,26 @@ const TeamDetailPage: React.FC = () => {
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
                 Select Employee *
               </label>
-              <select
-                value={selectedEmployeeId}
-                onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              <input
+                list="add-member-employees"
+                value={employeeSearchText}
+                onChange={(e) => {
+                  setEmployeeSearchText(e.target.value);
+                  const match = availableEmployees.find((emp: AssignableEmployee) =>
+                    `${emp.first_name} ${emp.last_name}` === e.target.value
+                  );
+                  setSelectedEmployeeId(match ? String(match.id) : '');
+                }}
+                onBlur={(e) => {
+                  const match = availableEmployees.find((emp: AssignableEmployee) =>
+                    `${emp.first_name} ${emp.last_name}` === e.target.value
+                  );
+                  if (!match && e.target.value) {
+                    setEmployeeSearchText('');
+                    setSelectedEmployeeId('');
+                  }
+                }}
+                placeholder="Type to search employees..."
                 style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -625,15 +644,20 @@ const TeamDetailPage: React.FC = () => {
                   border: '1px solid #e5e7eb',
                   fontSize: '0.875rem',
                   background: 'white',
+                  boxSizing: 'border-box',
                 }}
-              >
-                <option value="">Select an employee</option>
-                {availableEmployees.map((emp: AssignableEmployee) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name} {emp.job_title ? `- ${emp.job_title}` : ''}
-                  </option>
-                ))}
-              </select>
+              />
+              <datalist id="add-member-employees">
+                {availableEmployees
+                  .sort((a: AssignableEmployee, b: AssignableEmployee) =>
+                    `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)
+                  )
+                  .map((emp: AssignableEmployee) => (
+                    <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`}>
+                      {emp.job_title || ''}
+                    </option>
+                  ))}
+              </datalist>
               {availableEmployees.length === 0 && (
                 <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '8px' }}>
                   All employees are already in this team.
@@ -667,6 +691,7 @@ const TeamDetailPage: React.FC = () => {
                 onClick={() => {
                   setShowAddMemberModal(false);
                   setSelectedEmployeeId('');
+                  setEmployeeSearchText('');
                   setSelectedRole('member');
                 }}
                 style={{

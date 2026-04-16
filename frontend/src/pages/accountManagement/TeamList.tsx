@@ -313,7 +313,7 @@ const TeamList: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('status')}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th style={{ width: '100px' }}>Actions</th>
+              <th style={{ width: '130px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -383,7 +383,7 @@ const TeamList: React.FC = () => {
                     </span>
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', whiteSpace: 'nowrap' }}>
                       <button
                         onClick={(e) => handleEdit(team, e)}
                         style={{
