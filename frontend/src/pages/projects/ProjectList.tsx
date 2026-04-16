@@ -428,6 +428,53 @@ const ProjectList: React.FC = () => {
       : 0
   };
 
+  // Totals for the footer row (weighted averages for percentages)
+  const footerTotals = useMemo(() => {
+    const totalContractValue = sortedProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0);
+    const totalBacklog = sortedProjects.reduce((sum, p) => sum + (Number(p.backlog) || 0), 0);
+    const totalJtdCost = sortedProjects.reduce((sum, p) => sum + (Number(p.actual_cost) || 0), 0);
+
+    // Total GM$ = sum of each project's gross profit (contract_value * gm%)
+    // Blended GM% = total GM$ / total contract value
+    const totalGrossProfit = sortedProjects.reduce((sum, p) => {
+      const cv = Number(p.contract_value) || 0;
+      const gm = Number(p.gross_margin_percent);
+      if (!cv || gm === null || gm === undefined || isNaN(gm)) return sum;
+      return sum + cv * gm;
+    }, 0);
+    const weightedGm = totalContractValue > 0 ? totalGrossProfit / totalContractValue : 0;
+    const hasAnyGm = sortedProjects.some(p => {
+      const gm = Number(p.gross_margin_percent);
+      return !(gm === null || gm === undefined || isNaN(gm));
+    });
+
+    // Weighted % Complete = sum(contract_value * pct) / sum(contract_value)
+    const pctWeightedNumerator = sortedProjects.reduce((sum, p) => {
+      const cv = Number(p.contract_value) || 0;
+      const pct = Number(p.percent_complete);
+      if (!cv || pct === null || pct === undefined || isNaN(pct)) return sum;
+      return sum + cv * pct;
+    }, 0);
+    const pctWeightedDenominator = sortedProjects.reduce((sum, p) => {
+      const cv = Number(p.contract_value) || 0;
+      const pct = Number(p.percent_complete);
+      if (!cv || pct === null || pct === undefined || isNaN(pct)) return sum;
+      return sum + cv;
+    }, 0);
+    const weightedPct = pctWeightedDenominator > 0 ? pctWeightedNumerator / pctWeightedDenominator : 0;
+
+    return {
+      totalContractValue,
+      totalBacklog,
+      totalJtdCost,
+      totalGrossProfit,
+      weightedGm,
+      weightedPct,
+      hasGm: hasAnyGm && totalContractValue > 0,
+      hasPct: pctWeightedDenominator > 0,
+    };
+  }, [sortedProjects]);
+
   const handleExportPdf = () => {
     const fmtCurrency = (v: number | undefined) => {
       if (!v) return '-';
@@ -991,6 +1038,40 @@ const ProjectList: React.FC = () => {
               </tr>
             )}
           </tbody>
+          {sortedProjects.length > 0 && (
+            <tfoot>
+              <tr style={{
+                background: '#f1f5f9',
+                fontWeight: 700,
+                borderTop: '2px solid #cbd5e1',
+                position: 'sticky',
+                bottom: 0,
+              }}>
+                <td colSpan={4} style={{ textAlign: 'right', color: '#334155' }}>
+                  Totals ({sortedProjects.length.toLocaleString()} project{sortedProjects.length !== 1 ? 's' : ''}):
+                </td>
+                <td style={{ color: '#334155' }}>
+                  {/* Project column - no total */}
+                </td>
+                <td style={{ color: '#1e293b' }}>
+                  ${Math.round(footerTotals.totalContractValue).toLocaleString()}
+                </td>
+                <td style={{ color: footerTotals.weightedGm > 0 ? '#10b981' : footerTotals.weightedGm < 0 ? '#ef4444' : '#334155' }}>
+                  {footerTotals.hasGm ? `${Math.round(footerTotals.weightedGm * 100)}%` : '-'}
+                </td>
+                <td style={{ color: '#1e293b' }}>
+                  ${Math.round(footerTotals.totalBacklog).toLocaleString()}
+                </td>
+                <td style={{ color: '#1e293b' }}>
+                  ${Math.round(footerTotals.totalJtdCost).toLocaleString()}
+                </td>
+                <td style={{ color: '#334155' }}>
+                  {footerTotals.hasPct ? `${Math.round(footerTotals.weightedPct * 100)}%` : '-'}
+                </td>
+                <td colSpan={3}></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>

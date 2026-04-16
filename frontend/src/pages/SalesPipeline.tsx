@@ -1175,7 +1175,7 @@ const SalesPipeline: React.FC = () => {
                         </div>
                         <input
                           list={`employees-${opp.id}`}
-                          defaultValue={apiOpp?.assigned_to ? employees.find((e: any) => e.id === apiOpp.assigned_to)?.first_name + ' ' + employees.find((e: any) => e.id === apiOpp.assigned_to)?.last_name : ''}
+                          defaultValue={opp.salesperson.name !== 'Unassigned' ? opp.salesperson.name : ''}
                           onBlur={(e) => {
                             const selectedEmp = employees.find((emp: any) =>
                               `${emp.first_name} ${emp.last_name}` === e.target.value

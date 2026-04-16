@@ -40,6 +40,7 @@ import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, 
 
 interface ProjectProjection {
   contract: VPContract;
+  startOffset: number;
   monthlyBurnRate: number;
   remainingMonths: number;
   projectedEndDate: Date | null;
@@ -74,7 +75,8 @@ const ProjectedRevenue: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
 
-  // User-adjusted end months per contract (contractId -> number of months from now)
+  // User-adjusted start/end months per contract (contractId -> number of months from now)
+  const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
   const [adjustedEndMonths, setAdjustedEndMonths] = useState<Record<number, number>>({});
 
   // User-selected work contours per contract (contractId -> ContourType)
@@ -131,10 +133,14 @@ const ProjectedRevenue: React.FC = () => {
   // Initialize overrides from DB data once contracts load
   useEffect(() => {
     if (contracts && !overridesInitialized) {
+      const startMonths: Record<number, number> = {};
       const endMonths: Record<number, number> = {};
       const contours: Record<number, ContourType> = {};
 
       contracts.forEach(c => {
+        if (c.user_adjusted_start_months != null) {
+          startMonths[c.id] = c.user_adjusted_start_months;
+        }
         if (c.user_adjusted_end_months != null) {
           endMonths[c.id] = c.user_adjusted_end_months;
         }
@@ -143,6 +149,7 @@ const ProjectedRevenue: React.FC = () => {
         }
       });
 
+      setAdjustedStartMonths(startMonths);
       setAdjustedEndMonths(endMonths);
       setSelectedContours(contours);
       setOverridesInitialized(true);
@@ -152,7 +159,7 @@ const ProjectedRevenue: React.FC = () => {
   // Save projection override to backend
   const saveProjectionOverride = useCallback(async (
     contractId: number,
-    overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null }
+    overrides: { user_adjusted_start_months?: number | null; user_adjusted_end_months?: number | null; user_selected_contour?: string | null }
   ) => {
     try {
       await vistaDataService.updateProjectionOverrides(contractId, overrides);
@@ -308,8 +315,12 @@ const ProjectedRevenue: React.FC = () => {
       const backlog = parseNum(contract.backlog);
       const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
 
-      // Check if user has adjusted the end date for this contract
-      const userAdjustedMonths = adjustedEndMonths[contract.id];
+      // Get user-adjusted start/end months for this contract
+      const userAdjustedStartMonths = adjustedStartMonths[contract.id];
+      const userAdjustedEndMonths = adjustedEndMonths[contract.id];
+
+      // Start offset (defaults to 0 = start now)
+      const startOffset = userAdjustedStartMonths ?? 0;
 
       // Calculate remaining months based on contract value rules (or user override)
       let remainingMonths = 0;
@@ -317,9 +328,10 @@ const ProjectedRevenue: React.FC = () => {
       let projectedEndDate: Date | null = null;
 
       if (backlog > 0) {
-        if (userAdjustedMonths !== undefined) {
+        if (userAdjustedEndMonths !== undefined) {
           // User has manually set the end date - spread backlog over their specified months
-          remainingMonths = Math.max(1, Math.min(36, userAdjustedMonths));
+          const endMonthsFromNow = Math.max(1, Math.min(36, userAdjustedEndMonths));
+          remainingMonths = Math.max(1, endMonthsFromNow - startOffset);
         } else {
           // Use contract value-based duration rules to project end date
           const totalDuration = getDurationForValue(contractValue);
@@ -333,7 +345,7 @@ const ProjectedRevenue: React.FC = () => {
         }
 
         monthlyBurnRate = backlog / remainingMonths;
-        projectedEndDate = addMonths(now, remainingMonths);
+        projectedEndDate = addMonths(now, startOffset + remainingMonths);
       }
 
       // Generate monthly revenue projections
@@ -356,7 +368,7 @@ const ProjectedRevenue: React.FC = () => {
         const baseMonthly = backlog / remainingMonths;
 
         for (let i = 0; i < remainingMonths; i++) {
-          const monthDate = addMonths(now, i);
+          const monthDate = addMonths(now, startOffset + i);
           const monthKey = format(monthDate, 'yyyy-MM');
           const yearKey = String(monthDate.getFullYear());
 
@@ -376,6 +388,7 @@ const ProjectedRevenue: React.FC = () => {
 
       results.push({
         contract,
+        startOffset,
         monthlyBurnRate,
         remainingMonths,
         projectedEndDate,
@@ -408,7 +421,7 @@ const ProjectedRevenue: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection]);
 
   // Calculate column totals
   const columnTotals = useMemo(() => {
@@ -743,6 +756,7 @@ const ProjectedRevenue: React.FC = () => {
               >
                 % Comp<SortIndicator column="completion" />
               </th>
+              <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>Start</th>
               <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>End</th>
               <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Contour</th>
               {columns.map(col => (
@@ -797,14 +811,61 @@ const ProjectedRevenue: React.FC = () => {
                 <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
                   {parseNum(p.contract.backlog) > 0 ? (
                     <select
-                      value={p.remainingMonths}
+                      value={p.startOffset}
                       onChange={(e) => {
-                        const newMonths = parseInt(e.target.value);
+                        const newStart = parseInt(e.target.value);
+                        setAdjustedStartMonths(prev => ({
+                          ...prev,
+                          [p.contract.id]: newStart
+                        }));
+                        saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart });
+                        // Auto-bump end if start >= end
+                        const currentEnd = p.startOffset + p.remainingMonths;
+                        if (newStart >= currentEnd) {
+                          const newEnd = newStart + 1;
+                          setAdjustedEndMonths(prev => ({
+                            ...prev,
+                            [p.contract.id]: newEnd
+                          }));
+                          saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
+                        }
+                      }}
+                      style={{
+                        padding: '0.15rem 0.25rem',
+                        fontSize: '0.65rem',
+                        border: adjustedStartMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                        borderRadius: '3px',
+                        background: adjustedStartMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
+                        color: adjustedStartMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
+                        cursor: 'pointer',
+                        width: '65px'
+                      }}
+                      title="Click to adjust start date"
+                    >
+                      {Array.from({ length: 36 }, (_, i) => i).map(months => {
+                        const startDate = addMonths(startOfMonth(new Date()), months);
+                        return (
+                          <option key={months} value={months}>
+                            {format(startDate, 'MMM yy')}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  ) : (
+                    '-'
+                  )}
+                </td>
+                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
+                  {parseNum(p.contract.backlog) > 0 ? (
+                    <select
+                      value={p.startOffset + p.remainingMonths}
+                      onChange={(e) => {
+                        const newEndMonths = parseInt(e.target.value);
                         setAdjustedEndMonths(prev => ({
                           ...prev,
-                          [p.contract.id]: newMonths
+                          [p.contract.id]: newEndMonths
                         }));
-                        saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newMonths });
+                        saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newEndMonths });
                       }}
                       style={{
                         padding: '0.15rem 0.25rem',
@@ -818,7 +879,7 @@ const ProjectedRevenue: React.FC = () => {
                       }}
                       title="Click to adjust end date"
                     >
-                      {Array.from({ length: 36 }, (_, i) => i + 1).map(months => {
+                      {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > p.startOffset).map(months => {
                         const endDate = addMonths(startOfMonth(new Date()), months);
                         return (
                           <option key={months} value={months}>
@@ -926,7 +987,8 @@ const ProjectedRevenue: React.FC = () => {
         <strong>How projections work:</strong> Backlog is spread from now until the End date using the Work Contour.
         Default end date is based on contract value and % complete (see Duration Rules). Click the Duration Rules button to adjust thresholds.
         <br />
-        <strong>End dates:</strong> Click to change when a project completes.
+        <strong>Start dates:</strong> Click to change when a project begins (default is current month).
+        <strong style={{ marginLeft: '1rem' }}>End dates:</strong> Click to change when a project completes.
         <strong style={{ marginLeft: '1rem' }}>Contours:</strong> Auto-selected based on % complete (<span style={{ fontStyle: 'italic', border: '1px dashed #94a3b8', padding: '0 2px', borderRadius: '2px' }}>dashed</span>), or manually override (<span style={{ border: '1px solid #16a34a', padding: '0 2px', borderRadius: '2px', background: '#dcfce7', color: '#15803d' }}>green</span> = user-adjusted).
         <div style={{ marginTop: '0.5rem' }}>
           <strong>Work Contours:</strong>
@@ -944,8 +1006,31 @@ const ProjectedRevenue: React.FC = () => {
             <span><ContourVisual contour="rampdown" />Ramp Dn (max→0)</span>
           </div>
         </div>
-        {(Object.keys(adjustedEndMonths).length > 0 || Object.values(selectedContours).some(c => c !== 'flat')) && (
+        {(Object.keys(adjustedStartMonths).length > 0 || Object.keys(adjustedEndMonths).length > 0 || Object.values(selectedContours).some(c => c !== 'flat')) && (
           <div style={{ marginTop: '0.5rem' }}>
+            {Object.keys(adjustedStartMonths).length > 0 && (
+              <button
+                onClick={() => {
+                  // Clear from DB for each adjusted contract
+                  Object.keys(adjustedStartMonths).forEach(id => {
+                    saveProjectionOverride(Number(id), { user_adjusted_start_months: null });
+                  });
+                  setAdjustedStartMonths({});
+                }}
+                style={{
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.65rem',
+                  background: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  color: '#dc2626',
+                  marginRight: '0.5rem'
+                }}
+              >
+                Reset start dates ({Object.keys(adjustedStartMonths).length})
+              </button>
+            )}
             {Object.keys(adjustedEndMonths).length > 0 && (
               <button
                 onClick={() => {
