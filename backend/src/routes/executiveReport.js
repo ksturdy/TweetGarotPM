@@ -550,3 +550,4 @@ ${req.user.first_name || ''} ${req.user.last_name || ''}`.trim();
 });
 
 module.exports = router;
+module.exports.buildReportData = buildReportData;

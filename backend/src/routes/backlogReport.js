@@ -121,3 +121,4 @@ ${generatedBy}`.trim();
 });
 
 module.exports = router;
+module.exports.buildReportData = buildReportData;

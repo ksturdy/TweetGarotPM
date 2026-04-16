@@ -24,6 +24,7 @@ const config = require('./config');
 const errorHandler = require('./middleware/errorHandler');
 const { isR2Enabled } = require('./config/r2Client');
 const { captureAllSnapshots } = require('./jobs/weeklySnapshots');
+const { runScheduledReports } = require('./jobs/scheduledReportRunner');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -98,6 +99,7 @@ const attachmentRoutes = require('./routes/attachments');
 const executiveReportRoutes = require('./routes/executiveReport');
 const backlogReportRoutes = require('./routes/backlogReport');
 const cashFlowReportRoutes = require('./routes/cashFlowReport');
+const scheduledReportRoutes = require('./routes/scheduledReports');
 const estProductRoutes = require('./routes/estProducts');
 const estimateFileRoutes = require('./routes/estimateFiles');
 
@@ -230,6 +232,7 @@ app.use('/api/attachments', attachmentRoutes);
 app.use('/api/executive-report', executiveReportRoutes);
 app.use('/api/backlog-report', backlogReportRoutes);
 app.use('/api/reports/cash-flow', cashFlowReportRoutes);
+app.use('/api/scheduled-reports', scheduledReportRoutes);
 app.use('/api/est-products', estProductRoutes);
 app.use('/api/estimate-files', estimateFileRoutes);
 
@@ -330,7 +333,15 @@ app.listen(config.port, () => {
       console.error('[Cron] Weekly snapshot job failed:', err);
     });
   }, { timezone: 'America/New_York' });
-  console.log(`  ✅ Weekly snapshot cron scheduled (Thursdays 6:00 PM ET)\n`);
+  console.log(`  ✅ Weekly snapshot cron scheduled (Thursdays 6:00 PM ET)`);
+
+  // Scheduled report delivery - check every 15 minutes
+  cron.schedule('*/15 * * * *', () => {
+    runScheduledReports().catch(err => {
+      console.error('[Cron] Scheduled report runner failed:', err);
+    });
+  });
+  console.log(`  ✅ Scheduled report delivery cron active (every 15 min)\n`);
 });
 
 

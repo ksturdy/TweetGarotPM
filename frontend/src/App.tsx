@@ -101,6 +101,7 @@ import ExecutiveReport from './pages/reports/ExecutiveReport';
 import OpportunityProjectedRevenue from './pages/opportunities/OpportunityProjectedRevenue';
 import BacklogFitAnalysis from './pages/reports/BacklogFitAnalysis';
 import CashFlowReport from './pages/reports/CashFlowReport';
+import ScheduledReports from './pages/reports/ScheduledReports';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -420,6 +421,7 @@ const App: React.FC = () => {
                 <Route path="/executive-report" element={<ExecutiveReport />} />
                 <Route path="/reports/backlog-fit" element={<BacklogFitAnalysis />} />
                 <Route path="/reports/cash-flow" element={<CashFlowReport />} />
+                <Route path="/reports/scheduled" element={<ScheduledReports />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />

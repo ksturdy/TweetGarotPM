@@ -111,8 +111,8 @@ const CashFlowReport: React.FC = () => {
   const [marketFilter, setMarketFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>('all');
 
-  // Sorting
-  const [sortColumn, setSortColumn] = useState<string>('number');
+  // Sorting - default worst (most negative) cash flow first
+  const [sortColumn, setSortColumn] = useState<string>('cash_flow');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const { data: projects = [], isLoading } = useQuery({
