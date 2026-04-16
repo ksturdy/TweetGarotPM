@@ -403,7 +403,7 @@ const opportunities = {
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN users creator ON o.created_by = creator.id
-      WHERE o.customer_id = $1 AND o.tenant_id = $2
+      WHERE (o.customer_id = $1 OR o.gc_customer_id = $1) AND o.tenant_id = $2
       ORDER BY o.created_at DESC
     `;
 

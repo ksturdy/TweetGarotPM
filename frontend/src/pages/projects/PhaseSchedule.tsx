@@ -885,7 +885,7 @@ const GanttView: React.FC<{
           <div style={{ width: ganttCols.phase, minWidth: 0, padding: '0 0.4rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', width: '100%' }}>
               <input type="text" value={filterText} onChange={e => onFilterChange(e.target.value)}
-                placeholder="Search phases..." style={{
+                placeholder="Filter prefix (* = wildcard)" title="Type a phase prefix (e.g. 30) or use * as wildcard (e.g. *labor*, 30*010)" style={{
                   flex: 1, padding: '0.15rem 0.3rem', fontSize: '0.65rem', border: '1px solid #e2e8f0',
                   borderRadius: '3px', background: filterText ? '#fffbeb' : '#fff', color: '#1e293b',
                   outline: 'none', minWidth: 0, fontWeight: 400
@@ -1541,7 +1541,7 @@ const GridView: React.FC<{
             <th data-col="phase" style={thStyle(colWidths.phase, { textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 5, padding: '0.15rem 0.4rem' })}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                 <input type="text" value={filterText} onChange={e => onFilterChange(e.target.value)}
-                  placeholder="Search phases..." style={{
+                  placeholder="Filter prefix (* = wildcard)" title="Type a phase prefix (e.g. 30) or use * as wildcard (e.g. *labor*, 30*010)" style={{
                     flex: 1, padding: '0.15rem 0.3rem', fontSize: '0.65rem', border: '1px solid #e2e8f0',
                     borderRadius: '3px', background: filterText ? '#fffbeb' : '#fff', color: '#1e293b',
                     outline: 'none', minWidth: 0
@@ -2337,11 +2337,22 @@ const PhaseSchedule: React.FC = () => {
       result = result.filter(i => i.cost_types?.some(ct => costTypeFilter.has(ct)));
     }
     if (filterText.trim()) {
-      const lower = filterText.toLowerCase();
-      result = result.filter(i =>
-        i.name.toLowerCase().includes(lower) ||
-        (i.phase_code_display && i.phase_code_display.toLowerCase().includes(lower))
-      );
+      const raw = filterText.trim().toLowerCase();
+      if (raw.includes('*')) {
+        // Wildcard mode: * matches any characters (e.g. *30* = contains, 30* = starts with)
+        const escaped = raw.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        const regex = new RegExp('^' + escaped + '$', 'i');
+        result = result.filter(i =>
+          regex.test(i.name) ||
+          (i.phase_code_display && regex.test(i.phase_code_display))
+        );
+      } else {
+        // Default: prefix match on phase code / name
+        result = result.filter(i =>
+          i.name.toLowerCase().startsWith(raw) ||
+          (i.phase_code_display && i.phase_code_display.toLowerCase().startsWith(raw))
+        );
+      }
     }
     if (sortDir !== 'none') {
       result = [...result].sort((a, b) => {

@@ -2088,16 +2088,31 @@ const VistaData = {
           const projectName = (vpContract.description || vpContract.contract_number || 'Imported Contract').substring(0, 255);
           const projectClient = (vpContract.customer_name || 'Unknown Client').substring(0, 255);
 
+          // Look up customer_id by exact name match (case-insensitive, trimmed)
+          let customerId = null;
+          if (vpContract.customer_name) {
+            const customerResult = await client.query(
+              `SELECT id FROM customers
+               WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND tenant_id = $2
+               LIMIT 1`,
+              [vpContract.customer_name, tenantId]
+            );
+            if (customerResult.rows.length > 0) {
+              customerId = customerResult.rows[0].id;
+            }
+          }
+
           // Create or update Titan project — ON CONFLICT updates if number already exists
           const newProject = await client.query(
             `INSERT INTO projects (
-              tenant_id, number, name, client, status, manager_id, department_id,
+              tenant_id, number, name, client, customer_id, status, manager_id, department_id,
               contract_value, gross_margin_percent, backlog, start_date,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
+              customer_id = COALESCE(EXCLUDED.customer_id, projects.customer_id),
               status = EXCLUDED.status,
               manager_id = COALESCE(EXCLUDED.manager_id, projects.manager_id),
               department_id = COALESCE(EXCLUDED.department_id, projects.department_id),
@@ -2112,6 +2127,7 @@ const VistaData = {
               projectNumber,
               projectName,
               projectClient,
+              customerId,
               projectStatus,
               managerId,
               vpContract.linked_department_id || null,
@@ -2186,9 +2202,12 @@ const VistaData = {
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
                 p.department_id AS titan_dept, p.start_date AS titan_start,
                 p.client AS titan_client, p.contract_value AS titan_contract_value,
-                p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog
+                p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog,
+                p.manager_id AS titan_manager_id,
+                e.id AS vista_manager_id
          FROM vp_contracts vc
          JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
+         LEFT JOIN employees e ON e.employee_number = vc.employee_number::text AND e.tenant_id = vc.tenant_id
          WHERE vc.tenant_id = $1
            AND vc.linked_project_id IS NOT NULL`,
         [tenantId]
@@ -2203,20 +2222,26 @@ const VistaData = {
         const startChanged = row.start_month && new Date(row.start_month).toISOString() !== (row.titan_start ? new Date(row.titan_start).toISOString() : null);
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
+        const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
 
-        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged) continue;
+        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged && !managerChanged) continue;
 
         await client.query('SAVEPOINT sync_contract_row');
         try {
-          // Look up manager
-          let managerId = null;
-          if (row.employee_number) {
-            const empResult = await client.query(
-              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
-              [tenantId, String(row.employee_number)]
+          // Manager already resolved via JOIN
+          const managerId = row.vista_manager_id || null;
+
+          // Look up customer_id by exact name match
+          let customerId = null;
+          if (row.customer_name) {
+            const customerResult = await client.query(
+              `SELECT id FROM customers
+               WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND tenant_id = $2
+               LIMIT 1`,
+              [row.customer_name, tenantId]
             );
-            if (empResult.rows.length > 0) {
-              managerId = empResult.rows[0].id;
+            if (customerResult.rows.length > 0) {
+              customerId = customerResult.rows[0].id;
             }
           }
 
@@ -2225,18 +2250,20 @@ const VistaData = {
               status = $1,
               name = COALESCE($2, name),
               client = COALESCE($3, client),
-              contract_value = COALESCE($4, contract_value),
-              gross_margin_percent = COALESCE($5, gross_margin_percent),
-              backlog = COALESCE($6, backlog),
-              manager_id = COALESCE($7, manager_id),
-              department_id = COALESCE($8, department_id),
-              start_date = COALESCE($9, start_date),
+              customer_id = COALESCE($4, customer_id),
+              contract_value = COALESCE($5, contract_value),
+              gross_margin_percent = COALESCE($6, gross_margin_percent),
+              backlog = COALESCE($7, backlog),
+              manager_id = COALESCE($8, manager_id),
+              department_id = COALESCE($9, department_id),
+              start_date = COALESCE($10, start_date),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = $10 AND tenant_id = $11`,
+            WHERE id = $11 AND tenant_id = $12`,
             [
               mappedStatus,
               row.description ? row.description.substring(0, 255) : null,
               row.customer_name ? row.customer_name.substring(0, 255) : null,
+              customerId,
               row.contract_amount || null,
               row.gross_profit_percent || null,
               row.backlog || null,
@@ -2256,6 +2283,7 @@ const VistaData = {
           if (startChanged) changedFields.push(`start_date updated`);
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
+          if (managerChanged) changedFields.push(`manager: ${row.titan_manager_id} → ${row.vista_manager_id}`);
           changes.push({
             contract_number: row.contract_number,
             project_id: row.project_id,
