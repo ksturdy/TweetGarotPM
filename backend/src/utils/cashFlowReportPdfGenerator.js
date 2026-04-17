@@ -9,20 +9,31 @@ const fmtCurrency = (v) => {
   return `$${Math.round(n).toLocaleString('en-US')}`;
 };
 
+const fmtCurrencyShort = (v) => {
+  if (v === undefined || v === null || isNaN(Number(v))) return '-';
+  const n = Number(v);
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+};
+
 const fmtPercent = (v) => {
   if (v === undefined || v === null || isNaN(Number(v))) return '-';
   return `${Math.round(Number(v) * 100)}%`;
 };
 
-function generateCashFlowReportPdfHtml(projects, filters = {}) {
+function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = null) {
   const dateLabel = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-  // Compute totals
+  // Compute totals & KPI metrics
   const totals = {
     contractValue: 0, earnedRevenue: 0, billedAmount: 0, receivedAmount: 0,
     openReceivables: 0, cashFlow: 0, backlog: 0,
-    weightedRevenue: 0, weightedGm: 0, totalProjectedRevenue: 0,
   };
+
+  let positiveCashFlowCount = 0;
+  let jobsOver15 = 0;
+  let jobsOver15Positive = 0;
 
   projects.forEach(p => {
     totals.contractValue += Number(p.contract_value) || 0;
@@ -32,18 +43,42 @@ function generateCashFlowReportPdfHtml(projects, filters = {}) {
     totals.openReceivables += Number(p.open_receivables) || 0;
     totals.cashFlow += Number(p.cash_flow) || 0;
     totals.backlog += Number(p.backlog) || 0;
-    const rev = Number(p.projected_revenue) || 0;
-    totals.totalProjectedRevenue += rev;
-    totals.weightedRevenue += (Number(p.earned_revenue) || 0);
-    totals.weightedGm += (Number(p.gross_profit_percent) || 0) * rev;
+
+    const cf = Number(p.cash_flow) || 0;
+    const pct = Number(p.percent_complete) || 0;
+    if (cf > 0) positiveCashFlowCount++;
+    if (pct > 0.15) {
+      jobsOver15++;
+      if (cf > 0) jobsOver15Positive++;
+    }
   });
 
-  const avgPctComplete = totals.totalProjectedRevenue > 0
-    ? totals.weightedRevenue / totals.totalProjectedRevenue
-    : 0;
-  const avgGm = totals.totalProjectedRevenue > 0
-    ? totals.weightedGm / totals.totalProjectedRevenue
-    : 0;
+  // Weighted averages for footer
+  const totalCV = totals.contractValue;
+  const gmNumerator = projects.reduce((s, p) => {
+    const cv = Number(p.contract_value) || 0;
+    const gm = Number(p.gross_profit_percent);
+    if (!cv || isNaN(gm)) return s;
+    return s + cv * gm;
+  }, 0);
+  const avgGm = totalCV > 0 ? gmNumerator / totalCV : 0;
+
+  const pctNumerator = projects.reduce((s, p) => {
+    const cv = Number(p.contract_value) || 0;
+    const pct = Number(p.percent_complete);
+    if (!cv || isNaN(pct)) return s;
+    return s + cv * pct;
+  }, 0);
+  const pctDenominator = projects.reduce((s, p) => {
+    const cv = Number(p.contract_value) || 0;
+    const pct = Number(p.percent_complete);
+    if (!cv || isNaN(pct)) return s;
+    return s + cv;
+  }, 0);
+  const avgPctComplete = pctDenominator > 0 ? pctNumerator / pctDenominator : 0;
+
+  const positivePct = projects.length > 0 ? Math.round((positiveCashFlowCount / projects.length) * 100) : 0;
+  const over15Pct = jobsOver15 > 0 ? Math.round((jobsOver15Positive / jobsOver15) * 100) : 0;
 
   // Active filter labels
   const filterLabels = [];
@@ -51,10 +86,11 @@ function generateCashFlowReportPdfHtml(projects, filters = {}) {
   if (filters.pm && filters.pm !== 'all') filterLabels.push(`PM: ${filters.pm}`);
   if (filters.department && filters.department !== 'all') filterLabels.push(`Dept: ${filters.department}`);
   if (filters.market && filters.market !== 'all') filterLabels.push(`Market: ${filters.market}`);
+  if (filters.team) filterLabels.push(`Team: ${filters.team}`);
   if (filters.search) filterLabels.push(`Search: "${filters.search}"`);
 
   const filterStr = filterLabels.length > 0
-    ? `<div style="font-size: 8pt; color: #6b7280; margin-top: 2px;">Filters: ${filterLabels.join(' | ')}</div>`
+    ? `Filters: ${filterLabels.join('  |  ')}`
     : '';
 
   const rows = projects.map((p, i) => {
@@ -89,6 +125,13 @@ function generateCashFlowReportPdfHtml(projects, filters = {}) {
       </tr>`;
   }).join('');
 
+  // KPI card helper
+  const kpiCard = (label, value, bgColor, borderColor, labelColor, valueColor) => `
+    <div style="flex: 1; background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 6px; padding: 6px 10px; min-width: 0;">
+      <div style="font-size: 6.5pt; color: ${labelColor}; font-weight: 600; text-transform: uppercase; white-space: nowrap;">${label}</div>
+      <div style="font-size: 11pt; font-weight: 700; color: ${valueColor}; white-space: nowrap;">${value}</div>
+    </div>`;
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -103,39 +146,47 @@ function generateCashFlowReportPdfHtml(projects, filters = {}) {
 </head>
 <body>
   <!-- Header -->
-  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; border-bottom: 3px solid #002356; padding-bottom: 8px;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; border-bottom: 3px solid #002356; padding-bottom: 8px;">
     <div>
       <div style="font-size: 18pt; font-weight: 700; color: #002356; letter-spacing: 0.05em;">CASH FLOW REPORT</div>
+      ${scheduleName ? `<div style="font-size: 10pt; font-weight: 600; color: #475569; margin-top: 1px;">${scheduleName}</div>` : ''}
       <div style="font-size: 9pt; color: #6b7280;">Generated ${dateLabel}</div>
-      ${filterStr}
+      ${filterStr ? `<div style="font-size: 8pt; color: #6b7280; margin-top: 2px;">${filterStr}</div>` : ''}
     </div>
     <div style="text-align: right; font-size: 8pt; color: #6b7280;">
-      ${projects.length} project${projects.length !== 1 ? 's' : ''}
+      ${projects.length} project${projects.length !== 1 ? 's' : ''}<br>
+      <span style="font-size: 7pt; color: #94a3b8;">Sorted by Cash Flow (worst first)</span>
     </div>
   </div>
 
-  <!-- KPI Summary -->
-  <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-    <div style="flex: 1; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px;">
-      <div style="font-size: 7pt; color: #0369a1; font-weight: 600; text-transform: uppercase;">Contract Value</div>
-      <div style="font-size: 12pt; font-weight: 700; color: #002356;">${fmtCurrency(totals.contractValue)}</div>
-    </div>
-    <div style="flex: 1; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px;">
-      <div style="font-size: 7pt; color: #0369a1; font-weight: 600; text-transform: uppercase;">Total Billed</div>
-      <div style="font-size: 12pt; font-weight: 700; color: #002356;">${fmtCurrency(totals.billedAmount)}</div>
-    </div>
-    <div style="flex: 1; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px;">
-      <div style="font-size: 7pt; color: #0369a1; font-weight: 600; text-transform: uppercase;">Total Received</div>
-      <div style="font-size: 12pt; font-weight: 700; color: #002356;">${fmtCurrency(totals.receivedAmount)}</div>
-    </div>
-    <div style="flex: 1; background: ${totals.cashFlow >= 0 ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${totals.cashFlow >= 0 ? '#bbf7d0' : '#fecaca'}; border-radius: 6px; padding: 8px 12px;">
-      <div style="font-size: 7pt; color: ${totals.cashFlow >= 0 ? '#166534' : '#991b1b'}; font-weight: 600; text-transform: uppercase;">Net Cash Flow</div>
-      <div style="font-size: 12pt; font-weight: 700; color: ${totals.cashFlow >= 0 ? '#059669' : '#dc2626'};">${fmtCurrency(totals.cashFlow)}</div>
-    </div>
-    <div style="flex: 1; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px;">
-      <div style="font-size: 7pt; color: #0369a1; font-weight: 600; text-transform: uppercase;">Backlog</div>
-      <div style="font-size: 12pt; font-weight: 700; color: #002356;">${fmtCurrency(totals.backlog)}</div>
-    </div>
+  <!-- KPI Summary Row 1: Financial totals -->
+  <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+    ${kpiCard('Projects', String(projects.length), '#f0f9ff', '#bae6fd', '#0369a1', '#002356')}
+    ${kpiCard('Contract Value', fmtCurrencyShort(totals.contractValue), '#f0f9ff', '#bae6fd', '#0369a1', '#002356')}
+    ${kpiCard('Earned Revenue', fmtCurrencyShort(totals.earnedRevenue), '#f5f3ff', '#ddd6fe', '#6d28d9', '#7c3aed')}
+    ${kpiCard('Total Billed', fmtCurrencyShort(totals.billedAmount), '#fffbeb', '#fde68a', '#92400e', '#d97706')}
+    ${kpiCard('Total Received', fmtCurrencyShort(totals.receivedAmount), '#f0fdf4', '#bbf7d0', '#166534', '#059669')}
+  </div>
+
+  <!-- KPI Summary Row 2: Cash flow metrics -->
+  <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+    ${kpiCard('Net Cash Flow', fmtCurrencyShort(totals.cashFlow),
+      totals.cashFlow >= 0 ? '#f0fdf4' : '#fef2f2',
+      totals.cashFlow >= 0 ? '#bbf7d0' : '#fecaca',
+      totals.cashFlow >= 0 ? '#166534' : '#991b1b',
+      totals.cashFlow >= 0 ? '#059669' : '#dc2626')}
+    ${kpiCard('Open Receivables', fmtCurrencyShort(totals.openReceivables), '#fffbeb', '#fde68a', '#92400e', '#d97706')}
+    ${kpiCard('Backlog', fmtCurrencyShort(totals.backlog), '#f0f9ff', '#bae6fd', '#0369a1', '#002356')}
+    ${kpiCard(`Positive CF`, `${positiveCashFlowCount}/${projects.length} (${positivePct}%)`,
+      positivePct >= 50 ? '#ecfeff' : '#fff7ed',
+      positivePct >= 50 ? '#a5f3fc' : '#fed7aa',
+      positivePct >= 50 ? '#155e75' : '#9a3412',
+      positivePct >= 50 ? '#0891b2' : '#ea580c')}
+    ${kpiCard(`CF+ >15% Comp`, `${jobsOver15Positive}/${jobsOver15} (${over15Pct}%)`,
+      over15Pct >= 60 ? '#f0fdf4' : over15Pct >= 40 ? '#fffbeb' : '#fef2f2',
+      over15Pct >= 60 ? '#bbf7d0' : over15Pct >= 40 ? '#fde68a' : '#fecaca',
+      over15Pct >= 60 ? '#166534' : over15Pct >= 40 ? '#92400e' : '#991b1b',
+      over15Pct >= 60 ? '#059669' : over15Pct >= 40 ? '#d97706' : '#e11d48')}
   </div>
 
   <!-- Table -->

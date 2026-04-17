@@ -42,7 +42,9 @@ const REPORT_HANDLERS = {
 
     const filters = report.filters || {};
     const rows = await buildCashFlowData(report.tenant_id, filters);
-    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters);
+    // Sort by worst cash flow first (ascending)
+    rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
+    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters, report.name);
     const dateStr = new Date().toISOString().split('T')[0];
 
     return {

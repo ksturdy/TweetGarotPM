@@ -121,6 +121,7 @@ router.get('/pdf-download', async (req, res) => {
       search: req.query.search,
     };
     const rows = await buildCashFlowData(req.tenantId, filters);
+    rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
     const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters);
 
     const dateStr = new Date().toISOString().split('T')[0];
@@ -147,6 +148,7 @@ router.get('/email-draft', async (req, res) => {
       search: req.query.search,
     };
     const rows = await buildCashFlowData(req.tenantId, filters);
+    rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
     const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters);
 
     const dateStr = new Date().toISOString().split('T')[0];
