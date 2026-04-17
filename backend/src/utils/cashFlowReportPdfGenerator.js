@@ -22,7 +22,7 @@ const fmtPercent = (v) => {
   return `${Math.round(Number(v) * 100)}%`;
 };
 
-function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = null) {
+function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = null, metrics = null) {
   const dateLabel = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   // Compute totals & KPI metrics
@@ -79,6 +79,10 @@ function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = nu
 
   const positivePct = projects.length > 0 ? Math.round((positiveCashFlowCount / projects.length) * 100) : 0;
   const over15Pct = jobsOver15 > 0 ? Math.round((jobsOver15Positive / jobsOver15) * 100) : 0;
+
+  // Snapshot-based: avg % complete when projects first went cash-flow positive
+  const avgPctPositiveDisplay = metrics ? Math.round((metrics.avg_pct_at_first_positive || 0) * 100) : 0;
+  const projectsTurnedPositiveCount = metrics ? (metrics.projects_that_turned_positive || 0) : 0;
 
   // Active filter labels
   const filterLabels = [];
@@ -170,13 +174,12 @@ function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = nu
 
   <!-- KPI Summary Row 2: Cash flow metrics -->
   <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+    ${kpiCard('Open Receivables', fmtCurrencyShort(totals.openReceivables), '#fff7ed', '#fed7aa', '#9a3412', '#ea580c')}
     ${kpiCard('Net Cash Flow', fmtCurrencyShort(totals.cashFlow),
       totals.cashFlow >= 0 ? '#f0fdf4' : '#fef2f2',
       totals.cashFlow >= 0 ? '#bbf7d0' : '#fecaca',
       totals.cashFlow >= 0 ? '#166534' : '#991b1b',
       totals.cashFlow >= 0 ? '#059669' : '#dc2626')}
-    ${kpiCard('Open Receivables', fmtCurrencyShort(totals.openReceivables), '#fffbeb', '#fde68a', '#92400e', '#d97706')}
-    ${kpiCard('Backlog', fmtCurrencyShort(totals.backlog), '#f0f9ff', '#bae6fd', '#0369a1', '#002356')}
     ${kpiCard(`Positive CF`, `${positiveCashFlowCount}/${projects.length} (${positivePct}%)`,
       positivePct >= 50 ? '#ecfeff' : '#fff7ed',
       positivePct >= 50 ? '#a5f3fc' : '#fed7aa',
@@ -187,6 +190,7 @@ function generateCashFlowReportPdfHtml(projects, filters = {}, scheduleName = nu
       over15Pct >= 60 ? '#bbf7d0' : over15Pct >= 40 ? '#fde68a' : '#fecaca',
       over15Pct >= 60 ? '#166534' : over15Pct >= 40 ? '#92400e' : '#991b1b',
       over15Pct >= 60 ? '#059669' : over15Pct >= 40 ? '#d97706' : '#e11d48')}
+    ${kpiCard('Avg % at CF+', `${avgPctPositiveDisplay}% (${projectsTurnedPositiveCount} jobs)`, '#f5f3ff', '#ddd6fe', '#6d28d9', '#7c3aed')}
   </div>
 
   <!-- Table -->

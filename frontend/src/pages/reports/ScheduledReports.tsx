@@ -300,7 +300,7 @@ const ScheduledReports: React.FC = () => {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="sales-page" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
+    <div className="sales-page" style={{ maxWidth: '1500px', margin: '0 auto', padding: '1.5rem' }}>
       {/* Toast */}
       {toast && (
         <div style={{
@@ -346,15 +346,15 @@ const ScheduledReports: React.FC = () => {
         <table className="sales-table" style={{ width: '100%', paddingTop: '0.5rem' }}>
           <thead>
             <tr>
-              <th style={{ width: '18%' }}>Name</th>
-              <th style={{ width: '13%' }}>Report</th>
-              <th style={{ width: '13%' }}>Frequency</th>
-              <th style={{ width: '7%' }}>Time</th>
-              <th style={{ width: '13%' }}>Next Run</th>
-              <th style={{ width: '13%' }}>Last Run</th>
-              <th style={{ width: '4%', textAlign: 'center' }}>To</th>
-              <th style={{ width: '4%', textAlign: 'center' }}>On</th>
-              <th style={{ width: '15%', textAlign: 'center' }}>Actions</th>
+              <th>Name</th>
+              <th>Report</th>
+              <th>Frequency</th>
+              <th>Time</th>
+              <th>Next Run</th>
+              <th>Last Run</th>
+              <th style={{ textAlign: 'center', width: '50px' }}>To</th>
+              <th style={{ textAlign: 'center', width: '60px' }}>On</th>
+              <th style={{ textAlign: 'center', width: '220px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -430,7 +430,7 @@ const ScheduledReports: React.FC = () => {
                     </button>
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'nowrap' }}>
                       <button
                         onClick={() => openEdit(report)}
                         title="Edit"

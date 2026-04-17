@@ -201,49 +201,55 @@ ${generatedBy}`.trim();
 });
 
 /**
+ * Build snapshot-based cash flow metrics (reusable)
+ */
+async function buildCashFlowMetrics(tenantId) {
+  const result = await db.query(
+    `WITH first_positive AS (
+       SELECT DISTINCT ON (ps.project_id)
+         ps.project_id,
+         ps.snapshot_date,
+         ps.percent_complete,
+         ps.cash_flow
+       FROM project_snapshots ps
+       WHERE ps.cash_flow > 0
+         AND ps.tenant_id = $1
+       ORDER BY ps.project_id, ps.snapshot_date ASC
+     )
+     SELECT
+       fp.project_id,
+       fp.snapshot_date,
+       fp.percent_complete,
+       fp.cash_flow
+     FROM first_positive fp`,
+    [tenantId]
+  );
+
+  const rows = result.rows;
+  const count = rows.length;
+  const avgPctComplete = count > 0
+    ? rows.reduce((sum, r) => sum + (parseFloat(r.percent_complete) || 0), 0) / count
+    : 0;
+
+  return {
+    avg_pct_at_first_positive: avgPctComplete,
+    projects_that_turned_positive: count,
+    per_project: rows.map(r => ({
+      project_id: r.project_id,
+      first_positive_date: r.snapshot_date,
+      percent_complete_at_positive: parseFloat(r.percent_complete) || 0,
+    })),
+  };
+}
+
+/**
  * GET /api/reports/cash-flow/metrics
  * Returns computed metrics from snapshot history
  */
 router.get('/metrics', async (req, res) => {
   try {
-    const tenantId = req.tenantId;
-
-    const result = await db.query(
-      `WITH first_positive AS (
-         SELECT DISTINCT ON (ps.project_id)
-           ps.project_id,
-           ps.snapshot_date,
-           ps.percent_complete,
-           ps.cash_flow
-         FROM project_snapshots ps
-         WHERE ps.cash_flow > 0
-           AND ps.tenant_id = $1
-         ORDER BY ps.project_id, ps.snapshot_date ASC
-       )
-       SELECT
-         fp.project_id,
-         fp.snapshot_date,
-         fp.percent_complete,
-         fp.cash_flow
-       FROM first_positive fp`,
-      [tenantId]
-    );
-
-    const rows = result.rows;
-    const count = rows.length;
-    const avgPctComplete = count > 0
-      ? rows.reduce((sum, r) => sum + (parseFloat(r.percent_complete) || 0), 0) / count
-      : 0;
-
-    res.json({
-      avg_pct_at_first_positive: avgPctComplete,
-      projects_that_turned_positive: count,
-      per_project: rows.map(r => ({
-        project_id: r.project_id,
-        first_positive_date: r.snapshot_date,
-        percent_complete_at_positive: parseFloat(r.percent_complete) || 0,
-      })),
-    });
+    const metrics = await buildCashFlowMetrics(req.tenantId);
+    res.json(metrics);
   } catch (error) {
     console.error('Cash flow metrics error:', error);
     res.status(500).json({ error: 'Failed to load cash flow metrics' });
@@ -252,3 +258,4 @@ router.get('/metrics', async (req, res) => {
 
 module.exports = router;
 module.exports.buildCashFlowData = buildCashFlowData;
+module.exports.buildCashFlowMetrics = buildCashFlowMetrics;

@@ -37,14 +37,15 @@ const REPORT_HANDLERS = {
   },
 
   async cash_flow(report) {
-    const { buildCashFlowData } = require('../routes/cashFlowReport');
+    const { buildCashFlowData, buildCashFlowMetrics } = require('../routes/cashFlowReport');
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');
 
     const filters = report.filters || {};
     const rows = await buildCashFlowData(report.tenant_id, filters);
+    const metrics = await buildCashFlowMetrics(report.tenant_id);
     // Sort by worst cash flow first (ascending)
     rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
-    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters, report.name);
+    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters, report.name, metrics);
     const dateStr = new Date().toISOString().split('T')[0];
 
     return {

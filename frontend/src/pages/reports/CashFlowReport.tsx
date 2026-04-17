@@ -314,6 +314,7 @@ const CashFlowReport: React.FC = () => {
       totalEarnedRevenue: sum('earned_revenue'),
       totalBilled: sum('billed_amount'),
       totalReceived: sum('received_amount'),
+      openReceivables: sum('open_receivables'),
       netCashPosition: sum('cash_flow'),
       positiveCashFlowCount,
       jobsOver15Count: jobsOver15.length,
@@ -435,6 +436,7 @@ const CashFlowReport: React.FC = () => {
         { label: 'Earned Revenue', value: `$${(kpis.totalEarnedRevenue / 1e6).toFixed(1)}M`, valueColor: [139, 92, 246] as [number, number, number] },
         { label: 'Total Billed', value: `$${(kpis.totalBilled / 1e6).toFixed(1)}M`, valueColor: [217, 119, 6] as [number, number, number] },
         { label: 'Total Received', value: `$${(kpis.totalReceived / 1e6).toFixed(1)}M`, valueColor: [5, 150, 105] as [number, number, number] },
+        { label: 'Open AR', value: `$${(kpis.openReceivables / 1e6).toFixed(1)}M`, valueColor: [234, 88, 12] as [number, number, number] },
         { label: 'Net Cash', value: `$${(kpis.netCashPosition / 1e6).toFixed(1)}M`, valueColor: (kpis.netCashPosition >= 0 ? [5, 150, 105] : [220, 38, 38]) as [number, number, number] },
         { label: 'CF+ Jobs', value: `${kpis.positiveCashFlowCount}/${kpis.count} (${positivePct}%)`, valueColor: (positivePct >= 50 ? [8, 145, 178] : [234, 88, 12]) as [number, number, number] },
         { label: 'CF+ >15% Comp', value: `${kpis.jobsOver15PositiveCount}/${kpis.jobsOver15Count} (${over15PositivePct}%)`, valueColor: (over15PositivePct >= 60 ? [5, 150, 105] : over15PositivePct >= 40 ? [217, 119, 6] : [225, 29, 72]) as [number, number, number] },
@@ -562,6 +564,14 @@ const CashFlowReport: React.FC = () => {
       ),
     },
     {
+      label: 'Open Receivables',
+      value: `$${(kpis.openReceivables / 1e6).toFixed(1)}M`,
+      style: KPI_STYLES.orange,
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      ),
+    },
+    {
       label: 'Net Cash Position',
       value: `$${(kpis.netCashPosition / 1e6).toFixed(1)}M`,
       style: kpis.netCashPosition >= 0 ? KPI_STYLES.green : KPI_STYLES.rose,
@@ -647,7 +657,7 @@ const CashFlowReport: React.FC = () => {
       {/* KPI Cards - Row 2: Cash Flow Analysis */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(5, 1fr)',
         gap: '1rem',
         marginBottom: '1.25rem',
       }}>

@@ -6,10 +6,11 @@ const { generateCashFlowReportPdfHtml } = require('./cashFlowReportPdfGenerator'
  * @param {Array} projects - The cash flow project data rows
  * @param {Object} filters - Active filter labels for display
  * @param {string} [scheduleName] - Name of the scheduled report (optional)
+ * @param {Object} [metrics] - Snapshot metrics (avg % at CF+, etc.)
  * @returns {Promise<Buffer>} - PDF as a buffer
  */
-async function generateCashFlowReportPdfBuffer(projects, filters = {}, scheduleName = null) {
-  const html = generateCashFlowReportPdfHtml(projects, filters, scheduleName);
+async function generateCashFlowReportPdfBuffer(projects, filters = {}, scheduleName = null, metrics = null) {
+  const html = generateCashFlowReportPdfHtml(projects, filters, scheduleName, metrics);
   let browser = null;
 
   try {
