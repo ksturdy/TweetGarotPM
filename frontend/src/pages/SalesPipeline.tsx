@@ -18,6 +18,7 @@ import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import { employeesApi } from '../services/employees';
 import { LOCATION_GROUPS } from '../constants/locationGroups';
+import { useAuth } from '../context/AuthContext';
 import '../styles/SalesPipeline.css';
 import { exportListToPdf } from '../utils/listExportPdf';
 
@@ -60,6 +61,8 @@ const SalesPipeline: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const locationState = location.state as { selectedOpportunityId?: number; myItemsOnly?: boolean } | null;
   const [view, setView] = useState<'table' | 'board'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,6 +71,7 @@ const SalesPipeline: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedLocationGroup, setSelectedLocationGroup] = useState<string>('');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
+  const [myOpportunitiesOnly, setMyOpportunitiesOnly] = useState(locationState?.myItemsOnly ?? false);
   const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
@@ -207,9 +211,8 @@ const SalesPipeline: React.FC = () => {
 
   // Handle deep link from dashboard - open opportunity modal if ID is passed in state
   useEffect(() => {
-    const state = location.state as { selectedOpportunityId?: number } | null;
-    if (state?.selectedOpportunityId && apiOpportunities.length > 0) {
-      const apiOpp = apiOpportunities.find(a => a.id === state.selectedOpportunityId);
+    if (locationState?.selectedOpportunityId && apiOpportunities.length > 0) {
+      const apiOpp = apiOpportunities.find(a => a.id === locationState.selectedOpportunityId);
       if (apiOpp) {
         setSelectedOpportunity(apiOpp);
         setIsModalOpen(true);
@@ -217,7 +220,7 @@ const SalesPipeline: React.FC = () => {
       // Clear the state so refreshing doesn't reopen
       navigate(location.pathname, { replace: true });
     }
-  }, [location.state, apiOpportunities, navigate, location.pathname]);
+  }, [locationState, apiOpportunities, navigate, location.pathname]);
 
   // Get unique salespeople from opportunities
   const salespeople = useMemo(() => {
@@ -230,9 +233,19 @@ const SalesPipeline: React.FC = () => {
     return Array.from(uniqueSalespeople).sort();
   }, [apiOpportunities]);
 
+  // Current user's full name for "My Opportunities" filter
+  const currentUserName = user ? `${user.firstName} ${user.lastName}` : '';
+
   // Filter opportunities based on selected filters
   const filteredApiOpportunities = useMemo(() => {
     return apiOpportunities.filter(opp => {
+      // Filter by "My Opportunities"
+      if (myOpportunitiesOnly && currentUserName) {
+        if (opp.assigned_to_name?.toLowerCase() !== currentUserName.toLowerCase()) {
+          return false;
+        }
+      }
+
       // Filter by stage (exclude unchecked stages)
       if (excludedStages.size > 0 && opp.stage_name && excludedStages.has(opp.stage_name)) {
         return false;
@@ -250,7 +263,7 @@ const SalesPipeline: React.FC = () => {
 
       return true;
     });
-  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages]);
+  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages, myOpportunitiesOnly, currentUserName]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -963,7 +976,7 @@ const SalesPipeline: React.FC = () => {
         <div className="sales-table-section">
           <div className="sales-table-header">
             <div className="sales-table-title">
-              All Opportunities
+              {myOpportunitiesOnly ? 'My Opportunities' : 'All Opportunities'}
               <div className="sales-search-box" style={{ marginLeft: '16px' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
@@ -978,6 +991,17 @@ const SalesPipeline: React.FC = () => {
               </div>
             </div>
             <div className="sales-table-controls">
+              <button
+                className={myOpportunitiesOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+                onClick={() => setMyOpportunitiesOnly(!myOpportunitiesOnly)}
+                style={{ padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                My Opportunities
+              </button>
               <select
                 value={selectedLocationGroup}
                 onChange={(e) => setSelectedLocationGroup(e.target.value)}

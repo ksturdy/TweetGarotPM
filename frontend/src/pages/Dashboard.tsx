@@ -55,6 +55,57 @@ const getMarketGradient = (market?: string): string => {
   return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
 };
 
+// Helper function to get project status color
+const getStatusColor = (status: string): string => {
+  const colors: { [key: string]: string } = {
+    'Open': '#10b981', 'Soft-Closed': '#f59e0b', 'Hard-Closed': '#6b7280',
+    active: '#10b981', on_hold: '#f59e0b', completed: '#3b82f6', cancelled: '#ef4444'
+  };
+  return colors[status] || '#6b7280';
+};
+
+// Helper function to get project icon based on status
+const getProjectIcon = (status: string): string => {
+  const icons: { [key: string]: string } = {
+    'Open': '🏗️', 'Soft-Closed': '📋', 'Hard-Closed': '✅',
+    active: '🏗️', on_hold: '⏸️', completed: '✅', cancelled: '❌'
+  };
+  return icons[status] || '📋';
+};
+
+// Helper function to get project gradient based on status
+const getProjectGradient = (status: string): string => {
+  const gradients: { [key: string]: string } = {
+    'Open': 'linear-gradient(135deg, #10b981, #06b6d4)',
+    'Soft-Closed': 'linear-gradient(135deg, #f59e0b, #f97316)',
+    'Hard-Closed': 'linear-gradient(135deg, #6b7280, #4b5563)',
+    active: 'linear-gradient(135deg, #10b981, #06b6d4)',
+    on_hold: 'linear-gradient(135deg, #f59e0b, #f43f5e)',
+    completed: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+    cancelled: 'linear-gradient(135deg, #ef4444, #dc2626)'
+  };
+  return gradients[status] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
+};
+
+// Helper function to get manager initials
+const getManagerInitials = (name?: string): string => {
+  if (!name) return 'UN';
+  return name.split(' ').map(n => n[0]).join('');
+};
+
+// Helper function to get manager color from name hash
+const getManagerColor = (name: string): string => {
+  const colors = [
+    '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+    '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 // Helper function to get time-based greeting
 const getGreeting = (): string => {
   const hour = new Date().getHours();
@@ -213,28 +264,30 @@ const Dashboard: React.FC = () => {
     return stageName !== 'won' && stageName !== 'lost';
   }).length || 0;
 
-  // Sort filtered opportunities by most recent (created_at or updated_at)
-  const recentOpportunities = React.useMemo(() => {
+  // Sort filtered opportunities by most recent, excluding won/lost (matches KPI)
+  const sortedOpportunities = React.useMemo(() => {
     if (!opportunities) return [];
     return [...opportunities]
+      .filter((o: any) => {
+        const stageName = o.stage_name?.toLowerCase() || '';
+        return stageName !== 'won' && stageName !== 'lost';
+      })
       .sort((a: any, b: any) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
         const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
         return dateB - dateA;
-      })
-      .slice(0, 5);
+      });
   }, [opportunities]);
 
   // Sort filtered estimates by most recent (created_at or updated_at)
-  const recentEstimates = React.useMemo(() => {
+  const sortedEstimates = React.useMemo(() => {
     if (!estimates) return [];
     return [...estimates]
       .sort((a: any, b: any) => {
         const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
         const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
         return dateB - dateA;
-      })
-      .slice(0, 5);
+      });
   }, [estimates]);
 
   // Fetch attention items based on view scope
@@ -334,7 +387,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="kpi-content">
             <div className="kpi-value">{openOpportunities}</div>
-            <div className="kpi-label">Open Opportunities</div>
+            <div className="kpi-label">Active Opportunities</div>
           </div>
           <Link to="/sales" className="kpi-link">
             <ArrowForwardIcon fontSize="small" />
@@ -396,151 +449,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Active Projects */}
-          <div className="dashboard-card">
-            <div className="card-header">
-              <h2 className="card-title">
-                <FolderIcon className="card-title-icon" />
-                Active Projects
-              </h2>
-              <Link to="/projects" className="card-link">View all</Link>
-            </div>
-            <div className="projects-table-container">
-              <table className="projects-table">
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Manager</th>
-                    <th>Status</th>
-                    <th>Progress</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeProjects.slice(0, 5).map((project: any) => (
-                    <tr key={project.id}>
-                      <td>
-                        <Link to={`/projects/${project.id}`} className="project-name-link">
-                          {project.name}
-                        </Link>
-                        <div className="project-client">{project.client}</div>
-                      </td>
-                      <td>
-                        {project.manager_name ? (
-                          <div className="project-manager">
-                            <PersonIcon style={{ fontSize: '14px', marginRight: '4px', color: '#8888a0', verticalAlign: 'middle' }} />
-                            <span>{project.manager_name}</span>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#8888a0' }}>-</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`status-badge status-${project.status}`}>
-                          {project.status}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="progress-bar-container">
-                          <div className="progress-bar-wrapper">
-                            <div
-                              className="progress-bar"
-                              style={{ width: `${project.percentComplete || 0}%` }}
-                            />
-                          </div>
-                          <span className="progress-text">{project.percentComplete || 0}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {activeProjects.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="empty-table">
-                        {viewScope === 'my' ? 'No projects assigned to you' : 'No active projects'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="dashboard-right">
-          {/* Recent Opportunities */}
-          <div className="dashboard-card">
-            <div className="card-header">
-              <h2 className="card-title">
-                <HandshakeIcon className="card-title-icon" />
-                Recent Opportunities
-              </h2>
-              <Link to="/sales" className="card-link">View all</Link>
-            </div>
-            <div className="dashboard-table-container">
-              <table className="sales-table dashboard-compact-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '26%' }}>Project / Opportunity</th>
-                    <th style={{ width: '20%' }}>Customer</th>
-                    <th style={{ width: '10%', textAlign: 'right' }}>Value</th>
-                    <th style={{ width: '12%' }}>Stage</th>
-                    <th style={{ width: '12%' }}>Date</th>
-                    <th style={{ width: '20%' }}>Salesperson</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOpportunities.length > 0 ? (
-                    recentOpportunities.map((opp: any) => (
-                      <tr
-                        key={opp.id}
-                        onClick={() => navigate('/sales', { state: { selectedOpportunityId: opp.id } })}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div className="sales-project-cell">
-                            <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market), width: '32px', height: '32px', fontSize: '0.75rem' }}>
-                              {getMarketIcon(opp.market)}
-                            </div>
-                            <div className="sales-project-info">
-                              <h4>{opp.title}</h4>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
-                              {opp.facility_location_name || opp.facility_name || opp.client_name || '-'}
-                            </span>
-                            {(opp.customer_name || opp.owner || opp.client_company) && (
-                              <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
-                                {opp.customer_name || opp.owner || opp.client_company}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="sales-value-cell">{formatCurrency(parseFloat(opp.estimated_value) || 0)}</td>
-                        <td>
-                          <span className={`sales-stage-badge ${opp.stage_name?.toLowerCase().replace(/\s+/g, '-') || 'unknown'}`}>
-                            <span className="sales-stage-dot"></span>
-                            {opp.stage_name || 'Unknown'}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
-                          {opp.updated_at ? new Date(opp.updated_at).toLocaleDateString() : (opp.created_at ? new Date(opp.created_at).toLocaleDateString() : '-')}
-                        </td>
-                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>{opp.assigned_to_name || '-'}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="empty-table">No opportunities found</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
           {/* Recent Estimates */}
           <div className="dashboard-card">
             <div className="card-header">
@@ -548,23 +456,21 @@ const Dashboard: React.FC = () => {
                 <CalculateIcon className="card-title-icon" />
                 Recent Estimates
               </h2>
-              <Link to="/estimating" className="card-link">View all</Link>
+              <Link to="/estimating" state={{ myItemsOnly: viewScope === 'my' }} className="card-link">View all</Link>
             </div>
-            <div className="dashboard-table-container">
+            <div className="dashboard-table-container dashboard-scrollable">
               <table className="sales-table dashboard-compact-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '26%' }}>Project / Estimate</th>
-                    <th style={{ width: '20%' }}>Customer</th>
-                    <th style={{ width: '10%', textAlign: 'right' }}>Value</th>
-                    <th style={{ width: '12%' }}>Status</th>
-                    <th style={{ width: '12%' }}>Date</th>
-                    <th style={{ width: '20%' }}>Estimator</th>
+                    <th style={{ width: '35%' }}>Project / Estimate</th>
+                    <th style={{ width: '15%', textAlign: 'right' }}>Value</th>
+                    <th style={{ width: '15%' }}>Status</th>
+                    <th style={{ width: '15%' }}>Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentEstimates.length > 0 ? (
-                    recentEstimates.map((estimate: any) => (
+                  {sortedEstimates.length > 0 ? (
+                    sortedEstimates.map((estimate: any) => (
                       <tr
                         key={estimate.id}
                         onClick={() => window.location.href = `/estimating/estimates/${estimate.id}`}
@@ -577,19 +483,12 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="sales-project-info">
                               <h4>{estimate.project_name || 'Untitled'}</h4>
+                              {(estimate.customer_name || estimate.facility_name) && (
+                                <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
+                                  {estimate.customer_name || estimate.facility_name}
+                                </span>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: '#1a1a2e' }}>
-                              {estimate.customer_name || estimate.facility_name || '-'}
-                            </span>
-                            {(estimate.customer_name || estimate.customer_owner) && (
-                              <span style={{ fontSize: '0.75rem', color: '#5a5a72' }}>
-                                {estimate.customer_name || estimate.customer_owner}
-                              </span>
-                            )}
                           </div>
                         </td>
                         <td className="sales-value-cell">
@@ -604,12 +503,156 @@ const Dashboard: React.FC = () => {
                         <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
                           {estimate.updated_at ? new Date(estimate.updated_at).toLocaleDateString() : (estimate.created_at ? new Date(estimate.created_at).toLocaleDateString() : '-')}
                         </td>
-                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>{estimate.estimator_name || '-'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="empty-table">No estimates found</td>
+                      <td colSpan={4} className="empty-table">No estimates found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="dashboard-right">
+          {/* Active Projects */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <FolderIcon className="card-title-icon" />
+                Active Projects
+              </h2>
+              <Link to="/projects" state={{ myItemsOnly: viewScope === 'my' }} className="card-link">View all</Link>
+            </div>
+            <div className="dashboard-table-container dashboard-scrollable">
+              <table className="sales-table dashboard-compact-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '50%' }}>Project</th>
+                    <th style={{ width: '22%' }}>PM</th>
+                    <th style={{ width: '14%' }}>Status</th>
+                    <th style={{ width: '14%', textAlign: 'right' }}>% Complete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeProjects.map((project: any) => {
+                    const pct = project.percent_complete != null ? Math.round(Number(project.percent_complete) * 100) : null;
+                    return (
+                    <tr
+                      key={project.id}
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <div className="sales-project-cell">
+                          <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status), width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                            {project.market ? getMarketIcon(project.market) : getProjectIcon(project.status)}
+                          </div>
+                          <div className="sales-project-info">
+                            <h4>{project.name}</h4>
+                            <span>{project.owner_name || project.customer_name || project.client || ''}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {project.manager_name ? (
+                          <div className="sales-salesperson-cell">
+                            <div
+                              className="sales-salesperson-avatar"
+                              style={{ background: getManagerColor(project.manager_name) }}
+                            >
+                              {getManagerInitials(project.manager_name)}
+                            </div>
+                            {project.manager_name}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#8888a0', fontSize: '0.8125rem' }}>-</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`sales-stage-badge ${project.status.toLowerCase().replace('-', '_')}`}>
+                          <span className="sales-stage-dot" style={{ background: getStatusColor(project.status) }}></span>
+                          {project.status.includes('-') ? project.status : project.status.replace('_', ' ').charAt(0).toUpperCase() + project.status.replace('_', ' ').slice(1)}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: '#1a1a2e' }}>
+                        {pct != null ? `${pct}%` : '-'}
+                      </td>
+                    </tr>
+                    );
+                  })}
+                  {activeProjects.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="empty-table">
+                        {viewScope === 'my' ? 'No projects assigned to you' : 'No active projects'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Active Opportunities */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <HandshakeIcon className="card-title-icon" />
+                Active Opportunities
+              </h2>
+              <Link to="/sales" state={{ myItemsOnly: viewScope === 'my' }} className="card-link">View all</Link>
+            </div>
+            <div className="dashboard-table-container dashboard-scrollable">
+              <table className="sales-table dashboard-compact-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '50%' }}>Opportunity</th>
+                    <th style={{ width: '14%', textAlign: 'center' }}>Value</th>
+                    <th style={{ width: '16%', textAlign: 'center' }}>Stage</th>
+                    <th style={{ width: '20%', textAlign: 'center' }}>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedOpportunities.length > 0 ? (
+                    sortedOpportunities.map((opp: any) => (
+                      <tr
+                        key={opp.id}
+                        onClick={() => navigate('/sales', { state: { selectedOpportunityId: opp.id } })}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>
+                          <div className="sales-project-cell">
+                            <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market), width: '32px', height: '32px', fontSize: '0.75rem' }}>
+                              {getMarketIcon(opp.market)}
+                            </div>
+                            <div className="sales-project-info">
+                              <h4>{opp.title}</h4>
+                              {(opp.facility_location_name || opp.facility_name || opp.client_name) && (
+                                <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                  {opp.facility_location_name || opp.facility_name || opp.client_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="sales-value-cell" style={{ textAlign: 'center' }}>{formatCurrency(parseFloat(opp.estimated_value) || 0)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`sales-stage-badge ${opp.stage_name?.toLowerCase().replace(/\s+/g, '-') || 'unknown'}`}>
+                            <span className="sales-stage-dot"></span>
+                            {opp.stage_name || 'Unknown'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.8125rem', color: '#5a5a72', textAlign: 'center' }}>
+                          {opp.updated_at ? new Date(opp.updated_at).toLocaleDateString() : (opp.created_at ? new Date(opp.created_at).toLocaleDateString() : '-')}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="empty-table">No opportunities found</td>
                     </tr>
                   )}
                 </tbody>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -17,6 +17,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { useAuth } from '../../context/AuthContext';
+import '../../styles/SalesPipeline.css';
 import './EstimatesList.css';
 
 ChartJS.register(
@@ -33,14 +35,21 @@ ChartJS.register(
 
 const EstimatesList: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { toast, confirm } = useTitanFeedback();
+  const locationState = location.state as { myItemsOnly?: boolean } | null;
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [myEstimatesOnly, setMyEstimatesOnly] = useState(locationState?.myItemsOnly ?? false);
   const [sortColumn, setSortColumn] = useState<string>('activity');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [previewEstimate, setPreviewEstimate] = useState<Estimate | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Current user's full name for "My Estimates" filter
+  const currentUserName = user ? `${user.firstName} ${user.lastName}` : '';
 
   const { data: estimates = [], isLoading } = useQuery({
     queryKey: ['estimates', statusFilter, searchQuery],
@@ -260,8 +269,17 @@ const EstimatesList: React.FC = () => {
     },
   };
 
+  // Filter estimates by "My Estimates"
+  const filteredEstimates = useMemo(() => {
+    if (!myEstimatesOnly || !currentUserName) return estimates;
+    return estimates.filter((e: any) => {
+      const estimatorName = (e.estimator_full_name || e.estimator_name || '').toLowerCase();
+      return estimatorName === currentUserName.toLowerCase();
+    });
+  }, [estimates, myEstimatesOnly, currentUserName]);
+
   // Sort estimates
-  const sortedEstimates = [...estimates].sort((a: any, b: any) => {
+  const sortedEstimates = [...filteredEstimates].sort((a: any, b: any) => {
     let aValue: any;
     let bValue: any;
 
@@ -422,8 +440,19 @@ const EstimatesList: React.FC = () => {
       {/* Table */}
       <div className="est-table-section">
         <div className="est-table-header">
-          <div className="est-table-title">All Estimates</div>
+          <div className="est-table-title">{myEstimatesOnly ? 'My Estimates' : 'All Estimates'}</div>
           <div className="est-table-controls">
+            <button
+              className={myEstimatesOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+              onClick={() => setMyEstimatesOnly(!myEstimatesOnly)}
+              style={{ padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              My Estimates
+            </button>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}

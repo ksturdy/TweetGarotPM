@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
+import { useAuth } from '../../context/AuthContext';
 import '../../styles/SalesPipeline.css';
 import { exportListToPdf } from '../../utils/listExportPdf';
 
 const ProjectList: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string>('number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -18,6 +21,8 @@ const ProjectList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('Open');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [marketFilter, setMarketFilter] = useState<string>('all');
+  const locationState = location.state as { myItemsOnly?: boolean } | null;
+  const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? false);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -299,6 +304,7 @@ const ProjectList: React.FC = () => {
     if (statusFilter !== 'all' && project.status !== statusFilter) return false;
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
+    if (myProjectsOnly && user && project.manager_id !== user.id) return false;
 
     // Then apply search filter
     if (!searchTerm) return true;
@@ -482,6 +488,7 @@ const ProjectList: React.FC = () => {
     };
 
     const filters: string[] = [];
+    if (myProjectsOnly) filters.push('My Projects');
     if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
     if (departmentFilter !== 'all') filters.push(`Dept: ${departmentFilter}`);
     if (marketFilter !== 'all') filters.push(`Market: ${marketFilter}`);
@@ -732,6 +739,19 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
+        <div style={{ minWidth: '120px', alignSelf: 'flex-end' }}>
+          <button
+            className={myProjectsOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+            onClick={() => setMyProjectsOnly(!myProjectsOnly)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', whiteSpace: 'nowrap' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            My Projects
+          </button>
+        </div>
         <div style={{ minWidth: '180px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Market</label>
           <select
@@ -746,13 +766,14 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
-        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || searchTerm) && (
+        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || myProjectsOnly || searchTerm) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
               setStatusFilter('all');
               setDepartmentFilter('all');
               setMarketFilter('all');
+              setMyProjectsOnly(false);
               setSearchTerm('');
             }}
             style={{ padding: '0.5rem 1rem', height: 'fit-content' }}

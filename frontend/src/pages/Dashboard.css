@@ -169,7 +169,7 @@
 /* Dashboard Grid */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 0.7fr 1.3fr;
+  grid-template-columns: 0.9fr 1.1fr;
   gap: 1.5rem;
 }
 
@@ -517,6 +517,26 @@
 /* Dashboard Table Container */
 .dashboard-table-container {
   overflow-x: auto;
+}
+
+/* Scrollable table container for dashboard cards */
+.dashboard-scrollable {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dashboard-scrollable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f9fafb;
+}
+
+.dashboard-scrollable .projects-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f9fafb;
 }
 
 /* Compact table styling for dashboard */
