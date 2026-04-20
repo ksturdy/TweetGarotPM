@@ -41,9 +41,38 @@ export interface CashFlowMetrics {
   }[];
 }
 
+export interface CashFlowPdfFilters {
+  status?: string;
+  pm?: string;
+  department?: string;
+  market?: string;
+  search?: string;
+  team?: string;
+  scheduleName?: string;
+}
+
 export const cashFlowReportApi = {
   getData: () =>
     api.get<CashFlowProject[]>('/reports/cash-flow').then(res => res.data),
   getMetrics: () =>
     api.get<CashFlowMetrics>('/reports/cash-flow/metrics').then(res => res.data),
+  downloadPdf: async (filters: CashFlowPdfFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v && v !== 'all') params.set(k, v);
+    });
+    const res = await api.get('/reports/cash-flow/pdf-download', {
+      params,
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Cash-Flow-Report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };

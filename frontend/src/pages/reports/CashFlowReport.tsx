@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { cashFlowReportApi, CashFlowProject, CashFlowMetrics } from '../../services/cashFlowReport';
-import { getTenant } from '../../services/tenant';
+
 import { teamsApi, Team } from '../../services/teams';
-import { exportListToPdf } from '../../utils/listExportPdf';
+
 import '../../styles/SalesPipeline.css';
 
 const fmtCurrency = (v: number | undefined | null): string => {
@@ -125,11 +125,6 @@ const CashFlowReport: React.FC = () => {
     queryFn: cashFlowReportApi.getMetrics,
   });
 
-  const { data: tenant } = useQuery({
-    queryKey: ['tenant'],
-    queryFn: getTenant,
-  });
-
   const { data: teamsResponse } = useQuery({
     queryKey: ['teams'],
     queryFn: () => teamsApi.getAll(),
@@ -145,27 +140,6 @@ const CashFlowReport: React.FC = () => {
     if (teamFilter === 'all' || !teamMembersResponse?.data?.data) return [];
     return teamMembersResponse.data.data.map((m: any) => Number(m.employee_id));
   }, [teamFilter, teamMembersResponse]);
-
-  const logoUrl = tenant?.settings?.branding?.logo_url;
-
-  // Preload logo as base64 data URL for PDF export
-  const logoDataUrlRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!logoUrl) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        logoDataUrlRef.current = canvas.toDataURL('image/png');
-      }
-    };
-    img.src = logoUrl;
-  }, [logoUrl]);
 
   // Derive unique filter options from data
   const uniqueStatuses = useMemo(() =>
@@ -368,100 +342,28 @@ const CashFlowReport: React.FC = () => {
     };
   }, [sortedProjects]);
 
-  const handleExportPdf = () => {
-    const filters: string[] = [];
-    if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
-    if (pmFilter !== 'all') filters.push(`PM: ${pmFilter}`);
-    if (teamFilter !== 'all') {
-      const teamName = teams.find(t => String(t.id) === teamFilter)?.name;
-      if (teamName) filters.push(`Team: ${teamName}`);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleExportPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const teamName = teamFilter !== 'all'
+        ? teams.find(t => String(t.id) === teamFilter)?.name
+        : undefined;
+      await cashFlowReportApi.downloadPdf({
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        pm: pmFilter !== 'all' ? pmFilter : undefined,
+        department: departmentFilter !== 'all' ? departmentFilter : undefined,
+        market: marketFilter !== 'all' ? marketFilter : undefined,
+        search: searchTerm || undefined,
+        team: teamFilter !== 'all' ? teamFilter : undefined,
+        scheduleName: teamName ? `${teamName} Cash Flow` : undefined,
+      });
+    } catch (err) {
+      console.error('PDF download failed:', err);
+    } finally {
+      setPdfLoading(false);
     }
-    if (departmentFilter !== 'all') filters.push(`Dept: ${departmentFilter}`);
-    if (marketFilter !== 'all') filters.push(`Market: ${marketFilter}`);
-    if (searchTerm) filters.push(`Search: "${searchTerm}"`);
-
-    // Parse a currency string like "$1,234" or "-$5,678" to a number
-    const parseCurrency = (s: string): number => {
-      const cleaned = s.replace(/[$,]/g, '');
-      return parseFloat(cleaned) || 0;
-    };
-
-    // Parse a percent string like "25%" to a decimal
-    const parsePercent = (s: string): number => {
-      return parseFloat(s.replace('%', '')) || 0;
-    };
-
-    exportListToPdf({
-      title: 'Cash Flow Report',
-      subtitle: filters.length > 0
-        ? filters.join('  |  ')
-        : `${sortedProjects.length} projects`,
-      orientation: 'landscape',
-      fileName: `CashFlow_${new Date().toISOString().slice(0, 10)}.pdf`,
-      logoDataUrl: logoDataUrlRef.current || undefined,
-      accentColor: [0, 35, 86],        // navy #002356
-      headerFillColor: [0, 35, 86],     // navy header
-      headerTextColor: [255, 255, 255],  // white text on navy
-      columns: [
-        { header: '#', key: 'number', width: 0.55 },
-        { header: 'Project', key: 'name', width: 2.4 },
-        { header: 'PM', key: 'manager', width: 1.3 },
-        { header: 'Contract Value', key: 'contractValue', align: 'right', width: 0.95 },
-        { header: 'Earned Rev', key: 'earnedRevenue', align: 'right', width: 0.9 },
-        { header: 'Billed', key: 'billed', align: 'right', width: 0.9 },
-        { header: 'Received', key: 'received', align: 'right', width: 0.9 },
-        { header: 'Open AR', key: 'openAR', align: 'right', width: 0.8 },
-        { header: 'Cash Flow', key: 'cashFlow', align: 'right', width: 0.9 },
-        { header: '% Comp', key: 'pctComplete', align: 'right', width: 0.5 },
-        { header: 'GM%', key: 'gm', align: 'right', width: 0.45 },
-        { header: 'Backlog', key: 'backlog', align: 'right', width: 0.9 },
-      ],
-      rows: sortedProjects.map(p => ({
-        number: p.number,
-        name: p.name,
-        manager: p.manager_name || 'Unassigned',
-        contractValue: fmtCurrency(p.contract_value),
-        earnedRevenue: fmtCurrency(p.earned_revenue),
-        billed: fmtCurrency(p.billed_amount),
-        received: fmtCurrency(p.received_amount),
-        openAR: fmtCurrency(p.open_receivables),
-        cashFlow: fmtCurrency(p.cash_flow),
-        pctComplete: fmtPercent(p.percent_complete),
-        gm: fmtPercent(p.gross_profit_percent),
-        backlog: fmtCurrency(p.backlog),
-      })),
-      summaryRows: [
-        { label: 'Projects', value: String(kpis.count), valueColor: [0, 35, 86] as [number, number, number] },
-        { label: 'Contract Value', value: `$${(kpis.totalContractValue / 1e6).toFixed(1)}M`, valueColor: [59, 130, 246] as [number, number, number] },
-        { label: 'Earned Revenue', value: `$${(kpis.totalEarnedRevenue / 1e6).toFixed(1)}M`, valueColor: [139, 92, 246] as [number, number, number] },
-        { label: 'Total Billed', value: `$${(kpis.totalBilled / 1e6).toFixed(1)}M`, valueColor: [217, 119, 6] as [number, number, number] },
-        { label: 'Total Received', value: `$${(kpis.totalReceived / 1e6).toFixed(1)}M`, valueColor: [5, 150, 105] as [number, number, number] },
-        { label: 'Open AR', value: `$${(kpis.openReceivables / 1e6).toFixed(1)}M`, valueColor: [234, 88, 12] as [number, number, number] },
-        { label: 'Net Cash', value: `$${(kpis.netCashPosition / 1e6).toFixed(1)}M`, valueColor: (kpis.netCashPosition >= 0 ? [5, 150, 105] : [220, 38, 38]) as [number, number, number] },
-        { label: 'CF+ Jobs', value: `${kpis.positiveCashFlowCount}/${kpis.count} (${positivePct}%)`, valueColor: (positivePct >= 50 ? [8, 145, 178] : [234, 88, 12]) as [number, number, number] },
-        { label: 'CF+ >15% Comp', value: `${kpis.jobsOver15PositiveCount}/${kpis.jobsOver15Count} (${over15PositivePct}%)`, valueColor: (over15PositivePct >= 60 ? [5, 150, 105] : over15PositivePct >= 40 ? [217, 119, 6] : [225, 29, 72]) as [number, number, number] },
-        { label: 'Avg % at CF+', value: `${avgPctPositiveDisplay}%`, valueColor: [124, 58, 237] as [number, number, number] },
-      ],
-      cellStyleFn: (columnKey, cellValue) => {
-        if (cellValue === '-' || cellValue === '$0') return undefined;
-
-        if (columnKey === 'cashFlow') {
-          const n = parseCurrency(cellValue);
-          if (n > 0) return { textColor: [5, 150, 105] };   // green
-          if (n < 0) return { textColor: [220, 38, 38] };    // red
-        }
-        if (columnKey === 'gm') {
-          const n = parsePercent(cellValue);
-          if (n > 0) return { textColor: [5, 150, 105] };
-          if (n < 0) return { textColor: [220, 38, 38] };
-        }
-        if (columnKey === 'openAR') {
-          const n = parseCurrency(cellValue);
-          if (n > 0) return { textColor: [217, 119, 6] };    // amber
-        }
-        return undefined;
-      },
-    });
   };
 
   const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm;
@@ -631,13 +533,19 @@ const CashFlowReport: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <button className="sales-btn sales-btn-secondary" onClick={handleExportPdf}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export PDF
+          <button className="sales-btn sales-btn-secondary" onClick={handleExportPdf} disabled={pdfLoading}>
+            {pdfLoading ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            )}
+            {pdfLoading ? 'Generating...' : 'Export PDF'}
           </button>
         </div>
       </div>

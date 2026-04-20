@@ -41,6 +41,12 @@ const REPORT_HANDLERS = {
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');
 
     const filters = report.filters || {};
+    // Resolve team name for display on cover page
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), report.tenant_id);
+      if (team) filters.teamName = team.name;
+    }
     const rows = await buildCashFlowData(report.tenant_id, filters);
     const metrics = await buildCashFlowMetrics(report.tenant_id);
     // Sort by worst cash flow first (ascending)

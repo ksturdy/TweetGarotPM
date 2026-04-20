@@ -119,10 +119,21 @@ router.get('/pdf-download', async (req, res) => {
       department: req.query.department,
       market: req.query.market,
       search: req.query.search,
+      team: req.query.team,
     };
+
+    // Resolve team name for display
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), req.tenantId);
+      if (team) filters.teamName = team.name;
+    }
+
     const rows = await buildCashFlowData(req.tenantId, filters);
     rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
-    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters);
+    const metrics = await buildCashFlowMetrics(req.tenantId);
+    const scheduleName = req.query.scheduleName || null;
+    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters, scheduleName, metrics);
 
     const dateStr = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/pdf');
@@ -146,10 +157,20 @@ router.get('/email-draft', async (req, res) => {
       department: req.query.department,
       market: req.query.market,
       search: req.query.search,
+      team: req.query.team,
     };
+
+    // Resolve team name for display
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), req.tenantId);
+      if (team) filters.teamName = team.name;
+    }
+
     const rows = await buildCashFlowData(req.tenantId, filters);
     rows.sort((a, b) => (Number(a.cash_flow) || 0) - (Number(b.cash_flow) || 0));
-    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters);
+    const metrics = await buildCashFlowMetrics(req.tenantId);
+    const pdfBuffer = await generateCashFlowReportPdfBuffer(rows, filters, null, metrics);
 
     const dateStr = new Date().toISOString().split('T')[0];
     const dateLabel = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
