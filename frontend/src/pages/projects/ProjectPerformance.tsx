@@ -47,6 +47,20 @@ const ProjectPerformance: React.FC = () => {
   const dates = snapshots.map(s => format(new Date(s.snapshot_date), 'MMM d'));
   const hasData = snapshots.length > 0;
 
+  // Original estimated margin is a constant — use project override or latest non-zero snapshot value
+  const targetMarginPct = (() => {
+    // Prefer the project-level override
+    if (project?.override_original_estimated_margin_pct != null && project.override_original_estimated_margin_pct !== 0) {
+      return Number(project.override_original_estimated_margin_pct) * 100;
+    }
+    // Fall back to the last non-zero value from snapshots
+    for (let i = snapshots.length - 1; i >= 0; i--) {
+      const val = snapshots[i].original_estimated_margin_pct;
+      if (val != null && val !== 0) return Number(val) * 100;
+    }
+    return 0;
+  })();
+
   const gmPercentData = {
     labels: dates,
     datasets: [
@@ -59,8 +73,8 @@ const ProjectPerformance: React.FC = () => {
         fill: true,
       },
       {
-        label: 'Target GM%',
-        data: snapshots.map(s => (s.original_estimated_margin_pct || 0) * 100),
+        label: 'Estimated GM%',
+        data: snapshots.map(() => targetMarginPct),
         borderColor: '#10b981',
         backgroundColor: 'transparent',
         borderDash: [5, 5],
@@ -188,9 +202,9 @@ const ProjectPerformance: React.FC = () => {
         labels: {
           font: { size: 11 },
           padding: 10,
-          usePointStyle: true,
-          pointStyle: 'line',
-          boxHeight: 0,
+          usePointStyle: false,
+          boxWidth: 20,
+          boxHeight: 3,
         },
       },
       tooltip: {

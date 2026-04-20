@@ -155,8 +155,10 @@ class Team {
   }
 
   /**
-   * Get all employee IDs from teams where the given user is a member or lead
-   * Used for "My Team" filtering on the dashboard
+   * Get all employee IDs from the user's team.
+   * Priority: if the user leads a team, "My Team" = only those teams they lead.
+   * Fallback: if not a lead, use teams they're a member of.
+   * Used for "My Team" filtering on the dashboard.
    */
   static async getMyTeamMemberEmployeeIds(userId, tenantId) {
     // First, get the user's employee_id
@@ -171,7 +173,36 @@ class Team {
 
     const employeeId = empResult.rows[0].id;
 
-    // Find all teams where the user is a member or team lead
+    // Check if user leads any active teams
+    const leadsTeams = await db.query(
+      'SELECT id FROM teams WHERE team_lead_id = $1 AND tenant_id = $2 AND is_active = true',
+      [employeeId, tenantId]
+    );
+
+    if (leadsTeams.rows.length > 0) {
+      // User leads team(s) — "My Team" = only members of those teams + the lead
+      const result = await db.query(`
+        SELECT DISTINCT employee_id FROM (
+          -- All members of teams where user is the team lead
+          SELECT tm.employee_id
+          FROM teams t
+          JOIN team_members tm ON tm.team_id = t.id
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+          UNION
+
+          -- The team lead themselves
+          SELECT t.team_lead_id as employee_id
+          FROM teams t
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+        ) combined
+        WHERE employee_id IS NOT NULL
+      `, [employeeId, tenantId]);
+
+      return result.rows.map(r => r.employee_id);
+    }
+
+    // Fallback: user doesn't lead any team — use teams they're a member of
     const result = await db.query(`
       SELECT DISTINCT employee_id FROM (
         -- All members of teams where user is a member
@@ -188,21 +219,6 @@ class Team {
         FROM team_members tm
         JOIN teams t ON tm.team_id = t.id
         WHERE tm.employee_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND t.team_lead_id IS NOT NULL
-
-        UNION
-
-        -- All members of teams where user is the team lead
-        SELECT tm.employee_id
-        FROM teams t
-        JOIN team_members tm ON tm.team_id = t.id
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
-
-        UNION
-
-        -- The team lead themselves (for teams they lead)
-        SELECT t.team_lead_id as employee_id
-        FROM teams t
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
       ) combined
       WHERE employee_id IS NOT NULL
     `, [employeeId, tenantId]);
@@ -211,10 +227,10 @@ class Team {
   }
 
   /**
-   * Get user IDs for all team members of teams the user belongs to
-   * Similar to getMyTeamMemberEmployeeIds but returns user IDs
-   * Used for filtering opportunities/estimates by team
-   * Uses user_id link, email matching, and name matching as fallbacks
+   * Get user IDs for team members of the user's team.
+   * Priority: if the user leads a team, use only those teams.
+   * Fallback: if not a lead, use teams they're a member of.
+   * Uses user_id link, email matching, and name matching as fallbacks.
    */
   static async getMyTeamMemberUserIds(userId, tenantId) {
     // First, get the user's employee_id
@@ -229,11 +245,61 @@ class Team {
 
     const employeeId = empResult.rows[0].id;
 
-    // Find all user IDs from teams where the user is a member or team lead
-    // Uses multiple matching strategies: user_id link, email match, and name match
+    // Check if user leads any active teams
+    const leadsTeams = await db.query(
+      'SELECT id FROM teams WHERE team_lead_id = $1 AND tenant_id = $2 AND is_active = true',
+      [employeeId, tenantId]
+    );
+
+    if (leadsTeams.rows.length > 0) {
+      // User leads team(s) — "My Team" = only members of those teams + the lead
+      const result = await db.query(`
+        SELECT DISTINCT user_id FROM (
+          -- Members of teams user leads (via user_id link)
+          SELECT e.user_id
+          FROM teams t
+          JOIN team_members tm ON tm.team_id = t.id
+          JOIN employees e ON tm.employee_id = e.id
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND e.user_id IS NOT NULL
+
+          UNION
+
+          -- Members of teams user leads (via email match)
+          SELECT u.id as user_id
+          FROM teams t
+          JOIN team_members tm ON tm.team_id = t.id
+          JOIN employees e ON tm.employee_id = e.id AND e.tenant_id = $2
+          JOIN users u ON LOWER(e.email) = LOWER(u.email) AND u.tenant_id = $2
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+          UNION
+
+          -- Members of teams user leads (via name match)
+          SELECT u.id as user_id
+          FROM teams t
+          JOIN team_members tm ON tm.team_id = t.id
+          JOIN employees e ON tm.employee_id = e.id AND e.tenant_id = $2
+          JOIN users u ON LOWER(e.first_name) = LOWER(u.first_name) AND LOWER(e.last_name) = LOWER(u.last_name) AND u.tenant_id = $2
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+          UNION
+
+          -- The team lead themselves
+          SELECT e.user_id
+          FROM teams t
+          JOIN employees e ON t.team_lead_id = e.id
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND e.user_id IS NOT NULL
+        ) combined
+        WHERE user_id IS NOT NULL
+      `, [employeeId, tenantId]);
+
+      return result.rows.map(r => r.user_id);
+    }
+
+    // Fallback: user doesn't lead any team — use teams they're a member of
     const result = await db.query(`
       SELECT DISTINCT user_id FROM (
-        -- All members of teams where user is a member (via employee user_id link)
+        -- All members of teams where user is a member (via user_id link)
         SELECT e.user_id
         FROM team_members tm
         JOIN teams t ON tm.team_id = t.id
@@ -265,7 +331,7 @@ class Team {
 
         UNION
 
-        -- Team lead of those teams (via employee user_id link)
+        -- Team lead of those teams (via user_id link)
         SELECT e.user_id
         FROM team_members tm
         JOIN teams t ON tm.team_id = t.id
@@ -291,43 +357,6 @@ class Team {
         JOIN employees e ON t.team_lead_id = e.id AND e.tenant_id = $2
         JOIN users u ON LOWER(e.first_name) = LOWER(u.first_name) AND LOWER(e.last_name) = LOWER(u.last_name) AND u.tenant_id = $2
         WHERE tm.employee_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND t.team_lead_id IS NOT NULL
-
-        UNION
-
-        -- All members of teams where user is the team lead (via employee user_id link)
-        SELECT e.user_id
-        FROM teams t
-        JOIN team_members tm ON tm.team_id = t.id
-        JOIN employees e ON tm.employee_id = e.id
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND e.user_id IS NOT NULL
-
-        UNION
-
-        -- Members of teams user leads via email match
-        SELECT u.id as user_id
-        FROM teams t
-        JOIN team_members tm ON tm.team_id = t.id
-        JOIN employees e ON tm.employee_id = e.id AND e.tenant_id = $2
-        JOIN users u ON LOWER(e.email) = LOWER(u.email) AND u.tenant_id = $2
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
-
-        UNION
-
-        -- Members of teams user leads via name match
-        SELECT u.id as user_id
-        FROM teams t
-        JOIN team_members tm ON tm.team_id = t.id
-        JOIN employees e ON tm.employee_id = e.id AND e.tenant_id = $2
-        JOIN users u ON LOWER(e.first_name) = LOWER(u.first_name) AND LOWER(e.last_name) = LOWER(u.last_name) AND u.tenant_id = $2
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
-
-        UNION
-
-        -- The team lead themselves for teams they lead
-        SELECT e.user_id
-        FROM teams t
-        JOIN employees e ON t.team_lead_id = e.id
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND e.user_id IS NOT NULL
       ) combined
       WHERE user_id IS NOT NULL
     `, [employeeId, tenantId]);
@@ -336,8 +365,10 @@ class Team {
   }
 
   /**
-   * Get full names for all team members of teams the user belongs to
-   * Used for matching estimates by estimator_name text field
+   * Get full names for team members of the user's team.
+   * Priority: if the user leads a team, use only those teams.
+   * Fallback: if not a lead, use teams they're a member of.
+   * Used for matching estimates by estimator_name text field.
    */
   static async getMyTeamMemberNames(userId, tenantId) {
     // First, get the user's employee_id
@@ -352,7 +383,38 @@ class Team {
 
     const employeeId = empResult.rows[0].id;
 
-    // Find all team member names from teams where the user is a member or team lead
+    // Check if user leads any active teams
+    const leadsTeams = await db.query(
+      'SELECT id FROM teams WHERE team_lead_id = $1 AND tenant_id = $2 AND is_active = true',
+      [employeeId, tenantId]
+    );
+
+    if (leadsTeams.rows.length > 0) {
+      // User leads team(s) — "My Team" = only members of those teams + the lead
+      const result = await db.query(`
+        SELECT DISTINCT full_name FROM (
+          -- All members of teams where user is the team lead
+          SELECT e.first_name || ' ' || e.last_name as full_name
+          FROM teams t
+          JOIN team_members tm ON tm.team_id = t.id
+          JOIN employees e ON tm.employee_id = e.id
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+
+          UNION
+
+          -- The team lead themselves
+          SELECT e.first_name || ' ' || e.last_name as full_name
+          FROM teams t
+          JOIN employees e ON t.team_lead_id = e.id
+          WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
+        ) combined
+        WHERE full_name IS NOT NULL
+      `, [employeeId, tenantId]);
+
+      return result.rows.map(r => r.full_name);
+    }
+
+    // Fallback: user doesn't lead any team — use teams they're a member of
     const result = await db.query(`
       SELECT DISTINCT full_name FROM (
         -- All members of teams where user is a member
@@ -371,23 +433,6 @@ class Team {
         JOIN teams t ON tm.team_id = t.id
         JOIN employees e ON t.team_lead_id = e.id
         WHERE tm.employee_id = $1 AND t.tenant_id = $2 AND t.is_active = true AND t.team_lead_id IS NOT NULL
-
-        UNION
-
-        -- All members of teams where user is the team lead
-        SELECT e.first_name || ' ' || e.last_name as full_name
-        FROM teams t
-        JOIN team_members tm ON tm.team_id = t.id
-        JOIN employees e ON tm.employee_id = e.id
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
-
-        UNION
-
-        -- The team lead themselves for teams they lead
-        SELECT e.first_name || ' ' || e.last_name as full_name
-        FROM teams t
-        JOIN employees e ON t.team_lead_id = e.id
-        WHERE t.team_lead_id = $1 AND t.tenant_id = $2 AND t.is_active = true
       ) combined
       WHERE full_name IS NOT NULL
     `, [employeeId, tenantId]);

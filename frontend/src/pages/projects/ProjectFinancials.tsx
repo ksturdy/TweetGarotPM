@@ -209,14 +209,52 @@ const ProjectFinancials: React.FC = () => {
     },
   });
 
+  const fmtDollarInput = (num: number) =>
+    Math.round(num).toLocaleString('en-US');
+
+  const parseDollarInput = (str: string) =>
+    parseFloat(str.replace(/,/g, ''));
+
   useEffect(() => {
     if (project) {
       setMarginOverride(project.override_original_estimated_margin != null
-        ? String(project.override_original_estimated_margin) : '');
+        ? fmtDollarInput(Number(project.override_original_estimated_margin)) : '');
       setMarginPctOverride(project.override_original_estimated_margin_pct != null
-        ? String(Number(project.override_original_estimated_margin_pct) * 100) : '');
+        ? String(Number((Number(project.override_original_estimated_margin_pct) * 100).toFixed(2))) : '');
     }
   }, [project]);
+
+  const projectedRevenue = c ? parseFloat(String(c.projected_revenue)) || 0 : 0;
+
+  const handleMarginDollarChange = (value: string) => {
+    // Allow only digits, commas, and minus
+    const cleaned = value.replace(/[^0-9,\-]/g, '');
+    setMarginOverride(cleaned);
+    const num = parseDollarInput(cleaned);
+    if (!isNaN(num) && projectedRevenue > 0) {
+      const pct = (num / projectedRevenue) * 100;
+      setMarginPctOverride(isNaN(pct) ? '' : String(Number(pct.toFixed(2))));
+    } else if (!cleaned) {
+      setMarginPctOverride('');
+    }
+  };
+
+  const handleMarginDollarBlur = () => {
+    const num = parseDollarInput(marginOverride);
+    if (!isNaN(num) && marginOverride) {
+      setMarginOverride(fmtDollarInput(num));
+    }
+  };
+
+  const handleMarginPctChange = (value: string) => {
+    setMarginPctOverride(value);
+    if (value && projectedRevenue > 0) {
+      const dollars = projectedRevenue * (parseFloat(value) / 100);
+      setMarginOverride(isNaN(dollars) ? '' : fmtDollarInput(dollars));
+    } else if (!value) {
+      setMarginOverride('');
+    }
+  };
 
   const saveOverridesMutation = useMutation({
     mutationFn: (data: { override_original_estimated_margin: number | null; override_original_estimated_margin_pct: number | null }) =>
@@ -243,8 +281,9 @@ const ProjectFinancials: React.FC = () => {
   });
 
   const handleSaveOverrides = () => {
+    const dollarVal = marginOverride ? parseDollarInput(marginOverride) : NaN;
     saveOverridesMutation.mutate({
-      override_original_estimated_margin: marginOverride ? parseFloat(marginOverride) : null,
+      override_original_estimated_margin: !isNaN(dollarVal) ? dollarVal : null,
       override_original_estimated_margin_pct: marginPctOverride ? parseFloat(marginPctOverride) / 100 : null,
     });
   };
@@ -401,8 +440,9 @@ const ProjectFinancials: React.FC = () => {
                   <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.35rem' }}>
                     <label style={{ fontSize: '0.7rem', color: '#475569', minWidth: '25px' }}>$</label>
                     <input
-                      type="number" step="0.01" value={marginOverride}
-                      onChange={e => setMarginOverride(e.target.value)}
+                      type="text" inputMode="numeric" value={marginOverride}
+                      onChange={e => handleMarginDollarChange(e.target.value)}
+                      onBlur={handleMarginDollarBlur}
                       placeholder="Margin $"
                       style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
                     />
@@ -410,8 +450,8 @@ const ProjectFinancials: React.FC = () => {
                   <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <label style={{ fontSize: '0.7rem', color: '#475569', minWidth: '25px' }}>%</label>
                     <input
-                      type="number" step="0.1" value={marginPctOverride}
-                      onChange={e => setMarginPctOverride(e.target.value)}
+                      type="number" step="0.01" value={marginPctOverride}
+                      onChange={e => handleMarginPctChange(e.target.value)}
                       placeholder="Margin %"
                       style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
                     />
