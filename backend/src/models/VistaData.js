@@ -2204,10 +2204,11 @@ const VistaData = {
                 p.client AS titan_client, p.contract_value AS titan_contract_value,
                 p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog,
                 p.manager_id AS titan_manager_id,
-                e.id AS vista_manager_id
+                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
          FROM vp_contracts vc
          JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
          LEFT JOIN employees e ON e.employee_number = vc.employee_number::text AND e.tenant_id = vc.tenant_id
+         LEFT JOIN vp_employees vpe ON vpe.employee_number = vc.employee_number::int AND vpe.linked_employee_id IS NOT NULL
          WHERE vc.tenant_id = $1
            AND vc.linked_project_id IS NOT NULL`,
         [tenantId]
@@ -2321,9 +2322,13 @@ const VistaData = {
                 vw.gross_profit_percent, vw.backlog, vw.employee_number,
                 vw.linked_department_id,
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
-                p.department_id AS titan_dept, p.client AS titan_client
+                p.department_id AS titan_dept, p.client AS titan_client,
+                p.manager_id AS titan_manager_id,
+                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
          FROM vp_work_orders vw
          JOIN projects p ON p.number = 'WO-' || vw.work_order_number AND p.tenant_id = vw.tenant_id
+         LEFT JOIN employees e ON e.employee_number = vw.employee_number::text AND e.tenant_id = vw.tenant_id
+         LEFT JOIN vp_employees vpe ON vpe.employee_number = vw.employee_number::int AND vpe.linked_employee_id IS NOT NULL
          WHERE vw.tenant_id = $1
            AND vw.link_status IN ('auto_matched', 'manual_matched')`,
         [tenantId]
@@ -2337,21 +2342,14 @@ const VistaData = {
         const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
+        const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
 
-        if (!statusChanged && !deptChanged && !nameChanged && !clientChanged) continue;
+        if (!statusChanged && !deptChanged && !nameChanged && !clientChanged && !managerChanged) continue;
 
         await client.query('SAVEPOINT sync_wo_row');
         try {
-          let managerId = null;
-          if (row.employee_number) {
-            const empResult = await client.query(
-              `SELECT id FROM employees WHERE tenant_id = $1 AND employee_number = $2 LIMIT 1`,
-              [tenantId, String(row.employee_number)]
-            );
-            if (empResult.rows.length > 0) {
-              managerId = empResult.rows[0].id;
-            }
-          }
+          // Manager already resolved via JOIN (employees + vp_employees fallback)
+          const managerId = row.vista_manager_id || null;
 
           await client.query(
             `UPDATE projects SET
@@ -2386,6 +2384,7 @@ const VistaData = {
           if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${row.linked_department_id}`);
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
+          if (managerChanged) changedFields.push(`manager: ${row.titan_manager_id} → ${row.vista_manager_id}`);
           changes.push({
             work_order_number: row.work_order_number,
             project_id: row.project_id,
