@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
@@ -100,9 +100,27 @@ const Row: React.FC<{ label: string; value: string; highlight?: boolean; valueCo
   </div>
 );
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const Section: React.FC<{
+  title: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+}> = ({ title, children, onClick }) => (
   <div style={{ marginBottom: '0.75rem' }}>
-    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase', marginBottom: '0.5rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.25rem' }}>{title}</div>
+    <div
+      style={{
+        fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase',
+        marginBottom: '0.5rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.25rem',
+        cursor: onClick ? 'pointer' : 'default',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        userSelect: onClick ? 'none' : 'auto',
+      }}
+      onClick={onClick}
+    >
+      <span>{title}</span>
+      {onClick && (
+        <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>▶</span>
+      )}
+    </div>
     {children}
   </div>
 );
@@ -142,6 +160,7 @@ const LaborRow: React.FC<{
 
 const ProjectFinancials: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useTitanFeedback();
   const [showSnapshotSuccess, setShowSnapshotSuccess] = useState(false);
@@ -149,6 +168,14 @@ const ProjectFinancials: React.FC = () => {
   const [marginOverride, setMarginOverride] = useState('');
   const [marginPctOverride, setMarginPctOverride] = useState('');
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
+
+  const drillIn = (costType: number, trade?: string) => {
+    const params = new URLSearchParams();
+    params.set('cost_type', String(costType));
+    if (trade) params.set('trade', trade);
+    if (selectedJob) params.set('job', selectedJob);
+    navigate(`/projects/${projectId}/financials/cost-detail?${params.toString()}`);
+  };
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -511,27 +538,27 @@ const ProjectFinancials: React.FC = () => {
           <div className="card" style={{ padding: '0.75rem' }}>
             {costSummary ? (
               <>
-                <Section title="Material">
+                <Section title="Material" onClick={() => drillIn(2)}>
                   <Row label="Estimate" value={fmt(costSummary.costs.material.est_cost)} />
                   <Row label="JTD" value={fmt(costSummary.costs.material.jtd_cost)} highlight />
                   <Row label="Projected" value={fmt(costSummary.costs.material.projected_cost)} valueColor={getProjectedColor(costSummary.costs.material.projected_cost, costSummary.costs.material.est_cost)} />
                 </Section>
-                <Section title="Subcontracts">
+                <Section title="Subcontracts" onClick={() => drillIn(3)}>
                   <Row label="Estimate" value={fmt(costSummary.costs.subcontracts.est_cost)} />
                   <Row label="JTD" value={fmt(costSummary.costs.subcontracts.jtd_cost)} highlight />
                   <Row label="Projected" value={fmt(costSummary.costs.subcontracts.projected_cost)} valueColor={getProjectedColor(costSummary.costs.subcontracts.projected_cost, costSummary.costs.subcontracts.est_cost)} />
                 </Section>
-                <Section title="Rentals">
+                <Section title="Rentals" onClick={() => drillIn(4)}>
                   <Row label="Estimate" value={fmt(costSummary.costs.rentals.est_cost)} />
                   <Row label="JTD" value={fmt(costSummary.costs.rentals.jtd_cost)} highlight />
                   <Row label="Projected" value={fmt(costSummary.costs.rentals.projected_cost)} valueColor={getProjectedColor(costSummary.costs.rentals.projected_cost, costSummary.costs.rentals.est_cost)} />
                 </Section>
-                <Section title="MEP Equipment">
+                <Section title="MEP Equipment" onClick={() => drillIn(5)}>
                   <Row label="Estimate" value={fmt(costSummary.costs.mep_equipment.est_cost)} />
                   <Row label="JTD" value={fmt(costSummary.costs.mep_equipment.jtd_cost)} highlight />
                   <Row label="Projected" value={fmt(costSummary.costs.mep_equipment.projected_cost)} valueColor={getProjectedColor(costSummary.costs.mep_equipment.projected_cost, costSummary.costs.mep_equipment.est_cost)} />
                 </Section>
-                <Section title="General Conditions">
+                <Section title="General Conditions" onClick={() => drillIn(6)}>
                   <Row label="Estimate" value={fmt(costSummary.costs.general_conditions.est_cost)} />
                   <Row label="JTD" value={fmt(costSummary.costs.general_conditions.jtd_cost)} highlight />
                   <Row label="Projected" value={fmt(costSummary.costs.general_conditions.projected_cost)} valueColor={getProjectedColor(costSummary.costs.general_conditions.projected_cost, costSummary.costs.general_conditions.est_cost)} />
@@ -575,7 +602,7 @@ const ProjectFinancials: React.FC = () => {
                   const tradeLabel = trade === 'pf' ? 'Pipefitter (PF)' : trade === 'sm' ? 'Sheet Metal (SM)' : 'Plumbing (PL)';
                   const projectedHours = calcProjectedHours(ts);
                   return (
-                    <Section key={trade} title={tradeLabel}>
+                    <Section key={trade} title={tradeLabel} onClick={() => drillIn(1, trade)}>
                       <LaborHeader />
                       <LaborRow label="Estimate" hours={fmtNum(ts.est_hours)} cost={fmt(ts.est_cost)} />
                       <LaborRow label="JTD" hours={fmtNum(ts.jtd_hours)} cost={fmt(ts.jtd_cost)} highlight />
@@ -590,7 +617,7 @@ const ProjectFinancials: React.FC = () => {
                     const admin = getTradeSummary('admin');
                     const adminProjHours = calcProjectedHours(admin);
                     return (
-                      <Section title="Office/Admin">
+                      <Section title="Office/Admin" onClick={() => drillIn(1, 'admin')}>
                         <LaborHeader />
                         <LaborRow label="Estimate" hours={fmtNum(admin.est_hours)} cost={fmt(admin.est_cost)} />
                         <LaborRow label="JTD" hours={fmtNum(admin.jtd_hours)} cost={fmt(admin.jtd_cost)} highlight />

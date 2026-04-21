@@ -3191,14 +3191,14 @@ const VistaData = {
           contract = $1, job_description = $2, phase_description = $3,
           est_hours = $4, est_cost = $5, jtd_hours = $6, jtd_cost = $7,
           committed_cost = $8, projected_cost = $9, percent_complete = $10,
-          import_batch_id = $11, updated_at = CURRENT_TIMESTAMP
+          import_batch_id = $11, prior_week_cost = $13, updated_at = CURRENT_TIMESTAMP
         WHERE id = $12
         RETURNING *`,
         [
           data.contract, data.job_description, data.phase_description,
           data.est_hours, data.est_cost, data.jtd_hours, data.jtd_cost,
           data.committed_cost, data.projected_cost, data.percent_complete,
-          batchId, existing.rows[0].id
+          batchId, existing.rows[0].id, data.prior_week_cost || 0
         ]
       );
       return { row: result.rows[0], isNew: false };
@@ -3207,14 +3207,14 @@ const VistaData = {
         `INSERT INTO vp_phase_codes (
           tenant_id, contract, job, job_description, cost_type, phase, phase_description,
           est_hours, est_cost, jtd_hours, jtd_cost, committed_cost, projected_cost,
-          percent_complete, import_batch_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          percent_complete, import_batch_id, prior_week_cost
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *`,
         [
           tenantId, data.contract, data.job, data.job_description, data.cost_type,
           data.phase, data.phase_description, data.est_hours, data.est_cost,
           data.jtd_hours, data.jtd_cost, data.committed_cost, data.projected_cost,
-          data.percent_complete, batchId
+          data.percent_complete, batchId, data.prior_week_cost || 0
         ]
       );
       return { row: result.rows[0], isNew: true };
@@ -3375,6 +3375,51 @@ const VistaData = {
     }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, projected_cost: 0 });
 
     return { costs, labor, labor_totals };
+  },
+
+  async getPhaseCodeDetail(projectId, tenantId, { job = null, costType = null, trade = null } = {}) {
+    const params = [tenantId, projectId];
+    let idx = 3;
+    const conditions = ['pc.tenant_id = $1', 'pc.linked_project_id = $2'];
+
+    if (job) {
+      conditions.push(`pc.job = $${idx++}`);
+      params.push(job);
+    }
+
+    if (costType) {
+      conditions.push(`pc.cost_type = $${idx++}`);
+      params.push(parseInt(costType));
+    }
+
+    if (trade) {
+      const tradeMap = {
+        pf:    ['40-%', '45-%'],
+        sm:    ['30-%', '35-%'],
+        pl:    ['50-%', '55-%'],
+        admin: ['70-%'],
+      };
+      const prefixes = tradeMap[trade];
+      if (prefixes) {
+        const likeClauses = prefixes.map(p => {
+          params.push(p);
+          return `pc.phase LIKE $${idx++}`;
+        });
+        conditions.push(`(${likeClauses.join(' OR ')})`);
+      }
+    }
+
+    const result = await db.query(
+      `SELECT pc.id, pc.job, pc.phase, pc.phase_description,
+              pc.est_hours, pc.est_cost, pc.jtd_hours, pc.jtd_cost,
+              pc.committed_cost, pc.projected_cost, pc.percent_complete,
+              pc.prior_week_cost
+       FROM vp_phase_codes pc
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY pc.phase, pc.job`,
+      params
+    );
+    return result.rows;
   }
 };
 

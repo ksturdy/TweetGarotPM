@@ -563,7 +563,8 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             jtd_cost: parseNumber(row[' JTD Cost '] ?? row['JTD Cost']),
             committed_cost: parseNumber(row[' Committed Cost '] ?? row['Committed Cost']),
             projected_cost: parseNumber(row[' Projected At Completion Cost '] ?? row['Projected At Completion Cost']),
-            percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete '])
+            percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete ']),
+            prior_week_cost: parseNumber(row['Previous Week Cost'] ?? row[' Previous Week Cost '])
           };
 
           if (!phaseData.job || !phaseData.phase) continue;
@@ -966,6 +967,24 @@ router.get('/phase-codes/project/:projectId/cost-summary', async (req, res, next
       req.query.job || null
     );
     res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/vista/phase-codes/project/:projectId/detail - Raw phase code rows for drill-in
+router.get('/phase-codes/project/:projectId/detail', async (req, res, next) => {
+  try {
+    const rows = await VistaData.getPhaseCodeDetail(
+      req.params.projectId,
+      req.tenantId,
+      {
+        job: req.query.job || null,
+        costType: req.query.cost_type || null,
+        trade: req.query.trade || null,
+      }
+    );
+    res.json(rows);
   } catch (error) {
     next(error);
   }

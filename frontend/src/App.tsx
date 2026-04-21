@@ -79,6 +79,7 @@ import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
+import CostDrillIn from './pages/projects/CostDrillIn';
 import ProjectPerformance from './pages/projects/ProjectPerformance';
 import ProjectedRevenue from './pages/projects/ProjectedRevenue';
 import LaborForecast from './pages/projects/LaborForecast';
@@ -450,6 +451,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/phase-schedule" element={<PhaseSchedule />} />
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
                 <Route path="/projects/:id/financials" element={<ProjectFinancials />} />
+                <Route path="/projects/:id/financials/cost-detail" element={<CostDrillIn />} />
                 <Route path="/projects/:id/performance" element={<ProjectPerformance />} />
                 <Route path="/projects/:id/specifications" element={<ProjectSpecifications />} />
                 <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />

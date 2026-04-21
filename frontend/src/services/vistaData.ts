@@ -154,6 +154,21 @@ export interface ProjectJob {
   job_description: string;
 }
 
+export interface PhaseCodeDetailRow {
+  id: number;
+  job: string;
+  phase: string;
+  phase_description: string;
+  est_hours: number;
+  est_cost: number;
+  jtd_hours: number;
+  jtd_cost: number;
+  committed_cost: number;
+  projected_cost: number;
+  percent_complete: number;
+  prior_week_cost: number;
+}
+
 export interface VPWorkOrder {
   id: number;
   tenant_id: number;
@@ -714,6 +729,19 @@ export const vistaDataService = {
   getPhaseCodeCostSummary: async (projectId: number, job?: string): Promise<PhaseCodeCostSummary> => {
     const params = job ? `?job=${encodeURIComponent(job)}` : '';
     const response = await api.get(`/vista/phase-codes/project/${projectId}/cost-summary${params}`);
+    return response.data;
+  },
+
+  getPhaseCodeDetail: async (
+    projectId: number,
+    options?: { job?: string; costType?: number; trade?: string }
+  ): Promise<PhaseCodeDetailRow[]> => {
+    const params = new URLSearchParams();
+    if (options?.job) params.append('job', options.job);
+    if (options?.costType) params.append('cost_type', String(options.costType));
+    if (options?.trade) params.append('trade', options.trade);
+    const qs = params.toString();
+    const response = await api.get(`/vista/phase-codes/project/${projectId}/detail${qs ? `?${qs}` : ''}`);
     return response.data;
   },
 
