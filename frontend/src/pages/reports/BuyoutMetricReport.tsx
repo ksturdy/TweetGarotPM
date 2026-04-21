@@ -1,11 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { cashFlowReportApi, CashFlowProject, CashFlowMetrics } from '../../services/cashFlowReport';
-
+import { buyoutMetricReportApi, BuyoutMetricProject } from '../../services/buyoutMetricReport';
 import { teamsApi, Team } from '../../services/teams';
 
 import '../../styles/SalesPipeline.css';
+
+const COST_TYPE_OPTIONS = [
+  { value: 1, label: 'Labor' },
+  { value: 2, label: 'Material' },
+  { value: 3, label: 'Subcontracts' },
+  { value: 4, label: 'Rentals' },
+  { value: 5, label: 'MEP Equipment' },
+  { value: 6, label: 'General Conditions' },
+];
+
+const DEFAULT_COST_TYPES = [3, 5]; // Subcontracts + MEP Equipment
 
 const fmtCurrency = (v: number | undefined | null): string => {
   if (v === undefined || v === null || isNaN(Number(v))) return '-';
@@ -19,7 +29,12 @@ const fmtPercent = (v: number | undefined | null): string => {
   return `${Math.round(Number(v) * 100)}%`;
 };
 
-// Gradient definitions for KPI icon boxes
+const fmtCompact = (v: number): string => {
+  if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (Math.abs(v) >= 1e3) return `$${(v / 1e3).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
+};
+
 const KPI_STYLES = {
   blue:   { gradient: 'linear-gradient(135deg, #002356 0%, #004080 100%)', text: '#3b82f6' },
   purple: { gradient: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)', text: '#8b5cf6' },
@@ -89,7 +104,7 @@ const KpiCard: React.FC<{ card: KpiCardData }> = ({ card }) => (
       {card.hasBar && (
         <div style={{ marginTop: '6px', height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
           <div style={{
-            height: '100%', width: `${card.barPct}%`,
+            height: '100%', width: `${Math.min(card.barPct || 0, 100)}%`,
             background: card.style.gradient,
             borderRadius: '2px',
             transition: 'width 0.5s ease',
@@ -100,12 +115,17 @@ const KpiCard: React.FC<{ card: KpiCardData }> = ({ card }) => (
   </div>
 );
 
-const CashFlowReport: React.FC = () => {
+const BuyoutMetricReport: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialTeam = searchParams.get('team') || 'all';
+  const initialMinPct = searchParams.get('min_percent_complete');
 
-  // Filters
+  // Cost type filter (multi-select)
+  const [selectedCostTypes, setSelectedCostTypes] = useState<number[]>(DEFAULT_COST_TYPES);
+  const [minPctComplete, setMinPctComplete] = useState<number>(initialMinPct !== null ? Number(initialMinPct) : 10);
+
+  // Standard filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Open');
   const [pmFilter, setPmFilter] = useState<string>('all');
@@ -113,18 +133,19 @@ const CashFlowReport: React.FC = () => {
   const [marketFilter, setMarketFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>(initialTeam);
 
-  // Sorting - default worst (most negative) cash flow first
-  const [sortColumn, setSortColumn] = useState<string>('cash_flow');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Sorting
+  const [sortColumn, setSortColumn] = useState<string>('buyout_remaining');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Build query params from cost type + min pct filters (server-side filters)
+  const queryParams = useMemo(() => ({
+    cost_types: selectedCostTypes,
+    min_percent_complete: minPctComplete / 100, // convert to decimal
+  }), [selectedCostTypes, minPctComplete]);
 
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['cashFlowReport'],
-    queryFn: cashFlowReportApi.getData,
-  });
-
-  const { data: snapshotMetrics } = useQuery({
-    queryKey: ['cashFlowMetrics'],
-    queryFn: cashFlowReportApi.getMetrics,
+    queryKey: ['buyoutMetricReport', queryParams],
+    queryFn: () => buyoutMetricReportApi.getData(queryParams),
   });
 
   const { data: teams = [] } = useQuery<Team[]>({
@@ -145,7 +166,7 @@ const CashFlowReport: React.FC = () => {
     return teamMembersResponse.data.data.map((m: any) => Number(m.employee_id));
   }, [teamFilter, teamMembersResponse]);
 
-  // Derive unique filter options from data
+  // Derive unique filter options
   const uniqueStatuses = useMemo(() =>
     [...new Set(projects.map(p => p.status).filter(Boolean))].sort(),
     [projects]
@@ -163,7 +184,7 @@ const CashFlowReport: React.FC = () => {
     [projects]
   );
 
-  // Filter
+  // Client-side filters (status, pm, dept, market, team, search)
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -178,9 +199,7 @@ const CashFlowReport: React.FC = () => {
           p.name?.toLowerCase().includes(term) ||
           p.number?.toLowerCase().includes(term) ||
           p.manager_name?.toLowerCase().includes(term) ||
-          p.customer_name?.toLowerCase().includes(term) ||
-          p.owner_name?.toLowerCase().includes(term) ||
-          p.department_number?.toLowerCase().includes(term)
+          p.customer_name?.toLowerCase().includes(term)
         );
       }
       return true;
@@ -206,41 +225,33 @@ const CashFlowReport: React.FC = () => {
           aVal = a.manager_name?.toLowerCase() ?? '';
           bVal = b.manager_name?.toLowerCase() ?? '';
           break;
-        case 'contract_value':
-          aVal = Number(a.contract_value) || 0;
-          bVal = Number(b.contract_value) || 0;
-          break;
-        case 'earned_revenue':
-          aVal = Number(a.earned_revenue) || 0;
-          bVal = Number(b.earned_revenue) || 0;
-          break;
-        case 'billed_amount':
-          aVal = Number(a.billed_amount) || 0;
-          bVal = Number(b.billed_amount) || 0;
-          break;
-        case 'received_amount':
-          aVal = Number(a.received_amount) || 0;
-          bVal = Number(b.received_amount) || 0;
-          break;
-        case 'open_receivables':
-          aVal = Number(a.open_receivables) || 0;
-          bVal = Number(b.open_receivables) || 0;
-          break;
-        case 'cash_flow':
-          aVal = Number(a.cash_flow) || 0;
-          bVal = Number(b.cash_flow) || 0;
-          break;
         case 'percent_complete':
           aVal = Number(a.percent_complete) || 0;
           bVal = Number(b.percent_complete) || 0;
           break;
-        case 'gross_profit_percent':
-          aVal = Number(a.gross_profit_percent) || 0;
-          bVal = Number(b.gross_profit_percent) || 0;
+        case 'est_cost':
+          aVal = a.est_cost || 0;
+          bVal = b.est_cost || 0;
           break;
-        case 'backlog':
-          aVal = Number(a.backlog) || 0;
-          bVal = Number(b.backlog) || 0;
+        case 'jtd_cost':
+          aVal = a.jtd_cost || 0;
+          bVal = b.jtd_cost || 0;
+          break;
+        case 'committed_cost':
+          aVal = a.committed_cost || 0;
+          bVal = b.committed_cost || 0;
+          break;
+        case 'projected_cost':
+          aVal = a.projected_cost || 0;
+          bVal = b.projected_cost || 0;
+          break;
+        case 'buyout_remaining':
+          aVal = a.buyout_remaining || 0;
+          bVal = b.buyout_remaining || 0;
+          break;
+        case 'buyout_pct':
+          aVal = a.est_cost > 0 ? a.committed_cost / a.est_cost : 0;
+          bVal = b.est_cost > 0 ? b.committed_cost / b.est_cost : 0;
           break;
         case 'status':
           aVal = a.status ?? '';
@@ -256,112 +267,78 @@ const CashFlowReport: React.FC = () => {
     });
   }, [filteredProjects, sortColumn, sortDirection]);
 
-  const handleSort = (column: string) => {
+  const handleSort = useCallback((column: string) => {
     if (sortColumn === column) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortColumn(column);
       setSortDirection('asc');
     }
-  };
+  }, [sortColumn]);
 
   // KPIs
   const kpis = useMemo(() => {
-    const sum = (key: keyof CashFlowProject) =>
-      filteredProjects.reduce((s, p) => s + (Number(p[key]) || 0), 0);
-
-    const positiveCashFlowCount = filteredProjects.filter(p => Number(p.cash_flow) > 0).length;
-
-    // Jobs >15% complete
-    const jobsOver15 = filteredProjects.filter(p => (Number(p.percent_complete) || 0) > 0.15);
-    const jobsOver15Positive = jobsOver15.filter(p => Number(p.cash_flow) > 0);
-
-    // Average % complete when jobs first turned cash-flow positive (from weekly snapshots)
-    const filteredProjectIds = new Set(filteredProjects.map(p => p.id));
-    const snapshotPerProject = snapshotMetrics?.per_project?.filter(
-      sp => filteredProjectIds.has(sp.project_id)
-    ) || [];
-    const avgPctWhenPositive = snapshotPerProject.length > 0
-      ? snapshotPerProject.reduce((s, sp) => s + sp.percent_complete_at_positive, 0) / snapshotPerProject.length
-      : 0;
-    const projectsTurnedPositiveCount = snapshotPerProject.length;
+    const totalEst = filteredProjects.reduce((s, p) => s + p.est_cost, 0);
+    const totalJtd = filteredProjects.reduce((s, p) => s + p.jtd_cost, 0);
+    const totalCommitted = filteredProjects.reduce((s, p) => s + p.committed_cost, 0);
+    const totalProjected = filteredProjects.reduce((s, p) => s + p.projected_cost, 0);
+    const totalBuyoutRemaining = filteredProjects.reduce((s, p) => s + p.buyout_remaining, 0);
+    const overallBuyoutPct = totalEst > 0 ? (totalCommitted / totalEst) * 100 : 0;
 
     return {
       count: filteredProjects.length,
-      totalContractValue: sum('contract_value'),
-      totalEarnedRevenue: sum('earned_revenue'),
-      totalBilled: sum('billed_amount'),
-      totalReceived: sum('received_amount'),
-      openReceivables: sum('open_receivables'),
-      netCashPosition: sum('cash_flow'),
-      positiveCashFlowCount,
-      jobsOver15Count: jobsOver15.length,
-      jobsOver15PositiveCount: jobsOver15Positive.length,
-      avgPctWhenPositive,
-      projectsTurnedPositiveCount,
+      totalEst,
+      totalJtd,
+      totalCommitted,
+      totalProjected,
+      totalBuyoutRemaining,
+      overallBuyoutPct,
     };
-  }, [filteredProjects, snapshotMetrics]);
+  }, [filteredProjects]);
 
   // Footer totals
   const footerTotals = useMemo(() => {
-    const sum = (key: keyof CashFlowProject) =>
-      sortedProjects.reduce((s, p) => s + (Number(p[key]) || 0), 0);
+    const totalEst = sortedProjects.reduce((s, p) => s + p.est_cost, 0);
+    const totalJtd = sortedProjects.reduce((s, p) => s + p.jtd_cost, 0);
+    const totalCommitted = sortedProjects.reduce((s, p) => s + p.committed_cost, 0);
+    const totalProjected = sortedProjects.reduce((s, p) => s + p.projected_cost, 0);
+    const totalBuyoutRemaining = sortedProjects.reduce((s, p) => s + p.buyout_remaining, 0);
 
-    const totalCV = sum('contract_value');
-
-    // Weighted GM%
-    const gmNumerator = sortedProjects.reduce((s, p) => {
-      const cv = Number(p.contract_value) || 0;
-      const gm = Number(p.gross_profit_percent);
-      if (!cv || isNaN(gm)) return s;
-      return s + cv * gm;
-    }, 0);
-    const weightedGm = totalCV > 0 ? gmNumerator / totalCV : 0;
-
-    // Weighted % Complete
+    // Weighted % complete (weighted by projected cost)
     const pctNumerator = sortedProjects.reduce((s, p) => {
-      const cv = Number(p.contract_value) || 0;
-      const pct = Number(p.percent_complete);
-      if (!cv || isNaN(pct)) return s;
-      return s + cv * pct;
+      const pc = Number(p.percent_complete) || 0;
+      const proj = p.projected_cost || 0;
+      return s + pc * proj;
     }, 0);
-    const pctDenominator = sortedProjects.reduce((s, p) => {
-      const cv = Number(p.contract_value) || 0;
-      const pct = Number(p.percent_complete);
-      if (!cv || isNaN(pct)) return s;
-      return s + cv;
-    }, 0);
-    const weightedPct = pctDenominator > 0 ? pctNumerator / pctDenominator : 0;
+    const weightedPct = totalProjected > 0 ? pctNumerator / totalProjected : 0;
 
-    return {
-      contractValue: totalCV,
-      earnedRevenue: sum('earned_revenue'),
-      billedAmount: sum('billed_amount'),
-      receivedAmount: sum('received_amount'),
-      openReceivables: sum('open_receivables'),
-      cashFlow: sum('cash_flow'),
-      backlog: sum('backlog'),
-      weightedGm,
-      weightedPct,
-    };
+    return { totalEst, totalJtd, totalCommitted, totalProjected, totalBuyoutRemaining, weightedPct };
   }, [sortedProjects]);
+
+  const toggleCostType = useCallback((ct: number) => {
+    setSelectedCostTypes(prev => {
+      if (prev.includes(ct)) {
+        if (prev.length === 1) return prev; // Don't allow empty selection
+        return prev.filter(x => x !== ct);
+      }
+      return [...prev, ct].sort();
+    });
+  }, []);
 
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handleExportPdf = async () => {
     setPdfLoading(true);
     try {
-      const teamName = teamFilter !== 'all'
-        ? teams.find(t => String(t.id) === teamFilter)?.name
-        : undefined;
-      await cashFlowReportApi.downloadPdf({
+      await buyoutMetricReportApi.downloadPdf({
+        cost_types: selectedCostTypes,
+        min_percent_complete: minPctComplete / 100,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         pm: pmFilter !== 'all' ? pmFilter : undefined,
         department: departmentFilter !== 'all' ? departmentFilter : undefined,
         market: marketFilter !== 'all' ? marketFilter : undefined,
         search: searchTerm || undefined,
         team: teamFilter !== 'all' ? teamFilter : undefined,
-        scheduleName: teamName ? `${teamName} Cash Flow` : undefined,
       });
     } catch (err) {
       console.error('PDF download failed:', err);
@@ -370,9 +347,13 @@ const CashFlowReport: React.FC = () => {
     }
   };
 
-  const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm;
+  const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || departmentFilter !== 'all' ||
+    marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm ||
+    JSON.stringify(selectedCostTypes) !== JSON.stringify(DEFAULT_COST_TYPES) || minPctComplete !== 10;
 
   const clearAllFilters = () => {
+    setSelectedCostTypes(DEFAULT_COST_TYPES);
+    setMinPctComplete(10);
     setStatusFilter('all');
     setPmFilter('all');
     setDepartmentFilter('all');
@@ -393,24 +374,6 @@ const CashFlowReport: React.FC = () => {
     return colors[status] || '#6b7280';
   };
 
-  // Cash flow bar: shows ratio of received vs billed as a mini bar
-  const getCashFlowBarColor = (cf: number | undefined | null): string => {
-    const n = Number(cf) || 0;
-    if (n > 0) return '#10b981';
-    if (n < 0) return '#ef4444';
-    return '#94a3b8';
-  };
-
-  const positivePct = kpis.count > 0
-    ? Math.round((kpis.positiveCashFlowCount / kpis.count) * 100)
-    : 0;
-
-  const over15PositivePct = kpis.jobsOver15Count > 0
-    ? Math.round((kpis.jobsOver15PositiveCount / kpis.jobsOver15Count) * 100)
-    : 0;
-
-  const avgPctPositiveDisplay = Math.round(kpis.avgPctWhenPositive * 100);
-
   if (isLoading) {
     return (
       <div className="sales-container">
@@ -421,106 +384,62 @@ const CashFlowReport: React.FC = () => {
             borderTopColor: '#3b82f6', animation: 'spin 0.8s linear infinite',
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading cash flow data...</div>
+          <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading buyout metric data...</div>
         </div>
       </div>
     );
   }
 
-  // KPI card definitions
-  const kpiCards = [
+  const costTypeLabel = selectedCostTypes
+    .map(ct => COST_TYPE_OPTIONS.find(o => o.value === ct)?.label)
+    .filter(Boolean)
+    .join(', ');
+
+  const kpiCards: KpiCardData[] = [
     {
       label: 'Projects',
       value: kpis.count.toLocaleString(),
       style: KPI_STYLES.blue,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      ),
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
     },
     {
-      label: 'Contract Value',
-      value: `$${(kpis.totalContractValue / 1e6).toFixed(1)}M`,
+      label: 'Estimated Cost',
+      value: fmtCompact(kpis.totalEst),
       style: KPI_STYLES.blue,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      ),
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
     },
     {
-      label: 'Earned Revenue',
-      value: `$${(kpis.totalEarnedRevenue / 1e6).toFixed(1)}M`,
-      style: KPI_STYLES.purple,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-      ),
+      label: 'Projected Cost',
+      value: fmtCompact(kpis.totalProjected),
+      style: KPI_STYLES.cyan,
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
     },
     {
-      label: 'Total Billed',
-      value: `$${(kpis.totalBilled / 1e6).toFixed(1)}M`,
-      style: KPI_STYLES.amber,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      ),
-    },
-    {
-      label: 'Total Received',
-      value: `$${(kpis.totalReceived / 1e6).toFixed(1)}M`,
-      style: KPI_STYLES.green,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-      ),
-    },
-    {
-      label: 'Open Receivables',
-      value: `$${(kpis.openReceivables / 1e6).toFixed(1)}M`,
+      label: 'JTD Cost',
+      value: fmtCompact(kpis.totalJtd),
       style: KPI_STYLES.orange,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      ),
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>,
     },
     {
-      label: 'Net Cash Position',
-      value: `$${(kpis.netCashPosition / 1e6).toFixed(1)}M`,
-      style: kpis.netCashPosition >= 0 ? KPI_STYLES.green : KPI_STYLES.rose,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      ),
-    },
-    {
-      label: 'Positive Cash Flow',
-      value: `${kpis.positiveCashFlowCount} / ${kpis.count}`,
-      subValue: `${positivePct}%`,
-      style: positivePct >= 50 ? KPI_STYLES.cyan : KPI_STYLES.orange,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
-      ),
-      hasBar: true,
-      barPct: positivePct,
-    },
-    {
-      label: 'CF+ Jobs >15% Comp',
-      value: `${kpis.jobsOver15PositiveCount} / ${kpis.jobsOver15Count}`,
-      subValue: `${over15PositivePct}%`,
-      style: over15PositivePct >= 60 ? KPI_STYLES.green : over15PositivePct >= 40 ? KPI_STYLES.amber : KPI_STYLES.rose,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      ),
-      hasBar: true,
-      barPct: over15PositivePct,
-    },
-    {
-      label: 'Avg % Comp at CF+',
-      value: `${avgPctPositiveDisplay}%`,
-      subValue: `${kpis.projectsTurnedPositiveCount} jobs`,
+      label: 'Committed Cost',
+      value: fmtCompact(kpis.totalCommitted),
+      subValue: `${Math.round(kpis.overallBuyoutPct)}% bought out`,
       style: KPI_STYLES.purple,
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      ),
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+      hasBar: true,
+      barPct: kpis.overallBuyoutPct,
+    },
+    {
+      label: 'Buyout Remaining',
+      value: fmtCompact(kpis.totalBuyoutRemaining),
+      style: kpis.totalBuyoutRemaining >= 0 ? KPI_STYLES.amber : KPI_STYLES.rose,
+      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
     },
   ];
 
   return (
     <div className="sales-container">
-      {/* Header with logo */}
+      {/* Header */}
       <div className="sales-page-header" style={{ position: 'relative' }}>
         <div className="sales-page-title">
           <div>
@@ -532,8 +451,10 @@ const CashFlowReport: React.FC = () => {
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-            }}>Cash Flow Report</h1>
-            <div className="sales-subtitle">Project billing, collections, and cash position</div>
+            }}>Buyout Metric</h1>
+            <div className="sales-subtitle">
+              Project buyout status by cost type — {costTypeLabel}
+            </div>
           </div>
         </div>
         <div className="sales-header-actions">
@@ -554,26 +475,14 @@ const CashFlowReport: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards - Row 1: Financial Summary */}
+      {/* KPI Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: '1rem',
-        marginBottom: '0.75rem',
-      }}>
-        {kpiCards.slice(0, 5).map(card => (
-          <KpiCard key={card.label} card={card} />
-        ))}
-      </div>
-
-      {/* KPI Cards - Row 2: Cash Flow Analysis */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
+        gridTemplateColumns: 'repeat(6, 1fr)',
         gap: '1rem',
         marginBottom: '1.25rem',
       }}>
-        {kpiCards.slice(5).map(card => (
+        {kpiCards.map(card => (
           <KpiCard key={card.label} card={card} />
         ))}
       </div>
@@ -590,7 +499,54 @@ const CashFlowReport: React.FC = () => {
         alignItems: 'flex-end',
         border: '1px solid #e5e7eb',
       }}>
-        <div style={{ flex: '1', minWidth: '200px' }}>
+        {/* Cost Type checkboxes */}
+        <div style={{ minWidth: '280px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cost Types</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+            {COST_TYPE_OPTIONS.map(ct => (
+              <label
+                key={ct.value}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 500,
+                  cursor: 'pointer', userSelect: 'none',
+                  background: selectedCostTypes.includes(ct.value) ? '#002356' : '#e5e7eb',
+                  color: selectedCostTypes.includes(ct.value) ? '#fff' : '#475569',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedCostTypes.includes(ct.value)}
+                  onChange={() => toggleCostType(ct.value)}
+                  style={{ display: 'none' }}
+                />
+                {ct.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Min % Complete */}
+        <div style={{ minWidth: '120px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Min % Complete</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              value={minPctComplete}
+              onChange={(e) => setMinPctComplete(Number(e.target.value) || 0)}
+              className="form-input"
+              style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '80px', textAlign: 'right' }}
+            />
+            <span style={{ color: '#64748b', fontSize: '0.875rem' }}>%</span>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div style={{ flex: '1', minWidth: '180px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Search</label>
           <div className="sales-search-box" style={{ width: '100%' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -606,29 +562,28 @@ const CashFlowReport: React.FC = () => {
             />
           </div>
         </div>
-        <div style={{ minWidth: '140px' }}>
+
+        {/* Status */}
+        <div style={{ minWidth: '130px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Status</label>
           <select className="form-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}>
             <option value="all">All Statuses</option>
             {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <div style={{ minWidth: '160px' }}>
+
+        {/* PM */}
+        <div style={{ minWidth: '150px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project Manager</label>
           <input
             className="form-input"
-            list="cf-pm-list"
+            list="buyout-pm-list"
             placeholder="All PMs"
             value={pmFilter === 'all' ? '' : pmFilter}
             onChange={(e) => {
               const val = e.target.value;
-              if (!val) {
-                setPmFilter('all');
-              } else if (uniquePMs.includes(val)) {
-                setPmFilter(val);
-              } else {
-                setPmFilter(val);
-              }
+              if (!val) setPmFilter('all');
+              else setPmFilter(val);
             }}
             onBlur={(e) => {
               const val = e.target.value;
@@ -637,31 +592,38 @@ const CashFlowReport: React.FC = () => {
             }}
             style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
           />
-          <datalist id="cf-pm-list">
+          <datalist id="buyout-pm-list">
             {uniquePMs.map(pm => <option key={pm} value={pm} />)}
           </datalist>
         </div>
-        <div style={{ minWidth: '150px' }}>
+
+        {/* Team */}
+        <div style={{ minWidth: '140px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Team</label>
           <select className="form-input" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}>
             <option value="all">All Teams</option>
             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
-        <div style={{ minWidth: '140px' }}>
+
+        {/* Department */}
+        <div style={{ minWidth: '130px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Department</label>
           <select className="form-input" value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}>
             <option value="all">All Depts</option>
             {uniqueDepartments.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
-        <div style={{ minWidth: '160px' }}>
+
+        {/* Market */}
+        <div style={{ minWidth: '140px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Market</label>
           <select className="form-input" value={marketFilter} onChange={(e) => setMarketFilter(e.target.value)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}>
             <option value="all">All Markets</option>
             {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
+
         {anyFilterActive && (
           <button className="sales-filter-btn" onClick={clearAllFilters} style={{ padding: '0.5rem 1rem', height: 'fit-content' }}>
             Clear All
@@ -671,14 +633,13 @@ const CashFlowReport: React.FC = () => {
 
       {/* Table */}
       <div className="sales-table-section" style={{ position: 'relative', overflow: 'hidden' }}>
-        {/* Gradient accent bar at top of table section */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
           background: 'linear-gradient(90deg, #002356, #3b82f6, #8b5cf6)',
         }} />
         <div className="sales-table-header" style={{ paddingTop: '0.75rem' }}>
           <div className="sales-table-title">
-            Cash Flow Detail
+            Buyout Detail
             <span style={{ fontSize: '0.875rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
               ({filteredProjects.length.toLocaleString()} of {projects.length.toLocaleString()})
             </span>
@@ -687,43 +648,39 @@ const CashFlowReport: React.FC = () => {
         <table className="sales-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
             <col style={{ width: '4.5%' }} />   {/* # */}
-            <col style={{ width: '17%' }} />    {/* Project */}
-            <col style={{ width: '10%' }} />    {/* PM */}
-            <col style={{ width: '8.5%' }} />   {/* Contract Value */}
-            <col style={{ width: '8%' }} />     {/* Earned Rev */}
-            <col style={{ width: '7.5%' }} />   {/* Billed */}
-            <col style={{ width: '7.5%' }} />   {/* Received */}
-            <col style={{ width: '7%' }} />     {/* Open AR */}
-            <col style={{ width: '8%' }} />     {/* Cash Flow */}
-            <col style={{ width: '7.5%' }} />   {/* % Comp */}
-            <col style={{ width: '4.5%' }} />   {/* GM% */}
-            <col style={{ width: '7%' }} />     {/* Backlog */}
-            <col style={{ width: '5%' }} />     {/* Status */}
+            <col style={{ width: '16%' }} />     {/* Project */}
+            <col style={{ width: '9%' }} />      {/* PM */}
+            <col style={{ width: '7%' }} />      {/* % Comp */}
+            <col style={{ width: '9%' }} />      {/* Est Cost */}
+            <col style={{ width: '9%' }} />      {/* JTD Cost */}
+            <col style={{ width: '9.5%' }} />    {/* Committed */}
+            <col style={{ width: '9%' }} />      {/* Projected */}
+            <col style={{ width: '10%' }} />     {/* Buyout Rem */}
+            <col style={{ width: '9%' }} />      {/* Buyout % */}
+            <col style={{ width: '8%' }} />      {/* Status */}
           </colgroup>
           <thead>
             <tr>
               <th className="sales-sortable" onClick={() => handleSort('number')}>#{sortIcon('number')}</th>
               <th className="sales-sortable" onClick={() => handleSort('name')}>Project{sortIcon('name')}</th>
               <th className="sales-sortable" onClick={() => handleSort('manager')}>PM{sortIcon('manager')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('contract_value')} style={{ textAlign: 'right' }}>Contract Value{sortIcon('contract_value')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('earned_revenue')} style={{ textAlign: 'right' }}>Earned Rev{sortIcon('earned_revenue')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('billed_amount')} style={{ textAlign: 'right' }}>Billed{sortIcon('billed_amount')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('received_amount')} style={{ textAlign: 'right' }}>Received{sortIcon('received_amount')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('open_receivables')} style={{ textAlign: 'right' }}>Open AR{sortIcon('open_receivables')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('cash_flow')} style={{ textAlign: 'right' }}>Cash Flow{sortIcon('cash_flow')}</th>
               <th className="sales-sortable" onClick={() => handleSort('percent_complete')} style={{ textAlign: 'right' }}>% Comp{sortIcon('percent_complete')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('gross_profit_percent')} style={{ textAlign: 'right' }}>GM%{sortIcon('gross_profit_percent')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('backlog')} style={{ textAlign: 'right' }}>Backlog{sortIcon('backlog')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('est_cost')} style={{ textAlign: 'right' }}>Est Cost{sortIcon('est_cost')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('jtd_cost')} style={{ textAlign: 'right' }}>JTD Cost{sortIcon('jtd_cost')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('committed_cost')} style={{ textAlign: 'right' }}>Committed{sortIcon('committed_cost')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('projected_cost')} style={{ textAlign: 'right' }}>Projected{sortIcon('projected_cost')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('buyout_remaining')} style={{ textAlign: 'right' }}>Buyout Rem{sortIcon('buyout_remaining')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('buyout_pct')} style={{ textAlign: 'right' }}>Buyout %{sortIcon('buyout_pct')}</th>
               <th className="sales-sortable" onClick={() => handleSort('status')}>Status{sortIcon('status')}</th>
             </tr>
           </thead>
           <tbody>
             {sortedProjects.length > 0 ? (
               sortedProjects.map(p => {
-                const cf = Number(p.cash_flow) || 0;
-                const gm = Number(p.gross_profit_percent);
                 const pctComplete = Number(p.percent_complete) || 0;
                 const pctDisplay = Math.round(pctComplete * 100);
+                const buyoutPct = p.est_cost > 0 ? Math.round((p.committed_cost / p.est_cost) * 100) : 0;
+                const br = p.buyout_remaining;
 
                 return (
                   <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
@@ -731,7 +688,7 @@ const CashFlowReport: React.FC = () => {
                     <td>
                       <div>
                         <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{p.owner_name || p.customer_name || '-'}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{p.customer_name || '-'}</div>
                       </div>
                     </td>
                     <td>
@@ -749,35 +706,8 @@ const CashFlowReport: React.FC = () => {
                         <span style={{ fontSize: '0.8125rem' }}>{p.manager_name || 'Unassigned'}</span>
                       </div>
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 500 }}>{fmtCurrency(p.contract_value)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.earned_revenue)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.billed_amount)}</td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.received_amount)}</td>
-                    <td style={{
-                      textAlign: 'right',
-                      color: Number(p.open_receivables) > 0 ? '#d97706' : undefined,
-                    }}>
-                      {fmtCurrency(p.open_receivables)}
-                    </td>
-                    {/* Cash Flow cell with color indicator */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                        <div style={{
-                          width: '8px', height: '8px', borderRadius: '50%',
-                          background: getCashFlowBarColor(p.cash_flow),
-                          flexShrink: 0,
-                        }} />
-                        <span style={{
-                          fontWeight: 600,
-                          color: cf > 0 ? '#059669' : cf < 0 ? '#dc2626' : '#64748b',
-                        }}>
-                          {fmtCurrency(p.cash_flow)}
-                        </span>
-                      </div>
-                    </td>
-                    {/* % Complete with mini progress bar */}
-                    <td style={{ textAlign: 'right' }}>
-                      {p.percent_complete !== undefined && p.percent_complete !== null && !isNaN(pctComplete) ? (
+                      {p.percent_complete !== null ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
                           <div style={{
                             flex: '0 0 40px', height: '6px', background: '#e5e7eb',
@@ -803,14 +733,39 @@ const CashFlowReport: React.FC = () => {
                         <span style={{ color: '#94a3b8' }}>-</span>
                       )}
                     </td>
+                    <td style={{ textAlign: 'right', fontWeight: 500 }}>{fmtCurrency(p.est_cost)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.jtd_cost)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.committed_cost)}</td>
+                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.projected_cost)}</td>
                     <td style={{
                       textAlign: 'right',
                       fontWeight: 600,
-                      color: !isNaN(gm) ? (gm > 0 ? '#059669' : gm < 0 ? '#dc2626' : '#64748b') : '#94a3b8',
+                      color: br > 0 ? '#d97706' : br < 0 ? '#dc2626' : '#059669',
                     }}>
-                      {fmtPercent(p.gross_profit_percent)}
+                      {fmtCurrency(br)}
                     </td>
-                    <td style={{ textAlign: 'right' }}>{fmtCurrency(p.backlog)}</td>
+                    {/* Buyout % with mini bar */}
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                        <div style={{
+                          flex: '0 0 40px', height: '6px', background: '#e5e7eb',
+                          borderRadius: '3px', overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${Math.min(buyoutPct, 100)}%`,
+                            background: buyoutPct >= 90
+                              ? 'linear-gradient(135deg, #059669, #10b981)'
+                              : buyoutPct >= 50
+                                ? 'linear-gradient(135deg, #002356, #004080)'
+                                : 'linear-gradient(135deg, #d97706, #f59e0b)',
+                            borderRadius: '3px',
+                            transition: 'width 0.3s ease',
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '0.8125rem', color: '#475569', minWidth: '28px' }}>{buyoutPct}%</span>
+                      </div>
+                    </td>
                     <td>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: '5px',
@@ -830,10 +785,10 @@ const CashFlowReport: React.FC = () => {
               })
             ) : (
               <tr>
-                <td colSpan={13} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '40px' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>No projects found</h3>
                   <p style={{ color: '#6b7280', fontSize: '14px' }}>
-                    {searchTerm ? 'Try adjusting your search or filters' : 'No project data available'}
+                    {searchTerm ? 'Try adjusting your search or filters' : 'No buyout data available for selected cost types'}
                   </p>
                 </td>
               </tr>
@@ -851,26 +806,22 @@ const CashFlowReport: React.FC = () => {
                 <td colSpan={3} style={{ textAlign: 'right', color: '#334155' }}>
                   Totals ({sortedProjects.length.toLocaleString()} project{sortedProjects.length !== 1 ? 's' : ''}):
                 </td>
-                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.contractValue)}</td>
-                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.earnedRevenue)}</td>
-                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.billedAmount)}</td>
-                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.receivedAmount)}</td>
-                <td style={{ textAlign: 'right', color: '#d97706' }}>{fmtCurrency(footerTotals.openReceivables)}</td>
+                <td style={{ textAlign: 'right', color: '#334155' }}>{fmtPercent(footerTotals.weightedPct)}</td>
+                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.totalEst)}</td>
+                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.totalJtd)}</td>
+                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.totalCommitted)}</td>
+                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.totalProjected)}</td>
                 <td style={{
                   textAlign: 'right',
                   fontWeight: 700,
-                  color: footerTotals.cashFlow >= 0 ? '#059669' : '#dc2626',
+                  color: footerTotals.totalBuyoutRemaining > 0 ? '#d97706'
+                    : footerTotals.totalBuyoutRemaining < 0 ? '#dc2626' : '#059669',
                 }}>
-                  {fmtCurrency(footerTotals.cashFlow)}
+                  {fmtCurrency(footerTotals.totalBuyoutRemaining)}
                 </td>
-                <td style={{ textAlign: 'right', color: '#334155' }}>{fmtPercent(footerTotals.weightedPct)}</td>
-                <td style={{
-                  textAlign: 'right',
-                  color: footerTotals.weightedGm > 0 ? '#059669' : footerTotals.weightedGm < 0 ? '#dc2626' : '#334155',
-                }}>
-                  {fmtPercent(footerTotals.weightedGm)}
+                <td style={{ textAlign: 'right', color: '#334155' }}>
+                  {footerTotals.totalEst > 0 ? `${Math.round((footerTotals.totalCommitted / footerTotals.totalEst) * 100)}%` : '-'}
                 </td>
-                <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.backlog)}</td>
                 <td></td>
               </tr>
             </tfoot>
@@ -881,4 +832,4 @@ const CashFlowReport: React.FC = () => {
   );
 };
 
-export default CashFlowReport;
+export default BuyoutMetricReport;

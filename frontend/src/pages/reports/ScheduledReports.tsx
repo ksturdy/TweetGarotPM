@@ -7,6 +7,7 @@ import {
 } from '../../services/scheduledReports';
 import { usersApi, User } from '../../services/users';
 import { cashFlowReportApi } from '../../services/cashFlowReport';
+import { buyoutMetricReportApi } from '../../services/buyoutMetricReport';
 import { executiveReportApi } from '../../services/executiveReport';
 import { teamsApi, Team } from '../../services/teams';
 import '../../styles/SalesPipeline.css';
@@ -15,6 +16,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'executive_report', label: 'Executive Report' },
   { value: 'backlog_fit', label: 'Backlog Fit Analysis' },
   { value: 'cash_flow', label: 'Cash Flow Report' },
+  { value: 'buyout_metric', label: 'Buyout Metric Report' },
 ];
 
 const FREQUENCIES: { value: string; label: string }[] = [
@@ -122,16 +124,22 @@ const ScheduledReports: React.FC = () => {
     enabled: dialogOpen && form.report_type === 'cash_flow',
   });
 
-  // Fetch teams for filter dropdown
-  const { data: teamsResponse } = useQuery({
-    queryKey: ['teams'],
-    queryFn: () => teamsApi.getAll(),
-    enabled: dialogOpen && form.report_type === 'cash_flow',
+  // Fetch buyout metric data for filter dropdowns
+  const { data: buyoutMetricProjects = [] } = useQuery({
+    queryKey: ['buyoutMetricReport'],
+    queryFn: () => buyoutMetricReportApi.getData({ min_percent_complete: 0 }),
+    enabled: dialogOpen && form.report_type === 'buyout_metric',
   });
-  const teams: Team[] = useMemo(() => {
-    const raw = (teamsResponse as any)?.data?.data || [];
-    return Array.isArray(raw) ? raw : [];
-  }, [teamsResponse]);
+
+  // Fetch teams for filter dropdown
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ['teams'],
+    queryFn: async () => {
+      const response = await teamsApi.getAll();
+      return response.data.data || [];
+    },
+    enabled: dialogOpen && (form.report_type === 'cash_flow' || form.report_type === 'buyout_metric'),
+  });
 
   const cfFilterOptions = useMemo(() => ({
     statuses: [...new Set(cashFlowProjects.map(p => p.status).filter(Boolean))].sort() as string[],
@@ -139,6 +147,13 @@ const ScheduledReports: React.FC = () => {
     departments: [...new Set(cashFlowProjects.map(p => p.department_number).filter(Boolean))].sort() as string[],
     markets: [...new Set(cashFlowProjects.map(p => p.market).filter(Boolean))].sort() as string[],
   }), [cashFlowProjects]);
+
+  const bmFilterOptions = useMemo(() => ({
+    statuses: [...new Set(buyoutMetricProjects.map(p => p.status).filter(Boolean))].sort() as string[],
+    pms: [...new Set(buyoutMetricProjects.map(p => p.manager_name).filter(Boolean))].sort() as string[],
+    departments: [...new Set(buyoutMetricProjects.map(p => p.department_number).filter(Boolean))].sort() as string[],
+    markets: [...new Set(buyoutMetricProjects.map(p => p.market).filter(Boolean))].sort() as string[],
+  }), [buyoutMetricProjects]);
 
   // Fetch executive report data for snapshot date dropdown
   const { data: execReportResponse } = useQuery({
@@ -383,9 +398,11 @@ const ScheduledReports: React.FC = () => {
                     <span style={{
                       padding: '3px 10px', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 600,
                       background: report.report_type === 'executive_report' ? 'rgba(0,35,86,0.1)' :
-                        report.report_type === 'backlog_fit' ? 'rgba(139,92,246,0.1)' : 'rgba(59,130,246,0.1)',
+                        report.report_type === 'backlog_fit' ? 'rgba(139,92,246,0.1)' :
+                        report.report_type === 'buyout_metric' ? 'rgba(245,158,11,0.1)' : 'rgba(59,130,246,0.1)',
                       color: report.report_type === 'executive_report' ? '#002356' :
-                        report.report_type === 'backlog_fit' ? '#7c3aed' : '#2563eb',
+                        report.report_type === 'backlog_fit' ? '#7c3aed' :
+                        report.report_type === 'buyout_metric' ? '#d97706' : '#2563eb',
                     }}>
                       {reportTypeLabel(report.report_type)}
                     </span>
@@ -630,6 +647,70 @@ const ScheduledReports: React.FC = () => {
                       >
                         <option value="">All Markets</option>
                         {cfFilterOptions.markets.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Team</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.team as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, team: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Teams</option>
+                        {teams.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters (for Buyout Metric) */}
+              {form.report_type === 'buyout_metric' && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>Filters (Optional)</label>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Status</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.status as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, status: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Statuses</option>
+                        {bmFilterOptions.statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '180px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Project Manager</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.pm as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, pm: e.target.value || undefined } }))}
+                      >
+                        <option value="">All PMs</option>
+                        {bmFilterOptions.pms.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Department</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.department as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, department: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Departments</option>
+                        {bmFilterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Market</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.market as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, market: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Markets</option>
+                        {bmFilterOptions.markets.map(m => <option key={m} value={m}>{m}</option>)}
                       </select>
                     </div>
                     <div style={{ minWidth: '160px' }}>

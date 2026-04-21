@@ -36,6 +36,31 @@ const REPORT_HANDLERS = {
     };
   },
 
+  async buyout_metric(report) {
+    const { buildBuyoutMetricData } = require('../routes/buyoutMetricReport');
+    const { generateBuyoutMetricReportPdfBuffer } = require('../utils/buyoutMetricReportPdfBuffer');
+
+    const filters = report.filters || {};
+    // Resolve team name for display on cover page
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), report.tenant_id);
+      if (team) filters.teamName = team.name;
+    }
+    const rows = await buildBuyoutMetricData(report.tenant_id, filters);
+    // Sort by most buyout remaining first (descending)
+    rows.sort((a, b) => (b.buyout_remaining || 0) - (a.buyout_remaining || 0));
+    const pdfBuffer = await generateBuyoutMetricReportPdfBuffer(rows, filters);
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    return {
+      pdfBuffer,
+      filename: `Buyout-Metric-Report-${dateStr}.pdf`,
+      subject: `Buyout Metric Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Buyout Metric Report covering ${rows.length} project${rows.length !== 1 ? 's' : ''}.`,
+    };
+  },
+
   async cash_flow(report) {
     const { buildCashFlowData, buildCashFlowMetrics } = require('../routes/cashFlowReport');
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');

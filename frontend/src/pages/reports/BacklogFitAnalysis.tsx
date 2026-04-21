@@ -23,6 +23,7 @@ import { ContourType, getContourMultipliers, getDefaultContour } from '../../uti
 import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
 import api from '../../services/api';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 
 const REGIONS = [
   { prefix: '10', label: 'NE Wisconsin', color: '#3b82f6' },
@@ -30,6 +31,13 @@ const REGIONS = [
   { prefix: '30', label: 'Western WI', color: '#f59e0b' },
   { prefix: '40', label: 'Tempe, AZ', color: '#ef4444' },
 ];
+
+const getLocationGroup = (deptCode: string | null | undefined): string | null => {
+  if (!deptCode) return null;
+  const prefix = deptCode.substring(0, 2);
+  const group = LOCATION_GROUPS.find(g => g.prefix === prefix);
+  return group ? group.value : null;
+};
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, LineController, BarController, Title, Tooltip, Legend, Filler);
 
@@ -125,7 +133,7 @@ const BacklogFitAnalysis: React.FC = () => {
   const [capacityTarget, setCapacityTarget] = useState<number>(defaultSettings.capacityTarget);
   const [horizonMonths, setHorizonMonths] = useState<number>(defaultSettings.horizonMonths);
   const [marketFilter, setMarketFilter] = useState<string>('');
-  const [stateFilter, setStateFilter] = useState<string>('');
+  const [locationGroupFilter, setLocationGroupFilter] = useState<string>('');
   const [comparisonMode, setComparisonMode] = useState<'revenue' | 'labor'>(defaultSettings.comparisonMode);
   const [laborCapacityTarget, setLaborCapacityTarget] = useState<number>(defaultSettings.laborCapacityTarget);
   const [laborPctOfValue, setLaborPctOfValue] = useState<number>(defaultSettings.laborPctOfValue);
@@ -251,7 +259,7 @@ const BacklogFitAnalysis: React.FC = () => {
     contracts.forEach(c => {
       const status = c.status?.toLowerCase() || '';
       if (!status.includes('open') && !status.includes('soft')) return;
-      if (stateFilter && c.ship_state?.trim() !== stateFilter) return;
+      if (locationGroupFilter && getLocationGroup(c.department_code) !== locationGroupFilter) return;
 
       const backlog = parseNum(c.backlog);
       if (backlog <= 0) return;
@@ -283,7 +291,7 @@ const BacklogFitAnalysis: React.FC = () => {
     });
 
     return monthly;
-  }, [contracts, stateFilter]);
+  }, [contracts, locationGroupFilter]);
 
   // Calculate project monthly labor hours (same logic as LaborForecast)
   const projectMonthlyLabor = useMemo(() => {
@@ -295,7 +303,7 @@ const BacklogFitAnalysis: React.FC = () => {
     contracts.forEach(c => {
       const status = c.status?.toLowerCase() || '';
       if (!status.includes('open') && !status.includes('soft')) return;
-      if (stateFilter && c.ship_state?.trim() !== stateFilter) return;
+      if (locationGroupFilter && getLocationGroup(c.department_code) !== locationGroupFilter) return;
 
       // Calculate remaining hours per trade
       const pfRemaining = Math.max(0, (parseNum(c.pf_hours_projected) || parseNum(c.pf_hours_estimate)) - parseNum(c.pf_hours_jtd));
@@ -336,7 +344,7 @@ const BacklogFitAnalysis: React.FC = () => {
     });
 
     return monthly;
-  }, [contracts, stateFilter]);
+  }, [contracts, locationGroupFilter]);
 
   // Calculate opportunity projections and fit scores
   const opportunityScores = useMemo(() => {
@@ -364,6 +372,7 @@ const BacklogFitAnalysis: React.FC = () => {
       if (o.stage_name && excludedStageNames.has(o.stage_name)) return false;
       if (!o.estimated_value || parseNum(o.estimated_value) <= 0) return false;
       if (marketFilter && o.market !== marketFilter) return false;
+      if (locationGroupFilter && o.location_group !== locationGroupFilter) return false;
       return true;
     });
 
@@ -473,7 +482,7 @@ const BacklogFitAnalysis: React.FC = () => {
     // Sort by fit score descending
     results.sort((a, b) => b.fitScore - a.fitScore);
     return results;
-  }, [opportunities, projectMonthlyRevenue, projectMonthlyLabor, capacityTarget, laborCapacityTarget, hoursPerPersonPerMonth, laborPctOfValue, avgLaborRate, comparisonMode, monthKeys, marketFilter, excludedStageNames]);
+  }, [opportunities, projectMonthlyRevenue, projectMonthlyLabor, capacityTarget, laborCapacityTarget, hoursPerPersonPerMonth, laborPctOfValue, avgLaborRate, comparisonMode, monthKeys, marketFilter, locationGroupFilter, excludedStageNames]);
 
   // Opportunity monthly totals (revenue)
   const oppMonthlyTotals = useMemo(() => {
@@ -587,13 +596,6 @@ const BacklogFitAnalysis: React.FC = () => {
     return Array.from(markets).sort();
   }, [opportunities]);
 
-  // State options from contracts (trim whitespace to avoid duplicates like "WI" vs "WI ")
-  const stateOptions = useMemo(() => {
-    if (!contracts) return [];
-    const states = new Set<string>();
-    contracts.forEach(c => { if (c.ship_state?.trim()) states.add(c.ship_state.trim()); });
-    return Array.from(states).sort();
-  }, [contracts]);
 
   // Summary stats
   const summaryStats = useMemo(() => {
@@ -896,14 +898,16 @@ const BacklogFitAnalysis: React.FC = () => {
           </div>
 
           <div>
-            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>State</label>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Location Group</label>
             <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
+              value={locationGroupFilter}
+              onChange={(e) => setLocationGroupFilter(e.target.value)}
               style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px' }}
             >
-              <option value="">All States</option>
-              {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="">All Groups</option>
+              {LOCATION_GROUPS.map(g => (
+                <option key={g.value} value={g.value}>{g.label}</option>
+              ))}
             </select>
           </div>
 

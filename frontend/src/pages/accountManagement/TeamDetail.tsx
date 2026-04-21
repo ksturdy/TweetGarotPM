@@ -7,6 +7,7 @@ import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import SearchableSelect from '../../components/SearchableSelect';
+import { LOCATION_GROUPS } from '../../constants/locationGroups';
 import '../../styles/SalesPipeline.css';
 
 // --- Helper functions matching ProjectList.tsx and SalesPipeline.tsx ---
@@ -351,7 +352,7 @@ const TeamDetailPage: React.FC = () => {
       </div>
 
       {/* Dashboard KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="sales-kpi-card">
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>💼</div>
           <div className="sales-kpi-content">
@@ -373,32 +374,107 @@ const TeamDetailPage: React.FC = () => {
           </div>
         </div>
         <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>👥</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{dashboard?.customers.total || 0}</div>
-            <div className="sales-kpi-label">Customers</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-              {dashboard?.customers.active || 0} active
-            </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }}>📋</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{dashboard?.estimates.total || 0}</div>
-            <div className="sales-kpi-label">Estimates</div>
-            <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '4px' }}>
-              {dashboard?.estimates.pending || 0} pending
-            </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #6366f1, #3b82f6)' }}>💰</div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value">{formatCurrency(dashboard?.projects.total_value || 0)}</div>
             <div className="sales-kpi-label">Contract Value</div>
             <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
               {formatCurrency(dashboard?.opportunities.won_value || 0)} won opps
+            </div>
+          </div>
+        </div>
+        <div className="sales-kpi-card">
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/>
+            </svg>
+          </div>
+          <div className="sales-kpi-content">
+            <div className="sales-kpi-value">{formatCurrency(dashboard?.projects.total_backlog || 0)}</div>
+            <div className="sales-kpi-label">Backlog</div>
+            <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '4px' }}>
+              {dashboard?.projects.active || 0} active projects
+            </div>
+          </div>
+        </div>
+        <div className="sales-kpi-card">
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div className="sales-kpi-content">
+            <div className="sales-kpi-value">
+              {dashboard?.projects.avg_gross_margin !== null && dashboard?.projects.avg_gross_margin !== undefined
+                ? `${Number(dashboard.projects.avg_gross_margin).toFixed(1)}%`
+                : '-'}
+            </div>
+            <div className="sales-kpi-label">Gross Margin</div>
+            <div style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '4px' }}>
+              weighted avg
+            </div>
+          </div>
+        </div>
+        <div
+          className="sales-kpi-card"
+          onClick={() => navigate(`/reports/cash-flow?team=${teamId}`)}
+          style={{ cursor: 'pointer' }}
+          title="View Cash Flow Report"
+        >
+          <div className="sales-kpi-icon" style={{
+            background: ((dashboard?.cashFlow?.total_count || 0) > 0 &&
+              ((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) >= 0.5)
+              ? 'linear-gradient(135deg, #059669, #10b981)'
+              : 'linear-gradient(135deg, #e11d48, #f43f5e)'
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div className="sales-kpi-content">
+            <div className="sales-kpi-value" style={{
+              color: ((dashboard?.cashFlow?.total_count || 0) > 0 &&
+                ((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) >= 0.5)
+                ? '#059669' : '#e11d48'
+            }}>
+              {(dashboard?.cashFlow?.total_count || 0) > 0
+                ? `${Math.round(((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) * 100)}%`
+                : '0%'}
+            </div>
+            <div className="sales-kpi-label">Cash Flow +</div>
+            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
+              {dashboard?.cashFlow?.positive_count || 0}/{dashboard?.cashFlow?.total_count || 0} jobs CF+
+            </div>
+          </div>
+        </div>
+        <div
+          className="sales-kpi-card"
+          onClick={() => navigate(`/reports/buyout-metric?team=${teamId}`)}
+          style={{ cursor: 'pointer' }}
+          title="View Buyout Metric Report"
+        >
+          <div className="sales-kpi-icon" style={{
+            background: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0
+              ? 'linear-gradient(135deg, #d97706, #f59e0b)'
+              : 'linear-gradient(135deg, #e11d48, #f43f5e)'
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <div className="sales-kpi-content">
+            <div className="sales-kpi-value" style={{
+              color: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0 ? '#d97706' : '#e11d48'
+            }}>
+              {formatCurrency(dashboard?.buyout?.total_buyout_remaining || 0)}
+            </div>
+            <div className="sales-kpi-label">Buyout Remaining</div>
+            <div style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '4px' }}>
+              {dashboard?.buyout?.total_est_cost
+                ? `${Math.round(((dashboard?.buyout?.total_committed || 0) / dashboard.buyout.total_est_cost) * 100)}% bought out`
+                : '0% bought out'}
+              {' · '}{dashboard?.buyout?.project_count || 0} jobs · ≥10%
             </div>
           </div>
         </div>
@@ -540,23 +616,27 @@ const TeamDetailPage: React.FC = () => {
             <div className="sales-table-scroll-wrapper">
               <table className="sales-table">
                 <colgroup>
-                  <col style={{ width: '70px' }} />
+                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '85px' }} />
                   <col style={{ width: '0' }} />
                   <col style={{ width: '110px' }} />
                   <col style={{ width: '55px' }} />
                   <col style={{ width: '100px' }} />
+                  <col style={{ width: '100px' }} />
                   <col style={{ width: '90px' }} />
-                  <col style={{ width: '80px' }} />
+                  <col style={{ width: '70px' }} />
                   <col style={{ width: '85px' }} />
-                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '150px' }} />
                 </colgroup>
                 <thead>
                   <tr>
                     <th>Number</th>
+                    <th>Start Date</th>
                     <th>Project</th>
                     <th>Contract Value</th>
                     <th>GM%</th>
                     <th>Backlog</th>
+                    <th>JTD Cost</th>
                     <th>% Complete</th>
                     <th>Status</th>
                     <th>Dept</th>
@@ -571,7 +651,8 @@ const TeamDetailPage: React.FC = () => {
                         onClick={() => navigate(`/projects/${proj.id}`)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <td style={{ fontWeight: 500, color: '#6366f1', fontSize: '0.8rem' }}>{proj.project_number || '-'}</td>
+                        <td>{proj.project_number || proj.number || '-'}</td>
+                        <td>{proj.start_date ? new Date(proj.start_date).toLocaleDateString('en-US') : '-'}</td>
                         <td>
                           <div className="sales-project-cell">
                             <div className="sales-project-icon" style={{ background: proj.market ? getMarketGradient(proj.market) : getProjectGradient(proj.status) }}>
@@ -583,11 +664,8 @@ const TeamDetailPage: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td style={{ fontWeight: 500 }}>
-                          {proj.contract_value ? `$${Math.round(Number(proj.contract_value)).toLocaleString()}` : '-'}
-                        </td>
+                        <td>{proj.contract_value ? `$${Math.round(Number(proj.contract_value)).toLocaleString()}` : '-'}</td>
                         <td style={{
-                          fontWeight: 600,
                           color: proj.gross_margin_percent != null
                             ? Number(proj.gross_margin_percent) > 0 ? '#10b981' : Number(proj.gross_margin_percent) < 0 ? '#ef4444' : 'inherit'
                             : 'inherit'
@@ -595,6 +673,7 @@ const TeamDetailPage: React.FC = () => {
                           {proj.gross_margin_percent != null ? `${Math.round(Number(proj.gross_margin_percent) * 100)}%` : '-'}
                         </td>
                         <td>{proj.backlog ? `$${Math.round(Number(proj.backlog)).toLocaleString()}` : '-'}</td>
+                        <td>{proj.actual_cost ? `$${Math.round(Number(proj.actual_cost)).toLocaleString()}` : '-'}</td>
                         <td>{proj.percent_complete != null ? `${Math.round(Number(proj.percent_complete) * 100)}%` : '-'}</td>
                         <td>
                           <span className={`sales-stage-badge ${proj.status?.toLowerCase().replace('-', '_')}`}>
@@ -602,29 +681,83 @@ const TeamDetailPage: React.FC = () => {
                             {proj.status?.includes('-') ? proj.status : proj.status || 'Unknown'}
                           </span>
                         </td>
-                        <td style={{ fontSize: '0.8rem' }}>
-                          {proj.department_number || proj.department_name || '-'}
-                        </td>
+                        <td>{proj.department_number || '-'}</td>
                         <td>
-                          {proj.manager_name ? (
-                            <div className="sales-salesperson-cell">
-                              <div className="sales-salesperson-avatar" style={{ background: getManagerColor(proj.manager_name), width: '24px', height: '24px', fontSize: '0.6rem' }}>
-                                {getManagerInitials(proj.manager_name)}
-                              </div>
-                              {proj.manager_name}
+                          <div className="sales-salesperson-cell">
+                            <div
+                              className="sales-salesperson-avatar"
+                              style={{ background: getManagerColor(proj.manager_name || 'Unassigned') }}
+                            >
+                              {getManagerInitials(proj.manager_name)}
                             </div>
-                          ) : '-'}
+                            {proj.manager_name || 'Unassigned'}
+                          </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                         No projects found for this team.
                       </td>
                     </tr>
                   )}
                 </tbody>
+                {projects.length > 0 && (() => {
+                  const totalContractValue = projects.reduce((s: number, p: any) => s + (Number(p.contract_value) || 0), 0);
+                  const totalBacklog = projects.reduce((s: number, p: any) => s + (Number(p.backlog) || 0), 0);
+                  const totalJtdCost = projects.reduce((s: number, p: any) => s + (Number(p.actual_cost) || 0), 0);
+                  const gmNum = projects.reduce((s: number, p: any) => {
+                    const cv = Number(p.contract_value) || 0;
+                    const gm = Number(p.gross_margin_percent);
+                    return cv && !isNaN(gm) ? s + cv * gm : s;
+                  }, 0);
+                  const weightedGm = totalContractValue > 0 ? gmNum / totalContractValue : 0;
+                  const hasGm = projects.some((p: any) => p.gross_margin_percent != null);
+                  const pctNum = projects.reduce((s: number, p: any) => {
+                    const cv = Number(p.contract_value) || 0;
+                    const pct = Number(p.percent_complete);
+                    return cv && !isNaN(pct) ? s + cv * pct : s;
+                  }, 0);
+                  const pctDen = projects.reduce((s: number, p: any) => {
+                    const cv = Number(p.contract_value) || 0;
+                    const pct = Number(p.percent_complete);
+                    return cv && !isNaN(pct) ? s + cv : s;
+                  }, 0);
+                  const weightedPct = pctDen > 0 ? pctNum / pctDen : 0;
+                  const hasPct = projects.some((p: any) => p.percent_complete != null);
+                  return (
+                    <tfoot>
+                      <tr style={{
+                        background: '#f1f5f9',
+                        fontWeight: 700,
+                        borderTop: '2px solid #cbd5e1',
+                        position: 'sticky',
+                        bottom: 0,
+                      }}>
+                        <td colSpan={3} style={{ textAlign: 'right', color: '#334155' }}>
+                          Totals ({projects.length} project{projects.length !== 1 ? 's' : ''}):
+                        </td>
+                        <td style={{ color: '#1e293b' }}>
+                          ${Math.round(totalContractValue).toLocaleString()}
+                        </td>
+                        <td style={{ color: weightedGm > 0 ? '#10b981' : weightedGm < 0 ? '#ef4444' : '#334155' }}>
+                          {hasGm ? `${Math.round(weightedGm * 100)}%` : '-'}
+                        </td>
+                        <td style={{ color: '#1e293b' }}>
+                          ${Math.round(totalBacklog).toLocaleString()}
+                        </td>
+                        <td style={{ color: '#1e293b' }}>
+                          ${Math.round(totalJtdCost).toLocaleString()}
+                        </td>
+                        <td style={{ color: '#334155' }}>
+                          {hasPct ? `${Math.round(weightedPct * 100)}%` : '-'}
+                        </td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           </>
@@ -643,15 +776,17 @@ const TeamDetailPage: React.FC = () => {
                   <col style={{ width: '20%' }} />
                   <col style={{ width: '14%' }} />
                   <col style={{ width: '14%' }} />
+                  <col style={{ width: '90px' }} />
                   <col style={{ width: '100px' }} />
                   <col style={{ width: '130px' }} />
-                  <col style={{ width: '160px' }} />
+                  <col style={{ width: '180px' }} />
                 </colgroup>
                 <thead>
                   <tr>
                     <th>Activity</th>
                     <th>Opportunity</th>
                     <th>Company</th>
+                    <th>General Contractor</th>
                     <th>Location</th>
                     <th>Value</th>
                     <th>Stage</th>
@@ -660,59 +795,71 @@ const TeamDetailPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {opportunities.length > 0 ? (
-                    opportunities.map((opp: any) => (
-                      <tr
-                        key={opp.id}
-                        onClick={() => {
-                          setSelectedOpportunity(opp as Opportunity);
-                          setIsOpportunityModalOpen(true);
-                        }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td className="sales-date-cell">
-                          {opp.last_activity_at
-                            ? new Date(opp.last_activity_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                            : '-'}
-                        </td>
-                        <td>
-                          <div className="sales-project-cell">
-                            <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market) }}>
-                              {getMarketIcon(opp.market)}
-                            </div>
-                            <div className="sales-project-info">
-                              <h4>{opp.title}</h4>
-                            </div>
-                          </div>
-                        </td>
-                        <td>{opp.customer_name || opp.owner || '-'}</td>
-                        <td>{opp.facility_location_name || opp.facility_name || '-'}</td>
-                        <td className="sales-value-cell">{formatCurrencyShort(opp.estimated_value || 0)}</td>
-                        <td>
-                          <span
-                            className="sales-stage-badge"
-                            style={{ background: `${opp.stage_color}20`, color: opp.stage_color }}
-                          >
-                            <span className="sales-stage-dot" style={{ background: opp.stage_color }}></span>
-                            {opp.stage_name}
-                          </span>
-                        </td>
-                        <td>
-                          {opp.assigned_to_name ? (
-                            <div className="sales-salesperson-cell">
-                              <div className="sales-salesperson-avatar" style={{ background: getManagerColor(opp.assigned_to_name), width: '24px', height: '24px', fontSize: '0.6rem' }}>
-                                {getManagerInitials(opp.assigned_to_name)}
+                    opportunities.map((opp: any) => {
+                      const locationGroup = LOCATION_GROUPS.find(g => g.value === opp.location_group);
+                      return (
+                        <tr
+                          key={opp.id}
+                          onClick={() => {
+                            setSelectedOpportunity(opp as Opportunity);
+                            setIsOpportunityModalOpen(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td className="sales-date-cell">
+                            {opp.last_activity_at
+                              ? new Date(opp.last_activity_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              : '-'}
+                          </td>
+                          <td>
+                            <div className="sales-project-cell">
+                              <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market) }}>
+                                {getMarketIcon(opp.market)}
                               </div>
-                              {opp.assigned_to_name}
+                              <div className="sales-project-info">
+                                <h4>{opp.title}</h4>
+                              </div>
                             </div>
-                          ) : (
-                            <span style={{ color: '#9ca3af' }}>Unassigned</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td>{opp.customer_name || opp.owner || '-'}</td>
+                          <td style={{ fontSize: '12px', color: '#64748b' }}>{opp.general_contractor || '-'}</td>
+                          <td>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: locationGroup ? locationGroup.color : '#9ca3af',
+                            }}>
+                              {locationGroup ? locationGroup.label : '-'}
+                            </span>
+                          </td>
+                          <td className="sales-value-cell">{formatCurrency(opp.estimated_value || 0)}</td>
+                          <td>
+                            <span
+                              className="sales-stage-badge"
+                              style={{ background: `${opp.stage_color}20`, color: opp.stage_color }}
+                            >
+                              <span className="sales-stage-dot" style={{ background: opp.stage_color }}></span>
+                              {opp.stage_name}
+                            </span>
+                          </td>
+                          <td>
+                            {opp.assigned_to_name ? (
+                              <div className="sales-salesperson-cell">
+                                <div className="sales-salesperson-avatar" style={{ background: getManagerColor(opp.assigned_to_name), width: '24px', height: '24px', fontSize: '0.6rem' }}>
+                                  {getManagerInitials(opp.assigned_to_name)}
+                                </div>
+                                {opp.assigned_to_name}
+                              </div>
+                            ) : (
+                              <span style={{ color: '#9ca3af' }}>Unassigned</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                         No opportunities found for this team.
                       </td>
                     </tr>

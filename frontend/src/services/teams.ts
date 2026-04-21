@@ -50,6 +50,20 @@ export interface TeamDashboard {
     total: number;
     active: number;
     total_value: number;
+    total_backlog: number;
+    avg_gross_margin: number | null;
+  };
+  cashFlow: {
+    net_cash_position: number;
+    positive_count: number;
+    total_count: number;
+    total_open_receivables: number;
+  };
+  buyout: {
+    total_buyout_remaining: number;
+    total_committed: number;
+    total_est_cost: number;
+    project_count: number;
   };
 }
 

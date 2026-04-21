@@ -631,17 +631,70 @@ class Team {
     }
 
     // Get projects metrics (manager_id references employees)
-    let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0 }] };
+    let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0, total_backlog: 0, avg_gross_margin: null }] };
     if (employeeIds.length > 0) {
       const projFilter = activeOnly ? " AND p.status = 'Open'" : '';
       projectsResult = await db.query(`
         SELECT
           COUNT(*) as total,
           COUNT(CASE WHEN p.status = 'Open' THEN 1 END) as active,
-          COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value
+          COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value,
+          COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0) as total_backlog,
+          CASE WHEN SUM(COALESCE(vc.contract_amount, p.contract_value)) > 0
+            THEN SUM(COALESCE(vc.gross_profit_dollars, 0)) / SUM(COALESCE(vc.contract_amount, p.contract_value)) * 100
+            ELSE NULL
+          END as avg_gross_margin
         FROM projects p
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
         WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${projFilter}
+      `, [tenantId, employeeIds]);
+    }
+
+    // Get cash flow metrics for team projects
+    let cashFlowResult = { rows: [{ net_cash_position: 0, positive_count: 0, total_count: 0, total_open_receivables: 0 }] };
+    if (employeeIds.length > 0) {
+      const cfFilter = activeOnly ? " AND p.status = 'Open'" : '';
+      cashFlowResult = await db.query(`
+        SELECT
+          COALESCE(SUM(vc.cash_flow), 0) as net_cash_position,
+          COUNT(CASE WHEN vc.cash_flow > 0 THEN 1 END) as positive_count,
+          COUNT(CASE WHEN vc.cash_flow IS NOT NULL THEN 1 END) as total_count,
+          COALESCE(SUM(vc.open_receivables), 0) as total_open_receivables
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${cfFilter}
+      `, [tenantId, employeeIds]);
+    }
+
+    // Get buyout metrics for team projects (cost types 3=Subcontracts, 5=MEP Equipment, >= 10% complete)
+    let buyoutResult = { rows: [{ total_buyout_remaining: 0, total_committed: 0, total_est_cost: 0, project_count: 0 }] };
+    if (employeeIds.length > 0) {
+      const boFilter = activeOnly ? " AND p.status = 'Open'" : '';
+      buyoutResult = await db.query(`
+        SELECT
+          COALESCE(SUM(agg.projected_cost - agg.committed_cost - agg.jtd_cost), 0) as total_buyout_remaining,
+          COALESCE(SUM(agg.committed_cost), 0) as total_committed,
+          COALESCE(SUM(agg.est_cost), 0) as total_est_cost,
+          COUNT(*) as project_count
+        FROM (
+          SELECT
+            p.id,
+            COALESCE(SUM(pc.est_cost), 0) as est_cost,
+            COALESCE(SUM(pc.jtd_cost), 0) as jtd_cost,
+            COALESCE(SUM(pc.committed_cost), 0) as committed_cost,
+            COALESCE(SUM(pc.projected_cost), 0) as projected_cost
+          FROM projects p
+          JOIN vp_phase_codes pc ON pc.linked_project_id = p.id AND pc.cost_type = ANY(ARRAY[3, 5])
+          LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+          WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${boFilter}
+            AND vc.projected_cost > 0
+            AND (vc.actual_cost / vc.projected_cost) >= 0.10
+          GROUP BY p.id
+          HAVING COALESCE(SUM(pc.est_cost), 0) != 0
+              OR COALESCE(SUM(pc.jtd_cost), 0) != 0
+              OR COALESCE(SUM(pc.committed_cost), 0) != 0
+              OR COALESCE(SUM(pc.projected_cost), 0) != 0
+        ) agg
       `, [tenantId, employeeIds]);
     }
 
@@ -649,7 +702,9 @@ class Team {
       opportunities: opportunitiesResult.rows[0],
       customers: customersResult.rows[0],
       estimates: estimatesResult.rows[0],
-      projects: projectsResult.rows[0]
+      projects: projectsResult.rows[0],
+      cashFlow: cashFlowResult.rows[0],
+      buyout: buyoutResult.rows[0]
     };
   }
 
