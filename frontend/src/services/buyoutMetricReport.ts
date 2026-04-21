@@ -10,6 +10,8 @@ export interface BuyoutMetricProject {
   manager_name?: string;
   department_number?: string;
   customer_name?: string;
+  phase: string;
+  phase_description: string;
   est_cost: number;
   jtd_cost: number;
   committed_cost: number;

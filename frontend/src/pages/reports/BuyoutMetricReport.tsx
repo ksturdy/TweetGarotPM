@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buyoutMetricReportApi, BuyoutMetricProject } from '../../services/buyoutMetricReport';
 import { teamsApi, Team } from '../../services/teams';
+import SearchableSelect from '../../components/SearchableSelect';
 
 import '../../styles/SalesPipeline.css';
 
@@ -126,7 +127,7 @@ const BuyoutMetricReport: React.FC = () => {
   const [minPctComplete, setMinPctComplete] = useState<number>(initialMinPct !== null ? Number(initialMinPct) : 10);
 
   // Standard filters
-  const [searchTerm, setSearchTerm] = useState('');
+  const [projectFilter, setProjectFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('Open');
   const [pmFilter, setPmFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
@@ -184,27 +185,33 @@ const BuyoutMetricReport: React.FC = () => {
     [projects]
   );
 
-  // Client-side filters (status, pm, dept, market, team, search)
-  const filteredProjects = useMemo(() => {
+  // Client-side filters — stage 1: everything except project search (for dynamic project dropdown)
+  const baseFilteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (pmFilter !== 'all' && p.manager_name !== pmFilter) return false;
       if (departmentFilter !== 'all' && p.department_number !== departmentFilter) return false;
       if (marketFilter !== 'all' && p.market !== marketFilter) return false;
       if (teamFilter !== 'all' && teamEmployeeIds.length > 0 && !teamEmployeeIds.includes(Number(p.manager_id))) return false;
-
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        return (
-          p.name?.toLowerCase().includes(term) ||
-          p.number?.toLowerCase().includes(term) ||
-          p.manager_name?.toLowerCase().includes(term) ||
-          p.customer_name?.toLowerCase().includes(term)
-        );
-      }
       return true;
     });
-  }, [projects, statusFilter, pmFilter, departmentFilter, marketFilter, teamFilter, teamEmployeeIds, searchTerm]);
+  }, [projects, statusFilter, pmFilter, departmentFilter, marketFilter, teamFilter, teamEmployeeIds]);
+
+  // Dynamic project list for dropdown (derived from base-filtered data)
+  const uniqueProjects = useMemo(() => {
+    const seen = new Map<number, { id: number; number: string; name: string }>();
+    for (const p of baseFilteredProjects) {
+      if (!seen.has(p.id)) seen.set(p.id, { id: p.id, number: p.number, name: p.name });
+    }
+    return [...seen.values()].sort((a, b) => a.number.localeCompare(b.number));
+  }, [baseFilteredProjects]);
+
+  // Stage 2: apply project filter
+  const filteredProjects = useMemo(() => {
+    if (!projectFilter) return baseFilteredProjects;
+    const pid = Number(projectFilter);
+    return baseFilteredProjects.filter(p => p.id === pid);
+  }, [baseFilteredProjects, projectFilter]);
 
   // Sort
   const sortedProjects = useMemo(() => {
@@ -224,6 +231,10 @@ const BuyoutMetricReport: React.FC = () => {
         case 'manager':
           aVal = a.manager_name?.toLowerCase() ?? '';
           bVal = b.manager_name?.toLowerCase() ?? '';
+          break;
+        case 'phase':
+          aVal = a.phase?.toLowerCase() ?? '';
+          bVal = b.phase?.toLowerCase() ?? '';
           break;
         case 'percent_complete':
           aVal = Number(a.percent_complete) || 0;
@@ -253,10 +264,6 @@ const BuyoutMetricReport: React.FC = () => {
           aVal = a.est_cost > 0 ? a.committed_cost / a.est_cost : 0;
           bVal = b.est_cost > 0 ? b.committed_cost / b.est_cost : 0;
           break;
-        case 'status':
-          aVal = a.status ?? '';
-          bVal = b.status ?? '';
-          break;
         default:
           return 0;
       }
@@ -284,9 +291,10 @@ const BuyoutMetricReport: React.FC = () => {
     const totalProjected = filteredProjects.reduce((s, p) => s + p.projected_cost, 0);
     const totalBuyoutRemaining = filteredProjects.reduce((s, p) => s + p.buyout_remaining, 0);
     const overallBuyoutPct = totalEst > 0 ? (totalCommitted / totalEst) * 100 : 0;
+    const uniqueProjectCount = new Set(filteredProjects.map(p => p.id)).size;
 
     return {
-      count: filteredProjects.length,
+      count: uniqueProjectCount,
       totalEst,
       totalJtd,
       totalCommitted,
@@ -337,7 +345,7 @@ const BuyoutMetricReport: React.FC = () => {
         pm: pmFilter !== 'all' ? pmFilter : undefined,
         department: departmentFilter !== 'all' ? departmentFilter : undefined,
         market: marketFilter !== 'all' ? marketFilter : undefined,
-        search: searchTerm || undefined,
+        search: undefined,
         team: teamFilter !== 'all' ? teamFilter : undefined,
       });
     } catch (err) {
@@ -347,8 +355,8 @@ const BuyoutMetricReport: React.FC = () => {
     }
   };
 
-  const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || departmentFilter !== 'all' ||
-    marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm ||
+  const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || !!projectFilter ||
+    departmentFilter !== 'all' || marketFilter !== 'all' || teamFilter !== 'all' ||
     JSON.stringify(selectedCostTypes) !== JSON.stringify(DEFAULT_COST_TYPES) || minPctComplete !== 10;
 
   const clearAllFilters = () => {
@@ -356,23 +364,14 @@ const BuyoutMetricReport: React.FC = () => {
     setMinPctComplete(10);
     setStatusFilter('all');
     setPmFilter('all');
+    setProjectFilter('');
     setDepartmentFilter('all');
     setMarketFilter('all');
     setTeamFilter('all');
-    setSearchTerm('');
   };
 
   const sortIcon = (col: string) =>
     sortColumn === col ? (sortDirection === 'asc' ? ' \u2191' : ' \u2193') : ' \u2195';
-
-  const getStatusColor = (status: string): string => {
-    const colors: Record<string, string> = {
-      'Open': '#10b981',
-      'Soft-Closed': '#f59e0b',
-      'Hard-Closed': '#6b7280',
-    };
-    return colors[status] || '#6b7280';
-  };
 
   if (isLoading) {
     return (
@@ -545,22 +544,18 @@ const BuyoutMetricReport: React.FC = () => {
           </div>
         </div>
 
-        {/* Search */}
-        <div style={{ flex: '1', minWidth: '180px' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Search</label>
-          <div className="sales-search-box" style={{ width: '100%' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </div>
+        {/* Project search / select */}
+        <div style={{ flex: '1', minWidth: '220px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project</label>
+          <SearchableSelect
+            options={uniqueProjects.map(proj => ({
+              value: proj.id.toString(),
+              label: `${proj.number} - ${proj.name}`,
+            }))}
+            value={projectFilter}
+            onChange={setProjectFilter}
+            placeholder="All Projects"
+          />
         </div>
 
         {/* Status */}
@@ -641,29 +636,30 @@ const BuyoutMetricReport: React.FC = () => {
           <div className="sales-table-title">
             Buyout Detail
             <span style={{ fontSize: '0.875rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
-              ({filteredProjects.length.toLocaleString()} of {projects.length.toLocaleString()})
+              ({filteredProjects.length.toLocaleString()} of {projects.length.toLocaleString()} phases)
             </span>
           </div>
         </div>
         <table className="sales-table" style={{ tableLayout: 'fixed', width: '100%' }}>
           <colgroup>
-            <col style={{ width: '4.5%' }} />   {/* # */}
-            <col style={{ width: '16%' }} />     {/* Project */}
-            <col style={{ width: '9%' }} />      {/* PM */}
-            <col style={{ width: '7%' }} />      {/* % Comp */}
-            <col style={{ width: '9%' }} />      {/* Est Cost */}
-            <col style={{ width: '9%' }} />      {/* JTD Cost */}
-            <col style={{ width: '9.5%' }} />    {/* Committed */}
-            <col style={{ width: '9%' }} />      {/* Projected */}
-            <col style={{ width: '10%' }} />     {/* Buyout Rem */}
-            <col style={{ width: '9%' }} />      {/* Buyout % */}
-            <col style={{ width: '8%' }} />      {/* Status */}
+            <col style={{ width: '6%' }} />      {/* # */}
+            <col style={{ width: '17%' }} />     {/* Project */}
+            <col style={{ width: '11%' }} />     {/* PM */}
+            <col style={{ width: '12%' }} />     {/* Phase */}
+            <col style={{ width: '5%' }} />      {/* % Comp */}
+            <col style={{ width: '8.5%' }} />    {/* Est Cost */}
+            <col style={{ width: '8.5%' }} />    {/* JTD Cost */}
+            <col style={{ width: '8.5%' }} />    {/* Committed */}
+            <col style={{ width: '8.5%' }} />    {/* Projected */}
+            <col style={{ width: '8.5%' }} />    {/* Buyout Rem */}
+            <col style={{ width: '6%' }} />      {/* Buyout % */}
           </colgroup>
           <thead>
             <tr>
               <th className="sales-sortable" onClick={() => handleSort('number')}>#{sortIcon('number')}</th>
               <th className="sales-sortable" onClick={() => handleSort('name')}>Project{sortIcon('name')}</th>
               <th className="sales-sortable" onClick={() => handleSort('manager')}>PM{sortIcon('manager')}</th>
+              <th className="sales-sortable" onClick={() => handleSort('phase')}>Phase{sortIcon('phase')}</th>
               <th className="sales-sortable" onClick={() => handleSort('percent_complete')} style={{ textAlign: 'right' }}>% Comp{sortIcon('percent_complete')}</th>
               <th className="sales-sortable" onClick={() => handleSort('est_cost')} style={{ textAlign: 'right' }}>Est Cost{sortIcon('est_cost')}</th>
               <th className="sales-sortable" onClick={() => handleSort('jtd_cost')} style={{ textAlign: 'right' }}>JTD Cost{sortIcon('jtd_cost')}</th>
@@ -671,24 +667,23 @@ const BuyoutMetricReport: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('projected_cost')} style={{ textAlign: 'right' }}>Projected{sortIcon('projected_cost')}</th>
               <th className="sales-sortable" onClick={() => handleSort('buyout_remaining')} style={{ textAlign: 'right' }}>Buyout Rem{sortIcon('buyout_remaining')}</th>
               <th className="sales-sortable" onClick={() => handleSort('buyout_pct')} style={{ textAlign: 'right' }}>Buyout %{sortIcon('buyout_pct')}</th>
-              <th className="sales-sortable" onClick={() => handleSort('status')}>Status{sortIcon('status')}</th>
             </tr>
           </thead>
           <tbody>
             {sortedProjects.length > 0 ? (
-              sortedProjects.map(p => {
+              sortedProjects.map((p, idx) => {
                 const pctComplete = Number(p.percent_complete) || 0;
                 const pctDisplay = Math.round(pctComplete * 100);
                 const buyoutPct = p.est_cost > 0 ? Math.round((p.committed_cost / p.est_cost) * 100) : 0;
                 const br = p.buyout_remaining;
 
                 return (
-                  <tr key={p.id} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
+                  <tr key={`${p.id}-${p.phase}-${idx}`} onClick={() => navigate(`/projects/${p.id}`)} style={{ cursor: 'pointer' }}>
                     <td style={{ fontWeight: 500, color: '#475569' }}>{p.number}</td>
                     <td>
                       <div>
-                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{p.customer_name || '-'}</div>
+                        <div style={{ fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customer_name || '-'}</div>
                       </div>
                     </td>
                     <td>
@@ -706,29 +701,17 @@ const BuyoutMetricReport: React.FC = () => {
                         <span style={{ fontSize: '0.8125rem' }}>{p.manager_name || 'Unassigned'}</span>
                       </div>
                     </td>
+                    <td>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem' }}>{p.phase}</div>
+                        {p.phase_description && (
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.phase_description}</div>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       {p.percent_complete !== null ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                          <div style={{
-                            flex: '0 0 40px', height: '6px', background: '#e5e7eb',
-                            borderRadius: '3px', overflow: 'hidden',
-                          }}>
-                            <div style={{
-                              height: '100%',
-                              width: `${Math.min(pctDisplay, 100)}%`,
-                              background: pctDisplay >= 100
-                                ? 'linear-gradient(135deg, #059669, #10b981)'
-                                : pctDisplay >= 75
-                                  ? 'linear-gradient(135deg, #002356, #004080)'
-                                  : pctDisplay >= 50
-                                    ? 'linear-gradient(135deg, #3b82f6, #60a5fa)'
-                                    : 'linear-gradient(135deg, #94a3b8, #cbd5e1)',
-                              borderRadius: '3px',
-                              transition: 'width 0.3s ease',
-                            }} />
-                          </div>
-                          <span style={{ fontSize: '0.8125rem', color: '#475569', minWidth: '28px' }}>{pctDisplay}%</span>
-                        </div>
+                        <span style={{ fontSize: '0.8125rem', color: '#475569' }}>{pctDisplay}%</span>
                       ) : (
                         <span style={{ color: '#94a3b8' }}>-</span>
                       )}
@@ -744,51 +727,18 @@ const BuyoutMetricReport: React.FC = () => {
                     }}>
                       {fmtCurrency(br)}
                     </td>
-                    {/* Buyout % with mini bar */}
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                        <div style={{
-                          flex: '0 0 40px', height: '6px', background: '#e5e7eb',
-                          borderRadius: '3px', overflow: 'hidden',
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(buyoutPct, 100)}%`,
-                            background: buyoutPct >= 90
-                              ? 'linear-gradient(135deg, #059669, #10b981)'
-                              : buyoutPct >= 50
-                                ? 'linear-gradient(135deg, #002356, #004080)'
-                                : 'linear-gradient(135deg, #d97706, #f59e0b)',
-                            borderRadius: '3px',
-                            transition: 'width 0.3s ease',
-                          }} />
-                        </div>
-                        <span style={{ fontSize: '0.8125rem', color: '#475569', minWidth: '28px' }}>{buyoutPct}%</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '5px',
-                        padding: '3px 10px', borderRadius: '9999px',
-                        fontSize: '0.75rem', fontWeight: 600,
-                        background: p.status === 'Open' ? 'rgba(16, 185, 129, 0.12)'
-                          : p.status === 'Soft-Closed' ? 'rgba(245, 158, 11, 0.12)'
-                          : 'rgba(107, 114, 128, 0.12)',
-                        color: getStatusColor(p.status),
-                      }}>
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
-                        {p.status}
-                      </span>
+                      <span style={{ fontSize: '0.8125rem', color: '#475569' }}>{buyoutPct}%</span>
                     </td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan={11} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: '40px', border: 'none' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>No projects found</h3>
                   <p style={{ color: '#6b7280', fontSize: '14px' }}>
-                    {searchTerm ? 'Try adjusting your search or filters' : 'No buyout data available for selected cost types'}
+                    {anyFilterActive ? 'Try adjusting your search or filters' : 'No buyout data available for selected cost types'}
                   </p>
                 </td>
               </tr>
@@ -803,8 +753,8 @@ const BuyoutMetricReport: React.FC = () => {
                 position: 'sticky',
                 bottom: 0,
               }}>
-                <td colSpan={3} style={{ textAlign: 'right', color: '#334155' }}>
-                  Totals ({sortedProjects.length.toLocaleString()} project{sortedProjects.length !== 1 ? 's' : ''}):
+                <td colSpan={4} style={{ textAlign: 'right', color: '#334155' }}>
+                  Totals ({new Set(sortedProjects.map(p => p.id)).size.toLocaleString()} project{new Set(sortedProjects.map(p => p.id)).size !== 1 ? 's' : ''}, {sortedProjects.length.toLocaleString()} phase{sortedProjects.length !== 1 ? 's' : ''}):
                 </td>
                 <td style={{ textAlign: 'right', color: '#334155' }}>{fmtPercent(footerTotals.weightedPct)}</td>
                 <td style={{ textAlign: 'right', color: '#1e293b' }}>{fmtCurrency(footerTotals.totalEst)}</td>
@@ -822,7 +772,6 @@ const BuyoutMetricReport: React.FC = () => {
                 <td style={{ textAlign: 'right', color: '#334155' }}>
                   {footerTotals.totalEst > 0 ? `${Math.round((footerTotals.totalCommitted / footerTotals.totalEst) * 100)}%` : '-'}
                 </td>
-                <td></td>
               </tr>
             </tfoot>
           )}

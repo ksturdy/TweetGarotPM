@@ -41,6 +41,8 @@ async function buildBuyoutMetricData(tenantId, filters = {}) {
        e.first_name || ' ' || e.last_name AS manager_name,
        d.department_number,
        COALESCE(c.name, c.customer_owner, p.client) AS customer_name,
+       pc.phase,
+       MAX(pc.phase_description) AS phase_description,
        COALESCE(SUM(pc.est_cost), 0) AS est_cost,
        COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
        COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
@@ -54,14 +56,15 @@ async function buildBuyoutMetricData(tenantId, filters = {}) {
      LEFT JOIN departments d ON p.department_id = d.id
      LEFT JOIN customers c ON p.customer_id = c.id
      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
-     LEFT JOIN vp_phase_codes pc ON pc.linked_project_id = p.id
+     JOIN vp_phase_codes pc ON pc.linked_project_id = p.id
        AND pc.cost_type = ANY($2::int[])
      WHERE p.tenant_id = $1
      GROUP BY p.id, p.number, p.name, p.status, p.market, p.manager_id,
               e.first_name, e.last_name, d.department_number,
               c.name, c.customer_owner, p.client,
-              vc.projected_cost, vc.actual_cost
-     ORDER BY p.number ASC`,
+              vc.projected_cost, vc.actual_cost,
+              pc.phase
+     ORDER BY p.number ASC, pc.phase ASC`,
     [tenantId, costTypes]
   );
 
@@ -73,6 +76,8 @@ async function buildBuyoutMetricData(tenantId, filters = {}) {
     const pct = r.percent_complete !== null ? parseFloat(r.percent_complete) : null;
     return {
       ...r,
+      phase: r.phase || '',
+      phase_description: r.phase_description || '',
       est_cost: est,
       jtd_cost: jtd,
       committed_cost: committed,
