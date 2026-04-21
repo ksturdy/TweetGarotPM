@@ -1538,6 +1538,23 @@ const VistaData = {
     }
   },
 
+  // Sync active status from VP employees to linked Titan employees
+  // Updates employment_status when Vista active flag changes (e.g., rehires)
+  async syncLinkedEmployeeStatus(tenantId) {
+    const result = await db.query(
+      `UPDATE employees e SET
+        employment_status = CASE WHEN vpe.active THEN 'active' ELSE 'inactive' END,
+        updated_at = CURRENT_TIMESTAMP
+       FROM vp_employees vpe
+       WHERE vpe.linked_employee_id = e.id
+         AND e.tenant_id = $1
+         AND e.employment_status != CASE WHEN vpe.active THEN 'active' ELSE 'inactive' END
+       RETURNING e.id, e.first_name, e.last_name, e.employment_status as new_status`,
+      [tenantId]
+    );
+    return { updated: result.rowCount, employees: result.rows };
+  },
+
   // Sync ALL VP customers to Titan customers (Vista is source of truth)
   // Creates new customers or updates existing ones by customer_number
   async syncCustomersToTitan(tenantId, userId) {

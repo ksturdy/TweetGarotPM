@@ -715,6 +715,16 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         console.log(`[Vista Import] Auto-imported ${empResult.imported} employees`);
       }
 
+      // Sync active status for already-linked employees (handles rehires, terminations)
+      if (results.employees.total > 0) {
+        console.log('[Vista Import] Syncing linked employee statuses...');
+        const empSyncResult = await VistaData.syncLinkedEmployeeStatus(req.tenantId);
+        autoImport.employeeSync = empSyncResult;
+        if (empSyncResult.updated > 0) {
+          console.log(`[Vista Import] Updated ${empSyncResult.updated} employee statuses: ${empSyncResult.employees.map(e => `${e.first_name} ${e.last_name} → ${e.new_status}`).join(', ')}`);
+        }
+      }
+
       // Auto-import vendors (only those not linked)
       if (results.vendors.total > 0) {
         console.log('[Vista Import] Auto-importing vendors...');

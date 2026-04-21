@@ -1,10 +1,13 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const fs = require('fs');
+const { Server } = require('socket.io');
+const { setupSocketIO } = require('./socket');
 // Version: 2026-01-21 - Fix database crash handler and add startup validation
 
 // Handle uncaught exceptions and unhandled rejections gracefully
@@ -102,8 +105,10 @@ const cashFlowReportRoutes = require('./routes/cashFlowReport');
 const scheduledReportRoutes = require('./routes/scheduledReports');
 const estProductRoutes = require('./routes/estProducts');
 const estimateFileRoutes = require('./routes/estimateFiles');
+const directMessageRoutes = require('./routes/directMessages');
 
 const app = express();
+const server = http.createServer(app);
 
 // Middleware
 app.use(helmet());
@@ -139,6 +144,14 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Socket.IO setup
+const io = new Server(server, {
+  cors: corsOptions,
+  path: '/socket.io',
+});
+setupSocketIO(io);
+app.set('io', io);
 
 // Handle preflight requests explicitly for all routes
 app.options('*', cors(corsOptions));
@@ -235,6 +248,7 @@ app.use('/api/reports/cash-flow', cashFlowReportRoutes);
 app.use('/api/scheduled-reports', scheduledReportRoutes);
 app.use('/api/est-products', estProductRoutes);
 app.use('/api/estimate-files', estimateFileRoutes);
+app.use('/api/dm', directMessageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -314,7 +328,7 @@ function validateEnvironment() {
 }
 
 // Start server
-app.listen(config.port, () => {
+server.listen(config.port, () => {
   console.log(`\n🚀 Server running on port ${config.port} in ${config.nodeEnv} mode\n`);
 
   const { warnings, errors } = validateEnvironment();
@@ -325,6 +339,7 @@ app.listen(config.port, () => {
   console.log(`  ${process.env.DATABASE_URL || process.env.DB_PASSWORD ? '✅' : '❌'} Database configured`);
   console.log(`  ${process.env.ANTHROPIC_API_KEY ? '✅' : '⚠️'} Anthropic API (AI features)`);
   console.log(`  ${config.r2.accountId ? '✅' : '⚠️'} Cloudflare R2 (cloud storage)`);
+  console.log(`  ✅ Socket.IO ready (WebSocket + polling)`);
 
   // Weekly financial snapshots - every Thursday at 6:00 PM ET
   cron.schedule('0 18 * * 4', () => {
@@ -341,7 +356,25 @@ app.listen(config.port, () => {
       console.error('[Cron] Scheduled report runner failed:', err);
     });
   });
-  console.log(`  ✅ Scheduled report delivery cron active (every 15 min)\n`);
+  console.log(`  ✅ Scheduled report delivery cron active (every 15 min)`);
+
+  // Stale presence cleanup - every 2 minutes
+  const Presence = require('./models/Presence');
+  cron.schedule('*/2 * * * *', async () => {
+    try {
+      const stale = await Presence.markStaleOffline(2);
+      if (stale.length > 0) {
+        for (const { user_id, tenant_id } of stale) {
+          io.to(`tenant:${tenant_id}`).emit('presence:update', {
+            userId: user_id, status: 'offline'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Cron] Presence cleanup failed:', err.message);
+    }
+  });
+  console.log(`  ✅ Presence cleanup cron active (every 2 min)\n`);
 });
 
 

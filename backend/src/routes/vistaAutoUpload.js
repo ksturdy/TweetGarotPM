@@ -704,6 +704,16 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
         console.log(`[Vista Auto-Import] Auto-imported ${empResult.imported} employees`);
       }
 
+      // Sync active status for already-linked employees (handles rehires, terminations)
+      if (results.employees.total > 0) {
+        console.log('[Vista Auto-Import] Syncing linked employee statuses...');
+        const empSyncResult = await VistaData.syncLinkedEmployeeStatus(req.tenantId);
+        autoImport.employeeSync = empSyncResult;
+        if (empSyncResult.updated > 0) {
+          console.log(`[Vista Auto-Import] Updated ${empSyncResult.updated} employee statuses: ${empSyncResult.employees.map(e => `${e.first_name} ${e.last_name} → ${e.new_status}`).join(', ')}`);
+        }
+      }
+
       if (results.vendors.total > 0) {
         console.log('[Vista Auto-Import] Auto-importing vendors...');
         const vendorResult = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);

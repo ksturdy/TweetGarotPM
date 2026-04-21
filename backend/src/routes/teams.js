@@ -77,7 +77,8 @@ router.get('/:id/dashboard', async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const metrics = await Team.getDashboardMetrics(req.params.id, req.tenantId);
+    const filter = req.query.filter || 'active';
+    const metrics = await Team.getDashboardMetrics(req.params.id, req.tenantId, filter);
     res.json({ data: metrics });
   } catch (error) {
     console.error('Error fetching team dashboard:', error);
@@ -94,7 +95,8 @@ router.get('/:id/opportunities', async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const opportunities = await Team.getOpportunities(req.params.id, req.tenantId);
+    const filter = req.query.filter || 'active';
+    const opportunities = await Team.getOpportunities(req.params.id, req.tenantId, filter);
     res.json({ data: opportunities });
   } catch (error) {
     console.error('Error fetching team opportunities:', error);
@@ -111,7 +113,8 @@ router.get('/:id/customers', async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const customers = await Team.getCustomers(req.params.id, req.tenantId);
+    const filter = req.query.filter || 'active';
+    const customers = await Team.getCustomers(req.params.id, req.tenantId, filter);
     res.json({ data: customers });
   } catch (error) {
     console.error('Error fetching team customers:', error);
@@ -128,11 +131,29 @@ router.get('/:id/estimates', async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const estimates = await Team.getEstimates(req.params.id, req.tenantId);
+    const filter = req.query.filter || 'active';
+    const estimates = await Team.getEstimates(req.params.id, req.tenantId, filter);
     res.json({ data: estimates });
   } catch (error) {
     console.error('Error fetching team estimates:', error);
     res.status(500).json({ error: 'Failed to fetch team estimates' });
+  }
+});
+
+// Get team's projects
+router.get('/:id/projects', async (req, res) => {
+  try {
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    const filter = req.query.filter || 'active';
+    const projects = await Team.getProjects(req.params.id, req.tenantId, filter);
+    res.json({ data: projects });
+  } catch (error) {
+    console.error('Error fetching team projects:', error);
+    res.status(500).json({ error: 'Failed to fetch team projects' });
   }
 });
 

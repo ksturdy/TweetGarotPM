@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { teamsApi, Team } from '../../services/teams';
 import { employeesApi, AssignableEmployee } from '../../services/employees';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import SearchableSelect from '../../components/SearchableSelect';
 import '../../styles/SalesPipeline.css';
 
 const TeamList: React.FC = () => {
@@ -31,7 +32,7 @@ const TeamList: React.FC = () => {
     queryKey: ['teams'],
     queryFn: async (): Promise<Team[]> => {
       const response = await teamsApi.getAll();
-      return response.data.data;
+      return response.data.data || [];
     },
   });
 
@@ -252,7 +253,7 @@ const TeamList: React.FC = () => {
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', width: '36px', height: '36px', fontSize: '1rem' }}>👤</div>
           <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{teams.reduce((sum: number, t: Team) => sum + (t.member_count || 0), 0)}</div>
+            <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{teams.reduce((sum: number, t: Team) => sum + (Number(t.member_count) || 0), 0)}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Total Members</div>
           </div>
         </div>
@@ -260,7 +261,7 @@ const TeamList: React.FC = () => {
           <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', width: '36px', height: '36px', fontSize: '1rem' }}>📊</div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>
-              {teams.length > 0 ? Math.round(teams.reduce((sum: number, t: Team) => sum + (t.member_count || 0), 0) / teams.length) : 0}
+              {teams.length > 0 ? Math.round(teams.reduce((sum: number, t: Team) => sum + (Number(t.member_count) || 0), 0) / teams.length) : 0}
             </div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Avg Team Size</div>
           </div>
@@ -313,7 +314,6 @@ const TeamList: React.FC = () => {
               <th className="sales-sortable" onClick={() => handleSort('status')}>
                 Status <span className="sales-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
-              <th style={{ width: '130px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -382,42 +382,11 @@ const TeamList: React.FC = () => {
                       {team.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px', whiteSpace: 'nowrap' }}>
-                      <button
-                        onClick={(e) => handleEdit(team, e)}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid #e5e7eb',
-                          background: 'white',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(team.id, e)}
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid #fecaca',
-                          background: '#fef2f2',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '40px' }}>
                   <div>
                     <svg
                       fill="none"
@@ -521,25 +490,15 @@ const TeamList: React.FC = () => {
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
                   Team Lead
                 </label>
-                <select
+                <SearchableSelect
+                  options={employees.map((emp: AssignableEmployee) => ({
+                    value: emp.id.toString(),
+                    label: `${emp.first_name} ${emp.last_name}${emp.job_title ? ` - ${emp.job_title}` : ''}`,
+                  }))}
                   value={formData.team_lead_id}
-                  onChange={(e) => setFormData({ ...formData, team_lead_id: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    fontSize: '0.875rem',
-                    background: 'white',
-                  }}
-                >
-                  <option value="">Select team lead</option>
-                  {employees.map((emp: AssignableEmployee) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} {emp.job_title ? `- ${emp.job_title}` : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setFormData({ ...formData, team_lead_id: value })}
+                  placeholder="Search for team lead..."
+                />
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -579,44 +538,76 @@ const TeamList: React.FC = () => {
                 </label>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setEditingTeam(null);
-                    resetForm();
-                  }}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    background: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: '#6366f1',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                  }}
-                >
-                  {createMutation.isPending || updateMutation.isPending
-                    ? 'Saving...'
-                    : editingTeam
-                    ? 'Update Team'
-                    : 'Create Team'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  {editingTeam && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = await confirm({ message: `Are you sure you want to delete "${editingTeam.name}"? This action cannot be undone.`, danger: true });
+                        if (ok) {
+                          deleteMutation.mutate(editingTeam.id, {
+                            onSuccess: () => {
+                              setShowCreateModal(false);
+                              setEditingTeam(null);
+                              resetForm();
+                            },
+                          });
+                        }
+                      }}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        border: '1px solid #fecaca',
+                        background: '#fef2f2',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Delete Team
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setEditingTeam(null);
+                      resetForm();
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      background: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#6366f1',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {createMutation.isPending || updateMutation.isPending
+                      ? 'Saving...'
+                      : editingTeam
+                      ? 'Update Team'
+                      : 'Create Team'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

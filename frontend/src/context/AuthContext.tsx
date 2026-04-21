@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { disconnectSocket } from '../services/socket';
 
 interface User {
   id: number;
@@ -166,6 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(() => {
+    disconnectSocket();
     localStorage.removeItem('token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);

@@ -28,6 +28,7 @@ const GANTT_COLUMN_DEFS: ColumnDef[] = [
   { key: 'rowNum', label: 'ID', hideable: false },
   { key: 'phase', label: 'Phase Code', hideable: false },
   { key: 'ct', label: 'CT', hideable: true },
+  { key: 'estHrs', label: 'Est Hrs', hideable: true },
   { key: 'estCost', label: 'Est $', hideable: true },
   { key: 'start', label: 'Start', hideable: true },
   { key: 'end', label: 'End', hideable: true },
@@ -53,7 +54,8 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
   { key: 'jtdPi', label: 'PI', group: 'JTD', hideable: true },
   { key: 'projQty', label: 'Qty', group: 'Projected', hideable: true },
   { key: 'projHrs', label: 'Hrs', group: 'Projected', hideable: true },
-  { key: 'projCost', label: 'Cost', group: 'Projected', hideable: true },
+  { key: 'projCostField', label: 'Cost (Field)', group: 'Projected', hideable: true },
+  { key: 'projCostVista', label: 'Cost (Vista)', group: 'Projected', hideable: true },
   { key: 'projPi', label: 'PI', group: 'Projected', hideable: true },
   { key: 'start', label: 'Start', group: 'Schedule', hideable: true },
   { key: 'end', label: 'End', group: 'Schedule', hideable: true },
@@ -237,7 +239,8 @@ interface CostTypeGroup {
   pctComp: number;
   projQty: number;
   projHrs: number;
-  projCost: number;
+  projCostField: number;
+  projCostVista: number;
   earliestStart: string | null;
   latestEnd: string | null;
   duration: number;
@@ -669,7 +672,7 @@ const GanttView: React.FC<{
   const today = startOfDay(new Date());
 
   // Gantt column widths (persisted to localStorage)
-  const ganttColDefaults = { sel: 28, rowNum: 32, phase: 220, ct: 32, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
+  const ganttColDefaults = { sel: 28, rowNum: 32, phase: 220, ct: 32, estHrs: 56, estCost: 78, start: 90, end: 90, dur: 44, pred: 44, contour: 62 };
   const [ganttCols, setGanttCols] = useState<typeof ganttColDefaults>(() => {
     try { const saved = localStorage.getItem('phaseSchedule_ganttCols'); return saved ? { ...ganttColDefaults, ...JSON.parse(saved) } : ganttColDefaults; }
     catch { return ganttColDefaults; }
@@ -690,6 +693,19 @@ const GanttView: React.FC<{
   } | null>(null);
   const dragOccurredRef = useRef(false);
   const [barDragOffset, setBarDragOffset] = useState<{ itemId: number; deltaX: number } | null>(null);
+
+  // Bar resize state (drag left/right edge to change start/end date)
+  const barResizeRef = useRef<{
+    itemId: number;
+    edge: 'left' | 'right';
+    startMouseX: number;
+    originalBarLeft: number;
+    originalBarWidth: number;
+    originalStartDate: Date;
+    originalEndDate: Date;
+    dragStarted: boolean;
+  } | null>(null);
+  const [barResizeOffset, setBarResizeOffset] = useState<{ itemId: number; edge: 'left' | 'right'; deltaX: number } | null>(null);
   const onUpdateRef = useRef(onUpdate);
   onUpdateRef.current = onUpdate;
 
@@ -743,6 +759,17 @@ const GanttView: React.FC<{
         }
         setBarDragOffset({ itemId: drag.itemId, deltaX });
       }
+      if (barResizeRef.current) {
+        const r = barResizeRef.current;
+        const deltaX = e.clientX - r.startMouseX;
+        if (!r.dragStarted) {
+          if (Math.abs(deltaX) < 4) return;
+          r.dragStarted = true;
+          document.body.style.cursor = r.edge === 'right' ? 'e-resize' : 'w-resize';
+          document.body.style.userSelect = 'none';
+        }
+        setBarResizeOffset({ itemId: r.itemId, edge: r.edge, deltaX });
+      }
     };
     const onUp = (e: MouseEvent) => {
       if (barDragRef.current && barDragRef.current.dragStarted) {
@@ -757,8 +784,28 @@ const GanttView: React.FC<{
         } as any);
         dragOccurredRef.current = true;
       }
+      if (barResizeRef.current && barResizeRef.current.dragStarted) {
+        const r = barResizeRef.current;
+        const deltaX = e.clientX - r.startMouseX;
+        if (r.edge === 'left') {
+          const newBarLeft = r.originalBarLeft + deltaX;
+          const newStartDate = xToDateRef.current(newBarLeft);
+          if (newStartDate < r.originalEndDate) {
+            onUpdateRef.current(r.itemId, { start_date: format(newStartDate, 'yyyy-MM-dd') } as any);
+          }
+        } else {
+          const newBarRight = r.originalBarLeft + r.originalBarWidth + deltaX;
+          const newEndDate = xToDateRef.current(newBarRight);
+          if (newEndDate > r.originalStartDate) {
+            onUpdateRef.current(r.itemId, { end_date: format(newEndDate, 'yyyy-MM-dd') } as any);
+          }
+        }
+        dragOccurredRef.current = true;
+      }
       barDragRef.current = null;
       setBarDragOffset(null);
+      barResizeRef.current = null;
+      setBarResizeOffset(null);
       draggingRef.current = null;
       colResizeRef.current = null;
       document.body.style.cursor = '';
@@ -784,7 +831,7 @@ const GanttView: React.FC<{
     if (!ctx) return;
     let maxW = 36;
     // Header text widths
-    const headers: Record<string, string> = { rowNum: 'ID', phase: 'Phase Code', ct: 'CT', estCost: 'Est $', start: 'Start', end: 'End', dur: 'Dur', pred: 'Pred', contour: 'Contour' };
+    const headers: Record<string, string> = { rowNum: 'ID', phase: 'Phase Code', ct: 'CT', estHrs: 'Est Hrs', estCost: 'Est $', start: 'Start', end: 'End', dur: 'Dur', pred: 'Pred', contour: 'Contour' };
     ctx.font = '600 11px system-ui, -apple-system, sans-serif';
     maxW = Math.max(maxW, ctx.measureText(headers[col] || '').width + 24);
     // Measure cell content from items
@@ -795,6 +842,7 @@ const GanttView: React.FC<{
         case 'rowNum': text = String(item.row_number || ''); break;
         case 'phase': text = `${item.phase_code_display || ''} - ${item.name || ''}`; break;
         case 'ct': text = item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('') || ''; break;
+        case 'estHrs': text = fmtHrs(parseNum(item.total_est_hours)); break;
         case 'estCost': text = fmtCompact(parseNum(item.total_est_cost)); break;
         case 'start': text = item.start_date ? format(new Date(item.start_date), 'MM/dd/yy') : ''; break;
         case 'end': text = item.end_date ? format(new Date(item.end_date), 'MM/dd/yy') : ''; break;
@@ -910,6 +958,7 @@ const GanttView: React.FC<{
             <CTFilterDropdown selected={ctFilter} onToggle={onCtFilterToggle} onClear={onCtFilterClear} />
             {ganttResizeHandle('ct')}
           </div>}
+          {!gh('estHrs') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'estHrs', 'Est Hrs')} style={{ width: ganttCols.estHrs, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Est Hrs{ganttResizeHandle('estHrs')}</div>}
           {!gh('estCost') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'estCost', 'Est $')} style={{ width: ganttCols.estCost, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Est ${ganttResizeHandle('estCost')}</div>}
           {!gh('start') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'start', 'Start')} style={{ width: ganttCols.start, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>Start{ganttResizeHandle('start')}</div>}
           {!gh('end') && <div onContextMenu={e => ganttHeaderContextMenu(e, 'end', 'End')} style={{ width: ganttCols.end, textAlign: 'center', padding: '0 0.25rem', flexShrink: 0, position: 'relative', borderRight: '1px solid #cbd5e1' }}>End{ganttResizeHandle('end')}</div>}
@@ -945,6 +994,9 @@ const GanttView: React.FC<{
                   <span style={{ fontSize: '0.6rem', color: '#64748b' }}>({group.items.length})</span>
                 </div>
                 {!gh('ct') && <div style={{ width: ganttCols.ct, flexShrink: 0, borderRight: '1px solid #cbd5e1' }} />}
+                {!gh('estHrs') && <div style={{ width: ganttCols.estHrs, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 0.25rem', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', color: '#64748b' }}>
+                  {fmtHrs(group.estHrs)}
+                </div>}
                 {!gh('estCost') && <div style={{ width: ganttCols.estCost, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 0.25rem', borderRight: '1px solid #cbd5e1', fontSize: '0.65rem', color: '#64748b' }}>
                   {fmtCompact(group.estCost)}
                 </div>}
@@ -1038,6 +1090,21 @@ const GanttView: React.FC<{
                   const barColor = COST_TYPE_COLORS[item.cost_types?.[0] || 1];
                   const isDraggingThis = barDragOffset?.itemId === item.id;
                   const dragDelta = isDraggingThis ? barDragOffset.deltaX : 0;
+                  const isResizingThis = barResizeOffset?.itemId === item.id;
+                  const resizeDelta = isResizingThis ? barResizeOffset.deltaX : 0;
+                  const resizeEdge = isResizingThis ? barResizeOffset.edge : null;
+                  // Compute adjusted bar position/width during resize
+                  let adjBarLeft = barLeft + dragDelta;
+                  let adjBarWidth = barWidth;
+                  if (isResizingThis) {
+                    if (resizeEdge === 'left') {
+                      adjBarLeft = barLeft + resizeDelta;
+                      adjBarWidth = Math.max(8, barWidth - resizeDelta);
+                    } else {
+                      adjBarWidth = Math.max(8, barWidth + resizeDelta);
+                    }
+                  }
+                  const isActive = isDraggingThis || isResizingThis;
                   return (
                     <div key={item.id} style={{ height: rowHeight, position: 'relative', borderBottom: '1px solid #cbd5e1', cursor: 'pointer' }}
                       onClick={() => { if (dragOccurredRef.current) { dragOccurredRef.current = false; return; } onEdit(item); }}>
@@ -1046,12 +1113,12 @@ const GanttView: React.FC<{
                       ))}
                       {barWidth > 0 && (
                         <div style={{
-                          position: 'absolute', left: barLeft + dragDelta, top: 4, height: rowHeight - 8, width: barWidth,
-                          backgroundColor: isDraggingThis ? barColor + '50' : barColor + '30',
+                          position: 'absolute', left: adjBarLeft, top: 4, height: rowHeight - 8, width: adjBarWidth,
+                          backgroundColor: isActive ? barColor + '50' : barColor + '30',
                           border: `2px solid ${barColor}`, borderRadius: '4px',
-                          display: 'flex', alignItems: 'center', paddingLeft: '6px', overflow: 'hidden',
+                          display: 'flex', alignItems: 'center', paddingLeft: '6px', paddingRight: '6px', overflow: 'hidden',
                           cursor: isDraggingThis ? 'grabbing' : 'grab',
-                          zIndex: isDraggingThis ? 10 : undefined,
+                          zIndex: isActive ? 10 : undefined,
                         }}
                           onMouseDown={e => {
                             if (e.button !== 0 || !startDate || !endDate) return;
@@ -1066,11 +1133,39 @@ const GanttView: React.FC<{
                               dragStarted: false,
                             };
                           }}
-                          onMouseEnter={e => { if (!barDragRef.current) e.currentTarget.style.backgroundColor = barColor + '50'; }}
-                          onMouseLeave={e => { if (!barDragRef.current) e.currentTarget.style.backgroundColor = barColor + '30'; }}>
-                          <span style={{ fontSize: '0.65rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          onMouseEnter={e => { if (!barDragRef.current && !barResizeRef.current) e.currentTarget.style.backgroundColor = barColor + '50'; }}
+                          onMouseLeave={e => { if (!barDragRef.current && !barResizeRef.current) e.currentTarget.style.backgroundColor = barColor + '30'; }}>
+                          {/* Left resize handle */}
+                          <div style={{
+                            position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px',
+                            cursor: 'w-resize', zIndex: 2,
+                          }}
+                            onMouseDown={e => {
+                              if (e.button !== 0 || !startDate || !endDate) return;
+                              e.stopPropagation(); e.preventDefault();
+                              barResizeRef.current = {
+                                itemId: item.id, edge: 'left', startMouseX: e.clientX,
+                                originalBarLeft: barLeft, originalBarWidth: barWidth,
+                                originalStartDate: startDate, originalEndDate: endDate, dragStarted: false,
+                              };
+                            }} />
+                          <span style={{ fontSize: '0.65rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                             {item.name}
                           </span>
+                          {/* Right resize handle */}
+                          <div style={{
+                            position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px',
+                            cursor: 'e-resize', zIndex: 2,
+                          }}
+                            onMouseDown={e => {
+                              if (e.button !== 0 || !startDate || !endDate) return;
+                              e.stopPropagation(); e.preventDefault();
+                              barResizeRef.current = {
+                                itemId: item.id, edge: 'right', startMouseX: e.clientX,
+                                originalBarLeft: barLeft, originalBarWidth: barWidth,
+                                originalStartDate: startDate, originalEndDate: endDate, dragStarted: false,
+                              };
+                            }} />
                         </div>
                       )}
                     </div>
@@ -1119,7 +1214,7 @@ const GanttRow: React.FC<{
   rowHeight: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
-  ganttCols: { sel: number; rowNum: number; phase: number; ct: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
+  ganttCols: { sel: number; rowNum: number; phase: number; ct: number; estHrs: number; estCost: number; start: number; end: number; dur: number; pred: number; contour: number };
   hiddenCols: Set<string>;
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
@@ -1127,7 +1222,7 @@ const GanttRow: React.FC<{
   const dur = getDuration(item.start_date, item.end_date);
 
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
-    if (value) onUpdate(item.id, { [field]: value } as any);
+    onUpdate(item.id, { [field]: value || null } as any);
   };
 
   const handleDurationChange = (newDur: number) => {
@@ -1182,6 +1277,9 @@ const GanttRow: React.FC<{
       </div>
       {!hiddenCols.has('ct') && <div style={{ ...cellStyle, width: ganttCols.ct, justifyContent: 'center', flexShrink: 0, fontSize: '0.6rem', color: '#64748b' }}>
         {item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('')}
+      </div>}
+      {!hiddenCols.has('estHrs') && <div style={{ ...cellStyle, width: ganttCols.estHrs, justifyContent: 'center', padding: '0 0.25rem', flexShrink: 0, fontSize: '0.65rem' }}>
+        {fmtHrs(parseNum(item.total_est_hours))}
       </div>}
       {!hiddenCols.has('estCost') && <div style={{ ...cellStyle, width: ganttCols.estCost, justifyContent: 'center', padding: '0 0.25rem', flexShrink: 0 }}>
         {fmtCompact(parseNum(item.total_est_cost))}
@@ -1249,7 +1347,7 @@ const GRID_COL_DEFAULTS = {
   // JTD group
   pctComp: 54, jtdQty: 62, jtdHrs: 62, jtdCost: 78, jtdPi: 50,
   // Projected group
-  projQty: 62, projHrs: 62, projCost: 78, projPi: 50,
+  projQty: 62, projHrs: 62, projCostField: 78, projCostVista: 78, projPi: 50,
   // Schedule
   start: 100, end: 100, dur: 44, pred: 44, contour: 74
 };
@@ -1426,7 +1524,7 @@ const GridView: React.FC<{
   const vw = (col: string) => gv(col) ? (colWidths as any)[col] : 0;
   const estCols = ['estQty', 'uom', 'estHrs', 'estCost', 'estPi'];
   const jtdCols = ['pctComp', 'jtdQty', 'jtdHrs', 'jtdCost', 'jtdPi'];
-  const projCols = ['projQty', 'projHrs', 'projCost', 'projPi'];
+  const projCols = ['projQty', 'projHrs', 'projCostField', 'projCostVista', 'projPi'];
   const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
   const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
   const jtdGroupW = jtdCols.reduce((s, c) => s + vw(c), 0);
@@ -1504,7 +1602,8 @@ const GridView: React.FC<{
           {gv('jtdPi') && <col style={{ width: colWidths.jtdPi }} />}
           {gv('projQty') && <col style={{ width: colWidths.projQty }} />}
           {gv('projHrs') && <col style={{ width: colWidths.projHrs }} />}
-          {gv('projCost') && <col style={{ width: colWidths.projCost }} />}
+          {gv('projCostField') && <col style={{ width: colWidths.projCostField }} />}
+          {gv('projCostVista') && <col style={{ width: colWidths.projCostVista }} />}
           {gv('projPi') && <col style={{ width: colWidths.projPi }} />}
           {gv('start') && <col style={{ width: colWidths.start }} />}
           {gv('end') && <col style={{ width: colWidths.end }} />}
@@ -1581,7 +1680,8 @@ const GridView: React.FC<{
             {/* Projected group */}
             {gv('projQty') && <th data-col="projQty" onContextMenu={e => gridHeaderContextMenu(e, 'projQty', 'Proj Qty')} style={thStyle(colWidths.projQty, { background: COL_GROUP.proj.hdr })}>Qty{resizeHandle('projQty')}</th>}
             {gv('projHrs') && <th data-col="projHrs" onContextMenu={e => gridHeaderContextMenu(e, 'projHrs', 'Proj Hrs')} style={thStyle(colWidths.projHrs, { background: COL_GROUP.proj.hdr })}>Hrs{resizeHandle('projHrs')}</th>}
-            {gv('projCost') && <th data-col="projCost" onContextMenu={e => gridHeaderContextMenu(e, 'projCost', 'Proj Cost')} style={thStyle(colWidths.projCost, { background: COL_GROUP.proj.hdr })}>Cost{resizeHandle('projCost')}</th>}
+            {gv('projCostField') && <th data-col="projCostField" onContextMenu={e => gridHeaderContextMenu(e, 'projCostField', 'Cost (Field)')} style={thStyle(colWidths.projCostField, { background: COL_GROUP.proj.hdr, fontSize: '0.6rem' })}>Cost (Field){resizeHandle('projCostField')}</th>}
+            {gv('projCostVista') && <th data-col="projCostVista" onContextMenu={e => gridHeaderContextMenu(e, 'projCostVista', 'Cost (Vista)')} style={thStyle(colWidths.projCostVista, { background: COL_GROUP.proj.hdr, fontSize: '0.6rem' })}>Cost (Vista){resizeHandle('projCostVista')}</th>}
             {gv('projPi') && <th data-col="projPi" onContextMenu={e => gridHeaderContextMenu(e, 'projPi', 'Proj PI')} style={thStyle(colWidths.projPi, { background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('projPi')}</th>}
             {/* Schedule group */}
             {gv('start') && <th data-col="start" onContextMenu={e => gridHeaderContextMenu(e, 'start', 'Start')} style={thStyle(colWidths.start, { background: COL_GROUP.sched.hdr })}>Start{resizeHandle('start')}</th>}
@@ -1643,13 +1743,17 @@ const GridView: React.FC<{
               const pi = jQ > 0 && jH > 0 ? jQ / jH : 0;
               return s + (pi > 0 ? Math.max(eQ / pi, jH) : jH > eH ? jH : eH);
             }, 0);
-            const totProjCost = items.reduce((s, i) => {
-              const vPC = parseNum(i.total_projected_cost);
+            const totProjCostField = items.reduce((s, i) => {
               const pct = parseNum(i.percent_complete);
               const jC = parseNum(i.total_jtd_cost);
               const eC = parseNum(i.total_est_cost);
-              const p = vPC > 0 ? Math.max(vPC, jC) : pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
+              const p = pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
               return s + p;
+            }, 0);
+            const totProjCostVista = items.reduce((s, i) => {
+              const vPC = parseNum(i.total_projected_cost);
+              const jC = parseNum(i.total_jtd_cost);
+              return s + (vPC > 0 ? Math.max(vPC, jC) : 0);
             }, 0);
             // Overall schedule rollup
             let totEarliestStart: string | null = null;
@@ -1683,7 +1787,8 @@ const GridView: React.FC<{
                 {/* Projected totals */}
                 {gv('projQty') && <td style={{ ...tdTot, width: colWidths.projQty, background: COL_GROUP.proj.cell }}>{totProjQty > 0 ? Math.round(totProjQty).toLocaleString() : ''}</td>}
                 {gv('projHrs') && <td style={{ ...tdTot, width: colWidths.projHrs, background: COL_GROUP.proj.cell }}>{fmtHrs(totProjHrs)}</td>}
-                {gv('projCost') && <td style={{ ...tdTot, width: colWidths.projCost, background: COL_GROUP.proj.cell }}>{fmtCompact(totProjCost)}</td>}
+                {gv('projCostField') && (() => { const bl = totProjCostVista > 0 ? totProjCostVista : totEstCost; const pct = bl > 0 ? (totProjCostField - bl) / bl : 0; const bg = pct > 0.01 ? '#FFC7CE' : pct < -0.01 ? '#C6EFCE' : COL_GROUP.proj.cell; const fg = pct > 0.01 ? '#9C0006' : pct < -0.01 ? '#006100' : '#1e293b'; return <td style={{ ...tdTot, width: colWidths.projCostField, background: bg, color: fg }}>{fmtCompact(totProjCostField)}</td>; })()}
+                {gv('projCostVista') && (() => { const pct = totEstCost > 0 ? (totProjCostVista - totEstCost) / totEstCost : 0; const bg = pct < -0.01 ? '#C6EFCE' : pct > 0.01 ? '#FFC7CE' : COL_GROUP.proj.cell; const fg = pct < -0.01 ? '#006100' : pct > 0.01 ? '#9C0006' : '#1e293b'; return <td style={{ ...tdTot, width: colWidths.projCostVista, background: bg, color: fg }}>{totProjCostVista > 0 ? fmtCompact(totProjCostVista) : '$0'}</td>; })()}
                 {gv('projPi') && <td style={{ ...tdTot, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.proj.cell }}>{fmtPi(totProjQty, totProjHrs)}</td>}
                 {/* Schedule totals */}
                 {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totEarliestStart)}</td>}
@@ -1804,7 +1909,8 @@ const CostTypeSummaryRow: React.FC<{
       {/* Projected (color coded vs estimate) */}
       {sv('projQty') && <td style={{ ...tdS, width: colWidths.projQty, backgroundColor: COL_GROUP.proj.cell }}>{group.projQty > 0 ? Math.round(group.projQty).toLocaleString() : ''}</td>}
       {sv('projHrs') && <td style={{ ...tdS, width: colWidths.projHrs, backgroundColor: COL_GROUP.proj.cell, color: group.projHrs > group.estHrs ? '#ef4444' : group.projHrs < group.estHrs ? '#10b981' : '#1e293b' }}>{fmtHrs(group.projHrs)}</td>}
-      {sv('projCost') && <td style={{ ...tdS, width: colWidths.projCost, backgroundColor: COL_GROUP.proj.cell, color: group.projCost > group.estCost ? '#ef4444' : group.projCost < group.estCost ? '#10b981' : '#1e293b' }}>{fmtCompact(group.projCost)}</td>}
+      {sv('projCostField') && (() => { const bl = group.projCostVista > 0 ? group.projCostVista : group.estCost; const pct = bl > 0 ? (group.projCostField - bl) / bl : 0; const bg = pct > 0.01 ? '#FFC7CE' : pct < -0.01 ? '#C6EFCE' : COL_GROUP.proj.cell; const fg = pct > 0.01 ? '#9C0006' : pct < -0.01 ? '#006100' : '#1e293b'; return <td style={{ ...tdS, width: colWidths.projCostField, backgroundColor: bg, color: fg }}>{fmtCompact(group.projCostField)}</td>; })()}
+      {sv('projCostVista') && (() => { const pct = group.estCost > 0 ? (group.projCostVista - group.estCost) / group.estCost : 0; const bg = pct < -0.01 ? '#C6EFCE' : pct > 0.01 ? '#FFC7CE' : COL_GROUP.proj.cell; const fg = pct < -0.01 ? '#006100' : pct > 0.01 ? '#9C0006' : '#1e293b'; return <td style={{ ...tdS, width: colWidths.projCostVista, backgroundColor: bg, color: fg }}>{group.projCostVista > 0 ? fmtCompact(group.projCostVista) : '$0'}</td>; })()}
       {sv('projPi') && <td style={{ ...tdS, width: colWidths.projPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.proj.cell, color: (() => { const ePi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const pPi = group.projHrs > 0 ? group.projQty / group.projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#1e293b'; })() }}>{fmtPi(group.projQty, group.projHrs)}</td>}
       {/* Schedule */}
       {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.earliestStart)}</td>}
@@ -1858,14 +1964,24 @@ const GridRow: React.FC<{
   const jtdCost = parseNum(item.total_jtd_cost);
   const pctComp = parseNum(item.percent_complete);
   const jtdPi = jtdQty > 0 && jtdHrs > 0 ? jtdQty / jtdHrs : 0;
-  // Projected = Vista projected cost when available, else extrapolate from % complete, else estimate
+  // Projected costs: Field = extrapolated from % complete; Vista = from ERP
   const vistaProjCost = parseNum(item.total_projected_cost);
   const projQty = estQty; // scope doesn't change
   const projHrs = jtdPi > 0 ? Math.max(estQty / jtdPi, jtdHrs) : jtdHrs > estHrs ? jtdHrs : estHrs;
-  const projCost = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost)
-    : pctComp > 0 ? Math.max(jtdCost / (pctComp / 100), jtdCost)
+  // Field projection: always calculated from progress
+  const projCostField = pctComp > 0 ? Math.max(jtdCost / (pctComp / 100), jtdCost)
     : jtdCost > estCost ? jtdCost
     : estCost;
+  // Vista projection: ERP value (0 if not available)
+  const projCostVista = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost) : 0;
+  // Excel-style conditional shading: 1% tolerance to avoid false positives from rounding
+  const costStyle = (proj: number, baseline: number): { background: string; color: string } => {
+    if (baseline === 0 || proj === 0) return { background: '', color: '#1e293b' };
+    const pct = (proj - baseline) / baseline;
+    if (pct > 0.01) return { background: '#FFC7CE', color: '#9C0006' }; // over → pink
+    if (pct < -0.01) return { background: '#C6EFCE', color: '#006100' }; // under → green
+    return { background: '', color: '#1e293b' }; // neutral
+  };
 
   const handleFieldChange = useCallback((field: string, value: any) => {
     if (field === 'duration') {
@@ -2040,9 +2156,8 @@ const GridRow: React.FC<{
       {rv('projHrs') && <td style={{ ...tdMuted, width: colWidths.projHrs, background: bg(COL_GROUP.proj.cell), color: projHrs > estHrs ? '#ef4444' : projHrs < estHrs ? '#10b981' : '#64748b' }}>
         {fmtHrs(projHrs)}
       </td>}
-      {rv('projCost') && <td style={{ ...tdData, width: colWidths.projCost, fontWeight: 500, background: bg(COL_GROUP.proj.cell), color: projCost > estCost ? '#ef4444' : projCost < estCost ? '#10b981' : '#1e293b' }}>
-        {fmtCompact(projCost)}
-      </td>}
+      {rv('projCostField') && (() => { const cs = costStyle(projCostField, projCostVista > 0 ? projCostVista : estCost); return <td style={{ ...tdData, width: colWidths.projCostField, fontWeight: 500, background: cs.background || bg(COL_GROUP.proj.cell), color: cs.color }}>{fmtCompact(projCostField)}</td>; })()}
+      {rv('projCostVista') && (() => { const cs = projCostVista > 0 ? costStyle(projCostVista, estCost) : estCost > 0 ? { background: '#C6EFCE', color: '#006100' } : { background: '', color: '#cbd5e1' }; return <td style={{ ...tdData, width: colWidths.projCostVista, background: cs.background || bg(COL_GROUP.proj.cell), color: cs.color }}>{projCostVista > 0 ? fmtCompact(projCostVista) : '$0'}</td>; })()}
       {rv('projPi') && <td style={{ ...tdMuted, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.proj.cell), color: (() => { const ePi = estHrs > 0 ? estQty / estHrs : 0; const pPi = projHrs > 0 ? projQty / projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#64748b'; })() }}>
         {fmtPi(projQty, projHrs)}
       </td>}
@@ -2387,11 +2502,14 @@ const PhaseSchedule: React.FC = () => {
         const pi = jQ > 0 && jH > 0 ? jQ / jH : 0;
         return s + (pi > 0 ? Math.max(eQ / pi, jH) : jH > eH ? jH : eH);
       }, 0);
-      const projCost = items.reduce((s, i) => {
-        const vPC = parseNum(i.total_projected_cost);
+      const projCostField = items.reduce((s, i) => {
         const pct = parseNum(i.percent_complete); const jC = parseNum(i.total_jtd_cost); const eC = parseNum(i.total_est_cost);
-        const p = vPC > 0 ? Math.max(vPC, jC) : pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
+        const p = pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC;
         return s + p;
+      }, 0);
+      const projCostVista = items.reduce((s, i) => {
+        const vPC = parseNum(i.total_projected_cost); const jC = parseNum(i.total_jtd_cost);
+        return s + (vPC > 0 ? Math.max(vPC, jC) : 0);
       }, 0);
       let earliestStart: string | null = null;
       let latestEnd: string | null = null;
@@ -2402,7 +2520,7 @@ const PhaseSchedule: React.FC = () => {
       groups.push({
         costType: ct, name: COST_TYPE_NAMES[ct], color: COST_TYPE_COLORS[ct],
         items, estQty, estHrs, estCost, jtdQty, jtdHrs, jtdCost, pctComp,
-        projQty, projHrs, projCost, earliestStart, latestEnd,
+        projQty, projHrs, projCostField, projCostVista, earliestStart, latestEnd,
         duration: getDuration(earliestStart, latestEnd)
       });
     }

@@ -30,11 +30,17 @@ async function generatePhaseSchedulePdfBuffer(data) {
       format: 'Letter',
       landscape: true,
       printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate: `
+        <div style="width: 100%; text-align: center; font-size: 7pt; color: #94a3b8; font-family: system-ui, -apple-system, sans-serif;">
+          Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+        </div>`,
       margin: {
-        top: '0.5in',
-        right: '0.5in',
-        bottom: '0.5in',
-        left: '0.5in',
+        top: '0.3in',
+        right: '0.3in',
+        bottom: '0.45in',
+        left: '0.3in',
       },
       preferCSSPageSize: false,
     });

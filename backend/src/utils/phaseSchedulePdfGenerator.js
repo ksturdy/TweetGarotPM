@@ -19,6 +19,17 @@ const COL_GROUP = {
   sched: { hdr: '#e2e8f0', cell: '#f8fafc' },
 };
 
+// ─── Excel-style conditional shading ─────────────────────────────────
+function costCellStyle(proj, baseline) {
+  if (baseline === 0 && proj === 0) return { bg: '', fg: '#1e293b' };
+  if (baseline === 0 && proj > 0) return { bg: '#FFC7CE', fg: '#9C0006' };
+  if (proj === 0 && baseline > 0) return { bg: '#C6EFCE', fg: '#006100' };
+  const pct = (proj - baseline) / baseline;
+  if (pct > 0.01) return { bg: '#FFC7CE', fg: '#9C0006' };
+  if (pct < -0.01) return { bg: '#C6EFCE', fg: '#006100' };
+  return { bg: '', fg: '#1e293b' };
+}
+
 // ─── Formatting Helpers ──────────────────────────────────────────────
 const parseNum = (v) => {
   if (v === null || v === undefined || v === '') return 0;
@@ -183,10 +194,16 @@ function buildCostTypeGroups(items) {
       const pi = jQ > 0 && jH > 0 ? jQ / jH : 0;
       return s + (pi > 0 ? eQ / pi : parseNum(i.total_est_hours));
     }, 0);
-    const projCost = ctItems.reduce((s, i) => {
+    const projCostField = ctItems.reduce((s, i) => {
       const pct = parseNum(i.percent_complete);
       const jC = parseNum(i.total_jtd_cost);
-      return s + (pct > 0 ? jC / (pct / 100) : parseNum(i.total_est_cost));
+      const eC = parseNum(i.total_est_cost);
+      return s + (pct > 0 ? Math.max(jC / (pct / 100), jC) : jC > eC ? jC : eC);
+    }, 0);
+    const projCostVista = ctItems.reduce((s, i) => {
+      const vPC = parseNum(i.total_projected_cost);
+      const jC = parseNum(i.total_jtd_cost);
+      return s + (vPC > 0 ? Math.max(vPC, jC) : 0);
     }, 0);
 
     let earliestStart = null;
@@ -199,7 +216,7 @@ function buildCostTypeGroups(items) {
     groups.push({
       costType: ct, name: COST_TYPE_NAMES[ct], color: COST_TYPE_COLORS[ct],
       items: ctItems, estQty, estHrs, estCost, jtdQty, jtdHrs, jtdCost, pctComp,
-      projQty, projHrs, projCost, earliestStart, latestEnd,
+      projQty, projHrs, projCostField, projCostVista, earliestStart, latestEnd,
       duration: getDuration(earliestStart, latestEnd)
     });
   }
@@ -267,11 +284,11 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
 
   // Fixed column widths (px) — compact for PDF
   const cw = {
-    rowNum: 22, phase: 150, ct: 22,
-    estQty: 44, uom: 30, estHrs: 44, estCost: 54, estPi: 36,
-    pctComp: 38, jtdQty: 44, jtdHrs: 44, jtdCost: 54, jtdPi: 36,
-    projQty: 44, projHrs: 44, projCost: 54, projPi: 36,
-    start: 52, end: 52, dur: 30, contour: 42
+    rowNum: 20, phase: 200, ct: 20,
+    estQty: 40, uom: 28, estHrs: 40, estCost: 50, estPi: 34,
+    pctComp: 36, jtdQty: 40, jtdHrs: 40, jtdCost: 50, jtdPi: 34,
+    projQty: 40, projHrs: 40, projCostField: 54, projCostVista: 54, projPi: 34,
+    start: 48, end: 48, dur: 28, contour: 38
   };
 
   const fixedW = Object.values(cw).reduce((a, b) => a + b, 0);
@@ -282,12 +299,16 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
   const footer = buildFooter(project, viewLabel);
 
   // Styles
-  const thS = `padding: 2px 3px; text-align: center; font-size: 6pt; font-weight: 600; white-space: nowrap; border-bottom: 1px solid #94a3b8; border-right: 1px solid #cbd5e1; color: #1e293b; overflow: hidden;`;
-  const tdS = `padding: 2px 3px; text-align: center; font-size: 6.5pt; white-space: nowrap; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; overflow: hidden;`;
+  const thS = `padding: 2px 3px; text-align: center; font-size: 6pt; font-weight: 600; white-space: nowrap; border: 1px solid #cbd5e1; border-bottom: 1px solid #94a3b8; color: #1e293b; overflow: hidden;`;
+  const tdS = `padding: 2px 3px; text-align: center; font-size: 6.5pt; white-space: nowrap; border: 1px solid #cbd5e1; overflow: hidden;`;
+  // Group separator: heavy between groups, but standard weight on the table's outer edge
+  const grpBdr = mc > 0 ? 'border-right: 2px solid #94a3b8;' : '';
+  const grpBdrLeft = 'border-left: 2px solid #94a3b8;';
 
   // Group header row helper
-  function groupHdrTh(label, color, bgColor, colspan) {
-    return `<th colspan="${colspan}" style="${thS} background: ${bgColor}; color: ${color}; font-size: 5.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-left: 2px solid #94a3b8; border-right: 2px solid #94a3b8;">${label}</th>`;
+  function groupHdrTh(label, color, bgColor, colspan, isLast) {
+    const rBdr = isLast && mc === 0 ? '' : 'border-right: 2px solid #94a3b8;';
+    return `<th colspan="${colspan}" style="${thS} background: ${bgColor}; color: ${color}; font-size: 5.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-left: 2px solid #94a3b8; ${rBdr}">${label}</th>`;
   }
 
   // Build table rows
@@ -319,13 +340,14 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
     // Projected group
     rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell};">${group.projQty ? Math.round(group.projQty).toLocaleString() : '-'}</td>`;
     rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell};">${fmtHrs(group.projHrs)}</td>`;
-    rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; font-weight: 600;">${fmtCompact(group.projCost)}</td>`;
+    { const bl = group.projCostVista > 0 ? group.projCostVista : group.estCost; const cs = costCellStyle(group.projCostField, bl); rows += `<td style="${tdS} background: ${cs.bg || COL_GROUP.proj.cell}; color: ${cs.fg}; font-weight: 600;">${fmtCompact(group.projCostField)}</td>`; }
+    { const cs = costCellStyle(group.projCostVista, group.estCost); rows += `<td style="${tdS} background: ${cs.bg || COL_GROUP.proj.cell}; color: ${cs.fg}; font-weight: 600;">${group.projCostVista > 0 ? fmtCompact(group.projCostVista) : '$0'}</td>`; }
     rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; border-right: 2px solid #94a3b8;">${fmtPi(group.projQty, group.projHrs)}</td>`;
     // Schedule group
     rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${fmtDateShort(group.earliestStart)}</td>`;
     rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${fmtDateShort(group.latestEnd)}</td>`;
     rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${group.duration || '-'}</td>`;
-    rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; border-right: 2px solid #94a3b8;"></td>`; // Contour
+    rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; ${grpBdr}"></td>`; // Contour
     // Monthly columns
     months.forEach(m => {
       const key = formatMonthKey(m);
@@ -346,13 +368,16 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
       const jtdPiVal = jtdQty > 0 && jtdHrs > 0 ? jtdQty / jtdHrs : 0;
       const projQty = estQty;
       const projHrs = jtdPiVal > 0 ? estQty / jtdPiVal : estHrs;
-      const projCost = pctComp > 0 ? jtdCost / (pctComp / 100) : estCost;
+      const projCostField = pctComp > 0 ? Math.max(jtdCost / (pctComp / 100), jtdCost) : jtdCost > estCost ? jtdCost : estCost;
+      const vistaProjCost = parseNum(item.total_projected_cost);
+      const projCostVista = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost) : 0;
       const dur = getDuration(item.start_date, item.end_date);
       const monthlyVals = allMonthly.get(item.id) || {};
 
       // Color-coding for projected vs estimated
       const projHrsColor = projHrs > estHrs ? '#ef4444' : projHrs < estHrs ? '#10b981' : '#1e293b';
-      const projCostColor = projCost > estCost ? '#ef4444' : projCost < estCost ? '#10b981' : '#1e293b';
+      const csField = costCellStyle(projCostField, projCostVista > 0 ? projCostVista : estCost);
+      const csVista = projCostVista > 0 ? costCellStyle(projCostVista, estCost) : estCost > 0 ? { bg: '#C6EFCE', fg: '#006100' } : { bg: '', fg: '#cbd5e1' };
       const ePi = estHrs > 0 ? estQty / estHrs : 0;
       const pPi = projHrs > 0 ? projQty / projHrs : 0;
       const projPiColor = pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#64748b';
@@ -389,14 +414,15 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
       // Projected
       rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell};">${projQty ? Math.round(projQty).toLocaleString() : '-'}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; color: ${projHrsColor};">${fmtHrs(projHrs)}</td>`;
-      rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; font-weight: 500; color: ${projCostColor};">${fmtCompact(projCost)}</td>`;
+      rows += `<td style="${tdS} background: ${csField.bg || COL_GROUP.proj.cell}; font-weight: 500; color: ${csField.fg};">${fmtCompact(projCostField)}</td>`;
+      rows += `<td style="${tdS} background: ${csVista.bg || COL_GROUP.proj.cell}; color: ${csVista.fg};">${projCostVista > 0 ? fmtCompact(projCostVista) : '$0'}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; color: ${projPiColor}; border-right: 2px solid #94a3b8;">${fmtPi(projQty, projHrs)}</td>`;
 
       // Schedule
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${fmtDateShort(item.start_date)}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${fmtDateShort(item.end_date)}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${dur || '-'}</td>`;
-      rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; font-size: 5.5pt; border-right: 2px solid #94a3b8;">${item.contour_type || 'flat'}</td>`;
+      rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; font-size: 5.5pt; ${grpBdr}">${item.contour_type || 'flat'}</td>`;
 
       // Monthly
       months.forEach(m => {
@@ -419,7 +445,8 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
   const grandPctComp = totalEst > 0 ? (totalJtd / totalEst * 100) : 0;
   const grandProjQty = grandEstQty;
   const grandProjHrs = groups.reduce((s, g) => s + g.projHrs, 0);
-  const grandProjCost = groups.reduce((s, g) => s + g.projCost, 0);
+  const grandProjCostField = groups.reduce((s, g) => s + g.projCostField, 0);
+  const grandProjCostVista = groups.reduce((s, g) => s + g.projCostVista, 0);
 
   rows += `<tr style="font-weight: 700; background: #f1f5f9;">`;
   rows += `<td style="${tdS} font-weight: 700;" colspan="3">TOTAL</td>`;
@@ -435,7 +462,8 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
   rows += `<td style="${tdS} background: ${COL_GROUP.jtd.cell}; border-right: 2px solid #94a3b8;">${fmtPi(grandJtdQty, grandJtdHrs)}</td>`;
   rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; font-weight: 700;">${grandProjQty ? Math.round(grandProjQty).toLocaleString() : '-'}</td>`;
   rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; font-weight: 700;">${fmtHrs(grandProjHrs)}</td>`;
-  rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; font-weight: 700;">${fmtCompact(grandProjCost)}</td>`;
+  { const cs = costCellStyle(grandProjCostField, grandProjCostVista > 0 ? grandProjCostVista : totalEst); rows += `<td style="${tdS} background: ${cs.bg || COL_GROUP.proj.cell}; color: ${cs.fg}; font-weight: 700;">${fmtCompact(grandProjCostField)}</td>`; }
+  { const cs = costCellStyle(grandProjCostVista, totalEst); rows += `<td style="${tdS} background: ${cs.bg || COL_GROUP.proj.cell}; color: ${cs.fg}; font-weight: 700;">${grandProjCostVista > 0 ? fmtCompact(grandProjCostVista) : '$0'}</td>`; }
   rows += `<td style="${tdS} background: ${COL_GROUP.proj.cell}; border-right: 2px solid #94a3b8;">${fmtPi(grandProjQty, grandProjHrs)}</td>`;
   rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};" colspan="4"></td>`;
   // Monthly totals
@@ -447,8 +475,8 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
   });
   rows += '</tr>';
 
+  const totalColCount = 22 + mc; // 3 fixed + 5 est + 5 jtd + 5 proj + 4 sched + mc monthly
   return `
-    ${header}
     <table style="border-collapse: collapse; table-layout: fixed; width: ${totalW}px; font-family: system-ui, -apple-system, sans-serif;">
       <colgroup>
         <col style="width: ${cw.rowNum}px" />
@@ -456,17 +484,18 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
         <col style="width: ${cw.ct}px" />
         <col style="width: ${cw.estQty}px" /><col style="width: ${cw.uom}px" /><col style="width: ${cw.estHrs}px" /><col style="width: ${cw.estCost}px" /><col style="width: ${cw.estPi}px" />
         <col style="width: ${cw.pctComp}px" /><col style="width: ${cw.jtdQty}px" /><col style="width: ${cw.jtdHrs}px" /><col style="width: ${cw.jtdCost}px" /><col style="width: ${cw.jtdPi}px" />
-        <col style="width: ${cw.projQty}px" /><col style="width: ${cw.projHrs}px" /><col style="width: ${cw.projCost}px" /><col style="width: ${cw.projPi}px" />
+        <col style="width: ${cw.projQty}px" /><col style="width: ${cw.projHrs}px" /><col style="width: ${cw.projCostField}px" /><col style="width: ${cw.projCostVista}px" /><col style="width: ${cw.projPi}px" />
         <col style="width: ${cw.start}px" /><col style="width: ${cw.end}px" /><col style="width: ${cw.dur}px" /><col style="width: ${cw.contour}px" />
         ${months.map(() => `<col style="width: ${mColW}px" />`).join('')}
       </colgroup>
       <thead style="display: table-header-group;">
+        <tr><td colspan="${totalColCount}" style="border: none; padding: 0;">${header}</td></tr>
         <tr style="background: #eef2f7;">
           <th colspan="3" style="${thS} background: #eef2f7;"></th>
           ${groupHdrTh('Estimated', '#3b82f6', COL_GROUP.est.hdr, 5)}
           ${groupHdrTh('JTD', '#f59e0b', COL_GROUP.jtd.hdr, 5)}
-          ${groupHdrTh('Projected', '#10b981', COL_GROUP.proj.hdr, 4)}
-          ${groupHdrTh('Schedule', '#64748b', COL_GROUP.sched.hdr, 4)}
+          ${groupHdrTh('Projected', '#10b981', COL_GROUP.proj.hdr, 5)}
+          ${groupHdrTh('Schedule', '#64748b', COL_GROUP.sched.hdr, 4, true)}
           ${mc > 0 ? `<th colspan="${mc}" style="${thS} background: #eef2f7; color: #8b5cf6; font-size: 5.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Monthly Distribution</th>` : ''}
         </tr>
         <tr style="background: #eef2f7;">
@@ -485,12 +514,13 @@ function buildGridHtml(items, months, mode, project, logoBase64) {
           <th style="${thS} background: ${COL_GROUP.jtd.hdr}; border-right: 2px solid #94a3b8;">PI</th>
           <th style="${thS} background: ${COL_GROUP.proj.hdr};">Qty</th>
           <th style="${thS} background: ${COL_GROUP.proj.hdr};">Hrs</th>
-          <th style="${thS} background: ${COL_GROUP.proj.hdr};">Cost</th>
+          <th style="${thS} background: ${COL_GROUP.proj.hdr}; font-size: 5pt;">Cost (Field)</th>
+          <th style="${thS} background: ${COL_GROUP.proj.hdr}; font-size: 5pt;">Cost (Vista)</th>
           <th style="${thS} background: ${COL_GROUP.proj.hdr}; border-right: 2px solid #94a3b8;">PI</th>
           <th style="${thS} background: ${COL_GROUP.sched.hdr};">Start</th>
           <th style="${thS} background: ${COL_GROUP.sched.hdr};">End</th>
           <th style="${thS} background: ${COL_GROUP.sched.hdr};">Days</th>
-          <th style="${thS} background: ${COL_GROUP.sched.hdr}; border-right: 2px solid #94a3b8;">Contour</th>
+          <th style="${thS} background: ${COL_GROUP.sched.hdr}; ${grpBdr}">Contour</th>
           ${months.map(m => `<th style="${thS} background: #eef2f7; font-size: ${mFont};">${fmtMonthLabel(m)}</th>`).join('')}
         </tr>
       </thead>
@@ -544,7 +574,7 @@ function buildGanttHtml(items, months, project, logoBase64) {
   // Today marker offset
   const todayX = firstMonth ? dateToX(today) + leftW : 0;
 
-  const thS = `padding: 2px 3px; text-align: center; font-size: 6pt; font-weight: 600; white-space: nowrap; border-bottom: 1px solid #94a3b8; border-right: 1px solid #cbd5e1; color: #1e293b; background: #eef2f7; overflow: hidden;`;
+  const thS = `padding: 2px 3px; text-align: center; font-size: 6pt; font-weight: 600; white-space: nowrap; border: 1px solid #cbd5e1; border-bottom: 1px solid #94a3b8; color: #1e293b; background: #eef2f7; overflow: hidden;`;
 
   // Build rows
   let rowsHtml = '';
@@ -631,8 +661,8 @@ function buildGanttHtml(items, months, project, logoBase64) {
     return `background-position: ${i * colWidth}px 0`;
   }).join(', ');
 
+  const ganttTotalCols = 8 + mc;
   return `
-    ${header}
     <table style="border-collapse: collapse; table-layout: fixed; width: ${totalW}px; font-family: system-ui, -apple-system, sans-serif;">
       <colgroup>
         <col style="width: ${lc.rowNum}px" />
@@ -646,6 +676,7 @@ function buildGanttHtml(items, months, project, logoBase64) {
         ${months.map(() => `<col style="width: ${colWidth}px" />`).join('')}
       </colgroup>
       <thead style="display: table-header-group;">
+        <tr><td colspan="${ganttTotalCols}" style="border: none; padding: 0;">${header}</td></tr>
         <tr>
           <th style="${thS}">ID</th>
           <th style="${thS} text-align: left; padding-left: 6px;">Phase</th>
@@ -692,7 +723,6 @@ function generatePhaseSchedulePdfHtml(data) {
     }
     @page {
       size: letter landscape;
-      margin: 0;
     }
     table { border-collapse: collapse; }
     td, th { vertical-align: middle; }
@@ -703,6 +733,11 @@ function generatePhaseSchedulePdfHtml(data) {
       padding: 0 0 8px 0;
       margin-bottom: 6px;
       border-bottom: 2px solid #3b82f6;
+    }
+    thead .page-header-row { display: none; }
+    thead .page-header-row:first-child { display: table-row; }
+    @media print {
+      thead { display: table-header-group; }
     }
     .header-left { flex: 1; }
     .header-left h1 {
@@ -742,7 +777,7 @@ function generatePhaseSchedulePdfHtml(data) {
     }
   </style>
 </head>
-<body style="padding: 4px; position: relative;">
+<body style="padding: 2px; position: relative;">
   ${content}
 </body>
 </html>`;

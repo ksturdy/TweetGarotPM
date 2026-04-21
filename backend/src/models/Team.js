@@ -540,101 +540,158 @@ class Team {
   }
 
   /**
-   * Get team dashboard metrics
+   * Get team member employee IDs (for filtering opportunities/estimates which reference employees)
+   * Includes both team members AND the team lead
    */
-  static async getDashboardMetrics(teamId, tenantId) {
-    const userIds = await this.getMemberUserIds(teamId, tenantId);
+  static async getMemberEmployeeIds(teamId, tenantId) {
+    const result = await db.query(`
+      SELECT DISTINCT employee_id FROM (
+        SELECT tm.employee_id
+        FROM team_members tm
+        JOIN teams t ON tm.team_id = t.id
+        WHERE tm.team_id = $1 AND t.tenant_id = $2
+
+        UNION
+
+        SELECT t.team_lead_id as employee_id
+        FROM teams t
+        WHERE t.id = $1 AND t.tenant_id = $2 AND t.team_lead_id IS NOT NULL
+      ) combined
+      WHERE employee_id IS NOT NULL
+    `, [teamId, tenantId]);
+    return result.rows.map(r => r.employee_id);
+  }
+
+  /**
+   * Get team dashboard metrics
+   * @param {string} filter - 'active' (default) or 'all'
+   */
+  static async getDashboardMetrics(teamId, tenantId, filter = 'active') {
+    const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
     const memberNames = await this.getMemberNames(teamId, tenantId);
 
     // Default metrics if no members
-    if (userIds.length === 0) {
+    if (employeeIds.length === 0 && memberNames.length === 0) {
       return {
         opportunities: { total: 0, total_value: 0, won: 0, won_value: 0 },
         customers: { total: 0, active: 0 },
-        estimates: { total: 0, total_value: 0, pending: 0, won: 0 }
+        estimates: { total: 0, total_value: 0, pending: 0, won: 0 },
+        projects: { total: 0, active: 0, total_value: 0 }
       };
     }
 
-    // Get opportunities metrics
-    const opportunitiesResult = await db.query(`
-      SELECT
-        COUNT(*) as total,
-        COALESCE(SUM(estimated_value), 0) as total_value,
-        COUNT(CASE WHEN converted_to_project_id IS NOT NULL THEN 1 END) as won,
-        COALESCE(SUM(CASE WHEN converted_to_project_id IS NOT NULL THEN estimated_value ELSE 0 END), 0) as won_value
-      FROM opportunities
-      WHERE tenant_id = $1 AND assigned_to = ANY($2)
-    `, [tenantId, userIds]);
+    const activeOnly = filter === 'active';
+
+    // Get opportunities metrics (assigned_to references employees)
+    // Active = not converted to project (still in pipeline)
+    let opportunitiesResult = { rows: [{ total: 0, total_value: 0, won: 0, won_value: 0 }] };
+    if (employeeIds.length > 0) {
+      const oppFilter = activeOnly ? ' AND converted_to_project_id IS NULL' : '';
+      opportunitiesResult = await db.query(`
+        SELECT
+          COUNT(*) as total,
+          COALESCE(SUM(estimated_value), 0) as total_value,
+          COUNT(CASE WHEN converted_to_project_id IS NOT NULL THEN 1 END) as won,
+          COALESCE(SUM(CASE WHEN converted_to_project_id IS NOT NULL THEN estimated_value ELSE 0 END), 0) as won_value
+        FROM opportunities
+        WHERE tenant_id = $1 AND assigned_to = ANY($2)${oppFilter}
+      `, [tenantId, employeeIds]);
+    }
 
     // Get customers by account_manager
     let customersResult = { rows: [{ total: 0, active: 0 }] };
     if (memberNames.length > 0) {
+      const custFilter = activeOnly ? ' AND active_customer = true' : '';
       customersResult = await db.query(`
         SELECT
           COUNT(*) as total,
           COUNT(CASE WHEN active_customer = true THEN 1 END) as active
         FROM customers
-        WHERE tenant_id = $1 AND account_manager = ANY($2)
+        WHERE tenant_id = $1 AND account_manager = ANY($2)${custFilter}
       `, [tenantId, memberNames]);
     }
 
-    // Get estimates metrics (match by both estimator_id and estimator_name)
-    const estimatesResult = await db.query(`
-      SELECT
-        COUNT(*) as total,
-        COALESCE(SUM(total_cost), 0) as total_value,
-        COUNT(CASE WHEN status IN ('draft', 'pending') THEN 1 END) as pending,
-        COUNT(CASE WHEN status = 'won' THEN 1 END) as won
-      FROM estimates
-      WHERE tenant_id = $1
-        AND (
-          estimator_id = ANY($2)
-          OR estimator_name = ANY($3)
-        )
-    `, [tenantId, userIds.length > 0 ? userIds : [0], memberNames]);
+    // Get estimates metrics (estimator_id references employees)
+    let estimatesResult = { rows: [{ total: 0, total_value: 0, pending: 0, won: 0 }] };
+    if (employeeIds.length > 0 || memberNames.length > 0) {
+      const estFilter = activeOnly ? " AND status IN ('draft', 'pending', 'in_progress')" : '';
+      estimatesResult = await db.query(`
+        SELECT
+          COUNT(*) as total,
+          COALESCE(SUM(total_cost), 0) as total_value,
+          COUNT(CASE WHEN status IN ('draft', 'pending') THEN 1 END) as pending,
+          COUNT(CASE WHEN status = 'won' THEN 1 END) as won
+        FROM estimates
+        WHERE tenant_id = $1
+          AND (
+            estimator_id = ANY($2)
+            OR estimator_name = ANY($3)
+          )${estFilter}
+      `, [tenantId, employeeIds.length > 0 ? employeeIds : [0], memberNames.length > 0 ? memberNames : ['']]);
+    }
+
+    // Get projects metrics (manager_id references employees)
+    let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0 }] };
+    if (employeeIds.length > 0) {
+      const projFilter = activeOnly ? " AND p.status = 'Open'" : '';
+      projectsResult = await db.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN p.status = 'Open' THEN 1 END) as active,
+          COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${projFilter}
+      `, [tenantId, employeeIds]);
+    }
 
     return {
       opportunities: opportunitiesResult.rows[0],
       customers: customersResult.rows[0],
-      estimates: estimatesResult.rows[0]
+      estimates: estimatesResult.rows[0],
+      projects: projectsResult.rows[0]
     };
   }
 
   /**
    * Get team's opportunities
+   * @param {string} filter - 'active' (default) or 'all'
    */
-  static async getOpportunities(teamId, tenantId, limit = 50) {
-    const userIds = await this.getMemberUserIds(teamId, tenantId);
-    if (userIds.length === 0) return [];
+  static async getOpportunities(teamId, tenantId, filter = 'active', limit = 200) {
+    const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
+    if (employeeIds.length === 0) return [];
 
+    const activeFilter = filter === 'active' ? ' AND o.converted_to_project_id IS NULL' : '';
     const result = await db.query(`
       SELECT o.*,
              ps.name as stage_name, ps.color as stage_color,
-             u.first_name || ' ' || u.last_name as assigned_to_name,
+             e.first_name || ' ' || e.last_name as assigned_to_name,
              COALESCE(c.name, c.customer_owner) as customer_name,
              cl.name as facility_location_name
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
-      LEFT JOIN users u ON o.assigned_to = u.id
+      LEFT JOIN employees e ON o.assigned_to = e.id
       LEFT JOIN customers c ON o.customer_id = c.id
       LEFT JOIN customer_locations cl ON o.facility_location_id = cl.id
-      WHERE o.tenant_id = $1 AND o.assigned_to = ANY($2)
+      WHERE o.tenant_id = $1 AND o.assigned_to = ANY($2)${activeFilter}
       ORDER BY o.last_activity_at DESC NULLS LAST, o.created_at DESC
       LIMIT $3
-    `, [tenantId, userIds, limit]);
+    `, [tenantId, employeeIds, limit]);
     return result.rows;
   }
 
   /**
    * Get team's customers
+   * @param {string} filter - 'active' (default) or 'all'
    */
-  static async getCustomers(teamId, tenantId, limit = 50) {
+  static async getCustomers(teamId, tenantId, filter = 'active', limit = 200) {
     const memberNames = await this.getMemberNames(teamId, tenantId);
     if (memberNames.length === 0) return [];
 
+    const activeFilter = filter === 'active' ? ' AND active_customer = true' : '';
     const result = await db.query(`
       SELECT * FROM customers
-      WHERE tenant_id = $1 AND account_manager = ANY($2)
+      WHERE tenant_id = $1 AND account_manager = ANY($2)${activeFilter}
       ORDER BY customer_facility ASC
       LIMIT $3
     `, [tenantId, memberNames, limit]);
@@ -643,27 +700,63 @@ class Team {
 
   /**
    * Get team's estimates
-   * Matches by both estimator_id (user ID) AND estimator_name (text field)
+   * Matches by both estimator_id (employee ID) AND estimator_name (text field)
+   * @param {string} filter - 'active' (default) or 'all'
    */
-  static async getEstimates(teamId, tenantId, limit = 50) {
-    const userIds = await this.getMemberUserIds(teamId, tenantId);
+  static async getEstimates(teamId, tenantId, filter = 'active', limit = 200) {
+    const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
     const memberNames = await this.getMemberNames(teamId, tenantId);
 
-    if (userIds.length === 0 && memberNames.length === 0) return [];
+    if (employeeIds.length === 0 && memberNames.length === 0) return [];
 
+    const activeFilter = filter === 'active' ? " AND e.status IN ('draft', 'pending', 'in_progress')" : '';
     const result = await db.query(`
       SELECT DISTINCT e.*,
-             COALESCE(e.estimator_name, u.first_name || ' ' || u.last_name) as estimator_full_name
+             COALESCE(e.estimator_name, emp.first_name || ' ' || emp.last_name) as estimator_full_name
       FROM estimates e
-      LEFT JOIN users u ON e.estimator_id = u.id
+      LEFT JOIN employees emp ON e.estimator_id = emp.id
       WHERE e.tenant_id = $1
         AND (
           e.estimator_id = ANY($2)
           OR e.estimator_name = ANY($3)
-        )
+        )${activeFilter}
       ORDER BY e.created_at DESC
       LIMIT $4
-    `, [tenantId, userIds.length > 0 ? userIds : [0], memberNames, limit]);
+    `, [tenantId, employeeIds.length > 0 ? employeeIds : [0], memberNames.length > 0 ? memberNames : [''], limit]);
+    return result.rows;
+  }
+
+  /**
+   * Get team's projects (manager_id references employees)
+   * @param {string} filter - 'active' (default) or 'all'
+   */
+  static async getProjects(teamId, tenantId, filter = 'active', limit = 500) {
+    const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
+    if (employeeIds.length === 0) return [];
+
+    const activeFilter = filter === 'active' ? " AND p.status = 'Open'" : '';
+    const result = await db.query(`
+      SELECT p.*,
+             e.first_name || ' ' || e.last_name as manager_name,
+             d.name as department_name,
+             d.department_number,
+             COALESCE(c.name, c.customer_owner, p.client) as customer_name,
+             COALESCE(oc.name, oc.customer_owner) as owner_name,
+             COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+             COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+             COALESCE(vc.backlog, p.backlog) as backlog,
+             vc.actual_cost,
+             CASE WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost) ELSE NULL END as percent_complete
+      FROM projects p
+      LEFT JOIN employees e ON p.manager_id = e.id
+      LEFT JOIN departments d ON p.department_id = d.id
+      LEFT JOIN customers c ON p.customer_id = c.id
+      LEFT JOIN customers oc ON p.owner_customer_id = oc.id
+      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${activeFilter}
+      ORDER BY p.created_at DESC
+      LIMIT $3
+    `, [tenantId, employeeIds, limit]);
     return result.rows;
   }
 }

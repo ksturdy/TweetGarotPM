@@ -46,6 +46,11 @@ export interface TeamDashboard {
     pending: number;
     won: number;
   };
+  projects: {
+    total: number;
+    active: number;
+    total_value: number;
+  };
 }
 
 export interface TeamOpportunity {
@@ -85,6 +90,26 @@ export interface TeamEstimate {
   bid_date: string;
   estimator_id: number;
   estimator_full_name: string;
+  created_at: string;
+}
+
+export interface TeamProject {
+  id: number;
+  project_number: string;
+  name: string;
+  status: string;
+  market: string;
+  manager_name: string;
+  customer_name: string;
+  owner_name: string;
+  department_name: string;
+  department_number: string;
+  contract_value: number;
+  gross_margin_percent: number;
+  backlog: number;
+  actual_cost: number;
+  percent_complete: number;
+  client: string;
   created_at: string;
 }
 
@@ -132,15 +157,18 @@ export const teamsApi = {
       { role }
     ),
 
-  getDashboard: (id: number) =>
-    api.get<{ data: TeamDashboard }>(`/teams/${id}/dashboard`),
+  getDashboard: (id: number, filter: string = 'active') =>
+    api.get<{ data: TeamDashboard }>(`/teams/${id}/dashboard`, { params: { filter } }),
 
-  getOpportunities: (id: number) =>
-    api.get<{ data: TeamOpportunity[] }>(`/teams/${id}/opportunities`),
+  getOpportunities: (id: number, filter: string = 'active') =>
+    api.get<{ data: TeamOpportunity[] }>(`/teams/${id}/opportunities`, { params: { filter } }),
 
-  getCustomers: (id: number) =>
-    api.get<{ data: TeamCustomer[] }>(`/teams/${id}/customers`),
+  getCustomers: (id: number, filter: string = 'active') =>
+    api.get<{ data: TeamCustomer[] }>(`/teams/${id}/customers`, { params: { filter } }),
 
-  getEstimates: (id: number) =>
-    api.get<{ data: TeamEstimate[] }>(`/teams/${id}/estimates`),
+  getEstimates: (id: number, filter: string = 'active') =>
+    api.get<{ data: TeamEstimate[] }>(`/teams/${id}/estimates`, { params: { filter } }),
+
+  getProjects: (id: number, filter: string = 'active') =>
+    api.get<{ data: TeamProject[] }>(`/teams/${id}/projects`, { params: { filter } }),
 };

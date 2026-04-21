@@ -1,11 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../hooks/useSocket';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationBell from './NotificationBell';
+import ChatButton from '../messaging/ChatButton';
+import ChatPanel from '../messaging/ChatPanel';
 import './Layout.css';
 
 interface LayoutProps {
@@ -17,7 +20,9 @@ const COLLAPSED_KEY = 'sidebar-collapsed';
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, tenant, logout } = useAuth();
   const location = useLocation();
+  useSocket(); // Initialize WebSocket connection
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem(COLLAPSED_KEY) === 'true';
   });
@@ -79,6 +84,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="header-center">
           </div>
           <div className="header-right">
+            <ChatButton onClick={() => setChatOpen(prev => !prev)} isOpen={chatOpen} />
             <NotificationBell />
             <div className="user-menu">
               <span className="user-name">
@@ -99,6 +105,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebarCollapse} />
         <main className={`main ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>{children}</main>
       </div>
+      {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
     </div>
   );
 };
