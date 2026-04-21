@@ -1456,12 +1456,29 @@ const VistaData = {
   async importUnmatchedEmployeesToTitan(tenantId, userId) {
     const client = await db.getClient();
     let imported = 0;
+    let orphansReset = 0;
     const results = [];
 
     try {
       await client.query('BEGIN');
 
-      // Get all unlinked VP employees
+      // Fix orphaned links: VP employees whose linked Titan employee was deleted
+      // (FK ON DELETE SET NULL clears linked_employee_id but link_status stays stale)
+      const orphaned = await client.query(
+        `UPDATE vp_employees SET
+          link_status = 'unmatched',
+          linked_at = NULL,
+          linked_by = NULL
+         WHERE linked_employee_id IS NULL
+           AND link_status != 'unmatched'
+         RETURNING id, employee_number, first_name, last_name`
+      );
+      orphansReset = orphaned.rowCount;
+      if (orphansReset > 0) {
+        console.log(`[Vista Import] Reset ${orphansReset} orphaned VP employee links: ${orphaned.rows.map(r => `${r.first_name} ${r.last_name} (#${r.employee_number})`).join(', ')}`);
+      }
+
+      // Get all unlinked VP employees (including any just-reset orphans)
       const unlinked = await client.query(
         `SELECT id, employee_number, first_name, last_name, hire_date, active
          FROM vp_employees
@@ -1529,7 +1546,7 @@ const VistaData = {
       }
 
       await client.query('COMMIT');
-      return { imported, total: unlinked.rows.length, results };
+      return { imported, total: unlinked.rows.length, orphansReset, results };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

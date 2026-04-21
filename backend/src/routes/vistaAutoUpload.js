@@ -644,85 +644,110 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
       departments: { linked: 0 }
     };
 
-    try {
-      console.log('[Vista Auto-Import] Auto-linking 100% matches...');
-
-      if (results.contracts.total > 0) {
-        const contractLinkResult = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
-        autoLink.contracts = contractLinkResult;
-        console.log(`[Vista Auto-Import] Auto-linked ${contractLinkResult.contracts_linked} contracts (100% match by number)`);
+    // Each auto-import step runs independently so one failure doesn't block others
+    const safeRun = async (label, fn) => {
+      try {
+        return await fn();
+      } catch (err) {
+        console.error(`[Vista Auto-Import] ${label} error:`, err.message);
+        return null;
       }
+    };
 
-      if (results.customers.total > 0) {
-        const customerLinkResult = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
-        autoLink.customers = customerLinkResult;
-        console.log(`[Vista Auto-Import] Auto-linked ${customerLinkResult.customers_linked} customers (100% match)`);
-      }
+    console.log('[Vista Auto-Import] Auto-linking 100% matches...');
 
-      if (results.employees.total > 0) {
-        const empLinkResult = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
-        autoLink.employees = empLinkResult;
-        console.log(`[Vista Auto-Import] Auto-linked ${empLinkResult.employees_linked} employees (100% match)`);
-      }
+    if (results.contracts.total > 0) {
+      await safeRun('Auto-link contracts', async () => {
+        const r = await VistaData.autoLinkExactContractMatches(req.tenantId, req.user.id);
+        autoLink.contracts = r;
+        console.log(`[Vista Auto-Import] Auto-linked ${r.contracts_linked} contracts (100% match by number)`);
+      });
+    }
 
-      if (results.vendors.total > 0) {
-        const vendorLinkResult = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
-        autoLink.vendors = vendorLinkResult;
-        console.log(`[Vista Auto-Import] Auto-linked ${vendorLinkResult.vendors_linked} vendors (100% match)`);
-      }
+    if (results.customers.total > 0) {
+      await safeRun('Auto-link customers', async () => {
+        const r = await VistaData.autoLinkExactCustomerMatches(req.tenantId, req.user.id);
+        autoLink.customers = r;
+        console.log(`[Vista Auto-Import] Auto-linked ${r.customers_linked} customers (100% match)`);
+      });
+    }
 
-      // Auto-import contracts as projects (only those NOT already linked)
-      if (results.contracts.total > 0) {
+    if (results.employees.total > 0) {
+      await safeRun('Auto-link employees', async () => {
+        const r = await VistaData.autoLinkExactEmployeeMatches(req.tenantId, req.user.id);
+        autoLink.employees = r;
+        console.log(`[Vista Auto-Import] Auto-linked ${r.employees_linked} employees (100% match)`);
+      });
+    }
+
+    if (results.vendors.total > 0) {
+      await safeRun('Auto-link vendors', async () => {
+        const r = await VistaData.autoLinkExactVendorMatches(req.tenantId, req.user.id);
+        autoLink.vendors = r;
+        console.log(`[Vista Auto-Import] Auto-linked ${r.vendors_linked} vendors (100% match)`);
+      });
+    }
+
+    // Auto-import contracts as projects (only those NOT already linked)
+    if (results.contracts.total > 0) {
+      await safeRun('Import contracts', async () => {
         console.log('[Vista Auto-Import] Auto-importing contracts as projects...');
-        const contractResult = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
-        autoImport.contracts = contractResult;
-        console.log(`[Vista Auto-Import] Auto-imported ${contractResult.imported} contracts as projects`);
-      }
+        const r = await VistaData.importUnmatchedContractsToTitan(req.tenantId, req.user.id);
+        autoImport.contracts = r;
+        console.log(`[Vista Auto-Import] Auto-imported ${r.imported} contracts as projects`);
+      });
+    }
 
-      if (results.customers.total > 0) {
+    if (results.customers.total > 0) {
+      await safeRun('Import customers', async () => {
         console.log('[Vista Auto-Import] Auto-importing customers...');
-        const customerResult = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
-        autoImport.customers = customerResult;
-        console.log(`[Vista Auto-Import] Auto-imported ${customerResult.imported} customers`);
-      }
+        const r = await VistaData.importUnmatchedCustomersToTitan(req.tenantId, req.user.id);
+        autoImport.customers = r;
+        console.log(`[Vista Auto-Import] Auto-imported ${r.imported} customers`);
+      });
+    }
 
-      if (results.contracts.total > 0 || results.workOrders.total > 0) {
+    if (results.contracts.total > 0 || results.workOrders.total > 0) {
+      await safeRun('Import departments', async () => {
         console.log('[Vista Auto-Import] Auto-importing departments...');
-        const deptResult = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id);
-        autoImport.departments = deptResult;
-        console.log(`[Vista Auto-Import] Auto-imported ${deptResult.imported} departments`);
+        const r = await VistaData.importUnmatchedDepartmentsToTitan(req.tenantId, req.user.id);
+        autoImport.departments = r;
+        console.log(`[Vista Auto-Import] Auto-imported ${r.imported} departments`);
 
-        const deptLinkResult = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id);
-        autoLink.departments = deptLinkResult;
-        console.log(`[Vista Auto-Import] Auto-linked ${deptLinkResult.codes_linked} department codes`);
-      }
+        const lr = await VistaData.autoLinkExactDepartmentMatches(req.tenantId, req.user.id);
+        autoLink.departments = lr;
+        console.log(`[Vista Auto-Import] Auto-linked ${lr.codes_linked} department codes`);
+      });
+    }
 
-      if (results.employees.total > 0) {
+    if (results.employees.total > 0) {
+      await safeRun('Import employees', async () => {
         console.log('[Vista Auto-Import] Auto-importing employees...');
-        const empResult = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id);
-        autoImport.employees = empResult;
-        console.log(`[Vista Auto-Import] Auto-imported ${empResult.imported} employees`);
-      }
+        const r = await VistaData.importUnmatchedEmployeesToTitan(req.tenantId, req.user.id);
+        autoImport.employees = r;
+        console.log(`[Vista Auto-Import] Auto-imported ${r.imported} employees (${r.orphansReset || 0} orphaned links reset)`);
+      });
+    }
 
-      // Sync active status for already-linked employees (handles rehires, terminations)
-      if (results.employees.total > 0) {
+    // Sync active status for already-linked employees (handles rehires, terminations)
+    if (results.employees.total > 0) {
+      await safeRun('Sync employee statuses', async () => {
         console.log('[Vista Auto-Import] Syncing linked employee statuses...');
-        const empSyncResult = await VistaData.syncLinkedEmployeeStatus(req.tenantId);
-        autoImport.employeeSync = empSyncResult;
-        if (empSyncResult.updated > 0) {
-          console.log(`[Vista Auto-Import] Updated ${empSyncResult.updated} employee statuses: ${empSyncResult.employees.map(e => `${e.first_name} ${e.last_name} → ${e.new_status}`).join(', ')}`);
+        const r = await VistaData.syncLinkedEmployeeStatus(req.tenantId);
+        autoImport.employeeSync = r;
+        if (r.updated > 0) {
+          console.log(`[Vista Auto-Import] Updated ${r.updated} employee statuses: ${r.employees.map(e => `${e.first_name} ${e.last_name} → ${e.new_status}`).join(', ')}`);
         }
-      }
+      });
+    }
 
-      if (results.vendors.total > 0) {
+    if (results.vendors.total > 0) {
+      await safeRun('Import vendors', async () => {
         console.log('[Vista Auto-Import] Auto-importing vendors...');
-        const vendorResult = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);
-        autoImport.vendors = vendorResult;
-        console.log(`[Vista Auto-Import] Auto-imported ${vendorResult.imported} vendors`);
-      }
-    } catch (autoImportError) {
-      console.error('[Vista Auto-Import] Auto-import error:', autoImportError.message);
-      // Don't fail the whole upload if auto-import fails
+        const r = await VistaData.importUnmatchedVendorsToTitan(req.tenantId, req.user.id);
+        autoImport.vendors = r;
+        console.log(`[Vista Auto-Import] Auto-imported ${r.imported} vendors`);
+      });
     }
 
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
