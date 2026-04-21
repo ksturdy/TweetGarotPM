@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import { employeesApi } from '../services/employees';
+import { teamsApi } from '../services/teams';
 import { LOCATION_GROUPS } from '../constants/locationGroups';
 import { useAuth } from '../context/AuthContext';
 import '../styles/SalesPipeline.css';
@@ -72,6 +73,7 @@ const SalesPipeline: React.FC = () => {
   const [selectedLocationGroup, setSelectedLocationGroup] = useState<string>('');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
   const [myOpportunitiesOnly, setMyOpportunitiesOnly] = useState(locationState?.myItemsOnly ?? false);
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
@@ -112,6 +114,16 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => employeesApi.getAssignable()
   });
   const employees = (employeesResponse?.data as any)?.data || [];
+
+  // Fetch current user's team member names for "My Team" filter
+  const { data: myTeamResponse } = useQuery({
+    queryKey: ['teams', 'my-team-members'],
+    queryFn: () => teamsApi.getMyTeamMemberIds()
+  });
+  const teamMemberNames = useMemo(() => {
+    const names = (myTeamResponse?.data as any)?.data?.names || [];
+    return new Set<string>(names);
+  }, [myTeamResponse]);
 
   // Mutation for quick updates from table
   const updateOpportunityMutation = useMutation({
@@ -246,6 +258,13 @@ const SalesPipeline: React.FC = () => {
         }
       }
 
+      // Filter by "My Team" (same department)
+      if (myTeamOnly && teamMemberNames.size > 0) {
+        if (!opp.assigned_to_name || !teamMemberNames.has(opp.assigned_to_name)) {
+          return false;
+        }
+      }
+
       // Filter by stage (exclude unchecked stages)
       if (excludedStages.size > 0 && opp.stage_name && excludedStages.has(opp.stage_name)) {
         return false;
@@ -263,7 +282,7 @@ const SalesPipeline: React.FC = () => {
 
       return true;
     });
-  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages, myOpportunitiesOnly, currentUserName]);
+  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages, myOpportunitiesOnly, myTeamOnly, teamMemberNames, currentUserName]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -976,7 +995,7 @@ const SalesPipeline: React.FC = () => {
         <div className="sales-table-section">
           <div className="sales-table-header">
             <div className="sales-table-title">
-              {myOpportunitiesOnly ? 'My Opportunities' : 'All Opportunities'}
+              {myOpportunitiesOnly ? 'My Opportunities' : myTeamOnly ? 'My Team' : 'All Opportunities'}
               <div className="sales-search-box" style={{ marginLeft: '16px' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
@@ -993,7 +1012,7 @@ const SalesPipeline: React.FC = () => {
             <div className="sales-table-controls">
               <button
                 className={myOpportunitiesOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
-                onClick={() => setMyOpportunitiesOnly(!myOpportunitiesOnly)}
+                onClick={() => { setMyOpportunitiesOnly(!myOpportunitiesOnly); if (!myOpportunitiesOnly) setMyTeamOnly(false); }}
                 style={{ padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1001,6 +1020,20 @@ const SalesPipeline: React.FC = () => {
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
                 My Opportunities
+              </button>
+              <button
+                className={myTeamOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+                onClick={() => { setMyTeamOnly(!myTeamOnly); if (!myTeamOnly) setMyOpportunitiesOnly(false); }}
+                style={{ padding: '5px 10px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title="Filter to my team members"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                My Team
               </button>
               <select
                 value={selectedLocationGroup}

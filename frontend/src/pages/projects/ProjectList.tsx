@@ -6,6 +6,7 @@ import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
 import { useAuth } from '../../context/AuthContext';
+import { teamsApi } from '../../services/teams';
 import '../../styles/SalesPipeline.css';
 import { exportListToPdf } from '../../utils/listExportPdf';
 
@@ -23,6 +24,7 @@ const ProjectList: React.FC = () => {
   const [marketFilter, setMarketFilter] = useState<string>('all');
   const locationState = location.state as { myItemsOnly?: boolean } | null;
   const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? false);
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -131,6 +133,16 @@ const ProjectList: React.FC = () => {
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
   });
+
+  // Fetch current user's team member IDs for "My Team" filter
+  const { data: myTeamResponse } = useQuery({
+    queryKey: ['teams', 'my-team-members'],
+    queryFn: () => teamsApi.getMyTeamMemberIds()
+  });
+  const teamMemberEmployeeIds = useMemo(() => {
+    const ids = (myTeamResponse?.data as any)?.data?.employeeIds || [];
+    return new Set<number>(ids);
+  }, [myTeamResponse]);
 
   // Toggle favorite mutation with optimistic updates on the favorites query
   const toggleFavoriteMutation = useMutation({
@@ -305,6 +317,7 @@ const ProjectList: React.FC = () => {
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
     if (myProjectsOnly && user && project.manager_id !== user.id) return false;
+    if (myTeamOnly && teamMemberEmployeeIds.size > 0 && !teamMemberEmployeeIds.has(project.manager_id)) return false;
 
     // Then apply search filter
     if (!searchTerm) return true;
@@ -742,7 +755,7 @@ const ProjectList: React.FC = () => {
         <div style={{ minWidth: '120px', alignSelf: 'flex-end' }}>
           <button
             className={myProjectsOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
-            onClick={() => setMyProjectsOnly(!myProjectsOnly)}
+            onClick={() => { setMyProjectsOnly(!myProjectsOnly); if (!myProjectsOnly) setMyTeamOnly(false); }}
             style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', whiteSpace: 'nowrap' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -750,6 +763,22 @@ const ProjectList: React.FC = () => {
               <circle cx="12" cy="7" r="4"/>
             </svg>
             My Projects
+          </button>
+        </div>
+        <div style={{ minWidth: '120px', alignSelf: 'flex-end' }}>
+          <button
+            className={myTeamOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+            onClick={() => { setMyTeamOnly(!myTeamOnly); if (!myTeamOnly) setMyProjectsOnly(false); }}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', whiteSpace: 'nowrap' }}
+            title="Filter to my team members"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            My Team
           </button>
         </div>
         <div style={{ minWidth: '180px' }}>
@@ -766,7 +795,7 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
-        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || myProjectsOnly || searchTerm) && (
+        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || myProjectsOnly || myTeamOnly || searchTerm) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
@@ -774,6 +803,7 @@ const ProjectList: React.FC = () => {
               setDepartmentFilter('all');
               setMarketFilter('all');
               setMyProjectsOnly(false);
+              setMyTeamOnly(false);
               setSearchTerm('');
             }}
             style={{ padding: '0.5rem 1rem', height: 'fit-content' }}
