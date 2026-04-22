@@ -43,6 +43,7 @@ import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
 import ProposalList from './pages/marketing/ProposalList';
 import ProposalDetail from './pages/marketing/ProposalDetail';
 import ProposalWizard from './pages/marketing/ProposalWizard';
+import ProjectLocations from './pages/marketing/ProjectLocations';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -354,6 +355,7 @@ const App: React.FC = () => {
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
+                <Route path="/marketing/project-locations" element={<ProjectLocations />} />
                 <Route path="/case-studies" element={<CaseStudyList />} />
                 <Route path="/case-studies/create" element={<CaseStudyForm />} />
                 <Route path="/case-studies/:id" element={<CaseStudyDetail />} />

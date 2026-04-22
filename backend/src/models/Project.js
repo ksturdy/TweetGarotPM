@@ -155,6 +155,88 @@ const Project = {
   },
 
   /**
+   * Find projects with geocoded coordinates for map display
+   */
+  async findMapLocations(tenantId, filters = {}) {
+    let query = `
+      SELECT p.id, p.name, p.number, p.status, p.market,
+             p.latitude::float, p.longitude::float,
+             p.address, p.start_date,
+             e.first_name || ' ' || e.last_name as manager_name,
+             COALESCE(c.name, c.customer_owner, p.client) as customer_name,
+             COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+             vc.ship_city, vc.ship_state
+      FROM projects p
+      LEFT JOIN employees e ON p.manager_id = e.id
+      LEFT JOIN customers c ON p.customer_id = c.id
+      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1
+        AND p.latitude IS NOT NULL
+        AND p.longitude IS NOT NULL
+    `;
+    const params = [tenantId];
+
+    if (filters.status) {
+      params.push(filters.status);
+      query += ` AND p.status = $${params.length}`;
+    }
+    if (filters.managerId) {
+      params.push(filters.managerId);
+      query += ` AND p.manager_id = $${params.length}`;
+    }
+    if (filters.market) {
+      params.push(filters.market);
+      query += ` AND p.market = $${params.length}`;
+    }
+
+    query += ' ORDER BY p.name';
+    const result = await db.query(query, params);
+    return result.rows;
+  },
+
+  /**
+   * Find projects missing geocoding data (for batch geocoding)
+   */
+  async findUngeocoded(tenantId) {
+    const result = await db.query(`
+      SELECT p.id, p.address,
+             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+      FROM projects p
+      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1
+        AND p.latitude IS NULL
+        AND (vc.ship_city IS NOT NULL OR (p.address IS NOT NULL AND p.address != ''))
+    `, [tenantId]);
+    return result.rows;
+  },
+
+  /**
+   * Find projects that have a street address but may need re-geocoding
+   */
+  async findNeedsRegeocoding(tenantId) {
+    const result = await db.query(`
+      SELECT p.id, p.address,
+             vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip
+      FROM projects p
+      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1
+        AND p.latitude IS NOT NULL
+        AND vc.ship_address IS NOT NULL AND vc.ship_address != ''
+    `, [tenantId]);
+    return result.rows;
+  },
+
+  /**
+   * Update geocoding data for a project
+   */
+  async updateGeocode(id, lat, lng) {
+    await db.query(
+      'UPDATE projects SET latitude = $1, longitude = $2, geocoded_at = NOW() WHERE id = $3',
+      [lat, lng, id]
+    );
+  },
+
+  /**
    * Count projects in a tenant (for limit checking)
    */
   async countByTenant(tenantId) {

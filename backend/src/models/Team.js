@@ -685,10 +685,13 @@ class Team {
             COALESCE(SUM(pc.projected_cost), 0) as projected_cost
           FROM projects p
           JOIN vp_phase_codes pc ON pc.linked_project_id = p.id AND pc.cost_type = ANY(ARRAY[3, 5])
-          LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
           WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${boFilter}
-            AND vc.projected_cost > 0
-            AND (vc.actual_cost / vc.projected_cost) >= 0.10
+            AND EXISTS (
+              SELECT 1 FROM vp_contracts vc
+              WHERE vc.linked_project_id = p.id
+                AND vc.projected_cost > 0
+                AND (vc.actual_cost / vc.projected_cost) >= 0.10
+            )
           GROUP BY p.id
           HAVING COALESCE(SUM(pc.est_cost), 0) != 0
               OR COALESCE(SUM(pc.jtd_cost), 0) != 0

@@ -40,6 +40,31 @@ export interface Project {
   isFavorited?: boolean; // Runtime property added by UI
 }
 
+export interface MapProject {
+  id: number;
+  name: string;
+  number: string;
+  status: string;
+  market?: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  start_date?: string;
+  manager_name?: string;
+  customer_name?: string;
+  contract_value?: number;
+  ship_city?: string;
+  ship_state?: string;
+}
+
+export interface GeocodeResult {
+  status: 'started' | 'running' | 'complete';
+  running?: boolean;
+  total: number;
+  geocoded: number;
+  failed: number;
+}
+
 export const projectsApi = {
   getAll: (filters?: { status?: string; managerId?: number }) =>
     api.get<Project[]>('/projects', { params: filters }),
@@ -51,6 +76,40 @@ export const projectsApi = {
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
 
   delete: (id: number) => api.delete(`/projects/${id}`),
+
+  // Map locations
+  getMapLocations: (filters?: { status?: string; market?: string; managerId?: number }) =>
+    api.get<MapProject[]>('/projects/map-locations', { params: filters }),
+
+  geocodeProjects: (force?: boolean) =>
+    api.post<GeocodeResult>(`/projects/geocode${force ? '?force=true' : ''}`),
+
+  geocodeStatus: () =>
+    api.get<GeocodeResult>('/projects/geocode/status'),
+
+  downloadLocationsPdf: async (options: {
+    status?: string;
+    market?: string;
+    manager?: string;
+    customer?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    mapImage?: string;
+    includeList?: boolean;
+  } = {}) => {
+    const res = await api.post('/projects/map-locations/pdf', options, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Project-Locations-${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 
   // Use the new per-user favorites system
   toggleFavorite: (id: number) => favoritesService.toggle('project', id),

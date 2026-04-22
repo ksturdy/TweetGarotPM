@@ -760,6 +760,47 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       });
     }
 
+    // Auto-geocode any projects that are missing coordinates (non-blocking)
+    (async () => {
+      try {
+        const Project = require('../models/Project');
+        const ungeocoded = await Project.findUngeocoded(req.tenantId);
+        if (ungeocoded.length === 0) return;
+        console.log(`[Vista Import] Auto-geocoding ${ungeocoded.length} ungeocoded projects...`);
+
+        const { geocodeAddress, batchGeocodeGeocodio, buildAddressString, normalizeState, isInState, STATE_CENTROIDS } = require('../utils/geocoder');
+
+        if (process.env.GEOCODIO_API_KEY) {
+          const addresses = ungeocoded.map(p => buildAddressString(p) || '');
+          const batchResults = await batchGeocodeGeocodio(addresses);
+          let geocoded = 0;
+          for (let i = 0; i < ungeocoded.length; i++) {
+            const result = batchResults[i];
+            const project = ungeocoded[i];
+            const stateAbbr = normalizeState(project.ship_state);
+            if (result && (!stateAbbr || isInState(result.lat, result.lng, stateAbbr))) {
+              await Project.updateGeocode(project.id, result.lat, result.lng);
+              geocoded++;
+            } else if (stateAbbr && STATE_CENTROIDS[stateAbbr]) {
+              const [lat, lng] = STATE_CENTROIDS[stateAbbr];
+              await Project.updateGeocode(project.id, lat, lng);
+              geocoded++;
+            }
+          }
+          console.log(`[Vista Import] Auto-geocoded ${geocoded}/${ungeocoded.length} projects via Geocodio`);
+        } else {
+          for (const project of ungeocoded) {
+            try {
+              const coords = await geocodeAddress(project);
+              if (coords) await Project.updateGeocode(project.id, coords.lat, coords.lng);
+            } catch (err) { /* skip */ }
+          }
+        }
+      } catch (err) {
+        console.error('[Vista Import] Auto-geocode error:', err.message);
+      }
+    })();
+
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[Vista Import] Complete in ${totalTime}s. Sheets processed: ${results.sheetsProcessed.join(', ')}`);
 
@@ -1050,6 +1091,26 @@ router.post('/contracts/:id/link', requireAdmin, async (req, res, next) => {
 
     if (!contract) {
       return res.status(404).json({ message: 'Contract not found' });
+    }
+
+    // Auto-geocode the linked project in the background
+    if (project_id) {
+      const { geocodeAddress } = require('../utils/geocoder');
+      const Project = require('../models/Project');
+      (async () => {
+        try {
+          const project = await Project.findById(project_id);
+          if (project && !project.latitude) {
+            const coords = await geocodeAddress(project);
+            if (coords) {
+              await Project.updateGeocode(project_id, coords.lat, coords.lng);
+              console.log(`[Auto-geocode] Project ${project_id} geocoded after contract link (${coords.source})`);
+            }
+          }
+        } catch (err) {
+          console.error(`[Auto-geocode] Project ${project_id} failed:`, err.message);
+        }
+      })();
     }
 
     res.json(contract);

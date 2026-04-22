@@ -54,6 +54,14 @@ const MarketingList: React.FC = () => {
       ready: true,
     },
     {
+      name: 'Project Locations',
+      icon: '📍',
+      path: '/marketing/project-locations',
+      desc: 'Interactive map of project locations',
+      color: '#059669',
+      ready: true,
+    },
+    {
       name: 'Sell Sheets',
       icon: '📑',
       path: '/sell-sheets',
