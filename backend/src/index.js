@@ -263,10 +263,26 @@ if (process.env.NODE_ENV === 'production') {
   const frontendIndexPath = path.join(frontendBuildPath, 'index.html');
 
   if (fs.existsSync(frontendBuildPath) && fs.existsSync(frontendIndexPath)) {
-    app.use(express.static(frontendBuildPath));
+    // Hashed static assets (JS/CSS/media) — cache aggressively (1 year)
+    app.use('/static', express.static(path.join(frontendBuildPath, 'static'), {
+      maxAge: '1y',
+      immutable: true,
+    }));
+
+    // All other build files (manifest, icons, etc.) — short cache
+    app.use(express.static(frontendBuildPath, {
+      maxAge: '1h',
+      setHeaders: (res, filePath) => {
+        // Never cache index.html — must always fetch fresh to get latest bundle references
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      },
+    }));
 
     // Handle React routing - serve index.html for all non-API routes
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(frontendIndexPath);
     });
     console.log('Serving frontend build from:', frontendBuildPath);
