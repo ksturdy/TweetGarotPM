@@ -55,6 +55,7 @@ export interface MapProject {
   contract_value?: number;
   ship_city?: string;
   ship_state?: string;
+  department_name?: string;
 }
 
 export interface GeocodeResult {
@@ -78,7 +79,7 @@ export const projectsApi = {
   delete: (id: number) => api.delete(`/projects/${id}`),
 
   // Map locations
-  getMapLocations: (filters?: { status?: string; market?: string; managerId?: number }) =>
+  getMapLocations: (filters?: { status?: string; managerId?: number }) =>
     api.get<MapProject[]>('/projects/map-locations', { params: filters }),
 
   geocodeProjects: (force?: boolean) =>
@@ -89,7 +90,7 @@ export const projectsApi = {
 
   downloadLocationsPdf: async (options: {
     status?: string;
-    market?: string;
+    markets?: string[];
     manager?: string;
     customer?: string;
     dateFrom?: string;
@@ -105,6 +106,31 @@ export const projectsApi = {
     const a = document.createElement('a');
     a.href = url;
     a.download = `Project-Locations-${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  downloadComparisonPdf: async (options: {
+    customers: string[];
+    customerColors: Record<string, string>;
+    status?: string;
+    markets?: string[];
+    department?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    mapImage?: string;
+    includeList?: boolean;
+  } = { customers: [], customerColors: {} }) => {
+    const res = await api.post('/projects/map-locations/comparison-pdf', options, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Customer-Comparison-${new Date().toISOString().slice(0, 10)}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

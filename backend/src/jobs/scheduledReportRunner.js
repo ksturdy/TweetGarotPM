@@ -61,6 +61,136 @@ const REPORT_HANDLERS = {
     };
   },
 
+  async campaign(report) {
+    const campaignId = report.filters?.campaign_id;
+    if (!campaignId) {
+      throw new Error('No campaign selected for this scheduled report');
+    }
+
+    const campaigns = require('../models/campaigns');
+    const campaignCompanies = require('../models/campaignCompanies');
+    const campaignOpportunities = require('../models/campaignOpportunities');
+    const db = require('../config/database');
+    const { generateCampaignPdfHtml } = require('../utils/campaignPdfGenerator');
+    const { fetchLogoBase64 } = require('../utils/logoFetcher');
+    const { launchBrowser } = require('../utils/launchBrowser');
+
+    const campaign = await campaigns.getByIdAndTenant(campaignId, report.tenant_id);
+    if (!campaign) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    const [companiesList, weeksList, teamList, campaignOppsList, mainOppsResult, scoreBreakdownResult] = await Promise.all([
+      campaignCompanies.getByCampaignId(campaignId, {}, report.tenant_id),
+      campaigns.getWeeks(campaignId),
+      campaigns.getTeamMembers(campaignId),
+      campaignOpportunities.getByCampaignId(campaignId),
+      db.query(`
+        SELECT o.*, ps.name as stage_name, u.first_name || ' ' || u.last_name as assigned_to_name
+        FROM opportunities o
+        LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+        LEFT JOIN users u ON o.assigned_to = u.id
+        WHERE o.campaign_id = $1
+        ORDER BY o.estimated_value DESC
+      `, [campaignId]),
+      db.query(`
+        SELECT
+          CASE
+            WHEN c.customer_score >= 85 THEN 'A'
+            WHEN c.customer_score >= 70 THEN 'B'
+            WHEN c.customer_score >= 50 THEN 'C'
+            WHEN c.customer_score IS NOT NULL AND c.customer_score < 50 THEN 'D'
+            ELSE 'Unscored'
+          END as tier,
+          COUNT(*) as count,
+          COALESCE(SUM(o.estimated_value), 0) as total_value
+        FROM opportunities o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        WHERE o.tenant_id = $1 AND o.campaign_id = $2
+        GROUP BY tier
+        ORDER BY tier
+      `, [report.tenant_id, campaignId])
+    ]);
+
+    // Derive team from company assignments if empty
+    let effectiveTeam = teamList;
+    if (teamList.length === 0 && companiesList.length > 0) {
+      const memberMap = {};
+      companiesList.forEach(c => {
+        if (c.assigned_to_name && c.assigned_to_id) {
+          if (!memberMap[c.assigned_to_id]) {
+            memberMap[c.assigned_to_id] = {
+              employee_id: c.assigned_to_id,
+              name: c.assigned_to_name,
+              role: c.assigned_to_id === campaign.owner_id ? 'owner' : 'member'
+            };
+          }
+        }
+      });
+      effectiveTeam = Object.values(memberMap);
+    }
+
+    // Merge opportunities
+    const mainOpps = mainOppsResult.rows.map(o => ({
+      name: o.title,
+      company_name: o.client_company || '',
+      value: o.estimated_value,
+      stage: o.stage_name || '',
+      probability: o.probability || '',
+      close_date: o.estimated_start_date,
+      description: o.description
+    }));
+    const opportunitiesList = [...campaignOppsList, ...mainOpps];
+
+    // Enrich statuses
+    const campOppCompanyIds = new Set(campaignOppsList.map(o => o.campaign_company_id));
+    const mainOppCompanyNames = new Set(
+      mainOpps.map(o => (o.company_name || '').toLowerCase().trim()).filter(Boolean)
+    );
+    companiesList.forEach(c => {
+      if (c.status !== 'new_opp' && c.status !== 'no_interest' && c.status !== 'dead') {
+        if (campOppCompanyIds.has(c.id) || mainOppCompanyNames.has((c.name || '').toLowerCase().trim())) {
+          c.status = 'new_opp';
+        }
+      }
+    });
+
+    const logoBase64 = await fetchLogoBase64(report.tenant_id);
+    const html = generateCampaignPdfHtml(campaign, companiesList, weeksList, effectiveTeam, opportunitiesList, logoBase64, scoreBreakdownResult.rows);
+
+    let browser = null;
+    try {
+      browser = await launchBrowser();
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1056, height: 816 });
+      await page.setContent(html, { waitUntil: ['load', 'domcontentloaded'], timeout: 30000 });
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+      const pdfBuffer = await page.pdf({
+        format: 'Letter',
+        landscape: true,
+        printBackground: true,
+        margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+      });
+      await browser.close();
+      browser = null;
+
+      const safeName = (campaign.name || 'Campaign').replace(/[^a-zA-Z0-9]/g, '_');
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      return {
+        pdfBuffer: Buffer.from(pdfBuffer),
+        filename: `${safeName}_Report-${dateStr}.pdf`,
+        subject: `Campaign Report: ${campaign.name} - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+        body: `Please find attached the Campaign Report for "${campaign.name}".\n\nThis report includes executive summary, status breakdown, team performance, and prospect details.`,
+      };
+    } catch (err) {
+      if (browser) {
+        try { await browser.close(); } catch (e) { /* ignore */ }
+      }
+      throw err;
+    }
+  },
+
   async cash_flow(report) {
     const { buildCashFlowData, buildCashFlowMetrics } = require('../routes/cashFlowReport');
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');

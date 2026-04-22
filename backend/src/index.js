@@ -107,6 +107,7 @@ const scheduledReportRoutes = require('./routes/scheduledReports');
 const estProductRoutes = require('./routes/estProducts');
 const estimateFileRoutes = require('./routes/estimateFiles');
 const directMessageRoutes = require('./routes/directMessages');
+const customMapLayerRoutes = require('./routes/customMapLayers');
 
 const app = express();
 const server = http.createServer(app);
@@ -251,6 +252,7 @@ app.use('/api/scheduled-reports', scheduledReportRoutes);
 app.use('/api/est-products', estProductRoutes);
 app.use('/api/estimate-files', estimateFileRoutes);
 app.use('/api/dm', directMessageRoutes);
+app.use('/api/custom-map-layers', customMapLayerRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

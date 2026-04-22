@@ -52,7 +52,7 @@ function generateProjectLocationsPdfHtml(projects, options = {}) {
   // Filter description
   const filterParts = [];
   if (filters.status) filterParts.push(`Status: ${filters.status}`);
-  if (filters.market) filterParts.push(`Market: ${filters.market}`);
+  if (filters.markets && filters.markets.length > 0) filterParts.push(`Market: ${filters.markets.join(', ')}`);
   if (filters.manager) filterParts.push(`Manager: ${filters.manager}`);
   if (filters.customer) filterParts.push(`Customer: ${filters.customer}`);
   if (filters.dateFrom) filterParts.push(`From: ${filters.dateFrom}`);

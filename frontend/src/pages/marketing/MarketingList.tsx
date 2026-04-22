@@ -54,10 +54,10 @@ const MarketingList: React.FC = () => {
       ready: true,
     },
     {
-      name: 'Project Locations',
-      icon: '📍',
+      name: 'Mapping',
+      icon: '🗺️',
       path: '/marketing/project-locations',
-      desc: 'Interactive map of project locations',
+      desc: 'Project locations, customer comparison & custom maps',
       color: '#059669',
       ready: true,
     },

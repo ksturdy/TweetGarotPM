@@ -27,6 +27,7 @@ import ScheduleView from './pages/schedule/ScheduleView';
 import ProjectWeeklyGoals from './pages/projects/ProjectWeeklyGoals';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
+import Branding from './pages/marketing/Branding';
 import CaseStudyList from './pages/marketing/CaseStudyList';
 import CaseStudyForm from './pages/marketing/CaseStudyForm';
 import CaseStudyDetail from './pages/marketing/CaseStudyDetail';
@@ -44,6 +45,8 @@ import ProposalList from './pages/marketing/ProposalList';
 import ProposalDetail from './pages/marketing/ProposalDetail';
 import ProposalWizard from './pages/marketing/ProposalWizard';
 import ProjectLocations from './pages/marketing/ProjectLocations';
+import CustomerComparison from './pages/marketing/CustomerComparison';
+import CustomMaps from './pages/marketing/CustomMaps';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -355,7 +358,10 @@ const App: React.FC = () => {
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
+                <Route path="/marketing/branding" element={<Branding />} />
                 <Route path="/marketing/project-locations" element={<ProjectLocations />} />
+                <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
+                <Route path="/marketing/custom-maps" element={<CustomMaps />} />
                 <Route path="/case-studies" element={<CaseStudyList />} />
                 <Route path="/case-studies/create" element={<CaseStudyForm />} />
                 <Route path="/case-studies/:id" element={<CaseStudyDetail />} />

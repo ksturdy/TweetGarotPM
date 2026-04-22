@@ -165,10 +165,12 @@ const Project = {
              e.first_name || ' ' || e.last_name as manager_name,
              COALESCE(c.name, c.customer_owner, p.client) as customer_name,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-             vc.ship_city, vc.ship_state
+             vc.ship_city, vc.ship_state,
+             d.name as department_name
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN customers c ON p.customer_id = c.id
+      LEFT JOIN departments d ON p.department_id = d.id
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
       WHERE p.tenant_id = $1
         AND p.latitude IS NOT NULL

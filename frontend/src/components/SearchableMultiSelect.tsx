@@ -33,6 +33,10 @@ const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const validOptions = useMemo(
     () => options.filter(opt => opt.label != null && opt.label !== ''),
@@ -80,17 +84,18 @@ const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
   }, [disabled, updatePosition]);
 
   const toggleValue = useCallback((val: string) => {
-    if (values.includes(val)) {
-      onChange(values.filter(v => v !== val));
+    const current = valuesRef.current;
+    if (current.includes(val)) {
+      onChangeRef.current(current.filter(v => v !== val));
     } else {
-      onChange([...values, val]);
+      onChangeRef.current([...current, val]);
     }
-  }, [values, onChange]);
+  }, []);
 
   const removeValue = useCallback((val: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange(values.filter(v => v !== val));
-  }, [values, onChange]);
+    onChangeRef.current(valuesRef.current.filter(v => v !== val));
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;

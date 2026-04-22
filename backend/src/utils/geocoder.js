@@ -259,4 +259,4 @@ async function geocodeAddress(project) {
   return null;
 }
 
-module.exports = { geocodeAddress, buildAddressString, batchGeocodeGeocodio, normalizeState, isInState, STATE_CENTROIDS };
+module.exports = { geocodeAddress, buildAddressString, batchGeocodeGeocodio, geocodeCensus, normalizeState, isInState, STATE_CENTROIDS };

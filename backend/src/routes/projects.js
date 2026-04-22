@@ -91,7 +91,7 @@ router.post('/map-locations/pdf', async (req, res) => {
 
     const filters = {
       status: req.body.status || undefined,
-      market: req.body.market || undefined,
+      markets: Array.isArray(req.body.markets) ? req.body.markets : undefined,
       manager: req.body.manager || undefined,
       customer: req.body.customer || undefined,
       dateFrom: req.body.dateFrom || undefined,
@@ -104,10 +104,12 @@ router.post('/map-locations/pdf', async (req, res) => {
     // Get all map locations with server-side filters
     let locations = await Project.findMapLocations(req.tenantId, {
       status: filters.status,
-      market: filters.market,
     });
 
-    // Apply client-side filters (manager, customer, date range)
+    // Apply client-side filters
+    if (filters.markets && filters.markets.length > 0) {
+      locations = locations.filter(l => filters.markets.includes(l.market));
+    }
     if (filters.manager) {
       locations = locations.filter(l => l.manager_name === filters.manager);
     }
@@ -134,6 +136,63 @@ router.post('/map-locations/pdf', async (req, res) => {
   } catch (error) {
     console.error('Error generating project locations PDF:', error);
     res.status(500).json({ error: 'Failed to generate project locations PDF' });
+  }
+});
+
+// Download Customer Comparison as PDF
+router.post('/map-locations/comparison-pdf', async (req, res) => {
+  try {
+    const { generateCustomerComparisonPdfBuffer } = require('../utils/customerComparisonPdfBuffer');
+
+    const customers = req.body.customers || [];
+    const customerColors = req.body.customerColors || {};
+    const filters = {
+      status: req.body.status || undefined,
+      markets: Array.isArray(req.body.markets) ? req.body.markets : undefined,
+      department: req.body.department || undefined,
+      dateFrom: req.body.dateFrom || undefined,
+      dateTo: req.body.dateTo || undefined,
+    };
+    const mapImage = req.body.mapImage || undefined;
+    const includeList = req.body.includeList === true;
+
+    // Get all map locations with server-side filters
+    let locations = await Project.findMapLocations(req.tenantId, {
+      status: filters.status,
+    });
+
+    // Filter to selected customers
+    locations = locations.filter(l => customers.includes(l.customer_name));
+
+    // Apply client-side filters
+    if (filters.markets && filters.markets.length > 0) {
+      locations = locations.filter(l => filters.markets.includes(l.market));
+    }
+    if (filters.department) {
+      locations = locations.filter(l => l.department_name === filters.department);
+    }
+    if (filters.dateFrom) {
+      locations = locations.filter(l => l.start_date && l.start_date >= filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      locations = locations.filter(l => l.start_date && l.start_date <= filters.dateTo);
+    }
+
+    const pdfBuffer = await generateCustomerComparisonPdfBuffer(locations, {
+      customers,
+      customerColors,
+      filters,
+      mapImage,
+      includeList,
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Customer-Comparison-${dateStr}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating customer comparison PDF:', error);
+    res.status(500).json({ error: 'Failed to generate customer comparison PDF' });
   }
 });
 
