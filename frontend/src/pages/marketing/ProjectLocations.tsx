@@ -14,7 +14,6 @@ import SearchableSelect from '../../components/SearchableSelect';
 import SearchableMultiSelect from '../../components/SearchableMultiSelect';
 import CustomLayerMarkers from '../../components/maps/CustomLayerMarkers';
 import StateRevenueLayer from '../../components/maps/StateRevenueLayer';
-import USBoundaryMask from '../../components/maps/USBoundaryMask';
 import * as customMapLayerService from '../../services/customMapLayers';
 import '../../components/modals/Modal.css';
 import '../../styles/SalesPipeline.css';
@@ -114,63 +113,6 @@ const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> 
   useEffect(() => { mapRef.current = map; }, [map, mapRef]);
   return null;
 };
-
-const US_GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
-let cachedUSGeoJSON: any = null;
-
-async function applyUSMaskToCanvas(
-  canvas: HTMLCanvasElement,
-  leafletMap: L.Map,
-  cardEl: HTMLElement,
-  renderScale: number
-) {
-  if (!cachedUSGeoJSON) {
-    const resp = await fetch(US_GEOJSON_URL);
-    cachedUSGeoJSON = await resp.json();
-  }
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const mapContainer = leafletMap.getContainer();
-  const mapRect = mapContainer.getBoundingClientRect();
-  const cardRect = cardEl.getBoundingClientRect();
-  const ox = (mapRect.left - cardRect.left) * renderScale;
-  const oy = (mapRect.top - cardRect.top) * renderScale;
-
-  ctx.save();
-  ctx.beginPath();
-
-  // Outer rectangle covering entire canvas
-  ctx.moveTo(0, 0);
-  ctx.lineTo(canvas.width, 0);
-  ctx.lineTo(canvas.width, canvas.height);
-  ctx.lineTo(0, canvas.height);
-  ctx.closePath();
-
-  // Cut out each US state polygon as a hole
-  for (const feature of cachedUSGeoJSON.features) {
-    const { type, coordinates } = feature.geometry;
-    const rings = type === 'MultiPolygon'
-      ? coordinates.map((p: any) => p[0])
-      : [coordinates[0]];
-
-    for (const ring of rings) {
-      let first = true;
-      for (const [lng, lat] of ring) {
-        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
-        const x = pt.x * renderScale + ox;
-        const y = pt.y * renderScale + oy;
-        if (first) { ctx.moveTo(x, y); first = false; }
-        else { ctx.lineTo(x, y); }
-      }
-      ctx.closePath();
-    }
-  }
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fill('evenodd');
-  ctx.restore();
-}
 
 const ProjectLocations: React.FC = () => {
   const queryClient = useQueryClient();
@@ -325,6 +267,7 @@ const ProjectLocations: React.FC = () => {
   const [includeList, setIncludeList] = useState(false);
   const [enabledCustomLayers, setEnabledCustomLayers] = useState<number[]>([]);
   const [standardLayers, setStandardLayers] = useState<string[]>([]);
+  const [mapStyle, setMapStyle] = useState<string>('carto-voyager');
 
   const { data: customLayers = [] } = useQuery({
     queryKey: ['custom-map-layers'],
@@ -355,7 +298,7 @@ const ProjectLocations: React.FC = () => {
     setPdfLoading(true);
     setShowExportModal(false);
     try {
-      // Capture the map as a base64 PNG, then overlay the US boundary mask
+      // Capture the map as a base64 PNG
       let mapImage: string | undefined;
       if (mapRef.current) {
         const canvas = await html2canvas(mapRef.current, {
@@ -364,9 +307,6 @@ const ProjectLocations: React.FC = () => {
           scale: 2,
           logging: false,
         });
-        if (leafletMapRef.current) {
-          await applyUSMaskToCanvas(canvas, leafletMapRef.current, mapRef.current, 2);
-        }
         mapImage = canvas.toDataURL('image/png');
       }
 
@@ -610,9 +550,25 @@ const ProjectLocations: React.FC = () => {
       </div>
 
       {/* Layer Selectors */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '8px' }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Standard Maps</label>
+          <label className="form-label">Map Style</label>
+          <SearchableSelect
+            options={[
+              { value: 'carto-voyager', label: 'Standard (CARTO)' },
+              { value: 'esri-street', label: 'Streets (ESRI)' },
+              { value: 'esri-topo', label: 'Topographic (ESRI)' },
+              { value: 'stamen-terrain', label: 'Terrain (Stamen)' },
+              { value: 'stamen-toner', label: 'High Contrast (Toner)' },
+              { value: 'osm', label: 'OpenStreetMap' },
+            ]}
+            value={mapStyle}
+            onChange={setMapStyle}
+            placeholder="Select map style..."
+          />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">Standard Layers</label>
           <SearchableMultiSelect
             options={[
               { value: 'projects', label: 'Projects' },
@@ -648,14 +604,33 @@ const ProjectLocations: React.FC = () => {
           scrollWheelZoom={true}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
-            url={standardLayers.includes('revenue')
-              ? 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
-              : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+            attribution={
+              mapStyle.startsWith('stamen') ? '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://stamen.com/">Stamen Design</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' :
+              mapStyle.startsWith('esri') ? '&copy; <a href="https://www.esri.com/">Esri</a>' :
+              mapStyle === 'osm' ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' :
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+            }
+            url={
+              mapStyle === 'stamen-terrain' && standardLayers.includes('revenue')
+                ? 'https://tiles.stadiamaps.com/tiles/stamen_terrain_background/{z}/{x}/{y}{r}.png'
+              : mapStyle === 'stamen-terrain'
+                ? 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png'
+              : mapStyle === 'stamen-toner' && standardLayers.includes('revenue')
+                ? 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png'
+              : mapStyle === 'stamen-toner'
+                ? 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png'
+              : mapStyle === 'esri-street'
+                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+              : mapStyle === 'esri-topo'
+                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}'
+              : mapStyle === 'osm'
+                ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              : standardLayers.includes('revenue')
+                ? 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png'
+                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
             }
           />
           <MapRefCapture mapRef={leafletMapRef} />
-          <USBoundaryMask />
           {standardLayers.includes('projects') && filteredLocations.length > 0 && (
             <ClusteredMarkers locations={filteredLocations} />
           )}
@@ -673,7 +648,7 @@ const ProjectLocations: React.FC = () => {
       </div>
 
       {/* Legend */}
-      <div className="card" style={{ padding: '1rem' }}>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Legend:</span>
           {standardLayers.length === 0 && enabledCustomLayers.length === 0 && (
@@ -730,6 +705,66 @@ const ProjectLocations: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Project List */}
+      {filteredLocations.length > 0 && (
+        <div className="card" style={{ padding: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#1e293b', marginBottom: '1rem' }}>
+            Project List ({filteredLocations.length})
+          </h2>
+          <div style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+            <table className="sales-table">
+              <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
+                <tr>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Customer</th>
+                  <th>Location</th>
+                  <th>Market</th>
+                  <th style={{ textAlign: 'right' }}>Contract Value</th>
+                  <th>Manager</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLocations.map((project) => (
+                  <tr
+                    key={project.id}
+                    onClick={() => window.location.href = `/projects/${project.id}`}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td>
+                      <div style={{ fontWeight: 500, color: '#1a56db' }}>
+                        {project.name}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                        #{project.number}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={STATUS_BADGE_CLASSES[project.status] || 'badge'}>
+                        {project.status}
+                      </span>
+                    </td>
+                    <td>{project.customer_name || '-'}</td>
+                    <td>
+                      {project.ship_city && project.ship_state
+                        ? `${project.ship_city}, ${project.ship_state}`
+                        : project.address || '-'}
+                    </td>
+                    <td style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                      {project.market || '-'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 500, color: '#10b981' }}>
+                      {formatCurrency(project.contract_value)}
+                    </td>
+                    <td>{project.manager_name || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Re-geocode Confirmation Modal */}
       {showConfirmGeocode && (
