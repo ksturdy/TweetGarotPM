@@ -216,6 +216,153 @@ const REPORT_HANDLERS = {
       body: `Please find attached the Cash Flow Report covering ${rows.length} project${rows.length !== 1 ? 's' : ''}.`,
     };
   },
+
+  async opportunity_search(report) {
+    const RecurringSearches = require('../models/RecurringSearches');
+    const { generateOpportunitySearchPdfBuffer } = require('../utils/opportunitySearchPdfBuffer');
+    const Anthropic = require('@anthropic-ai/sdk');
+
+    const recurringSearchId = report.filters?.recurring_search_id;
+
+    if (!recurringSearchId) {
+      throw new Error('No recurring search selected for this scheduled report');
+    }
+
+    const recurringSearch = await RecurringSearches.findById(recurringSearchId, report.tenant_id);
+    if (!recurringSearch) {
+      throw new Error(`Recurring search ${recurringSearchId} not found`);
+    }
+
+    if (!recurringSearch.is_active) {
+      throw new Error(`Recurring search "${recurringSearch.name}" is not active`);
+    }
+
+    let searchData = {
+      name: recurringSearch.name,
+      criteria: recurringSearch.criteria,
+      results: [],
+      lead_count: 0,
+      total_estimated_value: 0,
+    };
+
+    // Always re-run the search with fresh results for recurring searches
+    console.log(`[Scheduled Reports] Running recurring opportunity search "${recurringSearch.name}"`);
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    // Build user message from criteria (same logic as in opportunitySearch.js)
+    const criteria = recurringSearch.criteria;
+      const parts = ['Search the web for real, publicly announced construction projects with these criteria:'];
+      if (criteria.market_sector) parts.push(`- Market Sector: ${criteria.market_sector}`);
+      if (criteria.location) parts.push(`- Location/Region: ${criteria.location}`);
+      if (criteria.construction_type) parts.push(`- Construction Type: ${criteria.construction_type}`);
+      if (criteria.min_value || criteria.max_value) {
+        const min = criteria.min_value ? `$${Number(criteria.min_value).toLocaleString()}` : 'any';
+        const max = criteria.max_value ? `$${Number(criteria.max_value).toLocaleString()}` : 'any';
+        parts.push(`- Project Size Range: ${min} to ${max}`);
+      }
+      if (criteria.keywords) parts.push(`- Keywords/Focus: ${criteria.keywords}`);
+      if (criteria.additional_criteria) parts.push(`- Additional Context: ${criteria.additional_criteria}`);
+      parts.push('\nUse web search to find real projects. Run multiple searches to be thorough. Return results as JSON only.');
+      const userMessage = parts.join('\n');
+
+      const SYSTEM_PROMPT = `You are a construction project intelligence researcher for a mechanical contracting company specializing in plumbing, HVAC, process piping, and refrigeration. Your job is to find REAL, publicly announced construction projects using web search.
+
+CRITICAL RULES:
+- You MUST use web search to find actual projects. Do NOT generate, fabricate, or speculate on projects.
+- Every project you return MUST be based on a real news article, press release, permit filing, or official announcement found via web search.
+- If you cannot find verified projects matching the criteria, say so honestly. Do NOT invent projects to fill results.
+- Include the source URL for every project.
+- Run multiple searches to be thorough - search for news articles, owner press releases, permit filings, and GC announcements.
+- Estimate the mechanical scope value as approximately 15-25% of total project value for healthcare/institutional projects.
+
+For each verified project found, return ONLY a valid JSON object with this structure:
+{"projects":[{"project_name":"string","owner":"string","location":"string","estimated_value":"string or null","estimated_mechanical_value":"string or null","project_type":"Healthcare|Industrial|Manufacturing|Data Center|Commercial|Education|Government","construction_type":"New Construction|Renovation|Expansion","estimated_start":"string or null","estimated_completion":"string or null","square_footage":"string or null","general_contractor":"string or null","architect":"string or null","source_url":"string","source_date":"string","confidence":"high|medium|low","mechanical_scope":"string describing estimated HVAC plumbing piping scope based on project type and size","intelligence_notes":"string explaining why this is a real opportunity with relevant context","recommended_contact":"string or null","next_steps":"string"}]}`;
+
+      try {
+        const response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-5-20250929',
+          max_tokens: 16000,
+          system: SYSTEM_PROMPT,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: userMessage }]
+        });
+
+        // Extract and parse results (simplified version of route logic)
+        let responseText = '';
+        for (const block of response.content) {
+          if (block.type === 'text') responseText += block.text;
+        }
+
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const leadsJson = JSON.parse(jsonMatch[0]);
+          const rawProjects = leadsJson.projects || leadsJson.leads || leadsJson.results || [];
+
+          // Update search data with fresh results
+          searchData = {
+            ...savedSearch,
+            results: rawProjects.map((p, i) => ({
+              id: i + 1,
+              company_name: p.owner || 'Unknown',
+              project_name: p.project_name || 'Untitled',
+              estimated_value: Number(p.estimated_mechanical_value) || 0,
+              mechanical_scope: p.mechanical_scope || '',
+              location: p.location || '',
+              construction_type: p.construction_type || 'New Construction',
+              market_sector: p.project_type || 'Commercial',
+              confidence: p.confidence || 'medium',
+              verification_status: p.source_url ? 'verifiable' : 'unverified',
+              source_url: p.source_url || null,
+              intelligence_source: p.intelligence_notes || '',
+              contact_name: p.recommended_contact || null,
+              // ... include other fields as needed
+            })),
+            lead_count: rawProjects.length,
+            total_estimated_value: rawProjects.reduce((sum, p) => sum + (Number(p.estimated_mechanical_value) || 0), 0),
+            name: `${recurringSearch.name} (${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`,
+          };
+
+          console.log(`[Scheduled Reports] Fresh search found ${rawProjects.length} projects`);
+        } else {
+          console.warn('[Scheduled Reports] Could not parse AI response');
+        }
+      } catch (err) {
+        console.error('[Scheduled Reports] Failed to run search:', err.message);
+        throw err; // Re-throw since we don't have fallback results for recurring searches
+      }
+
+    // Update last run stats and save results
+    await RecurringSearches.updateLastRun(
+      recurringSearch.id,
+      searchData.lead_count,
+      searchData.total_estimated_value,
+      searchData.results,
+      report.tenant_id
+    );
+
+    // Use default domain (custom_domain column may not exist yet)
+    const tenantDomain = 'app.titanpm.com';
+
+    const pdfBuffer = await generateOpportunitySearchPdfBuffer(searchData, tenantDomain);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeName = (recurringSearch.name || 'Opportunity-Search').replace(/[^a-zA-Z0-9]/g, '_');
+
+    const leadCount = searchData.lead_count || 0;
+    const totalValue = searchData.total_estimated_value || 0;
+    const fmtValue = totalValue >= 1e6
+      ? `$${(totalValue / 1e6).toFixed(1)}M`
+      : totalValue >= 1e3
+      ? `$${(totalValue / 1e3).toFixed(0)}K`
+      : `$${totalValue.toLocaleString()}`;
+
+    return {
+      pdfBuffer,
+      filename: `${safeName}-${dateStr}.pdf`,
+      subject: `Opportunity Search Report: ${recurringSearch.name} - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Opportunity Search Report for "${recurringSearch.name}".\n\nThis search found ${leadCount} project${leadCount !== 1 ? 's' : ''} with a total estimated value of ${fmtValue}.\n\nClick the link in the PDF to view full details and convert opportunities in Titan.`,
+    };
+  },
 };
 
 /**

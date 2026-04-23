@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 
 const SavedSearches = require('../models/savedSearches');
+const RecurringSearches = require('../models/RecurringSearches');
 
 const router = express.Router();
 
@@ -24,7 +25,10 @@ CRITICAL RULES:
 - If you cannot find verified projects matching the criteria, say so honestly. Do NOT invent projects to fill results.
 - Include the source URL for every project.
 - Run multiple searches to be thorough - search for news articles, owner press releases, permit filings, and GC announcements.
-- Estimate the mechanical scope value as approximately 15-25% of total project value for healthcare/institutional projects.
+- For estimated_mechanical_value: Use ONLY the mechanical/HVAC/plumbing scope value if explicitly stated in the source. If not stated, return null (not a guess, not "0", just null). The backend will estimate 20% of total project value automatically.
+- IMPORTANT: Never put cost-per-square-foot figures, budget line items, or other non-mechanical values in estimated_mechanical_value. Only use this field if you find an explicit mechanical/HVAC scope dollar amount.
+- Prioritize projects that match the criteria closely, but you may include promising opportunities that are reasonably close if they represent strong leads worth pursuing.
+- LOCATION INTERPRETATION: When given a specific city/location, interpret it broadly to include the surrounding region, metro area, and state. For example, "Marquette, MI" should include searches for Michigan, Upper Peninsula, Northern Michigan, etc. Look for projects within a reasonable service area (typically 100-200 mile radius for large mechanical contractors).
 
 For each verified project found, return ONLY a valid JSON object with this structure:
 {"projects":[{"project_name":"string","owner":"string","location":"string","estimated_value":"string or null","estimated_mechanical_value":"string or null","project_type":"Healthcare|Industrial|Manufacturing|Data Center|Commercial|Education|Government","construction_type":"New Construction|Renovation|Expansion","estimated_start":"string or null","estimated_completion":"string or null","square_footage":"string or null","general_contractor":"string or null","architect":"string or null","source_url":"string","source_date":"string","confidence":"high|medium|low","mechanical_scope":"string describing estimated HVAC plumbing piping scope based on project type and size","intelligence_notes":"string explaining why this is a real opportunity with relevant context","recommended_contact":"string or null","next_steps":"string"}]}`;
@@ -36,7 +40,7 @@ function buildUserMessage(criteria) {
     parts.push(`- Market Sector: ${criteria.market_sector}`);
   }
   if (criteria.location) {
-    parts.push(`- Location/Region: ${criteria.location}`);
+    parts.push(`- Location/Region: ${criteria.location} (search broadly - include surrounding metro area, region, and state)`);
   }
   if (criteria.construction_type) {
     parts.push(`- Construction Type: ${criteria.construction_type}`);
@@ -44,7 +48,7 @@ function buildUserMessage(criteria) {
   if (criteria.min_value || criteria.max_value) {
     const min = criteria.min_value ? `$${Number(criteria.min_value).toLocaleString()}` : 'any';
     const max = criteria.max_value ? `$${Number(criteria.max_value).toLocaleString()}` : 'any';
-    parts.push(`- Project Size Range: ${min} to ${max}`);
+    parts.push(`- Mechanical Value Range (target): ${min} to ${max}`);
   }
   if (criteria.keywords) {
     parts.push(`- Keywords/Focus: ${criteria.keywords}`);
@@ -53,7 +57,9 @@ function buildUserMessage(criteria) {
     parts.push(`- Additional Context: ${criteria.additional_criteria}`);
   }
 
-  parts.push('\nUse web search to find real projects. Run multiple searches to be thorough. Return results as JSON only.');
+  parts.push('\nUse web search to find real projects. Run multiple searches to be thorough. Cast a wide net geographically - mechanical contractors typically service a 100-200 mile radius. Prioritize projects matching the criteria, but include strong leads that are reasonably close.');
+  parts.push('\nFor estimated_mechanical_value in your response: Only provide a value if the source explicitly states the mechanical/HVAC/plumbing scope cost. Otherwise, set it to null and the system will auto-estimate at 20% of total project value.');
+  parts.push('\nReturn results as JSON only.');
 
   return parts.join('\n');
 }
@@ -127,7 +133,14 @@ function normalizeProject(project, index) {
   };
 
   const totalValue = parseDollar(project.estimated_value);
-  const mechValue = parseDollar(project.estimated_mechanical_value);
+  let mechValue = parseDollar(project.estimated_mechanical_value);
+
+  // Validation: Reject mechanical values that are unreasonably small compared to total project value
+  // (e.g., if total is $650M but mechValue is $98, that's clearly wrong)
+  if (mechValue && totalValue && mechValue < totalValue * 0.05) {
+    console.warn(`[Opportunity Search] Rejecting suspiciously low mechanical value $${mechValue.toLocaleString()} for total project value $${totalValue.toLocaleString()} (${(mechValue/totalValue*100).toFixed(2)}%). Will use 20% estimate instead.`);
+    mechValue = null; // Force fallback to 20% estimate
+  }
 
   // Estimate start date from estimated_start string
   let estimated_start_date = null;
@@ -437,6 +450,256 @@ router.delete('/saved/:id', async (req, res, next) => {
     res.json({ success: true });
   } catch (error) {
     console.error('[Opportunity Search] Error deleting saved search:', error);
+    next(error);
+  }
+});
+
+// GET /api/opportunity-search/saved/:id/pdf - Download PDF of a saved search
+router.get('/saved/:id/pdf', async (req, res, next) => {
+  try {
+    console.log('[Opportunity Search PDF] Request for ID:', req.params.id, 'Tenant:', req.tenantId);
+
+    const search = await SavedSearches.findById(Number(req.params.id), req.tenantId);
+    if (!search) {
+      console.log('[Opportunity Search PDF] Search not found');
+      return res.status(404).json({ error: 'Saved search not found' });
+    }
+
+    console.log('[Opportunity Search PDF] Found search:', search.name, 'Results:', search.results?.length);
+
+    const { generateOpportunitySearchPdfBuffer } = require('../utils/opportunitySearchPdfBuffer');
+
+    // Use default domain (custom_domain column may not exist yet)
+    const tenantDomain = 'app.titanpm.com';
+
+    console.log('[Opportunity Search PDF] Generating PDF...');
+    const pdfBuffer = await generateOpportunitySearchPdfBuffer(search, tenantDomain);
+    console.log('[Opportunity Search PDF] PDF generated, size:', pdfBuffer.length);
+
+    const safeName = (search.name || 'Opportunity-Search').replace(/[^a-zA-Z0-9]/g, '_');
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}-${dateStr}.pdf"`);
+    res.send(pdfBuffer);
+    console.log('[Opportunity Search PDF] PDF sent successfully');
+  } catch (error) {
+    console.error('[Opportunity Search PDF] ERROR:', error.message);
+    console.error('[Opportunity Search PDF] Stack:', error.stack);
+    res.status(500).json({ error: error.message || 'Failed to generate PDF' });
+  }
+});
+
+// ===== Recurring Searches Routes =====
+
+// GET /api/opportunity-search/recurring - Get all recurring searches
+router.get('/recurring', async (req, res, next) => {
+  try {
+    const activeOnly = req.query.active_only === 'true';
+    const searches = await RecurringSearches.findAllByTenant(req.tenantId, activeOnly);
+    res.json(searches);
+  } catch (error) {
+    console.error('[Opportunity Search] Error fetching recurring searches:', error);
+    next(error);
+  }
+});
+
+// GET /api/opportunity-search/recurring/:id - Get a single recurring search
+router.get('/recurring/:id', async (req, res, next) => {
+  try {
+    const search = await RecurringSearches.findById(Number(req.params.id), req.tenantId);
+    if (!search) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+    res.json(search);
+  } catch (error) {
+    console.error('[Opportunity Search] Error fetching recurring search:', error);
+    next(error);
+  }
+});
+
+// POST /api/opportunity-search/recurring - Create a new recurring search
+router.post('/recurring', async (req, res, next) => {
+  try {
+    const { name, description, criteria, is_active } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    if (!criteria || Object.keys(criteria).length === 0) {
+      return res.status(400).json({ error: 'Search criteria is required' });
+    }
+
+    const recurringSearch = await RecurringSearches.create(
+      { name: name.trim(), description, criteria, is_active },
+      req.user.id,
+      req.tenantId
+    );
+
+    res.status(201).json(recurringSearch);
+  } catch (error) {
+    console.error('[Opportunity Search] Error creating recurring search:', error);
+    next(error);
+  }
+});
+
+// POST /api/opportunity-search/recurring/from-saved/:id - Create recurring search from a saved search
+router.post('/recurring/from-saved/:id', async (req, res, next) => {
+  try {
+    const savedSearch = await SavedSearches.findById(Number(req.params.id), req.tenantId);
+    if (!savedSearch) {
+      return res.status(404).json({ error: 'Saved search not found' });
+    }
+
+    const { name, description } = req.body;
+    let recurringSearch = await RecurringSearches.create(
+      {
+        name: name || savedSearch.name,
+        description: description || `Recurring version of: ${savedSearch.name}`,
+        criteria: savedSearch.criteria,
+        is_active: true,
+      },
+      req.user.id,
+      req.tenantId
+    );
+
+    // Copy the results from the saved search to the recurring search
+    if (savedSearch.results && savedSearch.results.length > 0) {
+      recurringSearch = await RecurringSearches.updateLastRun(
+        recurringSearch.id,
+        savedSearch.lead_count || savedSearch.results.length,
+        savedSearch.total_estimated_value || 0,
+        savedSearch.results,
+        req.tenantId
+      );
+    }
+
+    res.status(201).json(recurringSearch);
+  } catch (error) {
+    console.error('[Opportunity Search] Error creating recurring search from saved:', error);
+    next(error);
+  }
+});
+
+// PUT /api/opportunity-search/recurring/:id - Update a recurring search
+router.put('/recurring/:id', async (req, res, next) => {
+  try {
+    const { name, description, criteria, is_active } = req.body;
+    const updated = await RecurringSearches.update(
+      Number(req.params.id),
+      { name, description, criteria, is_active },
+      req.tenantId
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('[Opportunity Search] Error updating recurring search:', error);
+    next(error);
+  }
+});
+
+// PATCH /api/opportunity-search/recurring/:id/toggle - Toggle active status
+router.patch('/recurring/:id/toggle', async (req, res, next) => {
+  try {
+    const updated = await RecurringSearches.toggleActive(Number(req.params.id), req.tenantId);
+    if (!updated) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+    res.json(updated);
+  } catch (error) {
+    console.error('[Opportunity Search] Error toggling recurring search:', error);
+    next(error);
+  }
+});
+
+// PATCH /api/opportunity-search/recurring/:id/update-results - Update last run results
+router.patch('/recurring/:id/update-results', async (req, res, next) => {
+  try {
+    const { resultCount, resultValue, results } = req.body;
+    const updated = await RecurringSearches.updateLastRun(
+      Number(req.params.id),
+      resultCount,
+      resultValue,
+      results,
+      req.tenantId
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('[Opportunity Search] Error updating recurring search results:', error);
+    next(error);
+  }
+});
+
+// DELETE /api/opportunity-search/recurring/:id - Delete a recurring search
+router.delete('/recurring/:id', async (req, res, next) => {
+  try {
+    const deleted = await RecurringSearches.delete(Number(req.params.id), req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Opportunity Search] Error deleting recurring search:', error);
+    next(error);
+  }
+});
+
+// GET /api/opportunity-search/recurring/:id/pdf - Download PDF of a recurring search
+router.get('/recurring/:id/pdf', async (req, res, next) => {
+  try {
+    const recurringSearch = await RecurringSearches.findById(Number(req.params.id), req.tenantId);
+    if (!recurringSearch) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+
+    console.log('[Opportunity Search] Generating PDF for recurring search:', recurringSearch.name);
+
+    // Check if we have saved results to use
+    if (!recurringSearch.last_results || recurringSearch.last_results.length === 0) {
+      return res.status(400).json({
+        error: 'No results available for this recurring search. Please run the search first by clicking "Rerun".'
+      });
+    }
+
+    // Use the saved results instead of running a fresh AI search
+    const leads = recurringSearch.last_results;
+    const summary = {
+      lead_count: recurringSearch.last_result_count,
+      total_estimated_value: recurringSearch.last_result_value
+    };
+
+    // Build a search object for PDF generation
+    const searchData = {
+      id: recurringSearch.id,
+      name: recurringSearch.name,
+      criteria: recurringSearch.criteria,
+      results: leads,
+      summary: summary,
+      created_at: recurringSearch.created_at
+    };
+
+    const { generateOpportunitySearchPdfBuffer } = require('../utils/opportunitySearchPdfBuffer');
+    const tenantDomain = 'app.titanpm.com';
+
+    const pdfBuffer = await generateOpportunitySearchPdfBuffer(searchData, tenantDomain);
+
+    const safeName = (recurringSearch.name || 'Recurring-Search').replace(/[^a-zA-Z0-9]/g, '_');
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}-${dateStr}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('[Opportunity Search] Error generating recurring search PDF:', error);
     next(error);
   }
 });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import opportunitySearchService, { SearchCriteria, GeneratedLead, SearchSummary, SavedSearchListItem } from '../services/opportunitySearch';
+import recurringSearchesService, { RecurringSearch } from '../services/recurringSearches';
 import opportunitiesService from '../services/opportunities';
 import '../styles/SalesPipeline.css';
 import { useTitanFeedback } from '../context/TitanFeedbackContext';
@@ -113,6 +114,12 @@ const OpportunitySearch: React.FC = () => {
   const [viewingSavedId, setViewingSavedId] = useState<number | null>(null);
   const [lastCriteria, setLastCriteria] = useState<SearchCriteria | null>(null);
   const [selectedSavedSearches, setSelectedSavedSearches] = useState<Set<number>>(new Set());
+  const [viewingRecurringId, setViewingRecurringId] = useState<number | null>(null);
+  const [viewingRecurringName, setViewingRecurringName] = useState<string>('');
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [recurringDialogMode, setRecurringDialogMode] = useState<'create' | 'edit'>('create');
+  const [recurringDialogData, setRecurringDialogData] = useState<{ id?: number; savedSearchId?: number; name: string; description: string }>({ name: '', description: '' });
+  const [shouldAutoSave, setShouldAutoSave] = useState(true);
 
   const savedSearchesQuery = useQuery({
     queryKey: ['saved-opportunity-searches'],
@@ -135,6 +142,121 @@ const OpportunitySearch: React.FC = () => {
       setSuccessMessage('Selected searches removed.');
     },
   });
+
+  const saveAsRecurringMutation = useMutation({
+    mutationFn: async (data: { savedSearchId: number; name: string; description: string }) => {
+      // Create the recurring search with custom name/description
+      const recurring = await recurringSearchesService.createFromSaved(data.savedSearchId, {
+        name: data.name,
+        description: data.description,
+      });
+      // Delete the saved search so it moves from Recent to Recurring
+      await opportunitySearchService.deleteSavedSearch(data.savedSearchId);
+      return recurring;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
+      setRecurringDialogOpen(false);
+      setSuccessMessage('Search moved to recurring! You can now schedule it.');
+    },
+  });
+
+  const updateRecurringMutation = useMutation({
+    mutationFn: (data: { id: number; name?: string; description?: string; criteria?: SearchCriteria }) =>
+      recurringSearchesService.update(data.id, {
+        name: data.name,
+        description: data.description,
+        criteria: data.criteria,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+      setRecurringDialogOpen(false);
+      setSuccessMessage('Recurring search updated.');
+    },
+  });
+
+  const recurringSearchesQuery = useQuery({
+    queryKey: ['recurring-searches'],
+    queryFn: () => recurringSearchesService.getAll(),
+  });
+
+  const toggleRecurringMutation = useMutation({
+    mutationFn: (id: number) => recurringSearchesService.toggleActive(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+      setSuccessMessage('Recurring search status updated.');
+    },
+  });
+
+  const deleteRecurringMutation = useMutation({
+    mutationFn: (id: number) => recurringSearchesService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+      setSuccessMessage('Recurring search deleted.');
+    },
+  });
+
+  const handleViewRecurring = (recurringSearch: RecurringSearch) => {
+    // Load the criteria into the form
+    setFormData({
+      market_sector: recurringSearch.criteria.market_sector || '',
+      location: recurringSearch.criteria.location || '',
+      construction_type: recurringSearch.criteria.construction_type || '',
+      min_value: recurringSearch.criteria.min_value,
+      max_value: recurringSearch.criteria.max_value,
+      keywords: recurringSearch.criteria.keywords || '',
+      additional_criteria: recurringSearch.criteria.additional_criteria || '',
+    });
+
+    setLastCriteria(recurringSearch.criteria);
+    setViewingSavedId(null);
+    setViewingRecurringId(recurringSearch.id);
+    setViewingRecurringName(recurringSearch.name);
+    setError('');
+
+    // Load the last saved results (if they exist)
+    if (recurringSearch.last_results && recurringSearch.last_results.length > 0) {
+      setLeads(recurringSearch.last_results);
+      setSummary({
+        total_leads: recurringSearch.last_result_count,
+        total_estimated_value: recurringSearch.last_result_value,
+        market_breakdown: {},
+        search_criteria_used: '',
+      });
+      setSuccessMessage(`Loaded results from ${new Date(recurringSearch.last_run_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Click "Rerun" for fresh results.`);
+    } else {
+      setLeads([]);
+      setSummary(null);
+      setSuccessMessage('No results yet for this recurring search. Click "Rerun" to execute the search.');
+    }
+
+    // Scroll to top to show the form and results
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRerunRecurring = async (recurringSearch: RecurringSearch) => {
+    // Load the criteria and run a fresh search
+    setFormData({
+      market_sector: recurringSearch.criteria.market_sector || '',
+      location: recurringSearch.criteria.location || '',
+      construction_type: recurringSearch.criteria.construction_type || '',
+      min_value: recurringSearch.criteria.min_value,
+      max_value: recurringSearch.criteria.max_value,
+      keywords: recurringSearch.criteria.keywords || '',
+      additional_criteria: recurringSearch.criteria.additional_criteria || '',
+    });
+
+    setLastCriteria(recurringSearch.criteria);
+    setViewingSavedId(null);
+    setViewingRecurringId(recurringSearch.id);
+    setViewingRecurringName(recurringSearch.name);
+    setSuccessMessage(`Re-running search: "${recurringSearch.name}"...`);
+
+    // Disable auto-save for this search since it's a recurring search rerun
+    setShouldAutoSave(false);
+    searchMutation.mutate(recurringSearch.criteria);
+  };
 
   const handleLoadSaved = async (id: number) => {
     try {
@@ -170,8 +292,22 @@ const OpportunitySearch: React.FC = () => {
       setSelectedLeads(new Set());
       setError('');
 
-      // Auto-save the search
-      if (data.leads.length > 0) {
+      // If we're viewing a recurring search, update it with the new results
+      if (viewingRecurringId) {
+        try {
+          await recurringSearchesService.updateResults(viewingRecurringId, {
+            resultCount: data.leads.length,
+            resultValue: data.summary.total_estimated_value,
+            results: data.leads,
+          });
+          queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+          setSuccessMessage(`Search completed! Found ${data.leads.length} leads.`);
+        } catch (err) {
+          console.error('Failed to update recurring search results:', err);
+        }
+      }
+      // Auto-save the search (only if shouldAutoSave is true)
+      else if (shouldAutoSave && data.leads.length > 0) {
         try {
           const autoName = generateSearchName(criteria);
           await opportunitySearchService.saveSearch({
@@ -185,11 +321,17 @@ const OpportunitySearch: React.FC = () => {
           console.error('Failed to auto-save search:', err);
         }
       }
+
+      // Reset shouldAutoSave back to true
+      setShouldAutoSave(true);
     },
     onError: (err: any) => {
       setError(err.response?.data?.error || 'Failed to search for opportunities. Please try again.');
       setLeads([]);
       setSummary(null);
+
+      // Reset shouldAutoSave back to true even on error
+      setShouldAutoSave(true);
     },
   });
 
@@ -241,6 +383,9 @@ const OpportunitySearch: React.FC = () => {
     setSelectedLeads(new Set());
     setError('');
     setSuccessMessage('');
+    setViewingSavedId(null);
+    setViewingRecurringId(null);
+    setViewingRecurringName('');
   };
 
   const toggleLead = (id: number) => {
@@ -318,6 +463,59 @@ const OpportunitySearch: React.FC = () => {
           </svg>
           Search Criteria
         </h3>
+
+        {/* Viewing Recurring Search Banner */}
+        {viewingRecurringId && (
+          <div style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            padding: '16px 20px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 2px 8px rgba(102, 126, 234, 0.2)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>
+                  Viewing Recurring Search: {viewingRecurringName}
+                </div>
+                <div style={{ fontSize: '13px', opacity: 0.9 }}>
+                  Edit the criteria below and click "Search with AI" to run, or close to return to the list
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setViewingRecurringId(null);
+                setViewingRecurringName('');
+                handleClear();
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                border: 'none',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 500,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+            >
+              Close
+            </button>
+          </div>
+        )}
 
         <div className="opp-search-form-grid">
           <div className="opp-search-form-group">
@@ -413,6 +611,35 @@ const OpportunitySearch: React.FC = () => {
             </svg>
             {searchMutation.isPending ? 'Searching...' : 'Search with AI'}
           </button>
+          {viewingRecurringId && (
+            <button
+              type="button"
+              className="sales-btn sales-btn-primary"
+              onClick={() => {
+                const criteria: SearchCriteria = {};
+                if (formData.market_sector) criteria.market_sector = formData.market_sector;
+                if (formData.location) criteria.location = formData.location;
+                if (formData.construction_type) criteria.construction_type = formData.construction_type;
+                if (formData.min_value) criteria.min_value = Number(formData.min_value);
+                if (formData.max_value) criteria.max_value = Number(formData.max_value);
+                if (formData.keywords) criteria.keywords = formData.keywords;
+                if (formData.additional_criteria) criteria.additional_criteria = formData.additional_criteria;
+
+                updateRecurringMutation.mutate({
+                  id: viewingRecurringId,
+                  criteria,
+                });
+              }}
+              disabled={updateRecurringMutation.isPending}
+              style={{ background: '#059669', borderColor: '#059669' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+              </svg>
+              {updateRecurringMutation.isPending ? 'Saving...' : 'Save Criteria'}
+            </button>
+          )}
           <button type="button" className="sales-btn sales-btn-secondary" onClick={handleClear}>
             Clear
           </button>
@@ -578,6 +805,52 @@ const OpportunitySearch: React.FC = () => {
                           View
                         </button>
                         <button
+                          className="opp-saved-view-btn"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await opportunitySearchService.downloadPdf(item.id);
+                              setSuccessMessage('PDF downloaded successfully');
+                            } catch (err: any) {
+                              console.error('PDF download error:', err);
+
+                              // Handle blob error responses
+                              let errorMsg = 'Unknown error';
+                              if (err.response?.data instanceof Blob) {
+                                try {
+                                  const text = await err.response.data.text();
+                                  const json = JSON.parse(text);
+                                  errorMsg = json.error || json.message || text;
+                                } catch {
+                                  errorMsg = 'Server error (could not parse response)';
+                                }
+                              } else {
+                                errorMsg = err.response?.data?.error || err.message;
+                              }
+                              setError(`PDF download failed: ${errorMsg}`);
+                            }
+                          }}
+                          title="Download PDF"
+                        >
+                          PDF
+                        </button>
+                        <button
+                          className="opp-saved-view-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecurringDialogMode('create');
+                            setRecurringDialogData({
+                              savedSearchId: item.id,
+                              name: item.name,
+                              description: '',
+                            });
+                            setRecurringDialogOpen(true);
+                          }}
+                          title="Save as recurring search for scheduling"
+                        >
+                          Recurring
+                        </button>
+                        <button
                           className="opp-saved-delete-btn"
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -601,6 +874,164 @@ const OpportunitySearch: React.FC = () => {
                 </tbody>
               </table>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Recurring Searches */}
+      {!searchMutation.isPending && (
+        <div className="opp-search-saved-section">
+          <h3 className="opp-search-saved-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Recurring Searches
+          </h3>
+
+          {recurringSearchesQuery.isLoading && (
+            <p className="opp-search-saved-loading">Loading recurring searches...</p>
+          )}
+
+          {recurringSearchesQuery.data && recurringSearchesQuery.data.length === 0 && (
+            <p className="opp-search-saved-empty">No recurring searches yet. Click "Recurring" on a recent search to add it here for scheduling.</p>
+          )}
+
+          {recurringSearchesQuery.data && recurringSearchesQuery.data.length > 0 && (
+            <table className="opp-search-saved-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Created</th>
+                  <th>Last Run</th>
+                  <th>Last Results</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recurringSearchesQuery.data.map((item: RecurringSearch) => (
+                  <tr key={item.id}>
+                    <td className="opp-saved-name">{item.name}</td>
+                    <td>{item.description || '-'}</td>
+                    <td>{new Date(item.created_at).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric'
+                    })}</td>
+                    <td>{item.last_run_at
+                      ? new Date(item.last_run_at).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric'
+                        })
+                      : 'Never'
+                    }</td>
+                    <td>
+                      {item.last_run_at && item.last_result_count > 0
+                        ? `${item.last_result_count} leads · ${formatCurrency(item.last_result_value)}`
+                        : '-'
+                      }
+                    </td>
+                    <td>
+                      <span className={`opp-search-tag ${item.is_active ? 'market' : 'construction'}`}>
+                        {item.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="opp-saved-view-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewRecurring(item);
+                        }}
+                        title="View and edit search criteria"
+                      >
+                        View
+                      </button>
+                      <button
+                        className="opp-saved-view-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRecurringDialogMode('edit');
+                          setRecurringDialogData({
+                            id: item.id,
+                            name: item.name,
+                            description: item.description || '',
+                          });
+                          setRecurringDialogOpen(true);
+                        }}
+                        title="Edit name and description"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="opp-saved-view-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRerunRecurring(item);
+                        }}
+                        title="Re-run search and view fresh results"
+                        disabled={searchMutation.isPending}
+                      >
+                        {searchMutation.isPending ? 'Running...' : 'Rerun'}
+                      </button>
+                      <button
+                        className="opp-saved-view-btn"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await recurringSearchesService.downloadPdf(item.id);
+                            setSuccessMessage('PDF downloaded successfully');
+                          } catch (err: any) {
+                            console.error('Recurring PDF download error:', err);
+
+                            // Handle blob error responses
+                            let errorMsg = 'Unknown error';
+                            if (err.response?.data instanceof Blob) {
+                              try {
+                                const text = await err.response.data.text();
+                                const json = JSON.parse(text);
+                                errorMsg = json.error || json.message || text;
+                              } catch {
+                                errorMsg = 'Server error (could not parse response)';
+                              }
+                            } else {
+                              errorMsg = err.response?.data?.error || err.message;
+                            }
+                            setError(`PDF generation failed: ${errorMsg}. Note: This runs a fresh AI search which may take 30-60 seconds.`);
+                          }
+                        }}
+                        title="Download PDF (runs fresh search)"
+                      >
+                        PDF
+                      </button>
+                      <button
+                        className="opp-saved-view-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleRecurringMutation.mutate(item.id);
+                        }}
+                        title={item.is_active ? 'Deactivate' : 'Activate'}
+                        disabled={toggleRecurringMutation.isPending}
+                      >
+                        {item.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        className="opp-saved-delete-btn"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const ok = await confirm({ message: 'Delete this recurring search?', danger: true });
+                          if (ok) {
+                            deleteRecurringMutation.mutate(item.id);
+                          }
+                        }}
+                        title="Delete"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}
@@ -641,6 +1072,43 @@ const OpportunitySearch: React.FC = () => {
                 />
                 Select All
               </label>
+              {(viewingSavedId || viewingRecurringId) && (
+                <button
+                  className="sales-btn sales-btn-secondary"
+                  onClick={async () => {
+                    try {
+                      if (viewingSavedId) {
+                        await opportunitySearchService.downloadPdf(viewingSavedId);
+                      } else if (viewingRecurringId) {
+                        await recurringSearchesService.downloadPdf(viewingRecurringId);
+                      }
+                      setSuccessMessage('PDF downloaded successfully');
+                    } catch (err: any) {
+                      console.error('PDF export error:', err);
+
+                      // Handle blob error responses
+                      let errorMsg = 'Unknown error';
+                      if (err.response?.data instanceof Blob) {
+                        try {
+                          const text = await err.response.data.text();
+                          const json = JSON.parse(text);
+                          errorMsg = json.error || json.message || text;
+                        } catch {
+                          errorMsg = 'Server error (could not parse response)';
+                        }
+                      } else {
+                        errorMsg = err.response?.data?.error || err.message;
+                      }
+                      setError(`PDF export failed: ${errorMsg}`);
+                    }
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Export PDF
+                </button>
+              )}
               <button
                 className="sales-btn sales-btn-primary"
                 disabled={selectedLeads.size === 0 || converting}
@@ -803,6 +1271,86 @@ const OpportunitySearch: React.FC = () => {
             <div className="opp-search-spinner" />
             <h3>Adding to Pipeline...</h3>
             <p>Creating opportunities from selected leads.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Recurring Search Name/Edit Dialog */}
+      {recurringDialogOpen && (
+        <div className="opp-search-converting">
+          <div className="opp-search-save-dialog">
+            <h3>{recurringDialogMode === 'create' ? 'Save as Recurring Search' : 'Edit Recurring Search'}</h3>
+            <p>{recurringDialogMode === 'create' ? 'Give this search a name and description for scheduling.' : 'Update the name and description for this recurring search.'}</p>
+
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., Green Bay Data Centers"
+              value={recurringDialogData.name}
+              onChange={(e) => setRecurringDialogData(prev => ({ ...prev, name: e.target.value }))}
+              autoFocus
+            />
+
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '6px', marginTop: '12px' }}>
+              Description (Optional)
+            </label>
+            <textarea
+              placeholder="e.g., Weekly search for data center projects in Green Bay area"
+              value={recurringDialogData.description}
+              onChange={(e) => setRecurringDialogData(prev => ({ ...prev, description: e.target.value }))}
+              rows={2}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                fontSize: '14px',
+                color: 'var(--text-primary)',
+                background: 'var(--bg-card)',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+              }}
+            />
+
+            <div className="opp-search-save-dialog-actions">
+              <button
+                className="sales-btn sales-btn-secondary"
+                onClick={() => {
+                  setRecurringDialogOpen(false);
+                  setRecurringDialogData({ name: '', description: '' });
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="sales-btn sales-btn-primary"
+                onClick={() => {
+                  if (!recurringDialogData.name.trim()) {
+                    setError('Please enter a name for the recurring search');
+                    return;
+                  }
+                  if (recurringDialogMode === 'create' && recurringDialogData.savedSearchId) {
+                    saveAsRecurringMutation.mutate({
+                      savedSearchId: recurringDialogData.savedSearchId,
+                      name: recurringDialogData.name.trim(),
+                      description: recurringDialogData.description.trim(),
+                    });
+                  } else if (recurringDialogMode === 'edit' && recurringDialogData.id) {
+                    updateRecurringMutation.mutate({
+                      id: recurringDialogData.id,
+                      name: recurringDialogData.name.trim(),
+                      description: recurringDialogData.description.trim(),
+                    });
+                  }
+                }}
+                disabled={saveAsRecurringMutation.isPending || updateRecurringMutation.isPending}
+              >
+                {saveAsRecurringMutation.isPending || updateRecurringMutation.isPending ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}

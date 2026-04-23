@@ -11,6 +11,7 @@ import { buyoutMetricReportApi } from '../../services/buyoutMetricReport';
 import { executiveReportApi } from '../../services/executiveReport';
 import { teamsApi, Team } from '../../services/teams';
 import { getCampaigns, Campaign } from '../../services/campaigns';
+import recurringSearchesService, { RecurringSearch } from '../../services/recurringSearches';
 import '../../styles/SalesPipeline.css';
 
 const REPORT_TYPES: { value: string; label: string }[] = [
@@ -19,6 +20,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'cash_flow', label: 'Cash Flow Report' },
   { value: 'buyout_metric', label: 'Buyout Metric Report' },
   { value: 'campaign', label: 'Campaign Report' },
+  { value: 'opportunity_search', label: 'Opportunity Search' },
 ];
 
 const FREQUENCIES: { value: string; label: string }[] = [
@@ -148,6 +150,13 @@ const ScheduledReports: React.FC = () => {
     queryKey: ['campaigns'],
     queryFn: getCampaigns,
     enabled: dialogOpen && form.report_type === 'campaign',
+  });
+
+  // Fetch recurring searches for opportunity search report type
+  const { data: recurringSearches = [] } = useQuery<RecurringSearch[]>({
+    queryKey: ['recurring-searches'],
+    queryFn: () => recurringSearchesService.getAll(true), // Only fetch active ones
+    enabled: dialogOpen && form.report_type === 'opportunity_search',
   });
 
   const cfFilterOptions = useMemo(() => ({
@@ -321,7 +330,8 @@ const ScheduledReports: React.FC = () => {
   const selectStyle: React.CSSProperties = { ...inputStyle, cursor: 'pointer' };
 
   const canSave = form.name.trim() && form.recipient_user_ids.length > 0 &&
-    (form.report_type !== 'campaign' || !!form.filters.campaign_id);
+    (form.report_type !== 'campaign' || !!form.filters.campaign_id) &&
+    (form.report_type !== 'opportunity_search' || !!form.filters.recurring_search_id);
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
@@ -410,11 +420,13 @@ const ScheduledReports: React.FC = () => {
                       background: report.report_type === 'executive_report' ? 'rgba(0,35,86,0.1)' :
                         report.report_type === 'backlog_fit' ? 'rgba(139,92,246,0.1)' :
                         report.report_type === 'buyout_metric' ? 'rgba(245,158,11,0.1)' :
-                        report.report_type === 'campaign' ? 'rgba(234,88,12,0.1)' : 'rgba(59,130,246,0.1)',
+                        report.report_type === 'campaign' ? 'rgba(234,88,12,0.1)' :
+                        report.report_type === 'opportunity_search' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
                       color: report.report_type === 'executive_report' ? '#002356' :
                         report.report_type === 'backlog_fit' ? '#7c3aed' :
                         report.report_type === 'buyout_metric' ? '#d97706' :
-                        report.report_type === 'campaign' ? '#ea580c' : '#2563eb',
+                        report.report_type === 'campaign' ? '#ea580c' :
+                        report.report_type === 'opportunity_search' ? '#059669' : '#2563eb',
                     }}>
                       {reportTypeLabel(report.report_type)}
                     </span>
@@ -775,6 +787,28 @@ const ScheduledReports: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Filters (for Opportunity Search Report) */}
+              {form.report_type === 'opportunity_search' && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>Recurring Search *</label>
+                  <select
+                    style={{ ...selectStyle, maxWidth: '500px' }}
+                    value={(form.filters.recurring_search_id as string) || ''}
+                    onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, recurring_search_id: e.target.value ? Number(e.target.value) : undefined } }))}
+                  >
+                    <option value="">Select a recurring search...</option>
+                    {recurringSearches.map(rs => (
+                      <option key={rs.id} value={rs.id}>
+                        {rs.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                    Only active recurring searches are shown. The search will be re-run with fresh results each time the report is generated.
+                  </div>
                 </div>
               )}
 

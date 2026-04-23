@@ -114,6 +114,83 @@ const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> 
   return null;
 };
 
+const US_GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
+let cachedUSGeoJSON: any = null;
+
+async function applyUSMaskToCanvas(
+  canvas: HTMLCanvasElement,
+  leafletMap: L.Map,
+  cardEl: HTMLElement,
+  renderScale: number
+) {
+  if (!cachedUSGeoJSON) {
+    const resp = await fetch(US_GEOJSON_URL);
+    cachedUSGeoJSON = await resp.json();
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const mapContainer = leafletMap.getContainer();
+  const mapRect = mapContainer.getBoundingClientRect();
+  const cardRect = cardEl.getBoundingClientRect();
+  const ox = (mapRect.left - cardRect.left) * renderScale;
+  const oy = (mapRect.top - cardRect.top) * renderScale;
+  const mw = mapRect.width * renderScale;
+  const mh = mapRect.height * renderScale;
+
+  ctx.save();
+  ctx.beginPath();
+  // Outer rectangle covering the map area
+  ctx.moveTo(ox, oy);
+  ctx.lineTo(ox + mw, oy);
+  ctx.lineTo(ox + mw, oy + mh);
+  ctx.lineTo(ox, oy + mh);
+  ctx.closePath();
+
+  // Cut holes for each US state polygon
+  for (const feature of cachedUSGeoJSON.features) {
+    const { type, coordinates } = feature.geometry;
+    const rings: number[][][] = type === 'MultiPolygon'
+      ? coordinates.map((p: any) => p[0])
+      : [coordinates[0]];
+    for (const ring of rings) {
+      let first = true;
+      for (const [lng, lat] of ring) {
+        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
+        const x = pt.x * renderScale + ox;
+        const y = pt.y * renderScale + oy;
+        if (first) { ctx.moveTo(x, y); first = false; } else { ctx.lineTo(x, y); }
+      }
+      ctx.closePath();
+    }
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fill('evenodd');
+
+  // Draw state borders
+  ctx.beginPath();
+  for (const feature of cachedUSGeoJSON.features) {
+    const { type, coordinates } = feature.geometry;
+    const rings: number[][][] = type === 'MultiPolygon'
+      ? coordinates.map((p: any) => p[0])
+      : [coordinates[0]];
+    for (const ring of rings) {
+      let first = true;
+      for (const [lng, lat] of ring) {
+        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
+        const x = pt.x * renderScale + ox;
+        const y = pt.y * renderScale + oy;
+        if (first) { ctx.moveTo(x, y); first = false; } else { ctx.lineTo(x, y); }
+      }
+      ctx.closePath();
+    }
+  }
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 1.5 * renderScale;
+  ctx.stroke();
+  ctx.restore();
+}
+
 const ProjectLocations: React.FC = () => {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -301,12 +378,17 @@ const ProjectLocations: React.FC = () => {
       // Capture the map as a base64 PNG
       let mapImage: string | undefined;
       if (mapRef.current) {
+        const renderScale = 2;
         const canvas = await html2canvas(mapRef.current, {
           useCORS: true,
           allowTaint: false,
-          scale: 2,
+          scale: renderScale,
           logging: false,
         });
+        // Post-process: draw white mask outside US boundaries
+        if (leafletMapRef.current) {
+          await applyUSMaskToCanvas(canvas, leafletMapRef.current, mapRef.current, renderScale);
+        }
         mapImage = canvas.toDataURL('image/png');
       }
 
