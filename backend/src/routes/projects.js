@@ -84,7 +84,7 @@ router.get('/map-locations', async (req, res, next) => {
   }
 });
 
-// Download Project Locations as PDF (POST to accept map image in body)
+// Download Project Locations as PDF (map is rendered server-side in Puppeteer)
 router.post('/map-locations/pdf', async (req, res) => {
   try {
     const { generateProjectLocationsPdfBuffer } = require('../utils/projectLocationsPdfBuffer');
@@ -98,8 +98,10 @@ router.post('/map-locations/pdf', async (req, res) => {
       dateTo: req.body.dateTo || undefined,
     };
 
-    const mapImage = req.body.mapImage || undefined;
     const includeList = req.body.includeList === true;
+
+    // Map viewport & layer config from the frontend
+    const mapConfig = req.body.mapConfig || undefined;
 
     // Get all map locations with server-side filters
     let locations = await Project.findMapLocations(req.tenantId, {
@@ -125,7 +127,7 @@ router.post('/map-locations/pdf', async (req, res) => {
 
     const pdfBuffer = await generateProjectLocationsPdfBuffer(locations, {
       filters,
-      mapImage,
+      mapConfig,
       includeList,
     });
 
@@ -153,8 +155,8 @@ router.post('/map-locations/comparison-pdf', async (req, res) => {
       dateFrom: req.body.dateFrom || undefined,
       dateTo: req.body.dateTo || undefined,
     };
-    const mapImage = req.body.mapImage || undefined;
     const includeList = req.body.includeList === true;
+    const mapConfig = req.body.mapConfig || undefined;
 
     // Get all map locations with server-side filters
     let locations = await Project.findMapLocations(req.tenantId, {
@@ -182,7 +184,7 @@ router.post('/map-locations/comparison-pdf', async (req, res) => {
       customers,
       customerColors,
       filters,
-      mapImage,
+      mapConfig,
       includeList,
     });
 

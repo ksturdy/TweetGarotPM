@@ -108,6 +108,7 @@ const estProductRoutes = require('./routes/estProducts');
 const estimateFileRoutes = require('./routes/estimateFiles');
 const directMessageRoutes = require('./routes/directMessages');
 const customMapLayerRoutes = require('./routes/customMapLayers');
+const leadInboxRoutes = require('./routes/leadInbox');
 
 const app = express();
 const server = http.createServer(app);
@@ -253,6 +254,7 @@ app.use('/api/est-products', estProductRoutes);
 app.use('/api/estimate-files', estimateFileRoutes);
 app.use('/api/dm', directMessageRoutes);
 app.use('/api/custom-map-layers', customMapLayerRoutes);
+app.use('/api/lead-inbox', leadInboxRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

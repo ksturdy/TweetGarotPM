@@ -3335,7 +3335,8 @@ const VistaData = {
          COALESCE(SUM(pc.est_cost), 0) AS est_cost,
          COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
          COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
-         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
+         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost,
+         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost
        FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
          AND pc.cost_type IN (2, 3, 4, 5, 6)
@@ -3363,7 +3364,9 @@ const VistaData = {
          COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours,
          COALESCE(SUM(pc.est_cost), 0) AS est_cost,
          COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
-         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
+         COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
+         COALESCE(SUM(pc.projected_cost), 0) AS projected_cost,
+         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost
        FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
          AND pc.cost_type = 1
@@ -3374,7 +3377,7 @@ const VistaData = {
 
     // Map cost rows to named categories
     const costMap = { 2: 'material', 3: 'subcontracts', 4: 'rentals', 5: 'mep_equipment', 6: 'general_conditions' };
-    const zeroCost = { est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0 };
+    const zeroCost = { est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 };
     const costs = {};
     Object.values(costMap).forEach(name => { costs[name] = { ...zeroCost }; });
     costResult.rows.forEach(row => {
@@ -3385,6 +3388,7 @@ const VistaData = {
           jtd_cost: parseFloat(row.jtd_cost),
           committed_cost: parseFloat(row.committed_cost),
           projected_cost: parseFloat(row.projected_cost),
+          prior_week_cost: parseFloat(row.prior_week_cost),
         };
       }
     });
@@ -3397,7 +3401,9 @@ const VistaData = {
       jtd_hours: parseFloat(r.jtd_hours),
       est_cost: parseFloat(r.est_cost),
       jtd_cost: parseFloat(r.jtd_cost),
+      committed_cost: parseFloat(r.committed_cost),
       projected_cost: parseFloat(r.projected_cost),
+      prior_week_cost: parseFloat(r.prior_week_cost),
     }));
 
     const labor_totals = labor.reduce((acc, r) => ({
@@ -3405,8 +3411,10 @@ const VistaData = {
       jtd_hours: acc.jtd_hours + r.jtd_hours,
       est_cost: acc.est_cost + r.est_cost,
       jtd_cost: acc.jtd_cost + r.jtd_cost,
+      committed_cost: acc.committed_cost + r.committed_cost,
       projected_cost: acc.projected_cost + r.projected_cost,
-    }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, projected_cost: 0 });
+      prior_week_cost: acc.prior_week_cost + r.prior_week_cost,
+    }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 });
 
     return { costs, labor, labor_totals };
   },

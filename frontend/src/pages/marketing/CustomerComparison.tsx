@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import html2canvas from 'html2canvas';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -121,61 +120,6 @@ const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> 
   useEffect(() => { mapRef.current = map; }, [map, mapRef]);
   return null;
 };
-
-const US_GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
-let cachedUSGeoJSON: any = null;
-
-async function applyUSMaskToCanvas(
-  canvas: HTMLCanvasElement,
-  leafletMap: L.Map,
-  cardEl: HTMLElement,
-  renderScale: number
-) {
-  if (!cachedUSGeoJSON) {
-    const resp = await fetch(US_GEOJSON_URL);
-    cachedUSGeoJSON = await resp.json();
-  }
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const mapContainer = leafletMap.getContainer();
-  const mapRect = mapContainer.getBoundingClientRect();
-  const cardRect = cardEl.getBoundingClientRect();
-  const ox = (mapRect.left - cardRect.left) * renderScale;
-  const oy = (mapRect.top - cardRect.top) * renderScale;
-
-  ctx.save();
-  ctx.beginPath();
-
-  ctx.moveTo(0, 0);
-  ctx.lineTo(canvas.width, 0);
-  ctx.lineTo(canvas.width, canvas.height);
-  ctx.lineTo(0, canvas.height);
-  ctx.closePath();
-
-  for (const feature of cachedUSGeoJSON.features) {
-    const { type, coordinates } = feature.geometry;
-    const rings = type === 'MultiPolygon'
-      ? coordinates.map((p: any) => p[0])
-      : [coordinates[0]];
-
-    for (const ring of rings) {
-      let first = true;
-      for (const [lng, lat] of ring) {
-        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
-        const x = pt.x * renderScale + ox;
-        const y = pt.y * renderScale + oy;
-        if (first) { ctx.moveTo(x, y); first = false; }
-        else { ctx.lineTo(x, y); }
-      }
-      ctx.closePath();
-    }
-  }
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fill('evenodd');
-  ctx.restore();
-}
 
 const CustomerComparison: React.FC = () => {
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
@@ -340,19 +284,21 @@ const CustomerComparison: React.FC = () => {
     setPdfLoading(true);
     setShowExportModal(false);
     try {
-      let mapImage: string | undefined;
-      if (mapRef.current) {
-        const canvas = await html2canvas(mapRef.current, {
-          useCORS: true,
-          allowTaint: false,
-          scale: 2,
-          logging: false,
-        });
-        if (leafletMapRef.current) {
-          await applyUSMaskToCanvas(canvas, leafletMapRef.current, mapRef.current, 2);
-        }
-        mapImage = canvas.toDataURL('image/png');
-      }
+      // Gather current map viewport
+      const map = leafletMapRef.current;
+      const center = map ? [map.getCenter().lat, map.getCenter().lng] : [39.8283, -98.5795];
+      const zoom = map ? map.getZoom() : 4;
+
+      // Gather custom pin data for enabled layers
+      const customPinData = enabledCustomLayers
+        .map(layerId => {
+          const layer = customLayers.find(l => l.id === layerId);
+          const pins = customPinQueries.data?.[layerId] || [];
+          return layer && pins.length > 0
+            ? { pins, color: layer.pin_color, name: layer.name }
+            : null;
+        })
+        .filter(Boolean);
 
       await projectsApi.downloadComparisonPdf({
         customers: selectedCustomers,
@@ -362,8 +308,13 @@ const CustomerComparison: React.FC = () => {
         department: departmentFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
-        mapImage,
         includeList,
+        mapConfig: {
+          center,
+          zoom,
+          tileUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+          customPins: customPinData,
+        },
       });
     } catch (err) {
       console.error('PDF download failed:', err);

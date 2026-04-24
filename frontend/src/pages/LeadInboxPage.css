@@ -1,0 +1,293 @@
+.lead-inbox-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-icon {
+  font-size: 32px;
+  color: #002356;
+}
+
+.page-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.pending-badge {
+  background: #ef4444;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.email-info {
+  display: flex;
+  align-items: center;
+  color: #6b7280;
+  font-size: 14px;
+  background: #f3f4f6;
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+.email-info strong {
+  color: #002356;
+  margin-left: 4px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 24px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border: none;
+  background: none;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.tab:hover {
+  color: #002356;
+  background: #f9fafb;
+}
+
+.tab.active {
+  color: #002356;
+  border-bottom-color: #002356;
+  font-weight: 600;
+}
+
+.tab-count {
+  background: #002356;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.tab-count.error {
+  background: #ef4444;
+}
+
+/* Lead List */
+.lead-list {
+  min-height: 400px;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+  font-size: 16px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.empty-state h3 {
+  margin-top: 16px;
+  color: #374151;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.empty-state p {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 14px;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+}
+
+/* Lead Cards */
+.lead-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.lead-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lead-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #002356;
+  transform: translateY(-2px);
+}
+
+.card-header {
+  margin-bottom: 16px;
+}
+
+.card-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  flex: 1;
+  line-height: 1.4;
+}
+
+.confidence-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.from-email {
+  font-weight: 500;
+}
+
+.received-date {
+  color: #9ca3af;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-info-row {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.card-info-row .label {
+  color: #6b7280;
+  font-weight: 500;
+  min-width: 90px;
+}
+
+.card-info-row .value {
+  color: #111827;
+  flex: 1;
+}
+
+.card-info-row .value-highlight {
+  font-weight: 600;
+  color: #059669;
+}
+
+.card-attachment-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.card-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .lead-inbox-page {
+    padding: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-right {
+    width: 100%;
+  }
+
+  .email-info {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .lead-cards {
+    grid-template-columns: 1fr;
+  }
+}

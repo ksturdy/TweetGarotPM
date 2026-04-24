@@ -95,8 +95,14 @@ export const projectsApi = {
     customer?: string;
     dateFrom?: string;
     dateTo?: string;
-    mapImage?: string;
     includeList?: boolean;
+    mapConfig?: {
+      center: number[];
+      zoom: number;
+      tileUrl: string;
+      standardLayers: string[];
+      customPins: any[];
+    };
   } = {}) => {
     const res = await api.post('/projects/map-locations/pdf', options, {
       responseType: 'blob',
@@ -120,8 +126,13 @@ export const projectsApi = {
     department?: string;
     dateFrom?: string;
     dateTo?: string;
-    mapImage?: string;
     includeList?: boolean;
+    mapConfig?: {
+      center: number[];
+      zoom: number;
+      tileUrl: string;
+      customPins: any[];
+    };
   } = { customers: [], customerColors: {} }) => {
     const res = await api.post('/projects/map-locations/comparison-pdf', options, {
       responseType: 'blob',

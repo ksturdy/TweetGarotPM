@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import html2canvas from 'html2canvas';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -114,81 +113,17 @@ const MapRefCapture: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> 
   return null;
 };
 
-const US_GEOJSON_URL = 'https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json';
-let cachedUSGeoJSON: any = null;
-
-async function applyUSMaskToCanvas(
-  canvas: HTMLCanvasElement,
-  leafletMap: L.Map,
-  cardEl: HTMLElement,
-  renderScale: number
-) {
-  if (!cachedUSGeoJSON) {
-    const resp = await fetch(US_GEOJSON_URL);
-    cachedUSGeoJSON = await resp.json();
-  }
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const mapContainer = leafletMap.getContainer();
-  const mapRect = mapContainer.getBoundingClientRect();
-  const cardRect = cardEl.getBoundingClientRect();
-  const ox = (mapRect.left - cardRect.left) * renderScale;
-  const oy = (mapRect.top - cardRect.top) * renderScale;
-  const mw = mapRect.width * renderScale;
-  const mh = mapRect.height * renderScale;
-
-  ctx.save();
-  ctx.beginPath();
-  // Outer rectangle covering the map area
-  ctx.moveTo(ox, oy);
-  ctx.lineTo(ox + mw, oy);
-  ctx.lineTo(ox + mw, oy + mh);
-  ctx.lineTo(ox, oy + mh);
-  ctx.closePath();
-
-  // Cut holes for each US state polygon
-  for (const feature of cachedUSGeoJSON.features) {
-    const { type, coordinates } = feature.geometry;
-    const rings: number[][][] = type === 'MultiPolygon'
-      ? coordinates.map((p: any) => p[0])
-      : [coordinates[0]];
-    for (const ring of rings) {
-      let first = true;
-      for (const [lng, lat] of ring) {
-        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
-        const x = pt.x * renderScale + ox;
-        const y = pt.y * renderScale + oy;
-        if (first) { ctx.moveTo(x, y); first = false; } else { ctx.lineTo(x, y); }
-      }
-      ctx.closePath();
-    }
-  }
-  ctx.fillStyle = '#ffffff';
-  ctx.fill('evenodd');
-
-  // Draw state borders
-  ctx.beginPath();
-  for (const feature of cachedUSGeoJSON.features) {
-    const { type, coordinates } = feature.geometry;
-    const rings: number[][][] = type === 'MultiPolygon'
-      ? coordinates.map((p: any) => p[0])
-      : [coordinates[0]];
-    for (const ring of rings) {
-      let first = true;
-      for (const [lng, lat] of ring) {
-        const pt = leafletMap.latLngToContainerPoint([lat, lng]);
-        const x = pt.x * renderScale + ox;
-        const y = pt.y * renderScale + oy;
-        if (first) { ctx.moveTo(x, y); first = false; } else { ctx.lineTo(x, y); }
-      }
-      ctx.closePath();
-    }
-  }
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 1.5 * renderScale;
-  ctx.stroke();
-  ctx.restore();
+/** Resolve the current tile URL based on map style + active layers */
+function resolveTileUrl(mapStyle: string, hasRevenue: boolean): string {
+  if (mapStyle === 'stamen-terrain' && hasRevenue) return 'https://tiles.stadiamaps.com/tiles/stamen_terrain_background/{z}/{x}/{y}{r}.png';
+  if (mapStyle === 'stamen-terrain') return 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}{r}.png';
+  if (mapStyle === 'stamen-toner' && hasRevenue) return 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}{r}.png';
+  if (mapStyle === 'stamen-toner') return 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png';
+  if (mapStyle === 'esri-street') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+  if (mapStyle === 'esri-topo') return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+  if (mapStyle === 'osm') return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  if (hasRevenue) return 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
+  return 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 }
 
 const ProjectLocations: React.FC = () => {
@@ -375,22 +310,22 @@ const ProjectLocations: React.FC = () => {
     setPdfLoading(true);
     setShowExportModal(false);
     try {
-      // Capture the map as a base64 PNG
-      let mapImage: string | undefined;
-      if (mapRef.current) {
-        const renderScale = 2;
-        const canvas = await html2canvas(mapRef.current, {
-          useCORS: true,
-          allowTaint: false,
-          scale: renderScale,
-          logging: false,
-        });
-        // Post-process: draw white mask outside US boundaries
-        if (leafletMapRef.current) {
-          await applyUSMaskToCanvas(canvas, leafletMapRef.current, mapRef.current, renderScale);
-        }
-        mapImage = canvas.toDataURL('image/png');
-      }
+      // Gather current map viewport
+      const map = leafletMapRef.current;
+      const center = map ? [map.getCenter().lat, map.getCenter().lng] : [39.8283, -98.5795];
+      const zoom = map ? map.getZoom() : 4;
+      const tileUrl = resolveTileUrl(mapStyle, standardLayers.includes('revenue'));
+
+      // Gather custom pin data for enabled layers
+      const customPinData = enabledCustomLayers
+        .map(layerId => {
+          const layer = customLayers.find(l => l.id === layerId);
+          const pins = customPinQueries.data?.[layerId] || [];
+          return layer && pins.length > 0
+            ? { pins, color: layer.pin_color, name: layer.name }
+            : null;
+        })
+        .filter(Boolean);
 
       await projectsApi.downloadLocationsPdf({
         status: statusFilter || undefined,
@@ -399,8 +334,14 @@ const ProjectLocations: React.FC = () => {
         customer: customerFilter || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
-        mapImage,
         includeList,
+        mapConfig: {
+          center,
+          zoom,
+          tileUrl,
+          standardLayers,
+          customPins: customPinData,
+        },
       });
     } catch (err) {
       console.error('PDF download failed:', err);

@@ -119,6 +119,7 @@ export interface CostCategorySummary {
   jtd_cost: number;
   committed_cost: number;
   projected_cost: number;
+  prior_week_cost: number;
 }
 
 export interface LaborTradeSummary {
@@ -128,7 +129,9 @@ export interface LaborTradeSummary {
   jtd_hours: number;
   est_cost: number;
   jtd_cost: number;
+  committed_cost: number;
   projected_cost: number;
+  prior_week_cost: number;
 }
 
 export interface PhaseCodeCostSummary {
@@ -145,7 +148,9 @@ export interface PhaseCodeCostSummary {
     jtd_hours: number;
     est_cost: number;
     jtd_cost: number;
+    committed_cost: number;
     projected_cost: number;
+    prior_week_cost: number;
   };
 }
 

@@ -7,7 +7,7 @@ import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { format } from 'date-fns';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
-const fmt =(value: number | string | null | undefined): string => {
+const fmt = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '-';
@@ -21,6 +21,13 @@ const fmtPct = (value: number | string | null | undefined): string => {
   return `${(num * 100).toFixed(1)}%`;
 };
 
+const fmtPctRaw = (value: number | string | null | undefined): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return '-';
+  return `${(num * 100).toFixed(2)}%`;
+};
+
 const fmtNum = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -32,7 +39,7 @@ const fmtRate = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return '-';
-  return `$${num.toFixed(2)}/hr`;
+  return `$${num.toFixed(2)}`;
 };
 
 const calcPctComplete = (earned: number | string | null | undefined, projected: number | string | null | undefined): string => {
@@ -40,7 +47,7 @@ const calcPctComplete = (earned: number | string | null | undefined, projected: 
   const earnedNum = typeof earned === 'string' ? parseFloat(earned) : earned;
   const projectedNum = typeof projected === 'string' ? parseFloat(projected) : projected;
   if (isNaN(earnedNum) || isNaN(projectedNum) || projectedNum === 0) return '-';
-  return `${((earnedNum / projectedNum) * 100).toFixed(1)}%`;
+  return `${((earnedNum / projectedNum) * 100).toFixed(2)}%`;
 };
 
 const getProjectedColor = (projected: number | string | null | undefined, estimate: number | string | null | undefined): string | undefined => {
@@ -48,27 +55,22 @@ const getProjectedColor = (projected: number | string | null | undefined, estima
   const projNum = typeof projected === 'string' ? parseFloat(projected) : projected;
   const estNum = typeof estimate === 'string' ? parseFloat(estimate) : estimate;
   if (isNaN(projNum) || isNaN(estNum) || estNum === 0) return undefined;
-
   const ratio = projNum / estNum;
-  if (ratio < 0.95) return '#10b981'; // Green: under budget (< 95%)
-  if (ratio <= 1.05) return '#f59e0b'; // Yellow: close to budget (95-105%)
-  return '#ef4444'; // Red: over budget (> 105%)
+  if (ratio < 0.95) return '#10b981';
+  if (ratio <= 1.05) return '#f59e0b';
+  return '#ef4444';
 };
 
 const getCashFlowColor = (cashFlow: number | string | null | undefined): string | undefined => {
   if (cashFlow === null || cashFlow === undefined) return undefined;
   const num = typeof cashFlow === 'string' ? parseFloat(cashFlow) : cashFlow;
   if (isNaN(num) || num === 0) return undefined;
-  return num > 0 ? '#10b981' : '#ef4444'; // Green for positive, Red for negative
+  return num > 0 ? '#10b981' : '#ef4444';
 };
 
-const getMarginColor = (margin: number | string | null | undefined): string | undefined => {
-  if (margin === null || margin === undefined) return undefined;
-  const num = typeof margin === 'string' ? parseFloat(margin) : margin;
-  if (isNaN(num)) return undefined;
-  if (num >= 0.15) return '#10b981'; // Green: good margin (>= 15%)
-  if (num >= 0.05) return '#f59e0b'; // Yellow: acceptable margin (5-15%)
-  return '#ef4444'; // Red: poor margin (< 5%)
+const getVarianceColor = (variance: number): string | undefined => {
+  if (variance === 0) return undefined;
+  return variance > 0 ? '#10b981' : '#ef4444';
 };
 
 const getGrossProfitColor = (actual: number | string | null | undefined, estimate: number | string | null | undefined): string | undefined => {
@@ -76,85 +78,42 @@ const getGrossProfitColor = (actual: number | string | null | undefined, estimat
   const actualNum = typeof actual === 'string' ? parseFloat(actual) : actual;
   const estNum = typeof estimate === 'string' ? parseFloat(estimate) : estimate;
   if (isNaN(actualNum) || isNaN(estNum) || estNum === 0) return undefined;
-
-  // For gross profit, negative is always bad
-  if (actualNum < 0) return '#ef4444'; // Red: losing money
-
+  if (actualNum < 0) return '#ef4444';
   const ratio = actualNum / estNum;
-  if (ratio >= 0.95) return '#10b981'; // Green: meeting or exceeding estimate (>= 95%)
-  if (ratio >= 0.75) return '#f59e0b'; // Yellow: somewhat below estimate (75-95%)
-  return '#ef4444'; // Red: significantly below estimate (< 75%)
+  if (ratio >= 0.95) return '#10b981';
+  if (ratio >= 0.75) return '#f59e0b';
+  return '#ef4444';
 };
 
-const Row: React.FC<{ label: string; value: string; highlight?: boolean; valueColor?: string }> = ({ label, value, highlight, valueColor }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
-    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{label}</span>
+const num = (v: number | string | null | undefined): number => {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return isNaN(n) ? 0 : n;
+};
+
+// Shared table cell styles
+const thStyle: React.CSSProperties = {
+  textAlign: 'right', padding: '0.35rem 0.5rem', fontSize: '0.7rem', fontWeight: 600,
+  color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0',
+};
+const tdStyle: React.CSSProperties = {
+  textAlign: 'right', padding: '0.4rem 0.5rem', fontSize: '0.8rem',
+  borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap',
+};
+const tfStyle: React.CSSProperties = {
+  textAlign: 'right', padding: '0.4rem 0.5rem', fontSize: '0.8rem', fontWeight: 700,
+  borderTop: '2px solid #e2e8f0', whiteSpace: 'nowrap',
+};
+
+// Summary box row component
+const SRow: React.FC<{ label: string; value: string; highlight?: boolean; valueColor?: string; italic?: boolean }> = ({ label, value, highlight, valueColor, italic }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.2rem 0', borderBottom: '1px solid #f1f5f9' }}>
+    <span style={{ color: italic ? '#94a3b8' : '#64748b', fontSize: '0.78rem', fontStyle: italic ? 'italic' : 'normal' }}>{label}</span>
     <span style={{
-      fontWeight: highlight ? 600 : 400,
-      color: valueColor ? '#ffffff' : (highlight ? '#1e40af' : '#1e293b'),
-      fontSize: '0.8rem',
-      backgroundColor: valueColor ? valueColor : 'transparent',
-      padding: valueColor ? '0.15rem 0.5rem' : '0',
-      borderRadius: valueColor ? '4px' : '0',
+      fontWeight: highlight ? 700 : 400, fontSize: '0.8rem',
+      color: valueColor || (highlight ? '#1e293b' : '#334155'),
+      fontVariantNumeric: 'tabular-nums',
     }}>{value}</span>
-  </div>
-);
-
-const Section: React.FC<{
-  title: string;
-  children: React.ReactNode;
-  onClick?: () => void;
-}> = ({ title, children, onClick }) => (
-  <div style={{ marginBottom: '0.75rem' }}>
-    <div
-      style={{
-        fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase',
-        marginBottom: '0.5rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.25rem',
-        cursor: onClick ? 'pointer' : 'default',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        userSelect: onClick ? 'none' : 'auto',
-      }}
-      onClick={onClick}
-    >
-      <span>{title}</span>
-      {onClick && (
-        <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>▶</span>
-      )}
-    </div>
-    {children}
-  </div>
-);
-
-const LaborHeader: React.FC = () => (
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.15rem 0', borderBottom: '1px solid #e2e8f0', marginBottom: '0.15rem' }}>
-    <span />
-    <span style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Hours</span>
-    <span style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Cost</span>
-  </div>
-);
-
-const LaborRow: React.FC<{
-  label: string; hours: string; cost: string;
-  highlight?: boolean; hoursColor?: string; costColor?: string;
-}> = ({ label, hours, cost, highlight, hoursColor, costColor }) => (
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', padding: '0.2rem 0', borderBottom: '1px solid #f1f5f9' }}>
-    <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{label}</span>
-    <span style={{
-      textAlign: 'right', fontWeight: highlight ? 600 : 400, fontSize: '0.8rem',
-      color: hoursColor ? '#ffffff' : (highlight ? '#1e40af' : '#1e293b'),
-      backgroundColor: hoursColor || 'transparent',
-      padding: hoursColor ? '0.1rem 0.4rem' : '0',
-      borderRadius: hoursColor ? '4px' : '0',
-      justifySelf: 'end',
-    }}>{hours}</span>
-    <span style={{
-      textAlign: 'right', fontWeight: highlight ? 600 : 400, fontSize: '0.8rem',
-      color: costColor ? '#ffffff' : (highlight ? '#1e40af' : '#1e293b'),
-      backgroundColor: costColor || 'transparent',
-      padding: costColor ? '0.1rem 0.4rem' : '0',
-      borderRadius: costColor ? '4px' : '0',
-      justifySelf: 'end',
-    }}>{cost}</span>
   </div>
 );
 
@@ -200,19 +159,19 @@ const ProjectFinancials: React.FC = () => {
   });
 
   const getTradeSummary = (trade: string) => {
-    if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, projected_cost: 0 };
+    if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 };
     const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === trade);
     return {
       est_hours: rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0),
       jtd_hours: rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_hours, 0),
       est_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_cost, 0),
       jtd_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_cost, 0),
+      committed_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + (r.committed_cost || 0), 0),
       projected_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0),
+      prior_week_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + (r.prior_week_cost || 0), 0),
     };
   };
 
-  // Projected Hours = Projected Cost / Rate
-  // Rate = JTD Cost / JTD Hours (preferred), fallback to Est Cost / Est Hours
   const calcProjectedHours = (summary: { jtd_cost: number; jtd_hours: number; est_cost: number; est_hours: number; projected_cost: number }) => {
     if (!summary.projected_cost) return 0;
     const rate = summary.jtd_hours > 0
@@ -236,11 +195,8 @@ const ProjectFinancials: React.FC = () => {
     },
   });
 
-  const fmtDollarInput = (num: number) =>
-    Math.round(num).toLocaleString('en-US');
-
-  const parseDollarInput = (str: string) =>
-    parseFloat(str.replace(/,/g, ''));
+  const fmtDollarInput = (n: number) => Math.round(n).toLocaleString('en-US');
+  const parseDollarInput = (str: string) => parseFloat(str.replace(/,/g, ''));
 
   useEffect(() => {
     if (project) {
@@ -254,12 +210,11 @@ const ProjectFinancials: React.FC = () => {
   const projectedRevenue = c ? parseFloat(String(c.projected_revenue)) || 0 : 0;
 
   const handleMarginDollarChange = (value: string) => {
-    // Allow only digits, commas, and minus
     const cleaned = value.replace(/[^0-9,\-]/g, '');
     setMarginOverride(cleaned);
-    const num = parseDollarInput(cleaned);
-    if (!isNaN(num) && projectedRevenue > 0) {
-      const pct = (num / projectedRevenue) * 100;
+    const n = parseDollarInput(cleaned);
+    if (!isNaN(n) && projectedRevenue > 0) {
+      const pct = (n / projectedRevenue) * 100;
       setMarginPctOverride(isNaN(pct) ? '' : String(Number(pct.toFixed(2))));
     } else if (!cleaned) {
       setMarginPctOverride('');
@@ -267,10 +222,8 @@ const ProjectFinancials: React.FC = () => {
   };
 
   const handleMarginDollarBlur = () => {
-    const num = parseDollarInput(marginOverride);
-    if (!isNaN(num) && marginOverride) {
-      setMarginOverride(fmtDollarInput(num));
-    }
+    const n = parseDollarInput(marginOverride);
+    if (!isNaN(n) && marginOverride) setMarginOverride(fmtDollarInput(n));
   };
 
   const handleMarginPctChange = (value: string) => {
@@ -286,9 +239,7 @@ const ProjectFinancials: React.FC = () => {
   const saveOverridesMutation = useMutation({
     mutationFn: (data: { override_original_estimated_margin: number | null; override_original_estimated_margin_pct: number | null }) =>
       projectsApi.update(Number(projectId), data as any),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['project', projectId] }); },
     onError: (error: any) => {
       console.error('Error saving margin overrides:', error);
       toast.error('Failed to save overrides.');
@@ -326,50 +277,76 @@ const ProjectFinancials: React.FC = () => {
 
   if (isLoading) return <div className="loading">Loading...</div>;
 
+  // Computed values for summary boxes
+  const billedAmt = num(c?.billed_amount);
+  const contractAmt = num(c?.contract_amount);
+  const earnedRev = num(c?.earned_revenue);
+  const pctBilled = contractAmt > 0 ? billedAmt / contractAmt : 0;
+  const overUnderBilled = billedAmt - earnedRev;
+
+  // Build cost type rows for the main table
+  const buildCostRows = () => {
+    if (!costSummary) return null;
+    const lt = costSummary.labor_totals;
+    const cs = costSummary.costs;
+    return [
+      { label: 'Labor', num: 1, costType: 1, est_hours: lt.est_hours, est_cost: lt.est_cost, prev_wk: lt.prior_week_cost, jtd_hours: lt.jtd_hours, jtd_cost: lt.jtd_cost, committed: lt.committed_cost, projected: lt.projected_cost },
+      { label: 'Material', num: 2, costType: 2, est_hours: 0, est_cost: cs.material.est_cost, prev_wk: cs.material.prior_week_cost, jtd_hours: 0, jtd_cost: cs.material.jtd_cost, committed: cs.material.committed_cost, projected: cs.material.projected_cost },
+      { label: 'Subcontracts', num: 3, costType: 3, est_hours: 0, est_cost: cs.subcontracts.est_cost, prev_wk: cs.subcontracts.prior_week_cost, jtd_hours: 0, jtd_cost: cs.subcontracts.jtd_cost, committed: cs.subcontracts.committed_cost, projected: cs.subcontracts.projected_cost },
+      { label: 'Rentals', num: 4, costType: 4, est_hours: 0, est_cost: cs.rentals.est_cost, prev_wk: cs.rentals.prior_week_cost, jtd_hours: 0, jtd_cost: cs.rentals.jtd_cost, committed: cs.rentals.committed_cost, projected: cs.rentals.projected_cost },
+      { label: 'MEP Equipment', num: 5, costType: 5, est_hours: 0, est_cost: cs.mep_equipment.est_cost, prev_wk: cs.mep_equipment.prior_week_cost, jtd_hours: 0, jtd_cost: cs.mep_equipment.jtd_cost, committed: cs.mep_equipment.committed_cost, projected: cs.mep_equipment.projected_cost },
+      { label: 'General Conditions', num: 6, costType: 6, est_hours: 0, est_cost: cs.general_conditions.est_cost, prev_wk: cs.general_conditions.prior_week_cost, jtd_hours: 0, jtd_cost: cs.general_conditions.jtd_cost, committed: cs.general_conditions.committed_cost, projected: cs.general_conditions.projected_cost },
+    ];
+  };
+
+  const costRows = buildCostRows();
+
+  // Compute totals from cost rows
+  const totals = costRows ? costRows.reduce((acc, r) => ({
+    est_hours: acc.est_hours + r.est_hours,
+    est_cost: acc.est_cost + r.est_cost,
+    prev_wk: acc.prev_wk + r.prev_wk,
+    jtd_hours: acc.jtd_hours + r.jtd_hours,
+    jtd_cost: acc.jtd_cost + r.jtd_cost,
+    committed: acc.committed + r.committed,
+    projected: acc.projected + r.projected,
+  }), { est_hours: 0, est_cost: 0, prev_wk: 0, jtd_hours: 0, jtd_cost: 0, committed: 0, projected: 0 }) : null;
+
+  // Cost type colors for the numbered badges (matching Vista's color coding)
+  const costTypeColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+      {/* ===== HEADER ===== */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
         <div>
           <Link to={`/projects/${projectId}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>&larr; Back</Link>
-          <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Financials</h2>
-          {project && <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{project.name}</div>}
+          <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.2rem', color: '#1e293b' }}>Contract Status Drilldown</h2>
+          {project && <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{project.number} - {project.name}</div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-          {c && (
-            <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#64748b' }}>
-              <div><strong>{c.contract_number}</strong> | {c.status}</div>
-              <div>{c.project_manager_name} | Dept {c.department_code}</div>
-            </div>
-          )}
           {c && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 onClick={() => captureSnapshotMutation.mutate()}
                 className="btn btn-secondary"
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                 disabled={captureSnapshotMutation.isPending}
               >
-                {captureSnapshotMutation.isPending ? '⏳ Capturing...' : '📸 Capture Snapshot'}
+                {captureSnapshotMutation.isPending ? 'Capturing...' : 'Capture Snapshot'}
               </button>
               <Link
                 to={`/projects/${projectId}/performance`}
                 className="btn btn-primary"
-                style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', textDecoration: 'none' }}
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
               >
-                📊 Performance Trends
+                Performance Trends
               </Link>
             </div>
           )}
           {showSnapshotSuccess && (
-            <div style={{
-              fontSize: '0.75rem',
-              color: '#047857',
-              background: '#d1fae5',
-              padding: '0.35rem 0.6rem',
-              borderRadius: '4px',
-              border: '1px solid #10b981'
-            }}>
-              ✓ Snapshot captured successfully!
+            <div style={{ fontSize: '0.75rem', color: '#047857', background: '#d1fae5', padding: '0.3rem 0.5rem', borderRadius: '4px', border: '1px solid #10b981' }}>
+              Snapshot captured!
             </div>
           )}
         </div>
@@ -377,7 +354,6 @@ const ProjectFinancials: React.FC = () => {
 
       {!c ? (
         <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📊</div>
           <h3 style={{ margin: 0, color: '#64748b' }}>No Vista Contract Linked</h3>
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
             Link a contract in the <Link to="/settings/vista">Vista Linking Manager</Link>
@@ -385,82 +361,243 @@ const ProjectFinancials: React.FC = () => {
         </div>
       ) : (
         <>
-        {jobs && jobs.length > 1 && (
-          <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Job:</span>
-            <button
-              onClick={() => setSelectedJob(null)}
-              style={{
-                fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
-                border: selectedJob === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-                background: selectedJob === null ? '#eff6ff' : '#fff',
-                cursor: 'pointer', fontWeight: selectedJob === null ? 600 : 400,
-              }}
-            >
-              All Jobs ({jobs.length})
-            </button>
-            {jobs.map(j => (
+          {/* ===== CONTRACT INFO BAR ===== */}
+          <div className="card" style={{ padding: '0.6rem 0.85rem', marginBottom: '0.75rem', fontSize: '0.78rem', color: '#334155' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <span><strong>Contract:</strong> {c.contract_number}</span>
+                {c.description && <span><strong>Description:</strong> {c.description}</span>}
+                {c.customer_name && <span><strong>Customer:</strong> {c.customer_name}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                {c.project_manager_name && <span><strong>PM:</strong> {c.project_manager_name}</span>}
+                {c.department_code && <span><strong>Dept:</strong> {c.department_code}</span>}
+                {c.status && <span><strong>Status:</strong> {c.status}</span>}
+                {c.start_month && <span><strong>Start:</strong> {format(new Date(c.start_month), 'MM/yy')}</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* ===== JOB SELECTOR ===== */}
+          {jobs && jobs.length > 1 && (
+            <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Job:</span>
               <button
-                key={j.job}
-                onClick={() => setSelectedJob(j.job)}
+                onClick={() => setSelectedJob(null)}
                 style={{
                   fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
-                  border: selectedJob === j.job ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-                  background: selectedJob === j.job ? '#eff6ff' : '#fff',
-                  cursor: 'pointer', fontWeight: selectedJob === j.job ? 600 : 400,
+                  border: selectedJob === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                  background: selectedJob === null ? '#eff6ff' : '#fff',
+                  cursor: 'pointer', fontWeight: selectedJob === null ? 600 : 400,
                 }}
-                title={j.job_description}
               >
-                {j.job}
+                All Jobs ({jobs.length})
               </button>
-            ))}
-            {selectedJob && (() => {
-              const selected = jobs.find(j => j.job === selectedJob);
-              return selected?.job_description ? (
-                <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic', marginLeft: '0.25rem' }}>
-                  — {selected.job_description}
-                </span>
-              ) : null;
-            })()}
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-          {/* Column 1: Contract & Revenue */}
-          <div className="card" style={{ padding: '0.75rem' }}>
-            <Section title="Contract Values">
-              <Row label="Original Contract" value={fmt(c.orig_contract_amount)} />
-              <Row label="Current Contract" value={fmt(c.contract_amount)} highlight />
-              <Row label="Approved Changes" value={fmt(c.approved_changes)} />
-              <Row label="Pending COs" value={fmt(c.pending_change_orders)} />
-              <Row label="CO Count" value={fmtNum(c.change_order_count)} />
-            </Section>
-            <Section title="Revenue & Progress">
-              <Row label="Projected Revenue" value={fmt(c.projected_revenue)} highlight />
-              <Row label="Earned Revenue" value={fmt(c.earned_revenue)} />
-              <Row label="% Complete" value={calcPctComplete(c.earned_revenue, c.projected_revenue)} highlight />
-              <Row label="Backlog" value={fmt(c.backlog)} />
-            </Section>
-            <Section title="Margin">
-              <Row label="Gross Profit $" value={fmt(c.gross_profit_dollars)} valueColor={getGrossProfitColor(c.gross_profit_dollars, c.original_estimated_margin)} />
-              <Row label="Gross Profit %" value={fmtPct(c.gross_profit_percent)} valueColor={getGrossProfitColor(c.gross_profit_percent, c.original_estimated_margin_pct)} />
-              <Row label="Orig Est Margin" value={fmt(c.original_estimated_margin)} />
-              <Row label="Orig Est Margin %" value={fmtPct(c.original_estimated_margin_pct)} />
-              {project?.override_original_estimated_margin != null && (
-                <Row label="Override Margin $" value={fmt(project.override_original_estimated_margin)} valueColor="#2563eb" />
-              )}
-              {project?.override_original_estimated_margin_pct != null && (
-                <Row label="Override Margin %" value={fmtPct(project.override_original_estimated_margin_pct)} valueColor="#2563eb" />
-              )}
-              <div style={{ marginTop: '0.35rem' }}>
+              {jobs.map(j => (
                 <button
-                  onClick={() => setShowOverrideInputs(!showOverrideInputs)}
-                  style={{ fontSize: '0.65rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  key={j.job}
+                  onClick={() => setSelectedJob(j.job)}
+                  style={{
+                    fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+                    border: selectedJob === j.job ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                    background: selectedJob === j.job ? '#eff6ff' : '#fff',
+                    cursor: 'pointer', fontWeight: selectedJob === j.job ? 600 : 400,
+                  }}
+                  title={j.job_description}
                 >
-                  {showOverrideInputs ? 'Hide Override' : 'Set Override'}
+                  {j.job}
                 </button>
-              </div>
+              ))}
+              {selectedJob && (() => {
+                const selected = jobs.find(j => j.job === selectedJob);
+                return selected?.job_description ? (
+                  <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic', marginLeft: '0.25rem' }}>
+                    — {selected.job_description}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          {/* ===== THREE-BOX SUMMARY ROW ===== */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            {/* Box 1: Contract */}
+            <div className="card" style={{ padding: '0.6rem 0.75rem' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', borderBottom: '2px solid #cbd5e1', paddingBottom: '0.25rem', marginBottom: '0.35rem' }}>Contract</div>
+              <SRow label="Original Contract" value={fmt(c.orig_contract_amount)} highlight />
+              <SRow label="Approved Changes" value={fmt(c.approved_changes)} />
+              <SRow label="Revised Contract" value={fmt(c.contract_amount)} highlight />
+              <SRow label="Pending Change Orders" value={fmt(c.pending_change_orders)} italic={num(c.pending_change_orders) > 0} valueColor={num(c.pending_change_orders) > 0 ? '#0891b2' : undefined} />
+              <SRow label="Est Revenue" value={fmt(c.projected_revenue)} highlight />
+            </div>
+
+            {/* Box 2: Progress */}
+            <div className="card" style={{ padding: '0.6rem 0.75rem' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', borderBottom: '2px solid #cbd5e1', paddingBottom: '0.25rem', marginBottom: '0.35rem' }}>Progress</div>
+              <SRow label="% Complete" value={calcPctComplete(c.earned_revenue, c.projected_revenue)} highlight />
+              <SRow label="% Billed" value={fmtPctRaw(pctBilled)} />
+              <SRow label="Billed To Date" value={fmt(c.billed_amount)} />
+              <SRow label="Earned Revenue" value={fmt(c.earned_revenue)} />
+              <SRow label="Over/(Under) Billed" value={fmt(overUnderBilled)} valueColor={overUnderBilled !== 0 ? (overUnderBilled > 0 ? '#10b981' : '#ef4444') : undefined} />
+            </div>
+
+            {/* Box 3: Net Cash Flow */}
+            <div className="card" style={{ padding: '0.6rem 0.75rem' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', borderBottom: '2px solid #cbd5e1', paddingBottom: '0.25rem', marginBottom: '0.35rem' }}>Net Cash Flow</div>
+              <SRow label="Cash Received" value={fmt(c.received_amount)} />
+              <SRow label="Cash Paid" value={fmt(c.actual_cost)} />
+              <SRow label="Net Cash Flow" value={fmt(c.cash_flow)} highlight valueColor={getCashFlowColor(c.cash_flow)} />
+              <SRow label="Open Receivables" value={fmt(c.open_receivables)} italic />
+              <SRow label="Backlog" value={fmt(c.backlog)} />
+            </div>
+          </div>
+
+          {/* ===== COST TYPE TABLE ===== */}
+          <div className="card" style={{ padding: 0, overflow: 'auto', marginBottom: '0.75rem' }}>
+            {costRows && totals ? (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', tableLayout: 'auto' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <th style={{ ...thStyle, textAlign: 'left', minWidth: '140px' }}>Cost Type</th>
+                    <th style={thStyle}>Est Hours</th>
+                    <th style={thStyle}>Est Cost</th>
+                    <th style={thStyle}>Prev Week</th>
+                    <th style={thStyle}>JTD Hours</th>
+                    <th style={thStyle}>JTD Cost</th>
+                    <th style={thStyle}>Variance</th>
+                    <th style={thStyle}>Committed</th>
+                    <th style={thStyle}>Projected @ Compl</th>
+                    <th style={thStyle}>Variance</th>
+                    <th style={thStyle}>Rem Spend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costRows.map((row, i) => {
+                    const jtdVariance = row.est_cost - row.jtd_cost;
+                    const projVariance = row.est_cost - row.projected;
+                    const remSpend = row.projected - row.committed - row.jtd_cost;
+                    return (
+                      <tr
+                        key={row.costType}
+                        onClick={() => drillIn(row.costType)}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
+                      >
+                        <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>
+                          <span style={{
+                            display: 'inline-block', width: '1.2rem', height: '1.2rem', lineHeight: '1.2rem',
+                            textAlign: 'center', borderRadius: '3px', marginRight: '0.4rem',
+                            backgroundColor: costTypeColors[i], color: '#fff', fontSize: '0.65rem', fontWeight: 700,
+                          }}>{row.num}</span>
+                          {row.label}
+                        </td>
+                        <td style={tdStyle}>{row.est_hours ? fmtNum(row.est_hours) : '-'}</td>
+                        <td style={tdStyle}>{fmt(row.est_cost)}</td>
+                        <td style={tdStyle}>{fmt(row.prev_wk)}</td>
+                        <td style={tdStyle}>{row.jtd_hours ? fmtNum(row.jtd_hours) : '-'}</td>
+                        <td style={tdStyle}>{fmt(row.jtd_cost)}</td>
+                        <td style={{ ...tdStyle, color: getVarianceColor(jtdVariance), fontWeight: 500 }}>{fmt(jtdVariance)}</td>
+                        <td style={tdStyle}>{fmt(row.committed)}</td>
+                        <td style={{ ...tdStyle, color: getProjectedColor(row.projected, row.est_cost), fontWeight: 600 }}>{fmt(row.projected)}</td>
+                        <td style={{ ...tdStyle, color: getVarianceColor(projVariance), fontWeight: 500 }}>{fmt(projVariance)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500, color: remSpend > 0 ? '#3b82f6' : remSpend < 0 ? '#ef4444' : undefined }}>{fmt(remSpend)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <td style={{ ...tfStyle, textAlign: 'left' }}>Total for Contract</td>
+                    <td style={tfStyle}>{totals.est_hours ? fmtNum(totals.est_hours) : '-'}</td>
+                    <td style={tfStyle}>{fmt(totals.est_cost)}</td>
+                    <td style={tfStyle}>{fmt(totals.prev_wk)}</td>
+                    <td style={tfStyle}>{totals.jtd_hours ? fmtNum(totals.jtd_hours) : '-'}</td>
+                    <td style={tfStyle}>{fmt(totals.jtd_cost)}</td>
+                    <td style={{ ...tfStyle, color: getVarianceColor(totals.est_cost - totals.jtd_cost) }}>{fmt(totals.est_cost - totals.jtd_cost)}</td>
+                    <td style={tfStyle}>{fmt(totals.committed)}</td>
+                    <td style={{ ...tfStyle, color: getProjectedColor(totals.projected, totals.est_cost) }}>{fmt(totals.projected)}</td>
+                    <td style={{ ...tfStyle, color: getVarianceColor(totals.est_cost - totals.projected) }}>{fmt(totals.est_cost - totals.projected)}</td>
+                    {(() => { const totalRemSpend = totals.projected - totals.committed - totals.jtd_cost; return (
+                      <td style={{ ...tfStyle, color: totalRemSpend > 0 ? '#3b82f6' : totalRemSpend < 0 ? '#ef4444' : undefined }}>{fmt(totalRemSpend)}</td>
+                    ); })()}
+                  </tr>
+                </tfoot>
+              </table>
+            ) : (
+              /* Fallback: contract-level totals when no phase code data */
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Cost Type</th>
+                    <th style={thStyle}>Estimate</th>
+                    <th style={thStyle}>JTD</th>
+                    <th style={thStyle}>Projected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: 'Labor', num: 1, est: c.current_est_labor_cost, jtd: null, proj: c.ttl_labor_projected },
+                    { label: 'Material', num: 2, est: c.material_estimate, jtd: c.material_jtd, proj: c.material_projected },
+                    { label: 'Subcontracts', num: 3, est: c.subcontracts_estimate, jtd: c.subcontracts_jtd, proj: c.subcontracts_projected },
+                    { label: 'Rentals', num: 4, est: c.rentals_estimate, jtd: c.rentals_jtd, proj: c.rentals_projected },
+                    { label: 'MEP Equipment', num: 5, est: c.mep_equip_estimate, jtd: c.mep_equip_jtd, proj: c.mep_equip_projected },
+                  ].map((row, i) => (
+                    <tr key={row.num} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>
+                        <span style={{
+                          display: 'inline-block', width: '1.2rem', height: '1.2rem', lineHeight: '1.2rem',
+                          textAlign: 'center', borderRadius: '3px', marginRight: '0.4rem',
+                          backgroundColor: costTypeColors[i], color: '#fff', fontSize: '0.65rem', fontWeight: 700,
+                        }}>{row.num}</span>
+                        {row.label}
+                      </td>
+                      <td style={tdStyle}>{fmt(row.est)}</td>
+                      <td style={tdStyle}>{fmt(row.jtd)}</td>
+                      <td style={{ ...tdStyle, color: getProjectedColor(row.proj, row.est), fontWeight: 600 }}>{fmt(row.proj)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <td style={{ ...tfStyle, textAlign: 'left' }}>Total</td>
+                    <td style={tfStyle}>{fmt(c.current_est_cost)}</td>
+                    <td style={tfStyle}>{fmt(c.actual_cost)}</td>
+                    <td style={{ ...tfStyle, color: getProjectedColor(c.projected_cost, c.current_est_cost) }}>{fmt(c.projected_cost)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+
+          {/* ===== BOTTOM METRICS BAR ===== */}
+          <div className="card" style={{ padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem' }}>
+              <MetricChip label="Estimated Margin" value={fmt(c.original_estimated_margin)} />
+              <MetricChip label="Estimated Margin %" value={fmtPct(c.original_estimated_margin_pct)} />
+              <MetricChip label="Gross Margin" value={fmt(c.gross_profit_dollars)}
+                valueColor={getGrossProfitColor(c.gross_profit_dollars, c.original_estimated_margin)} />
+              <MetricChip label="Gross Margin %" value={fmtPct(c.gross_profit_percent)}
+                valueColor={getGrossProfitColor(c.gross_profit_percent, c.original_estimated_margin_pct)} />
+              <MetricChip label="Estimated Labor Rate" value={fmtRate(c.estimated_labor_rate)} />
+              <MetricChip label="Actual Labor Rate" value={fmtRate(c.actual_labor_rate)}
+                valueColor={getProjectedColor(c.actual_labor_rate, c.estimated_labor_rate)} />
+            </div>
+            {/* Margin override controls */}
+            <div style={{ marginTop: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.35rem' }}>
+              {project?.override_original_estimated_margin != null && (
+                <div style={{ fontSize: '0.72rem', color: '#2563eb', marginBottom: '0.25rem' }}>
+                  Override: {fmt(project.override_original_estimated_margin)} ({fmtPct(project.override_original_estimated_margin_pct)})
+                </div>
+              )}
+              <button
+                onClick={() => setShowOverrideInputs(!showOverrideInputs)}
+                style={{ fontSize: '0.68rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+              >
+                {showOverrideInputs ? 'Hide Override' : 'Set Margin Override'}
+              </button>
               {showOverrideInputs && (
-                <div style={{ marginTop: '0.35rem', padding: '0.5rem', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                <div style={{ marginTop: '0.35rem', padding: '0.5rem', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0', maxWidth: '400px' }}>
                   <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.35rem' }}>
                     Override Vista margin for snapshots & charts
                   </div>
@@ -471,7 +608,7 @@ const ProjectFinancials: React.FC = () => {
                       onChange={e => handleMarginDollarChange(e.target.value)}
                       onBlur={handleMarginDollarBlur}
                       placeholder="Margin $"
-                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
+                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -480,247 +617,136 @@ const ProjectFinancials: React.FC = () => {
                       type="number" step="0.01" value={marginPctOverride}
                       onChange={e => handleMarginPctChange(e.target.value)}
                       placeholder="Margin %"
-                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px', width: '100%' }}
+                      style={{ flex: 1, fontSize: '0.75rem', padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: '3px' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={handleSaveOverrides}
-                      disabled={saveOverridesMutation.isPending}
-                      className="btn btn-primary"
-                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}
-                    >
+                    <button onClick={handleSaveOverrides} disabled={saveOverridesMutation.isPending}
+                      className="btn btn-primary" style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
                       {saveOverridesMutation.isPending ? 'Saving...' : 'Save'}
                     </button>
-                    <button
-                      onClick={() => backfillMutation.mutate()}
+                    <button onClick={() => backfillMutation.mutate()}
                       disabled={backfillMutation.isPending || (project?.override_original_estimated_margin == null && project?.override_original_estimated_margin_pct == null)}
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}
-                    >
+                      className="btn btn-secondary" style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
                       {backfillMutation.isPending ? 'Updating...' : 'Apply to Past Snapshots'}
                     </button>
-                    <button
-                      onClick={handleClearOverrides}
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', color: '#ef4444' }}
-                    >
+                    <button onClick={handleClearOverrides} className="btn btn-secondary"
+                      style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem', color: '#ef4444' }}>
                       Clear
                     </button>
                   </div>
                 </div>
               )}
-            </Section>
+            </div>
           </div>
 
-          {/* Column 2: Billing & Costs */}
-          <div className="card" style={{ padding: '0.75rem' }}>
-            <Section title="Billing & AR">
-              <Row label="Billed Amount" value={fmt(c.billed_amount)} />
-              <Row label="Received Amount" value={fmt(c.received_amount)} />
-              <Row label="Open Receivables" value={fmt(c.open_receivables)} highlight />
-              <Row label="Cash Flow" value={fmt(c.cash_flow)} valueColor={getCashFlowColor(c.cash_flow)} />
-            </Section>
-            <Section title="Costs">
-              <Row label="Actual Cost" value={fmt(c.actual_cost)} highlight />
-              <Row label="Projected Cost" value={fmt(c.projected_cost)} />
-              <Row label="Current Est Cost" value={fmt(c.current_est_cost)} />
-            </Section>
-            <Section title="Labor Rates">
-              <Row label="Actual Rate" value={fmtRate(c.actual_labor_rate)} valueColor={getProjectedColor(c.actual_labor_rate, c.estimated_labor_rate)} />
-              <Row label="Estimated Rate" value={fmtRate(c.estimated_labor_rate)} />
-              <Row label="Est Labor Cost" value={fmt(c.current_est_labor_cost)} />
-              <Row label="Labor Projected" value={fmt(c.ttl_labor_projected)} valueColor={getProjectedColor(c.ttl_labor_projected, c.current_est_labor_cost)} />
-            </Section>
-          </div>
-
-          {/* Column 3: Cost Breakdown (from Phase Codes) */}
-          <div className="card" style={{ padding: '0.75rem' }}>
-            {costSummary ? (
-              <>
-                <Section title="Material" onClick={() => drillIn(2)}>
-                  <Row label="Estimate" value={fmt(costSummary.costs.material.est_cost)} />
-                  <Row label="JTD" value={fmt(costSummary.costs.material.jtd_cost)} highlight />
-                  <Row label="Projected" value={fmt(costSummary.costs.material.projected_cost)} valueColor={getProjectedColor(costSummary.costs.material.projected_cost, costSummary.costs.material.est_cost)} />
-                </Section>
-                <Section title="Subcontracts" onClick={() => drillIn(3)}>
-                  <Row label="Estimate" value={fmt(costSummary.costs.subcontracts.est_cost)} />
-                  <Row label="JTD" value={fmt(costSummary.costs.subcontracts.jtd_cost)} highlight />
-                  <Row label="Projected" value={fmt(costSummary.costs.subcontracts.projected_cost)} valueColor={getProjectedColor(costSummary.costs.subcontracts.projected_cost, costSummary.costs.subcontracts.est_cost)} />
-                </Section>
-                <Section title="Rentals" onClick={() => drillIn(4)}>
-                  <Row label="Estimate" value={fmt(costSummary.costs.rentals.est_cost)} />
-                  <Row label="JTD" value={fmt(costSummary.costs.rentals.jtd_cost)} highlight />
-                  <Row label="Projected" value={fmt(costSummary.costs.rentals.projected_cost)} valueColor={getProjectedColor(costSummary.costs.rentals.projected_cost, costSummary.costs.rentals.est_cost)} />
-                </Section>
-                <Section title="MEP Equipment" onClick={() => drillIn(5)}>
-                  <Row label="Estimate" value={fmt(costSummary.costs.mep_equipment.est_cost)} />
-                  <Row label="JTD" value={fmt(costSummary.costs.mep_equipment.jtd_cost)} highlight />
-                  <Row label="Projected" value={fmt(costSummary.costs.mep_equipment.projected_cost)} valueColor={getProjectedColor(costSummary.costs.mep_equipment.projected_cost, costSummary.costs.mep_equipment.est_cost)} />
-                </Section>
-                <Section title="General Conditions" onClick={() => drillIn(6)}>
-                  <Row label="Estimate" value={fmt(costSummary.costs.general_conditions.est_cost)} />
-                  <Row label="JTD" value={fmt(costSummary.costs.general_conditions.jtd_cost)} highlight />
-                  <Row label="Projected" value={fmt(costSummary.costs.general_conditions.projected_cost)} valueColor={getProjectedColor(costSummary.costs.general_conditions.projected_cost, costSummary.costs.general_conditions.est_cost)} />
-                </Section>
-              </>
-            ) : (
-              <>
-                <Section title="Material">
-                  <Row label="Estimate" value={fmt(c.material_estimate)} />
-                  <Row label="JTD" value={fmt(c.material_jtd)} highlight />
-                  <Row label="Projected" value={fmt(c.material_projected)} valueColor={getProjectedColor(c.material_projected, c.material_estimate)} />
-                </Section>
-                <Section title="Subcontracts">
-                  <Row label="Estimate" value={fmt(c.subcontracts_estimate)} />
-                  <Row label="JTD" value={fmt(c.subcontracts_jtd)} highlight />
-                  <Row label="Projected" value={fmt(c.subcontracts_projected)} valueColor={getProjectedColor(c.subcontracts_projected, c.subcontracts_estimate)} />
-                </Section>
-                <Section title="Rentals">
-                  <Row label="Estimate" value={fmt(c.rentals_estimate)} />
-                  <Row label="JTD" value={fmt(c.rentals_jtd)} highlight />
-                  <Row label="Projected" value={fmt(c.rentals_projected)} valueColor={getProjectedColor(c.rentals_projected, c.rentals_estimate)} />
-                </Section>
-                <Section title="MEP Equipment">
-                  <Row label="Estimate" value={fmt(c.mep_equip_estimate)} />
-                  <Row label="JTD" value={fmt(c.mep_equip_jtd)} highlight />
-                  <Row label="Projected" value={fmt(c.mep_equip_projected)} valueColor={getProjectedColor(c.mep_equip_projected, c.mep_equip_estimate)} />
-                </Section>
-                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '0.5rem' }}>
-                  From contract totals. Import phase codes for detailed breakdown.
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Column 4: Labor Hours (from Phase Codes) */}
-          <div className="card" style={{ padding: '0.75rem' }}>
-            {costSummary ? (
-              <>
-                {(['pf', 'sm', 'pl'] as const).map(trade => {
-                  const ts = getTradeSummary(trade);
-                  const tradeLabel = trade === 'pf' ? 'Pipefitter (PF)' : trade === 'sm' ? 'Sheet Metal (SM)' : 'Plumbing (PL)';
-                  const projectedHours = calcProjectedHours(ts);
-                  return (
-                    <Section key={trade} title={tradeLabel} onClick={() => drillIn(1, trade)}>
-                      <LaborHeader />
-                      <LaborRow label="Estimate" hours={fmtNum(ts.est_hours)} cost={fmt(ts.est_cost)} />
-                      <LaborRow label="JTD" hours={fmtNum(ts.jtd_hours)} cost={fmt(ts.jtd_cost)} highlight />
-                      <LaborRow label="Projected" hours={fmtNum(projectedHours)} cost={fmt(ts.projected_cost)}
-                        hoursColor={getProjectedColor(projectedHours, ts.est_hours)}
-                        costColor={getProjectedColor(ts.projected_cost, ts.est_cost)} />
-                    </Section>
-                  );
-                })}
-                {costSummary.labor.some(l => l.trade === 'admin') && (
-                  (() => {
+          {/* ===== RATES BY PHASE PREFIX (Trade Drilldowns) ===== */}
+          {costSummary && (
+            <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+              <div style={{ padding: '0.5rem 0.75rem', borderBottom: '2px solid #e2e8f0', backgroundColor: '#f8fafc' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Rates By Phase Prefix</span>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc' }}>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Trade</th>
+                    <th style={thStyle}>Est Hours</th>
+                    <th style={thStyle}>JTD Hours</th>
+                    <th style={thStyle}>Proj Hours</th>
+                    <th style={thStyle}>Est Cost</th>
+                    <th style={thStyle}>JTD Cost</th>
+                    <th style={thStyle}>Projected Cost</th>
+                    <th style={thStyle}>Est Rate</th>
+                    <th style={thStyle}>JTD Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(['pf', 'sm', 'pl'] as const).map(trade => {
+                    const ts = getTradeSummary(trade);
+                    const projHours = calcProjectedHours(ts);
+                    const tradeLabel = trade === 'pf' ? 'Pipefitter (PF)' : trade === 'sm' ? 'Sheet Metal (SM)' : 'Plumbing (PL)';
+                    const estRate = ts.est_hours > 0 ? ts.est_cost / ts.est_hours : 0;
+                    const jtdRate = ts.jtd_hours > 0 ? ts.jtd_cost / ts.jtd_hours : 0;
+                    return (
+                      <tr
+                        key={trade}
+                        onClick={() => drillIn(1, trade)}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
+                      >
+                        <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color: '#2563eb' }}>{tradeLabel}</td>
+                        <td style={tdStyle}>{fmtNum(ts.est_hours)}</td>
+                        <td style={tdStyle}>{fmtNum(ts.jtd_hours)}</td>
+                        <td style={{ ...tdStyle, color: getProjectedColor(projHours, ts.est_hours), fontWeight: 500 }}>{fmtNum(projHours)}</td>
+                        <td style={tdStyle}>{fmt(ts.est_cost)}</td>
+                        <td style={tdStyle}>{fmt(ts.jtd_cost)}</td>
+                        <td style={{ ...tdStyle, color: getProjectedColor(ts.projected_cost, ts.est_cost), fontWeight: 600 }}>{fmt(ts.projected_cost)}</td>
+                        <td style={tdStyle}>{estRate ? fmtRate(estRate) : '-'}</td>
+                        <td style={{ ...tdStyle, color: jtdRate && estRate ? getProjectedColor(jtdRate, estRate) : undefined, fontWeight: 500 }}>{jtdRate ? fmtRate(jtdRate) : '-'}</td>
+                      </tr>
+                    );
+                  })}
+                  {costSummary.labor.some((l: LaborTradeSummary) => l.trade === 'admin') && (() => {
                     const admin = getTradeSummary('admin');
                     const adminProjHours = calcProjectedHours(admin);
+                    const adminEstRate = admin.est_hours > 0 ? admin.est_cost / admin.est_hours : 0;
+                    const adminJtdRate = admin.jtd_hours > 0 ? admin.jtd_cost / admin.jtd_hours : 0;
                     return (
-                      <Section title="Office/Admin" onClick={() => drillIn(1, 'admin')}>
-                        <LaborHeader />
-                        <LaborRow label="Estimate" hours={fmtNum(admin.est_hours)} cost={fmt(admin.est_cost)} />
-                        <LaborRow label="JTD" hours={fmtNum(admin.jtd_hours)} cost={fmt(admin.jtd_cost)} highlight />
-                        <LaborRow label="Projected" hours={fmtNum(adminProjHours)} cost={fmt(admin.projected_cost)}
-                          hoursColor={getProjectedColor(adminProjHours, admin.est_hours)}
-                          costColor={getProjectedColor(admin.projected_cost, admin.est_cost)} />
-                      </Section>
-                    );
-                  })()
-                )}
-                <Section title="Total Labor">
-                  {(() => {
-                    const totalProjHours = calcProjectedHours(costSummary.labor_totals);
-                    return (
-                      <>
-                        <LaborHeader />
-                        <LaborRow label="Estimate" hours={fmtNum(costSummary.labor_totals.est_hours)} cost={fmt(costSummary.labor_totals.est_cost)} />
-                        <LaborRow label="JTD" hours={fmtNum(costSummary.labor_totals.jtd_hours)} cost={fmt(costSummary.labor_totals.jtd_cost)} highlight />
-                        <LaborRow label="Projected" hours={fmtNum(totalProjHours)} cost={fmt(costSummary.labor_totals.projected_cost)}
-                          hoursColor={getProjectedColor(totalProjHours, costSummary.labor_totals.est_hours)}
-                          costColor={getProjectedColor(costSummary.labor_totals.projected_cost, costSummary.labor_totals.est_cost)} />
-                      </>
+                      <tr
+                        onClick={() => drillIn(1, 'admin')}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
+                      >
+                        <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color: '#2563eb' }}>Office/Admin</td>
+                        <td style={tdStyle}>{fmtNum(admin.est_hours)}</td>
+                        <td style={tdStyle}>{fmtNum(admin.jtd_hours)}</td>
+                        <td style={{ ...tdStyle, color: getProjectedColor(adminProjHours, admin.est_hours), fontWeight: 500 }}>{fmtNum(adminProjHours)}</td>
+                        <td style={tdStyle}>{fmt(admin.est_cost)}</td>
+                        <td style={tdStyle}>{fmt(admin.jtd_cost)}</td>
+                        <td style={{ ...tdStyle, color: getProjectedColor(admin.projected_cost, admin.est_cost), fontWeight: 600 }}>{fmt(admin.projected_cost)}</td>
+                        <td style={tdStyle}>{adminEstRate ? fmtRate(adminEstRate) : '-'}</td>
+                        <td style={{ ...tdStyle, color: adminJtdRate && adminEstRate ? getProjectedColor(adminJtdRate, adminEstRate) : undefined, fontWeight: 500 }}>{adminJtdRate ? fmtRate(adminJtdRate) : '-'}</td>
+                      </tr>
                     );
                   })()}
-                </Section>
-              </>
-            ) : (
-              <>
-                <Section title="Pipefitter (PF)">
-                  <Row label="Estimate" value={fmtNum(c.pf_hours_estimate)} />
-                  <Row label="JTD" value={fmtNum(c.pf_hours_jtd)} highlight />
-                  <Row label="Projected" value={fmtNum(c.pf_hours_projected)} valueColor={getProjectedColor(c.pf_hours_projected, c.pf_hours_estimate)} />
-                </Section>
-                <Section title="Sheet Metal (SM)">
-                  <Row label="Estimate" value={fmtNum(c.sm_hours_estimate)} />
-                  <Row label="JTD" value={fmtNum(c.sm_hours_jtd)} highlight />
-                  <Row label="Projected" value={fmtNum(c.sm_hours_projected)} valueColor={getProjectedColor(c.sm_hours_projected, c.sm_hours_estimate)} />
-                </Section>
-                <Section title="Plumbing (PL)">
-                  <Row label="Estimate" value={fmtNum(c.pl_hours_estimate)} />
-                  <Row label="JTD" value={fmtNum(c.pl_hours_jtd)} highlight />
-                  <Row label="Projected" value={fmtNum(c.pl_hours_projected)} valueColor={getProjectedColor(c.pl_hours_projected, c.pl_hours_estimate)} />
-                </Section>
-                <Section title="Total Hours">
-                  <Row label="Estimate" value={fmtNum(c.total_hours_estimate)} />
-                  <Row label="JTD" value={fmtNum(c.total_hours_jtd)} highlight />
-                  <Row label="Projected" value={fmtNum(c.total_hours_projected)} valueColor={getProjectedColor(c.total_hours_projected, c.total_hours_estimate)} />
-                </Section>
-                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '0.5rem' }}>
-                  From contract totals. Import phase codes for detailed breakdown.
-                </div>
-              </>
-            )}
-            {costSummary ? (
-              <>
-                <Section title="Cost Totals">
-                  <Row label="Labor" value={fmt(costSummary.labor_totals.projected_cost)} />
-                  <Row label="Material" value={fmt(costSummary.costs.material.projected_cost)} />
-                  <Row label="Subcontracts" value={fmt(costSummary.costs.subcontracts.projected_cost)} />
-                  <Row label="Rentals" value={fmt(costSummary.costs.rentals.projected_cost)} />
-                  <Row label="MEP Equipment" value={fmt(costSummary.costs.mep_equipment.projected_cost)} />
-                  <Row label="General Cond." value={fmt(costSummary.costs.general_conditions.projected_cost)} />
-                </Section>
-                <Section title="Total Project Cost">
+                </tbody>
+                <tfoot>
                   {(() => {
-                    const totalEst = costSummary.labor_totals.est_cost
-                      + costSummary.costs.material.est_cost + costSummary.costs.subcontracts.est_cost
-                      + costSummary.costs.rentals.est_cost + costSummary.costs.mep_equipment.est_cost
-                      + costSummary.costs.general_conditions.est_cost;
-                    const totalJtd = costSummary.labor_totals.jtd_cost
-                      + costSummary.costs.material.jtd_cost + costSummary.costs.subcontracts.jtd_cost
-                      + costSummary.costs.rentals.jtd_cost + costSummary.costs.mep_equipment.jtd_cost
-                      + costSummary.costs.general_conditions.jtd_cost;
-                    const totalProj = costSummary.labor_totals.projected_cost
-                      + costSummary.costs.material.projected_cost + costSummary.costs.subcontracts.projected_cost
-                      + costSummary.costs.rentals.projected_cost + costSummary.costs.mep_equipment.projected_cost
-                      + costSummary.costs.general_conditions.projected_cost;
+                    const lt = costSummary.labor_totals;
+                    const totalProjHours = calcProjectedHours(lt);
+                    const totalEstRate = lt.est_hours > 0 ? lt.est_cost / lt.est_hours : 0;
+                    const totalJtdRate = lt.jtd_hours > 0 ? lt.jtd_cost / lt.jtd_hours : 0;
                     return (
-                      <>
-                        <Row label="Estimate" value={fmt(totalEst)} />
-                        <Row label="JTD" value={fmt(totalJtd)} highlight />
-                        <Row label="Projected" value={fmt(totalProj)}
-                          valueColor={getProjectedColor(totalProj, totalEst)} />
-                      </>
+                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                        <td style={{ ...tfStyle, textAlign: 'left' }}>Total Labor</td>
+                        <td style={tfStyle}>{fmtNum(lt.est_hours)}</td>
+                        <td style={tfStyle}>{fmtNum(lt.jtd_hours)}</td>
+                        <td style={{ ...tfStyle, color: getProjectedColor(totalProjHours, lt.est_hours) }}>{fmtNum(totalProjHours)}</td>
+                        <td style={tfStyle}>{fmt(lt.est_cost)}</td>
+                        <td style={tfStyle}>{fmt(lt.jtd_cost)}</td>
+                        <td style={{ ...tfStyle, color: getProjectedColor(lt.projected_cost, lt.est_cost) }}>{fmt(lt.projected_cost)}</td>
+                        <td style={tfStyle}>{totalEstRate ? fmtRate(totalEstRate) : '-'}</td>
+                        <td style={{ ...tfStyle, color: totalJtdRate && totalEstRate ? getProjectedColor(totalJtdRate, totalEstRate) : undefined }}>{totalJtdRate ? fmtRate(totalJtdRate) : '-'}</td>
+                      </tr>
                     );
                   })()}
-                </Section>
-              </>
-            ) : (
-              <Section title="Info">
-                <Row label="Customer" value={c.customer_name || '-'} />
-                <Row label="Market" value={c.primary_market || '-'} />
-                <Row label="Negotiated" value={c.negotiated_work || '-'} />
-                {c.start_month && <Row label="Start" value={format(new Date(c.start_month), 'MMM yyyy')} />}
-                {c.month_closed && <Row label="Closed" value={format(new Date(c.month_closed), 'MMM yyyy')} />}
-              </Section>
-            )}
-          </div>
-        </div>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
   );
 };
+
+const MetricChip: React.FC<{ label: string; value: string; valueColor?: string }> = ({ label, value, valueColor }) => (
+  <div style={{ textAlign: 'center' }}>
+    <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.15rem' }}>{label}</div>
+    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: valueColor || '#1e293b', fontFamily: 'monospace' }}>{value}</div>
+  </div>
+);
 
 export default ProjectFinancials;
