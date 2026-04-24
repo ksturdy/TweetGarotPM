@@ -195,6 +195,7 @@ export const useBomStore = create<BomState>()((set, get) => ({
 
   generateCostEstimate: (projectName, config) => {
     const { bomEntries, unitPrices } = get();
+    const laborRate = config.laborRatePerHour || 0;
 
     const lineItems: CostLineItem[] = bomEntries.map((entry) => {
       const matchingPrice = unitPrices.find(
@@ -203,10 +204,14 @@ export const useBomStore = create<BomState>()((set, get) => ({
           (!entry.size || !p.size || p.size === entry.size)
       );
 
-      const materialUnitCost = matchingPrice?.materialCostPerUnit ?? 0;
-      const laborUnitCost = matchingPrice?.laborCostPerUnit ?? 0;
-      const materialTotal = materialUnitCost * entry.quantity;
-      const laborTotal = laborUnitCost * entry.quantity;
+      // Use unit price if available, otherwise fall back to BOM entry data from PipeSpec
+      const materialUnitCost = matchingPrice?.materialCostPerUnit
+        ?? entry.materialCostPerUnit
+        ?? 0;
+      const laborUnitCost = matchingPrice?.laborCostPerUnit
+        ?? (entry.laborHoursPerUnit ? Math.round(entry.laborHoursPerUnit * laborRate * 100) / 100 : 0);
+      const materialTotal = Math.round(materialUnitCost * entry.quantity * 100) / 100;
+      const laborTotal = Math.round(laborUnitCost * entry.quantity * 100) / 100;
 
       return {
         id: generateId(),

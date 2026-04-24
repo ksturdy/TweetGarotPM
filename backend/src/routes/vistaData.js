@@ -1150,10 +1150,14 @@ router.post('/contracts/:id/ignore', requireAdmin, async (req, res, next) => {
 // PATCH /api/vista/contracts/:id/projection - Update projection overrides (end months, contour)
 router.patch('/contracts/:id/projection', async (req, res, next) => {
   try {
-    const { user_adjusted_end_months, user_selected_contour, user_adjusted_start_months } = req.body;
+    // Only pass fields that were explicitly sent in the request body
+    const overrides = {};
+    if ('user_adjusted_end_months' in req.body) overrides.user_adjusted_end_months = req.body.user_adjusted_end_months;
+    if ('user_selected_contour' in req.body) overrides.user_selected_contour = req.body.user_selected_contour;
+    if ('user_adjusted_start_months' in req.body) overrides.user_adjusted_start_months = req.body.user_adjusted_start_months;
     const result = await VistaData.updateProjectionOverrides(
       req.params.id,
-      { user_adjusted_end_months, user_selected_contour, user_adjusted_start_months },
+      overrides,
       req.tenantId
     );
     if (!result) {

@@ -1,21 +1,35 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Calculator, Download } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import { useBomStore } from '../../stores/useBomStore';
 import { usePdfStore } from '../../stores/usePdfStore';
 import { downloadCsv } from '../../lib/export/csv';
 import { formatCurrency, formatPercent } from '../../lib/utils/formatters';
 import type { CostConfig, CostLineItem } from '../../types/cost';
+import { takeoffsApi } from '../../../../services/takeoffs';
 
 export default function CostEstimateTable() {
+  const { id: takeoffId } = useParams<{ id: string }>();
   const activeDocumentId = usePdfStore((s) => s.activeDocumentId);
   const bomEntries = useBomStore((s) => s.bomEntries);
   const costEstimate = useBomStore((s) => s.costEstimate);
   const generateCostEstimate = useBomStore((s) => s.generateCostEstimate);
 
   const [showConfig, setShowConfig] = useState(false);
+  const [laborRate, setLaborRate] = useState('0');
   const [taxRate, setTaxRate] = useState('8.25');
   const [overheadRate, setOverheadRate] = useState('10');
   const [profitRate, setProfitRate] = useState('15');
+
+  // Load labor rate from takeoff record
+  useEffect(() => {
+    if (!takeoffId) return;
+    takeoffsApi.getById(Number(takeoffId)).then(({ data }) => {
+      if (data.labor_rate_per_hour) {
+        setLaborRate(String(data.labor_rate_per_hour));
+      }
+    }).catch(() => {});
+  }, [takeoffId]);
 
   const [editingCell, setEditingCell] = useState<{
     id: string;
@@ -25,13 +39,14 @@ export default function CostEstimateTable() {
 
   const handleGenerate = useCallback(() => {
     const config: CostConfig = {
+      laborRatePerHour: parseFloat(laborRate) || 0,
       taxRate: parseFloat(taxRate) / 100,
       overheadRate: parseFloat(overheadRate) / 100,
       profitRate: parseFloat(profitRate) / 100,
     };
     generateCostEstimate('Project Estimate', config);
     setShowConfig(false);
-  }, [taxRate, overheadRate, profitRate, generateCostEstimate]);
+  }, [laborRate, taxRate, overheadRate, profitRate, generateCostEstimate]);
 
   const handleExport = useCallback(() => {
     if (!costEstimate) return;
@@ -167,7 +182,11 @@ export default function CostEstimateTable() {
           <h4 style={{ marginBottom: 12, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', color: '#6db3f8' }}>
             Estimate Configuration
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#7a9ab5' }}>Labor $/Hr</span>
+              <input type="number" min={0} step="0.01" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} style={inputStyle} />
+            </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#7a9ab5' }}>Tax Rate %</span>
               <input type="number" min={0} max={100} step="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} style={inputStyle} />

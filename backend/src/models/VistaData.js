@@ -317,21 +317,34 @@ const VistaData = {
   },
 
   async updateProjectionOverrides(id, overrides, tenantId) {
+    // Only update fields that are explicitly provided to avoid wiping other overrides
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if ('user_adjusted_end_months' in overrides) {
+      setClauses.push(`user_adjusted_end_months = $${paramIndex++}`);
+      values.push(overrides.user_adjusted_end_months ?? null);
+    }
+    if ('user_selected_contour' in overrides) {
+      setClauses.push(`user_selected_contour = $${paramIndex++}`);
+      values.push(overrides.user_selected_contour ?? null);
+    }
+    if ('user_adjusted_start_months' in overrides) {
+      setClauses.push(`user_adjusted_start_months = $${paramIndex++}`);
+      values.push(overrides.user_adjusted_start_months ?? null);
+    }
+
+    if (setClauses.length === 0) return null;
+
+    setClauses.push('updated_at = NOW()');
+    values.push(id, tenantId);
+
     const result = await db.query(
-      `UPDATE vp_contracts SET
-        user_adjusted_end_months = $1,
-        user_selected_contour = $2,
-        user_adjusted_start_months = $3,
-        updated_at = NOW()
-       WHERE id = $4 AND tenant_id = $5
+      `UPDATE vp_contracts SET ${setClauses.join(', ')}
+       WHERE id = $${paramIndex++} AND tenant_id = $${paramIndex}
        RETURNING *`,
-      [
-        overrides.user_adjusted_end_months ?? null,
-        overrides.user_selected_contour ?? null,
-        overrides.user_adjusted_start_months ?? null,
-        id,
-        tenantId
-      ]
+      values
     );
     return result.rows[0];
   },

@@ -25,6 +25,7 @@ import {
   traceoverRunsApi,
   traceoverMeasurementsApi,
 } from '../../../services/traceover';
+import { takeoffsApi } from '../../../services/takeoffs';
 import { pipeSpecsApi, type PipeSpec as ApiPipeSpec } from '../../../services/pipeSpecs';
 import { rateTablesApi, type RateTable as ApiRateTable } from '../../../services/rateTables';
 import {
@@ -1201,6 +1202,77 @@ export function useTraceoverPersistence(takeoffId: number | null) {
     return () => {
       unsub();
       for (const t of debounceTimers.values()) clearTimeout(t);
+    };
+  }, [takeoffId]);
+
+  // ─── Sync takeoff items to backend (debounced) ───
+
+  useEffect(() => {
+    if (!takeoffId) return;
+
+    let prevItems = useTakeoffStore.getState().items;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const syncToServer = (items: import('../types/takeoff').TakeoffItem[]) => {
+      const mapped = items.map((item, i) => {
+        // Map client document UUID → server doc ID
+        const serverDocId = ids.current.docClientToServer.get(item.documentId) ?? null;
+        // Map client run UUID → server run ID
+        const serverRunId = item.traceoverRunId
+          ? ids.current.runClientToServer.get(item.traceoverRunId) ?? null
+          : null;
+
+        return {
+          sort_order: i + 1,
+          fitting_type: item.fittingType || (item.componentType === 'pipe_segment' ? 'pipe' : item.componentType),
+          size: item.size || '',
+          join_type: item.jointType || null,
+          quantity: item.quantity || 0,
+          base_hours_per_unit: item.laborHours && item.quantity ? item.laborHours / item.quantity : 0,
+          base_hours_total: item.laborHours || 0,
+          adjusted_hours: item.laborHours || 0,
+          material_unit_cost: item.materialCost || 0,
+          material_cost: item.materialCostTotal || (item.materialCost ? item.materialCost * item.quantity : 0),
+          remarks: item.description || null,
+          source: item.source || 'traceover',
+          traceover_run_id: serverRunId,
+          document_id: serverDocId,
+          page_number: item.pageNumber,
+          component_type: item.componentType,
+          label: item.label || '',
+          description: item.description || '',
+          material: item.material || '',
+          pipe_material: item.pipeMaterial || '',
+          labor_hours: item.laborHours || 0,
+          reducing_size: item.reducingSize || null,
+          confidence: item.confidence || null,
+          verified: item.verified || false,
+        };
+      });
+
+      takeoffsApi
+        .syncItems(takeoffId, mapped)
+        .catch((err: unknown) => console.error('[Persistence] takeoff items sync failed:', err));
+    };
+
+    const unsub = useTakeoffStore.subscribe((state) => {
+      if (!hydrated.current) {
+        prevItems = state.items;
+        return;
+      }
+
+      // Only sync when items array reference actually changes
+      if (state.items === prevItems) return;
+      prevItems = state.items;
+
+      // Debounce to batch rapid changes (e.g. multiple items added during a run)
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => syncToServer(state.items), 1500);
+    });
+
+    return () => {
+      unsub();
+      if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [takeoffId]);
 

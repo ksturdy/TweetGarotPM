@@ -755,6 +755,7 @@ const OpportunitySearch: React.FC = () => {
                     </th>
                     <th>Name</th>
                     <th>Date</th>
+                    <th>User</th>
                     <th>Leads</th>
                     <th>Est. Value</th>
                     <th>Market</th>
@@ -789,6 +790,7 @@ const OpportunitySearch: React.FC = () => {
                       <td>{new Date(item.created_at).toLocaleDateString('en-US', {
                         month: 'short', day: 'numeric', year: 'numeric'
                       })}</td>
+                      <td>{item.created_by_name || '-'}</td>
                       <td>{item.lead_count}</td>
                       <td>{formatCurrency(Number(item.total_estimated_value))}</td>
                       <td>
@@ -904,6 +906,7 @@ const OpportunitySearch: React.FC = () => {
                   <th>Name</th>
                   <th>Description</th>
                   <th>Created</th>
+                  <th>User</th>
                   <th>Last Run</th>
                   <th>Last Results</th>
                   <th>Status</th>
@@ -918,6 +921,7 @@ const OpportunitySearch: React.FC = () => {
                     <td>{new Date(item.created_at).toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric', year: 'numeric'
                     })}</td>
+                    <td>{item.created_by_name || '-'}</td>
                     <td>{item.last_run_at
                       ? new Date(item.last_run_at).toLocaleDateString('en-US', {
                           month: 'short', day: 'numeric', year: 'numeric'

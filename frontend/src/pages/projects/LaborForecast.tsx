@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
 import opportunitiesService, { OpportunityWithEstimate } from '../../services/opportunities';
 import { getForecastRules, ForecastDurationRule } from '../../services/tenant';
 import { useAuth } from '../../context/AuthContext';
+import { teamsApi } from '../../services/teams';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import '../../components/modals/Modal.css';
+import '../../styles/SalesPipeline.css';
 import { format, addMonths, addWeeks, startOfMonth, startOfWeek, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -255,8 +257,23 @@ const getOppDurationForValue = (value: number, rules: ForecastDurationRule[]): n
 // ═══════════════════════════════════════════════════════════
 
 const LaborForecast: React.FC = () => {
-  const { tenant } = useAuth();
+  const { user, tenant } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
+
+  // My Projects / My Team
+  const [myProjectsOnly, setMyProjectsOnly] = useState(false);
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
+
+  const { data: myTeamResponse } = useQuery({
+    queryKey: ['teams', 'my-team-members'],
+    queryFn: () => teamsApi.getMyTeamMemberIds()
+  });
+  const teamMemberNames = useMemo(() => {
+    const names: string[] = (myTeamResponse?.data as any)?.data?.names || [];
+    return new Set(names.map(n => n.toLowerCase()));
+  }, [myTeamResponse]);
 
   // Filters
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
@@ -397,10 +414,12 @@ const LaborForecast: React.FC = () => {
   ) => {
     try {
       await vistaDataService.updateProjectionOverrides(contractId, overrides);
+      // Invalidate both labor forecast and projected revenue caches so they stay in sync
+      queryClient.invalidateQueries({ queryKey: ['vpContracts'] });
     } catch (err) {
       console.error('Failed to save projection override:', err);
     }
-  }, []);
+  }, [queryClient]);
 
   // ─── Filter options ──────────────────────────────────────
 
@@ -441,6 +460,26 @@ const LaborForecast: React.FC = () => {
         }
         if (marketFilter && c.primary_market !== marketFilter) return false;
         if (pmFilter && c.project_manager_name !== pmFilter) return false;
+        if (myProjectsOnly && user) {
+          if (!c.project_manager_name) return false;
+          const pmName = c.project_manager_name.toLowerCase();
+          const reverseName = `${user.lastName}, ${user.firstName}`.toLowerCase();
+          if (!pmName.startsWith(reverseName)) return false;
+        }
+        if (myTeamOnly && teamMemberNames.size > 0) {
+          if (!c.project_manager_name) return false;
+          const pmName = c.project_manager_name.toLowerCase();
+          let matched = false;
+          for (const name of teamMemberNames) {
+            const parts = name.split(' ');
+            if (parts.length >= 2) {
+              const reversed = `${parts[parts.length - 1]}, ${parts[0]}`;
+              if (pmName.startsWith(reversed)) { matched = true; break; }
+            }
+            if (pmName === name) { matched = true; break; }
+          }
+          if (!matched) return false;
+        }
         if (searchFilter) {
           const search = searchFilter.toLowerCase();
           const m1 = c.contract_number?.toLowerCase().includes(search);
@@ -456,7 +495,7 @@ const LaborForecast: React.FC = () => {
         searchText: `${c.contract_number} ${c.description || ''} ${c.customer_name || ''} ${c.project_manager_name || ''}`,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [contracts, statusFilter, departmentFilter, locationGroupFilter, marketFilter, pmFilter, searchFilter]);
+  }, [contracts, statusFilter, departmentFilter, locationGroupFilter, marketFilter, pmFilter, searchFilter, myProjectsOnly, myTeamOnly, user, teamMemberNames]);
 
   // Clear project filter selections that are no longer in the filtered list
   useEffect(() => {
@@ -541,6 +580,31 @@ const LaborForecast: React.FC = () => {
       }
       if (marketFilter && c.primary_market !== marketFilter) return false;
       if (pmFilter && c.project_manager_name !== pmFilter) return false;
+
+      // My Projects filter — Vista PM names are "Last, First M" format
+      if (myProjectsOnly && user) {
+        if (!c.project_manager_name) return false;
+        const pmName = c.project_manager_name.toLowerCase();
+        const reverseName = `${user.lastName}, ${user.firstName}`.toLowerCase();
+        if (!pmName.startsWith(reverseName)) return false;
+      }
+
+      // My Team filter — team names are "First Last", PM names are "Last, First M"
+      if (myTeamOnly && teamMemberNames.size > 0) {
+        if (!c.project_manager_name) return false;
+        const pmName = c.project_manager_name.toLowerCase();
+        let matched = false;
+        for (const name of teamMemberNames) {
+          const parts = name.split(' ');
+          if (parts.length >= 2) {
+            const reversed = `${parts[parts.length - 1]}, ${parts[0]}`;
+            if (pmName.startsWith(reversed)) { matched = true; break; }
+          }
+          if (pmName === name) { matched = true; break; }
+        }
+        if (!matched) return false;
+      }
+
       if (searchFilter) {
         const search = searchFilter.toLowerCase();
         const m1 = c.contract_number?.toLowerCase().includes(search);
@@ -697,7 +761,7 @@ const LaborForecast: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap]);
+  }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap, myProjectsOnly, myTeamOnly, user, teamMemberNames]);
 
   // ─── Opportunity projections ──────────────────────────────
 
@@ -1484,13 +1548,42 @@ const LaborForecast: React.FC = () => {
             )}
           </div>
         </div>
-        <div>
-          <Link
-            to="/projects/projected-revenue"
-            style={{ fontSize: '0.75rem', color: '#3b82f6', textDecoration: 'none' }}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            className={myProjectsOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+            onClick={() => { setMyProjectsOnly(!myProjectsOnly); if (!myProjectsOnly) setMyTeamOnly(false); }}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
           >
-            Projected Revenue &rarr;
-          </Link>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            My Projects
+          </button>
+          <button
+            className={myTeamOnly ? 'sales-btn sales-btn-primary' : 'sales-btn sales-btn-secondary'}
+            onClick={() => { setMyTeamOnly(!myTeamOnly); if (!myTeamOnly) setMyProjectsOnly(false); }}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+            title="Filter to my team members"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            My Team
+          </button>
+          <button
+            className="sales-btn sales-btn-secondary"
+            onClick={() => navigate('/projects/projected-revenue')}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+            </svg>
+            Projected Revenue
+          </button>
         </div>
       </div>
 
@@ -1559,7 +1652,7 @@ const LaborForecast: React.FC = () => {
               value={pmFilter}
               onChange={setPmFilter}
               placeholder="All PMs"
-              style={{ minWidth: '130px', fontSize: '0.8rem' }}
+              style={{ minWidth: '180px', fontSize: '0.8rem' }}
             />
           </div>
           <div>
@@ -1569,13 +1662,13 @@ const LaborForecast: React.FC = () => {
               value={projectFilter}
               onChange={setProjectFilter}
               placeholder="All Projects"
-              style={{ minWidth: '140px', fontSize: '0.8rem' }}
+              style={{ minWidth: '200px', fontSize: '0.8rem' }}
             />
           </div>
 
-          {(searchFilter || departmentFilter.length > 0 || locationGroupFilter.length > 0 || tradeFilter.length < 3 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both') && (
+          {(searchFilter || departmentFilter.length > 0 || locationGroupFilter.length > 0 || tradeFilter.length < 3 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || locationFilter !== 'both' || myProjectsOnly || myTeamOnly) && (
             <button
-              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setLocationGroupFilter([]); setTradeFilter(['pf', 'sm', 'pl']); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); }}
+              onClick={() => { setSearchFilter(''); setDepartmentFilter([]); setLocationGroupFilter([]); setTradeFilter(['pf', 'sm', 'pl']); setMarketFilter(''); setPmFilter(''); setProjectFilter([]); setStatusFilter('all'); setLocationFilter('both'); setMyProjectsOnly(false); setMyTeamOnly(false); }}
               style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}
             >
               Clear Filters

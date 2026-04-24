@@ -18,8 +18,13 @@ class Feedback {
     let paramCount = 1;
 
     if (status) {
-      query += ` AND f.status = $${paramCount}`;
-      params.push(status);
+      if (status.includes(',')) {
+        query += ` AND f.status = ANY($${paramCount})`;
+        params.push(status.split(','));
+      } else {
+        query += ` AND f.status = $${paramCount}`;
+        params.push(status);
+      }
       paramCount++;
     }
 
@@ -70,8 +75,13 @@ class Feedback {
     let paramCount = 2;
 
     if (status) {
-      query += ` AND f.status = $${paramCount}`;
-      params.push(status);
+      if (status.includes(',')) {
+        query += ` AND f.status = ANY($${paramCount})`;
+        params.push(status.split(','));
+      } else {
+        query += ` AND f.status = $${paramCount}`;
+        params.push(status);
+      }
       paramCount++;
     }
 

@@ -208,10 +208,11 @@ const OpportunityProjectedRevenue: React.FC = () => {
   ) => {
     try {
       await opportunitiesService.updateProjectionOverrides(opportunityId, overrides);
+      queryClient.invalidateQueries({ queryKey: ['opportunities', 'projectedRevenue'] });
     } catch (err) {
       console.error('Failed to save projection override:', err);
     }
-  }, []);
+  }, [queryClient]);
 
   // Update location group
   const updateLocationGroup = useCallback(async (opportunityId: number, locationGroup: string) => {

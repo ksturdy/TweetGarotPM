@@ -28,8 +28,8 @@ const TakeoffsList: React.FC = () => {
   const formatType = (type: string) => type === 'traceover' ? 'Traceover' : 'Manual';
 
   const formatHours = (val: number) => {
-    const n = Number(val || 0);
-    return n.toFixed(1);
+    const n = Math.round(Number(val || 0));
+    return n.toLocaleString();
   };
 
   const getEstimatorInitials = (name?: string): string => {

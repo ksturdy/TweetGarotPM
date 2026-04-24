@@ -80,7 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
       label: 'Sales',
       icon: <TrendingUpIcon />,
       children: [
-        { label: 'Opportunity Search', path: '/opportunity-search' },
+        { label: 'Opportunity Search', path: '/sales/opportunity-search' },
         { label: 'Opportunities', path: '/sales' },
         { label: 'Campaigns', path: '/campaigns' },
         { label: 'Marketing', path: '/marketing' },

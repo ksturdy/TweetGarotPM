@@ -201,6 +201,30 @@
   display: none;
 }
 
+/* Vista Sync Indicator */
+.vista-sync-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  text-decoration: none;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vista-sync-indicator:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.vista-sync-indicator .MuiSvgIcon-root {
+  font-size: 0.9rem;
+}
+
 /* Header Right Section */
 .header-right {
   display: flex;
@@ -300,6 +324,10 @@
   }
 
   .feedback-label {
+    display: none;
+  }
+
+  .vista-sync-text {
     display: none;
   }
 

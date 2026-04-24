@@ -211,6 +211,29 @@ router.post('/:id/items', async (req, res, next) => {
   }
 });
 
+// Bulk sync items (replaces all items for a takeoff — used by traceover workspace)
+// MUST be before /:id/items/:itemId so Express doesn't match "sync" as an itemId
+router.put('/:id/items/sync', async (req, res, next) => {
+  try {
+    const takeoff = await Takeoff.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!takeoff) {
+      return res.status(404).json({ error: 'Takeoff not found' });
+    }
+
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'items must be an array' });
+    }
+
+    const result = await Takeoff.syncItems(req.params.id, items);
+    // Re-fetch to get updated totals from trigger
+    const updated = await Takeoff.findByIdAndTenant(req.params.id, req.tenantId);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Update item
 router.put('/:id/items/:itemId', async (req, res, next) => {
   try {

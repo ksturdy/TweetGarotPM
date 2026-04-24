@@ -196,6 +196,75 @@ const Takeoff = {
   },
 
   /**
+   * Bulk sync items from the traceover workspace.
+   * Deletes existing items and inserts the new set, preserving trigger-based totals.
+   */
+  async syncItems(takeoffId, items) {
+    // Delete all existing items for this takeoff
+    await db.query('DELETE FROM takeoff_items WHERE takeoff_id = $1', [takeoffId]);
+
+    if (items.length === 0) {
+      // Trigger won't fire on empty delete-only, so manually zero out totals
+      await db.query(
+        `UPDATE takeoffs SET total_items = 0, total_base_hours = 0, total_adjusted_hours = 0, total_material_cost = 0 WHERE id = $1`,
+        [takeoffId]
+      );
+      return [];
+    }
+
+    const inserted = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const result = await db.query(
+        `INSERT INTO takeoff_items (
+          takeoff_id, sort_order, fitting_type, size, join_type, quantity,
+          base_hours_per_unit, base_hours_total, adjusted_hours,
+          material_unit_cost, material_cost, remarks,
+          source, traceover_run_id, document_id, page_number,
+          component_type, label, description, material, pipe_material,
+          labor_hours, reducing_size, confidence, verified
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9,
+          $10, $11, $12,
+          $13, $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22, $23, $24, $25
+        ) RETURNING *`,
+        [
+          takeoffId,
+          item.sort_order || i + 1,
+          item.fitting_type || 'pipe',
+          item.size || '',
+          item.join_type || null,
+          item.quantity || 0,
+          item.base_hours_per_unit || 0,
+          item.base_hours_total || 0,
+          item.adjusted_hours || 0,
+          item.material_unit_cost || 0,
+          item.material_cost || 0,
+          item.remarks || null,
+          item.source || 'traceover',
+          item.traceover_run_id || null,
+          item.document_id || null,
+          item.page_number || null,
+          item.component_type || null,
+          item.label || '',
+          item.description || '',
+          item.material || '',
+          item.pipe_material || '',
+          item.labor_hours || 0,
+          item.reducing_size || null,
+          item.confidence || null,
+          item.verified || false,
+        ]
+      );
+      inserted.push(result.rows[0]);
+    }
+    return inserted;
+  },
+
+  /**
    * Recalculate all items for a takeoff based on current performance factor.
    * Useful when performance factor changes or productivity rates are updated.
    */

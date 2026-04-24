@@ -278,7 +278,7 @@ const ProjectLocations: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [includeList, setIncludeList] = useState(false);
   const [enabledCustomLayers, setEnabledCustomLayers] = useState<number[]>([]);
-  const [standardLayers, setStandardLayers] = useState<string[]>([]);
+  const [standardLayers, setStandardLayers] = useState<string[]>(['projects']);
   const [mapStyle, setMapStyle] = useState<string>('carto-voyager');
 
   const { data: customLayers = [] } = useQuery({

@@ -27,6 +27,7 @@ export interface CostLineItem {
 }
 
 export interface CostConfig {
+  laborRatePerHour: number;
   taxRate: number;
   overheadRate: number;
   profitRate: number;

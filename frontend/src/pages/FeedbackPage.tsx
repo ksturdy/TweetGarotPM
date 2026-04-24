@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   feedbackService,
@@ -13,10 +13,27 @@ import FeedbackForm from '../components/feedback/FeedbackForm';
 import FeedbackDetail from '../components/feedback/FeedbackDetail';
 import './FeedbackPage.css';
 
+const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'completed', 'on_hold', 'rejected'];
+const DEFAULT_STATUSES = ALL_STATUSES.filter(s => s !== 'completed');
+
+const STATUS_LABELS: Record<string, string> = {
+  submitted: 'Submitted',
+  read: 'Read',
+  under_review: 'Under Review',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  on_hold: 'On Hold',
+  rejected: 'Rejected',
+};
+
 const FeedbackPage: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(DEFAULT_STATUSES);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<FeedbackFilters>({
+    status: DEFAULT_STATUSES.join(','),
     sortBy: 'votes',
     order: 'desc'
   });
@@ -141,6 +158,38 @@ const FeedbackPage: React.FC = () => {
     }
   };
 
+  // Close status dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Sync selectedStatuses → filters.status
+  useEffect(() => {
+    if (selectedStatuses.length === ALL_STATUSES.length || selectedStatuses.length === 0) {
+      setFilters(prev => ({ ...prev, status: undefined }));
+    } else {
+      setFilters(prev => ({ ...prev, status: selectedStatuses.join(',') }));
+    }
+  }, [selectedStatuses]);
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const toggleAllStatuses = () => {
+    setSelectedStatuses(prev =>
+      prev.length === ALL_STATUSES.length ? [] : [...ALL_STATUSES]
+    );
+  };
+
   const handleFilterChange = (key: keyof FeedbackFilters, value: string) => {
     setFilters(prev => ({
       ...prev,
@@ -150,16 +199,13 @@ const FeedbackPage: React.FC = () => {
 
   const isAdmin = user?.role === 'admin';
 
-  // Default sort: non-completed items first by votes, then completed items by votes
-  // Only apply this grouping when no specific status filter is set
-  const sortedFeedbackItems = React.useMemo(() => {
-    if (filters.status) {
-      return feedbackItems;
-    }
-    const nonCompleted = feedbackItems.filter(f => f.status !== 'completed');
-    const completed = feedbackItems.filter(f => f.status === 'completed');
-    return [...nonCompleted, ...completed];
-  }, [feedbackItems, filters.status]);
+  const statusButtonLabel = selectedStatuses.length === ALL_STATUSES.length
+    ? 'All'
+    : selectedStatuses.length === 0
+    ? 'None'
+    : selectedStatuses.length <= 2
+    ? selectedStatuses.map(s => STATUS_LABELS[s]).join(', ')
+    : `${selectedStatuses.length} selected`;
 
   return (
     <div className="feedback-page">
@@ -180,22 +226,44 @@ const FeedbackPage: React.FC = () => {
       </div>
 
       <div className="feedback-filters">
-        <div className="filter-group">
+        <div className="filter-group" ref={statusDropdownRef}>
           <label>Status:</label>
-          <select
-            value={filters.status || ''}
-            onChange={(e) => handleFilterChange('status', e.target.value)}
-            className="form-control form-control-sm"
-          >
-            <option value="">All</option>
-            <option value="submitted">Submitted</option>
-            <option value="read">Read</option>
-            <option value="under_review">Under Review</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="on_hold">On Hold</option>
-            <option value="rejected">Rejected</option>
-          </select>
+          <div className="multi-select-container">
+            <button
+              type="button"
+              className="multi-select-trigger form-control form-control-sm"
+              onClick={() => setStatusDropdownOpen(prev => !prev)}
+            >
+              <span>{statusButtonLabel}</span>
+              <span className="multi-select-arrow">&#9662;</span>
+            </button>
+            {statusDropdownOpen && (
+              <div className="multi-select-dropdown">
+                <label className="multi-select-option multi-select-all">
+                  <input
+                    type="checkbox"
+                    checked={selectedStatuses.length === ALL_STATUSES.length}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selectedStatuses.length > 0 && selectedStatuses.length < ALL_STATUSES.length;
+                    }}
+                    onChange={toggleAllStatuses}
+                  />
+                  <span>Select All</span>
+                </label>
+                <div className="multi-select-divider" />
+                {ALL_STATUSES.map(status => (
+                  <label key={status} className="multi-select-option">
+                    <input
+                      type="checkbox"
+                      checked={selectedStatuses.includes(status)}
+                      onChange={() => toggleStatus(status)}
+                    />
+                    <span>{STATUS_LABELS[status]}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="filter-group">
@@ -247,7 +315,7 @@ const FeedbackPage: React.FC = () => {
             <div className="loading">Loading feedback...</div>
           ) : (
             <FeedbackList
-              feedbackItems={sortedFeedbackItems}
+              feedbackItems={feedbackItems}
               userVotes={userVotes}
               onVote={handleVote}
               onRemoveVote={handleRemoveVote}

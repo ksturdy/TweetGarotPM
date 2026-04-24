@@ -5,10 +5,12 @@ import { useSocket } from '../../hooks/useSocket';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import SyncIcon from '@mui/icons-material/Sync';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationBell from './NotificationBell';
 import ChatButton from '../messaging/ChatButton';
 import ChatPanel from '../messaging/ChatPanel';
+import { vistaDataService } from '../../services/vistaData';
 import './Layout.css';
 
 interface LayoutProps {
@@ -27,10 +29,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return localStorage.getItem(COLLAPSED_KEY) === 'true';
   });
 
+  const [lastVistaSync, setLastVistaSync] = useState<string | null>(null);
+
   // Close sidebar on route change (mobile/tablet)
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  // Fetch last Vista sync time
+  useEffect(() => {
+    vistaDataService.getStats()
+      .then(stats => {
+        const dates = [
+          stats.last_contracts_import,
+          stats.last_work_orders_import,
+          stats.last_employees_import,
+          stats.last_customers_import,
+          stats.last_vendors_import,
+        ].filter(Boolean).map(d => new Date(d!).getTime());
+        if (dates.length > 0) {
+          setLastVistaSync(new Date(Math.max(...dates)).toLocaleString());
+        }
+      })
+      .catch(() => { /* ignore - Vista may not be configured */ });
+  }, []);
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen(prev => !prev);
@@ -84,6 +106,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="header-center">
           </div>
           <div className="header-right">
+            {lastVistaSync && (
+              <Link to="/vista" className="vista-sync-indicator" title={`Last Vista sync: ${lastVistaSync}`}>
+                <SyncIcon fontSize="small" />
+                <span className="vista-sync-text">Vista: {lastVistaSync}</span>
+              </Link>
+            )}
             <ChatButton onClick={() => setChatOpen(prev => !prev)} isOpen={chatOpen} />
             <NotificationBell />
             <div className="user-menu">

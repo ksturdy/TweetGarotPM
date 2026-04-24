@@ -265,7 +265,10 @@ const EstimateDetail: React.FC = () => {
       const res = await takeoffsApi.getById(takeoffId);
       const takeoff = res.data;
       const items = takeoff.items || [];
-      if (items.length === 0) return;
+      if (items.length === 0) {
+        toast.warning('This takeoff has no items to import. Add items to the takeoff first.');
+        return;
+      }
 
       let lineItems: EstimateLineItem[];
 
@@ -347,8 +350,10 @@ const EstimateDetail: React.FC = () => {
       setShowTakeoffPicker(false);
       setSelectedTakeoffId('');
       setSelectedImportMode('summary');
+      toast.success(`Imported ${lineItems.length} item(s) from ${takeoff.name}`);
     } catch (err) {
       console.error('Failed to import takeoff:', err);
+      toast.error('Failed to import takeoff. Please try again.');
     }
   };
 

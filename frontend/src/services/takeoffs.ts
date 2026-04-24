@@ -63,6 +63,8 @@ export const takeoffsApi = {
 
   // Items
   getItems: (takeoffId: number) => api.get(`/takeoffs/${takeoffId}/items`),
+  syncItems: (takeoffId: number, items: Record<string, unknown>[]) =>
+    api.put(`/takeoffs/${takeoffId}/items/sync`, { items }),
   addItem: (takeoffId: number, data: Partial<TakeoffItem>) =>
     api.post(`/takeoffs/${takeoffId}/items`, data),
   updateItem: (takeoffId: number, itemId: number, data: Partial<TakeoffItem>) =>
