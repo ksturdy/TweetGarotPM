@@ -3324,10 +3324,10 @@ const VistaData = {
     return result.rows;
   },
 
-  async getPhaseCodeCostSummary(projectId, tenantId, job = null) {
+  async getPhaseCodeCostSummary(projectId, tenantId, jobs = null) {
     const params = [tenantId, projectId];
-    const jobFilter = job ? ` AND pc.job = $3` : '';
-    if (job) params.push(job);
+    const jobFilter = jobs && jobs.length ? ` AND pc.job = ANY($3)` : '';
+    if (jobs && jobs.length) params.push(jobs);
 
     // Cost categories (cost_type 2-6)
     const costResult = await db.query(
@@ -3419,14 +3419,14 @@ const VistaData = {
     return { costs, labor, labor_totals };
   },
 
-  async getPhaseCodeDetail(projectId, tenantId, { job = null, costType = null, trade = null } = {}) {
+  async getPhaseCodeDetail(projectId, tenantId, { jobs = null, costType = null, trade = null } = {}) {
     const params = [tenantId, projectId];
     let idx = 3;
     const conditions = ['pc.tenant_id = $1', 'pc.linked_project_id = $2'];
 
-    if (job) {
-      conditions.push(`pc.job = $${idx++}`);
-      params.push(job);
+    if (jobs && jobs.length) {
+      conditions.push(`pc.job = ANY($${idx++})`);
+      params.push(jobs);
     }
 
     if (costType) {

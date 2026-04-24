@@ -731,18 +731,18 @@ export const vistaDataService = {
     return response.data;
   },
 
-  getPhaseCodeCostSummary: async (projectId: number, job?: string): Promise<PhaseCodeCostSummary> => {
-    const params = job ? `?job=${encodeURIComponent(job)}` : '';
+  getPhaseCodeCostSummary: async (projectId: number, jobs?: string[]): Promise<PhaseCodeCostSummary> => {
+    const params = jobs && jobs.length ? '?' + jobs.map(j => `job=${encodeURIComponent(j)}`).join('&') : '';
     const response = await api.get(`/vista/phase-codes/project/${projectId}/cost-summary${params}`);
     return response.data;
   },
 
   getPhaseCodeDetail: async (
     projectId: number,
-    options?: { job?: string; costType?: number; trade?: string }
+    options?: { jobs?: string[]; costType?: number; trade?: string }
   ): Promise<PhaseCodeDetailRow[]> => {
     const params = new URLSearchParams();
-    if (options?.job) params.append('job', options.job);
+    if (options?.jobs) options.jobs.forEach(j => params.append('job', j));
     if (options?.costType) params.append('cost_type', String(options.costType));
     if (options?.trade) params.append('trade', options.trade);
     const qs = params.toString();

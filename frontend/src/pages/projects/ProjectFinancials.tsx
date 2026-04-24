@@ -126,13 +126,22 @@ const ProjectFinancials: React.FC = () => {
   const [showOverrideInputs, setShowOverrideInputs] = useState(false);
   const [marginOverride, setMarginOverride] = useState('');
   const [marginPctOverride, setMarginPctOverride] = useState('');
-  const [selectedJob, setSelectedJob] = useState<string | null>(null);
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+
+  const toggleJob = (job: string) => {
+    setSelectedJobs(prev => {
+      const next = new Set(prev);
+      if (next.has(job)) next.delete(job);
+      else next.add(job);
+      return next;
+    });
+  };
 
   const drillIn = (costType: number, trade?: string) => {
     const params = new URLSearchParams();
     params.set('cost_type', String(costType));
     if (trade) params.set('trade', trade);
-    if (selectedJob) params.set('job', selectedJob);
+    if (selectedJobs.size > 0) params.set('jobs', Array.from(selectedJobs).join(','));
     navigate(`/projects/${projectId}/financials/cost-detail?${params.toString()}`);
   };
 
@@ -152,9 +161,10 @@ const ProjectFinancials: React.FC = () => {
     enabled: !!c,
   });
 
+  const selectedJobsArray = Array.from(selectedJobs);
   const { data: costSummary } = useQuery({
-    queryKey: ['phaseCodeCostSummary', projectId, selectedJob],
-    queryFn: () => vistaDataService.getPhaseCodeCostSummary(Number(projectId), selectedJob || undefined),
+    queryKey: ['phaseCodeCostSummary', projectId, selectedJobsArray],
+    queryFn: () => vistaDataService.getPhaseCodeCostSummary(Number(projectId), selectedJobsArray.length ? selectedJobsArray : undefined),
     enabled: !!c,
   });
 
@@ -381,14 +391,14 @@ const ProjectFinancials: React.FC = () => {
           {/* ===== JOB SELECTOR ===== */}
           {jobs && jobs.length > 1 && (
             <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Job:</span>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Jobs:</span>
               <button
-                onClick={() => setSelectedJob(null)}
+                onClick={() => setSelectedJobs(new Set())}
                 style={{
                   fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
-                  border: selectedJob === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-                  background: selectedJob === null ? '#eff6ff' : '#fff',
-                  cursor: 'pointer', fontWeight: selectedJob === null ? 600 : 400,
+                  border: selectedJobs.size === 0 ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                  background: selectedJobs.size === 0 ? '#eff6ff' : '#fff',
+                  cursor: 'pointer', fontWeight: selectedJobs.size === 0 ? 600 : 400,
                 }}
               >
                 All Jobs ({jobs.length})
@@ -396,23 +406,23 @@ const ProjectFinancials: React.FC = () => {
               {jobs.map(j => (
                 <button
                   key={j.job}
-                  onClick={() => setSelectedJob(j.job)}
+                  onClick={() => toggleJob(j.job)}
                   style={{
                     fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
-                    border: selectedJob === j.job ? '2px solid #3b82f6' : '1px solid #cbd5e1',
-                    background: selectedJob === j.job ? '#eff6ff' : '#fff',
-                    cursor: 'pointer', fontWeight: selectedJob === j.job ? 600 : 400,
+                    border: selectedJobs.has(j.job) ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                    background: selectedJobs.has(j.job) ? '#eff6ff' : '#fff',
+                    cursor: 'pointer', fontWeight: selectedJobs.has(j.job) ? 600 : 400,
                   }}
                   title={j.job_description}
                 >
                   {j.job}
                 </button>
               ))}
-              {selectedJob && (() => {
-                const selected = jobs.find(j => j.job === selectedJob);
-                return selected?.job_description ? (
+              {selectedJobs.size > 0 && selectedJobs.size <= 2 && (() => {
+                const descs = jobs.filter(j => selectedJobs.has(j.job)).map(j => j.job_description).filter(Boolean);
+                return descs.length ? (
                   <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic', marginLeft: '0.25rem' }}>
-                    — {selected.job_description}
+                    — {descs.join(', ')}
                   </span>
                 ) : null;
               })()}

@@ -1035,10 +1035,11 @@ router.get('/phase-codes/project/:projectId/jobs', async (req, res, next) => {
 // GET /api/vista/phase-codes/project/:projectId/cost-summary - Aggregated cost data from phase codes
 router.get('/phase-codes/project/:projectId/cost-summary', async (req, res, next) => {
   try {
+    const jobs = req.query.job ? (Array.isArray(req.query.job) ? req.query.job : [req.query.job]) : null;
     const summary = await VistaData.getPhaseCodeCostSummary(
       req.params.projectId,
       req.tenantId,
-      req.query.job || null
+      jobs
     );
     res.json(summary);
   } catch (error) {
@@ -1049,11 +1050,12 @@ router.get('/phase-codes/project/:projectId/cost-summary', async (req, res, next
 // GET /api/vista/phase-codes/project/:projectId/detail - Raw phase code rows for drill-in
 router.get('/phase-codes/project/:projectId/detail', async (req, res, next) => {
   try {
+    const jobs = req.query.job ? (Array.isArray(req.query.job) ? req.query.job : [req.query.job]) : null;
     const rows = await VistaData.getPhaseCodeDetail(
       req.params.projectId,
       req.tenantId,
       {
-        job: req.query.job || null,
+        jobs,
         costType: req.query.cost_type || null,
         trade: req.query.trade || null,
       }

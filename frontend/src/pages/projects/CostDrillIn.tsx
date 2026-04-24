@@ -67,7 +67,8 @@ const CostDrillIn: React.FC = () => {
 
   const costType = Number(searchParams.get('cost_type')) || 0;
   const trade = searchParams.get('trade') || undefined;
-  const job = searchParams.get('job') || undefined;
+  const jobsParam = searchParams.get('jobs');
+  const jobs = jobsParam ? jobsParam.split(',').filter(Boolean) : undefined;
 
   const isLabor = costType === 1;
   const title = isLabor && trade ? TRADE_LABELS[trade] || 'Labor' : COST_TYPE_LABELS[costType] || 'Cost Detail';
@@ -78,9 +79,9 @@ const CostDrillIn: React.FC = () => {
   });
 
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['phaseCodeDetail', projectId, job, costType, trade],
+    queryKey: ['phaseCodeDetail', projectId, jobs, costType, trade],
     queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), {
-      job,
+      jobs,
       costType: costType || undefined,
       trade,
     }),
@@ -203,7 +204,7 @@ const CostDrillIn: React.FC = () => {
         </h1>
         <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
           {project?.number} - {project?.name}
-          {job && <span style={{ marginLeft: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#f1f5f9', borderRadius: '4px', fontSize: '0.75rem' }}>Job: {job}</span>}
+          {jobs && jobs.length > 0 && <span style={{ marginLeft: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#f1f5f9', borderRadius: '4px', fontSize: '0.75rem' }}>Jobs: {jobs.join(', ')}</span>}
         </div>
       </div>
 
@@ -297,7 +298,7 @@ const CostDrillIn: React.FC = () => {
               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                 <SortTh sortKey="phase" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Phase</SortTh>
                 <SortTh sortKey="phase_description" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Description</SortTh>
-                {job === undefined && <SortTh sortKey="job" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Job</SortTh>}
+                {!jobs || jobs.length !== 1 && <SortTh sortKey="job" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Job</SortTh>}
                 {isLabor && <SortTh sortKey="est_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Hrs</SortTh>}
                 {isLabor && <SortTh sortKey="jtd_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Hrs</SortTh>}
                 <SortTh sortKey="est_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Cost</SortTh>
@@ -321,7 +322,7 @@ const CostDrillIn: React.FC = () => {
                   <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <Td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap', fontWeight: 500 }}>{row.phase}</Td>
                     <Td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
-                    {job === undefined && <Td>{row.job}</Td>}
+                    {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
                     {isLabor && <Td align="right">{fmtNum(row.est_hours)}</Td>}
                     {isLabor && <Td align="right">{fmtNum(row.jtd_hours)}</Td>}
                     <Td align="right">{fmt(row.est_cost)}</Td>
@@ -351,7 +352,7 @@ const CostDrillIn: React.FC = () => {
               <tr style={{ backgroundColor: '#f8fafc', borderTop: '2px solid #e2e8f0', fontWeight: 700 }}>
                 <Td>Total</Td>
                 <Td />
-                {job === undefined && <Td />}
+                {!jobs || jobs.length !== 1 && <Td />}
                 {isLabor && <Td align="right">{fmtNum(totals.est_hours)}</Td>}
                 {isLabor && <Td align="right">{fmtNum(totals.jtd_hours)}</Td>}
                 <Td align="right">{fmt(totals.est_cost)}</Td>

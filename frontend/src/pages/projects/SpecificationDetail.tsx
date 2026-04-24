@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { specificationsApi } from '../../services/specifications';
+import api from '../../services/api';
 import '../../styles/SalesPipeline.css';
 
 const SpecificationDetail: React.FC = () => {
@@ -11,8 +12,10 @@ const SpecificationDetail: React.FC = () => {
   const [newQuestion, setNewQuestion] = useState('');
   const [answeringQuestion, setAnsweringQuestion] = useState<number | null>(null);
   const [answerText, setAnswerText] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
-  const { data: specification } = useQuery({
+  const { data: specification, isLoading, isError, error } = useQuery({
     queryKey: ['specification', specId],
     queryFn: () => specificationsApi.getById(Number(specId)).then(res => res.data.data),
   });
@@ -63,7 +66,17 @@ const SpecificationDetail: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
-  if (!specification) return <div>Loading...</div>;
+  if (isLoading) return <div>Loading specification...</div>;
+  if (isError) return (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <h2>Error Loading Specification</h2>
+      <p style={{ color: '#dc2626' }}>{(error as any)?.response?.data?.error || 'Failed to load specification. It may have been deleted.'}</p>
+      <button onClick={() => navigate(`/projects/${projectId}/specifications`)} className="btn btn-secondary" style={{ marginTop: '1rem' }}>
+        Back to Specifications
+      </button>
+    </div>
+  );
+  if (!specification) return <div>Specification not found.</div>;
 
   return (
     <div>
@@ -82,6 +95,11 @@ const SpecificationDetail: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          {specification.file_name && (
+            <button onClick={() => specificationsApi.download(specification.id)} className="btn btn-primary">
+              Download
+            </button>
+          )}
           <button onClick={() => navigate(`/projects/${projectId}/specifications`)} className="btn btn-secondary">
             Close
           </button>
@@ -126,6 +144,53 @@ const SpecificationDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* File Actions */}
+      {specification.file_name && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ marginTop: 0 }}>Document</h3>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: showPreview ? '1rem' : 0 }}>
+            <button
+              onClick={() => specificationsApi.download(specification.id)}
+              className="btn btn-primary"
+            >
+              Download {specification.file_name}
+            </button>
+            {specification.file_type === 'application/pdf' && (
+              <button
+                onClick={async () => {
+                  if (!showPreview) {
+                    try {
+                      const response = await api.get(`/specifications/${specification.id}/download`, {
+                        responseType: 'blob'
+                      });
+                      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+                      setPreviewUrl(url);
+                      setShowPreview(true);
+                    } catch {
+                      specificationsApi.download(specification.id);
+                    }
+                  } else {
+                    if (previewUrl) window.URL.revokeObjectURL(previewUrl);
+                    setPreviewUrl(null);
+                    setShowPreview(false);
+                  }
+                }}
+                className="btn btn-secondary"
+              >
+                {showPreview ? 'Hide Preview' : 'Preview PDF'}
+              </button>
+            )}
+          </div>
+          {showPreview && previewUrl && (
+            <iframe
+              src={previewUrl}
+              style={{ width: '100%', height: '80vh', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+              title="Specification PDF Preview"
+            />
+          )}
+        </div>
+      )}
 
       {/* Version History */}
       {versions && versions.length > 1 && (
