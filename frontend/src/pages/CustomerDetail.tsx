@@ -628,6 +628,21 @@ const CustomerDetail: React.FC = () => {
               <h3><span className="cd-panel-icon">👥</span> Contacts <span className="cd-count">{contacts.length}</span></h3>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
+                  onClick={() => navigate(`/customers/${id}/org-chart`)}
+                  title="View org chart"
+                  style={{
+                    fontSize: '10px',
+                    padding: '2px 8px',
+                    background: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    whiteSpace: 'nowrap'
+                  }}
+                >Org Chart</button>
+                <button
                   className="cd-icon-btn"
                   onClick={() => { setAddingContact(true); setTimeout(() => contactInputRef.current?.focus(), 50); }}
                   title="Add contact"
@@ -643,71 +658,71 @@ const CustomerDetail: React.FC = () => {
             </div>
             <div className="cd-locations-list">
               {addingContact && (
-                <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <input
-                      ref={contactInputRef}
-                      type="text"
-                      value={newContactFirst}
-                      onChange={(e) => setNewContactFirst(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Escape') { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); } }}
-                      placeholder="First name..."
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="text"
-                      value={newContactLast}
-                      onChange={(e) => setNewContactLast(e.target.value)}
-                      placeholder="Last name..."
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <input
-                      type="text"
-                      value={newContactTitle}
-                      onChange={(e) => setNewContactTitle(e.target.value)}
-                      placeholder="Title..."
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="email"
-                      value={newContactEmail}
-                      onChange={(e) => setNewContactEmail(e.target.value)}
-                      placeholder="Email..."
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                    />
-                    <input
-                      type="tel"
-                      value={newContactPhone}
-                      onChange={(e) => setNewContactPhone(e.target.value)}
-                      placeholder="Phone..."
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={() => {
-                        if (newContactFirst.trim() || newContactLast.trim()) {
-                          addContactMutation.mutate({
-                            first_name: newContactFirst.trim(),
-                            last_name: newContactLast.trim(),
-                            title: newContactTitle.trim() || undefined,
-                            email: newContactEmail.trim() || undefined,
-                            phone: newContactPhone.trim() || undefined,
-                          });
-                        }
-                      }}
-                      disabled={(!newContactFirst.trim() && !newContactLast.trim()) || addContactMutation.isPending}
-                      style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: (!newContactFirst.trim() && !newContactLast.trim()) ? 0.5 : 1 }}
-                    >{addContactMutation.isPending ? '...' : 'Add'}</button>
-                    <button
-                      onClick={() => { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); }}
-                      style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                    >Cancel</button>
-                  </div>
-                </div>
-              )}
+                    <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input
+                          ref={contactInputRef}
+                          type="text"
+                          value={newContactFirst}
+                          onChange={(e) => setNewContactFirst(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Escape') { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); } }}
+                          placeholder="First name..."
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="text"
+                          value={newContactLast}
+                          onChange={(e) => setNewContactLast(e.target.value)}
+                          placeholder="Last name..."
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input
+                          type="text"
+                          value={newContactTitle}
+                          onChange={(e) => setNewContactTitle(e.target.value)}
+                          placeholder="Title..."
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="email"
+                          value={newContactEmail}
+                          onChange={(e) => setNewContactEmail(e.target.value)}
+                          placeholder="Email..."
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                        <input
+                          type="tel"
+                          value={newContactPhone}
+                          onChange={(e) => setNewContactPhone(e.target.value)}
+                          placeholder="Phone..."
+                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => {
+                            if (newContactFirst.trim() || newContactLast.trim()) {
+                              addContactMutation.mutate({
+                                first_name: newContactFirst.trim(),
+                                last_name: newContactLast.trim(),
+                                title: newContactTitle.trim() || undefined,
+                                email: newContactEmail.trim() || undefined,
+                                phone: newContactPhone.trim() || undefined,
+                              });
+                            }
+                          }}
+                          disabled={(!newContactFirst.trim() && !newContactLast.trim()) || addContactMutation.isPending}
+                          style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: (!newContactFirst.trim() && !newContactLast.trim()) ? 0.5 : 1 }}
+                        >{addContactMutation.isPending ? '...' : 'Add'}</button>
+                        <button
+                          onClick={() => { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); }}
+                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                        >Cancel</button>
+                      </div>
+                    </div>
+                  )}
               {contacts.length === 0 && !addingContact ? (
                 <div className="cd-empty-mini">No contacts added</div>
               ) : (

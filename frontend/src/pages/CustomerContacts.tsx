@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getCustomer, getCustomerTouchpoints } from '../services/customers';
 import api from '../services/api';
@@ -25,6 +25,7 @@ interface CustomerContact {
 
 const CustomerContacts: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { confirm } = useTitanFeedback();
   const [showContactModal, setShowContactModal] = useState(false);
@@ -138,24 +139,43 @@ const CustomerContacts: React.FC = () => {
           <h2 className="section-title">
             👤 Contacts <span className="tab-count">{contacts.length}</span>
           </h2>
-          <button
-            className="btn-primary"
-            onClick={() => setShowContactModal(true)}
-            style={{
-              background: 'linear-gradient(135deg, #667eea, #764ba2)',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '8px',
-              color: 'white',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'transform 0.2s',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-            onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-          >
-            + Add Contact
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => navigate(`/customers/${id}/org-chart`)}
+              style={{
+                background: '#10b981',
+                border: 'none',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '8px',
+                color: 'white',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'transform 0.2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+            >
+              Org Chart
+            </button>
+            <button
+              className="btn-primary"
+              onClick={() => setShowContactModal(true)}
+              style={{
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                border: 'none',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '8px',
+                color: 'white',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'transform 0.2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+            >
+              + Add Contact
+            </button>
+          </div>
         </div>
         <div className="data-content">
           {contacts.length === 0 ? (

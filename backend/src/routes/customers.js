@@ -358,6 +358,20 @@ router.get('/:id/contacts', async (req, res, next) => {
   }
 });
 
+// Get customer contacts with organizational hierarchy
+router.get('/:id/contacts/hierarchy', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const contacts = await Customer.getContactsWithHierarchy(req.params.id, req.tenantId);
+    res.json(contacts);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Create contact for customer
 router.post('/:id/contacts', async (req, res, next) => {
   try {
@@ -367,6 +381,63 @@ router.post('/:id/contacts', async (req, res, next) => {
     }
     const contact = await Customer.createContact(req.params.id, req.body, req.tenantId);
     res.status(201).json(contact);
+  } catch (error) {
+    console.error('Error creating contact:', error);
+    res.status(500).json({ error: error.message || 'Failed to create contact' });
+  }
+});
+
+// Update contact for customer (nested route)
+router.put('/:id/contacts/:contactId', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
+    if (!existingContact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    if (existingContact.customer_id !== parseInt(req.params.id, 10)) {
+      return res.status(400).json({ error: 'Contact does not belong to this customer' });
+    }
+    const contact = await Customer.updateContact(req.params.contactId, req.body, req.tenantId);
+    res.json(contact);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete contact for customer (nested route)
+router.delete('/:id/contacts/:contactId', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+    const existingContact = await Customer.getContactById(req.params.contactId, req.tenantId);
+    if (!existingContact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    if (existingContact.customer_id !== parseInt(req.params.id, 10)) {
+      return res.status(400).json({ error: 'Contact does not belong to this customer' });
+    }
+    await Customer.deleteContact(req.params.contactId);
+    res.json({ message: 'Contact deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get direct reports for a contact
+router.get('/contacts/:contactId/reports', async (req, res, next) => {
+  try {
+    const contact = await Customer.getContactById(req.params.contactId, req.tenantId);
+    if (!contact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    const reports = await Customer.getDirectReports(req.params.contactId, req.tenantId);
+    res.json(reports);
   } catch (error) {
     next(error);
   }
@@ -389,7 +460,7 @@ router.put('/contacts/:contactId', async (req, res, next) => {
       ...req.body,
       customer_id: req.body.customer_id !== undefined ? req.body.customer_id : existingContact.customer_id
     };
-    const contact = await Customer.updateContact(req.params.contactId, updateData);
+    const contact = await Customer.updateContact(req.params.contactId, updateData, req.tenantId);
     res.json(contact);
   } catch (error) {
     next(error);

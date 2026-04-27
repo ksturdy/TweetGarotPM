@@ -526,12 +526,108 @@ const Customer = {
     return result.rows;
   },
 
+  /**
+   * Get contacts with organizational hierarchy information
+   */
+  async getContactsWithHierarchy(customerId, tenantId) {
+    const result = await db.query(`
+      SELECT
+        cc.*,
+        mgr.first_name || ' ' || mgr.last_name as manager_name,
+        (
+          SELECT COUNT(*)
+          FROM customer_contacts subordinates
+          WHERE subordinates.reports_to = cc.id
+            AND subordinates.tenant_id = $2
+        ) as direct_reports_count
+      FROM customer_contacts cc
+      LEFT JOIN customer_contacts mgr ON cc.reports_to = mgr.id
+      WHERE cc.customer_id = $1 AND cc.tenant_id = $2
+      ORDER BY cc.is_primary DESC, cc.last_name ASC, cc.first_name ASC
+    `, [customerId, tenantId]);
+    return result.rows;
+  },
+
+  /**
+   * Get direct reports for a contact
+   */
+  async getDirectReports(contactId, tenantId) {
+    const result = await db.query(`
+      SELECT *
+      FROM customer_contacts
+      WHERE reports_to = $1 AND tenant_id = $2
+      ORDER BY last_name ASC, first_name ASC
+    `, [contactId, tenantId]);
+    return result.rows;
+  },
+
+  /**
+   * Validate no circular reporting relationship
+   * Recursively checks if contactId appears in the reporting chain above reportsTo
+   */
+  async validateNoCircularReporting(contactId, reportsTo, tenantId) {
+    if (!reportsTo) return true; // No manager = no circular dependency
+
+    // Prevent self-reporting
+    if (contactId === reportsTo) {
+      throw new Error('Contact cannot report to themselves');
+    }
+
+    // Walk up the reporting chain
+    let current = reportsTo;
+    const visited = new Set([contactId]);
+    const maxDepth = 50; // Safety limit to prevent infinite loops
+    let depth = 0;
+
+    while (current && depth < maxDepth) {
+      if (visited.has(current)) {
+        throw new Error('Circular reporting relationship detected');
+      }
+      visited.add(current);
+
+      // Get the manager of current contact
+      const result = await db.query(
+        'SELECT reports_to FROM customer_contacts WHERE id = $1 AND tenant_id = $2',
+        [current, tenantId]
+      );
+
+      if (result.rows.length === 0) break; // Contact not found, end of chain
+      current = result.rows[0].reports_to;
+      depth++;
+    }
+
+    if (depth >= maxDepth) {
+      throw new Error('Reporting chain exceeds maximum depth');
+    }
+
+    return true;
+  },
+
   async createContact(customerId, data, tenantId = null) {
+    // Convert customerId to number for comparison
+    const customerIdNum = parseInt(customerId, 10);
+
+    // Validate reports_to if provided
+    if (data.reports_to) {
+      // Ensure manager belongs to same customer and tenant
+      const manager = await this.getContactById(data.reports_to, tenantId);
+      if (!manager) {
+        throw new Error('Manager contact not found');
+      }
+      if (manager.customer_id !== customerIdNum) {
+        throw new Error('Manager must belong to same customer');
+      }
+
+      // Check for circular reporting
+      // Note: For new contacts, pass a temporary negative ID to avoid self-check issues
+      await this.validateNoCircularReporting(-1, data.reports_to, tenantId);
+    }
+
     const result = await db.query(`
       INSERT INTO customer_contacts (
         customer_id, first_name, last_name, title,
-        email, phone, mobile, is_primary, notes, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        email, phone, mobile, is_primary, notes, reports_to, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
       customerId,
@@ -543,6 +639,7 @@ const Customer = {
       data.mobile,
       data.is_primary,
       data.notes,
+      data.reports_to || null,
       tenantId
     ]);
     return result.rows[0];
@@ -550,11 +647,24 @@ const Customer = {
 
   // Create contact without requiring a customer (standalone contact)
   async createStandaloneContact(data, tenantId) {
+    // Validate reports_to if provided
+    if (data.reports_to) {
+      const manager = await this.getContactById(data.reports_to, tenantId);
+      if (!manager) {
+        throw new Error('Manager contact not found');
+      }
+      if (data.customer_id && manager.customer_id !== parseInt(data.customer_id, 10)) {
+        throw new Error('Manager must belong to same customer');
+      }
+
+      await this.validateNoCircularReporting(-1, data.reports_to, tenantId);
+    }
+
     const result = await db.query(`
       INSERT INTO customer_contacts (
         customer_id, first_name, last_name, title,
-        email, phone, mobile, is_primary, notes, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        email, phone, mobile, is_primary, notes, reports_to, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
       data.customer_id || null,
@@ -566,18 +676,48 @@ const Customer = {
       data.mobile,
       data.is_primary || false,
       data.notes,
+      data.reports_to || null,
       tenantId
     ]);
     return result.rows[0];
   },
 
-  async updateContact(contactId, data) {
+  async updateContact(contactId, data, tenantId) {
+    // Validate reports_to if provided
+    if (data.reports_to !== undefined && data.reports_to !== null) {
+      // Get current contact to check customer_id and tenant_id
+      const currentContact = await db.query(
+        'SELECT customer_id, tenant_id FROM customer_contacts WHERE id = $1',
+        [contactId]
+      );
+
+      if (currentContact.rows.length === 0) {
+        throw new Error('Contact not found');
+      }
+
+      const customerId = data.customer_id !== undefined ? parseInt(data.customer_id, 10) : currentContact.rows[0].customer_id;
+      const contactTenantId = tenantId || currentContact.rows[0].tenant_id;
+
+      // Ensure manager belongs to same customer and tenant
+      const manager = await this.getContactById(data.reports_to, contactTenantId);
+      if (!manager) {
+        throw new Error('Manager contact not found');
+      }
+      if (customerId && manager.customer_id !== customerId) {
+        throw new Error('Manager must belong to same customer');
+      }
+
+      // Check for circular reporting
+      await this.validateNoCircularReporting(contactId, data.reports_to, contactTenantId);
+    }
+
     const result = await db.query(`
       UPDATE customer_contacts SET
         customer_id = $1, first_name = $2, last_name = $3, title = $4,
         email = $5, phone = $6, mobile = $7, is_primary = $8, notes = $9,
+        reports_to = $10,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10
+      WHERE id = $11
       RETURNING *
     `, [
       data.customer_id !== undefined ? data.customer_id : null,
@@ -589,6 +729,7 @@ const Customer = {
       data.mobile,
       data.is_primary,
       data.notes,
+      data.reports_to !== undefined ? data.reports_to : null,
       contactId
     ]);
     return result.rows[0];

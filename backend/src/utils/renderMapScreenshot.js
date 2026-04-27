@@ -34,6 +34,12 @@ async function getUSGeoJSON() {
 
 /**
  * Build an HTML page that renders a Leaflet map with all the requested layers.
+ *
+ * Layer z-index ordering (via Leaflet panes):
+ *   200  tilePane        — base map tiles
+ *   400  overlayPane     — revenue GeoJSON fills
+ *   450  maskPane        — white mask outside US (custom pane)
+ *   600  markerPane      — cluster markers + revenue labels (always on top)
  */
 function buildMapHtml(opts) {
   const {
@@ -66,7 +72,6 @@ function buildMapHtml(opts) {
     * { margin: 0; padding: 0; }
     body { overflow: hidden; }
     #map { width: ${width}px; height: ${height}px; background: #ffffff; position: relative; }
-    /* Hide Leaflet attribution & zoom for clean PDF look */
     .leaflet-control-attribution, .leaflet-control-zoom { display: none !important; }
   </style>
 </head>
@@ -86,16 +91,11 @@ function buildMapHtml(opts) {
         markerZoomAnimation: false,
       }).setView(${safeJSON(center)}, ${zoom});
 
-      // Expose map globally so post-render mask can use latLngToContainerPoint
-      window.__map = map;
-
-      var tileLayer = L.tileLayer(${safeJSON(tileUrl)}, {
-        maxZoom: 18,
-      });
+      var tileLayer = L.tileLayer(${safeJSON(tileUrl)}, { maxZoom: 18 });
       tileLayer.addTo(map);
 
 ${showRevenue && geoJSON ? `
-      // ── Revenue choropleth layer ──
+      // ── Revenue choropleth (overlayPane z=400) ──
       (function() {
         var stateData = ${safeJSON(stateRevenueData)};
         var geo = ${safeJSON(geoJSON)};
@@ -174,8 +174,41 @@ ${showRevenue && geoJSON ? `
       })();
 ` : ''}
 
+${geoJSON ? `
+      // ── US boundary mask (custom maskPane z=450, above revenue but below markers) ──
+      (function() {
+        var geo = ${safeJSON(geoJSON)};
+
+        // Create pane between overlayPane (400) and markerPane (600)
+        map.createPane('maskPane');
+        map.getPane('maskPane').style.zIndex = '450';
+
+        var worldOuter = [[-90, -360], [90, -360], [90, 360], [-90, 360]];
+        var holes = [];
+        geo.features.forEach(function(f) {
+          var t = f.geometry.type, c = f.geometry.coordinates;
+          if (t === 'Polygon') {
+            holes.push(c[0].map(function(p) { return [p[1], p[0]]; }));
+          } else if (t === 'MultiPolygon') {
+            c.forEach(function(poly) {
+              holes.push(poly[0].map(function(p) { return [p[1], p[0]]; }));
+            });
+          }
+        });
+
+        L.polygon([worldOuter].concat(holes), {
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+          color: '#94a3b8',
+          weight: 1.5,
+          interactive: false,
+          pane: 'maskPane',
+        }).addTo(map);
+      })();
+` : ''}
+
 ${showProjects && locations.length > 0 ? `
-      // ── Project marker clusters ──
+      // ── Project marker clusters (markerPane z=600, always on top) ──
       (function() {
         var locs = ${safeJSON(locations)};
         var statusColors = {
@@ -253,12 +286,12 @@ ${customPins.map((cp, i) => `
       })();
 `).join('\n')}
 
-      // Track when tiles finish loading
+      // Signal ready after tiles load
       tileLayer.on('load', function() {
-        setTimeout(function() { window.__mapReady = true; }, 600);
+        setTimeout(function() { window.__mapReady = true; }, 800);
       });
 
-      // Fallback: if tiles never fire load, set ready after timeout
+      // Fallback timeout
       setTimeout(function() {
         if (!window.__mapReady) window.__mapReady = true;
       }, 12000);
@@ -269,101 +302,7 @@ ${customPins.map((cp, i) => `
 }
 
 /**
- * After the map renders, draw a white canvas mask over everything outside the
- * US state boundaries.  Uses the proven "fill white + destination-out to cut
- * state shapes + re-draw state borders" approach from the old applyUSMaskToCanvas.
- */
-async function drawCanvasMask(page, geoJSON) {
-  if (!geoJSON) return;
-
-  await page.evaluate((geoStr) => {
-    var geo = JSON.parse(geoStr);
-    var mapEl = document.getElementById('map');
-    var lMap = window.__map;
-    if (!lMap) return;
-
-    var scale = window.devicePixelRatio || 1;
-    var w = mapEl.offsetWidth;
-    var h = mapEl.offsetHeight;
-
-    var canvas = document.createElement('canvas');
-    canvas.width = w * scale;
-    canvas.height = h * scale;
-    canvas.style.cssText = 'position:absolute;top:0;left:0;width:' + w + 'px;height:' + h + 'px;z-index:999;pointer-events:none;';
-    mapEl.appendChild(canvas);
-
-    var ctx = canvas.getContext('2d');
-
-    // 1. Fill entire canvas white
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // 2. Cut out US state shapes (makes them transparent → map shows through)
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0,0,0,1)';
-
-    geo.features.forEach(function(feature) {
-      var type = feature.geometry.type;
-      var coords = feature.geometry.coordinates;
-      var rings = type === 'MultiPolygon'
-        ? coords.map(function(p) { return p[0]; })
-        : [coords[0]];
-
-      rings.forEach(function(ring) {
-        ctx.beginPath();
-        ring.forEach(function(pt, i) {
-          var px = lMap.latLngToContainerPoint([pt[1], pt[0]]);
-          var x = px.x * scale;
-          var y = px.y * scale;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-        ctx.fill();
-      });
-    });
-
-    // 3. Draw state borders on top
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1.5 * scale;
-
-    geo.features.forEach(function(feature) {
-      var type = feature.geometry.type;
-      var coords = feature.geometry.coordinates;
-      var rings = type === 'MultiPolygon'
-        ? coords.map(function(p) { return p[0]; })
-        : [coords[0]];
-
-      rings.forEach(function(ring) {
-        ctx.beginPath();
-        ring.forEach(function(pt, i) {
-          var px = lMap.latLngToContainerPoint([pt[1], pt[0]]);
-          var x = px.x * scale;
-          var y = px.y * scale;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.closePath();
-        ctx.stroke();
-      });
-    });
-  }, JSON.stringify(geoJSON));
-}
-
-/**
  * Render a Leaflet map in Puppeteer and return a base64 PNG data URL.
- *
- * @param {import('puppeteer').Browser} browser - Already-launched Puppeteer browser
- * @param {Object} opts
- * @param {number[]} opts.center   - [lat, lng]
- * @param {number}   opts.zoom
- * @param {string}   opts.tileUrl
- * @param {string[]} opts.standardLayers - e.g. ['projects','revenue']
- * @param {Array}    opts.locations      - MapProject rows (for project markers)
- * @param {Object}   opts.stateRevenueData
- * @param {Array}    opts.customPins     - [{pins, color, name}]
- * @returns {Promise<string>} data:image/png;base64,… URL
  */
 async function renderMapScreenshot(browser, opts = {}) {
   const width = opts.width || 1000;
@@ -388,14 +327,11 @@ async function renderMapScreenshot(browser, opts = {}) {
       timeout: 30000,
     });
 
-    // Wait for our JS flag that fires after tiles + layers finish
+    // Wait for tiles + layers to finish rendering
     await page.waitForFunction('window.__mapReady === true', { timeout: 15000 });
 
-    // Draw the white mask outside US on a canvas overlay (above all Leaflet layers)
-    await drawCanvasMask(page, geoJSON);
-
-    // Brief extra pause for the canvas to paint
-    await page.evaluate(() => new Promise(r => setTimeout(r, 100)));
+    // Extra settle time for SVG polygon rendering
+    await page.evaluate(() => new Promise(r => setTimeout(r, 300)));
 
     const screenshot = await page.screenshot({
       encoding: 'base64',

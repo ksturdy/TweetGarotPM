@@ -43,6 +43,25 @@ export interface CustomerLocation {
   updated_at: string;
 }
 
+export interface CustomerContact {
+  id: number;
+  customer_id: number | null;
+  tenant_id: number;
+  first_name: string;
+  last_name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  is_primary: boolean;
+  notes?: string;
+  reports_to?: number | null;
+  manager_name?: string;
+  direct_reports_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CustomerStats {
   total_customers: string;
   active_customers: string;
@@ -132,8 +151,23 @@ export const deleteCustomerLocation = async (locationId: number) => {
 };
 
 // ── Contact API ──
-export const createCustomerContact = async (customerId: number | string, data: { first_name: string; last_name: string; title?: string; email?: string; phone?: string }) => {
-  const response = await api.post(`/customers/${customerId}/contacts`, data);
+export const createCustomerContact = async (customerId: number | string, data: Partial<CustomerContact>) => {
+  const response = await api.post<CustomerContact>(`/customers/${customerId}/contacts`, data);
+  return response.data;
+};
+
+export const updateCustomerContact = async (contactId: number, data: Partial<CustomerContact>) => {
+  const response = await api.put<CustomerContact>(`/customers/contacts/${contactId}`, data);
+  return response.data;
+};
+
+export const getCustomerContactsHierarchy = async (customerId: number | string) => {
+  const response = await api.get<CustomerContact[]>(`/customers/${customerId}/contacts/hierarchy`);
+  return response.data;
+};
+
+export const getContactDirectReports = async (contactId: number) => {
+  const response = await api.get<CustomerContact[]>(`/customers/contacts/${contactId}/reports`);
   return response.data;
 };
 

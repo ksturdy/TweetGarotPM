@@ -306,9 +306,6 @@ export function useTraceoverPersistence(takeoffId: number | null) {
           systems: systemsRes.data.map(mapApiSystem),
         });
 
-        // Mark hydration complete — subscriptions can now process changes
-        hydrated.current = true;
-
         // Fetch documents (separate try/catch so failures don't block runs)
         let serverDocs: any[] = [];
         try {
@@ -457,6 +454,12 @@ export function useTraceoverPersistence(takeoffId: number | null) {
             console.warn(`[Persistence] Failed to fetch measurements for doc ${serverDoc.id}:`, measErr);
           }
         }
+
+        // Mark hydration complete — subscriptions can now process user changes.
+        // IMPORTANT: this MUST be after docs, runs, and measurements are loaded,
+        // otherwise subscriptions would treat hydrated data as new user-created
+        // items and re-create them on the server (causing duplicates).
+        hydrated.current = true;
       } catch (err) {
         console.error('[Persistence] Failed to hydrate settings:', err);
       }

@@ -66,6 +66,7 @@ import TeamList from './pages/accountManagement/TeamList';
 import TeamDetail from './pages/accountManagement/TeamDetail';
 import CustomerDetail from './pages/CustomerDetail';
 import CustomerContacts from './pages/CustomerContacts';
+import CustomerOrgChart from './pages/CustomerOrgChart';
 import CustomerProjects from './pages/CustomerProjects';
 import CustomerEstimates from './pages/CustomerEstimates';
 import CustomerTouchpoints from './pages/CustomerTouchpoints';
@@ -403,6 +404,7 @@ const App: React.FC = () => {
                 <Route path="/account-management/teams/:id" element={<TeamDetail />} />
                 <Route path="/customers/:id" element={<CustomerDetail />} />
                 <Route path="/customers/:id/contacts" element={<CustomerContacts />} />
+                <Route path="/customers/:id/org-chart" element={<CustomerOrgChart />} />
                 <Route path="/customers/:id/projects" element={<CustomerProjects />} />
                 <Route path="/customers/:id/estimates" element={<CustomerEstimates />} />
                 <Route path="/customers/:id/touchpoints" element={<CustomerTouchpoints />} />
