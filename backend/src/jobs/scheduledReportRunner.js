@@ -301,7 +301,7 @@ For each verified project found, return ONLY a valid JSON object with this struc
 
           // Update search data with fresh results
           searchData = {
-            ...savedSearch,
+            ...searchData,
             results: rawProjects.map((p, i) => ({
               id: i + 1,
               company_name: p.owner || 'Unknown',
