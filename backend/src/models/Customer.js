@@ -534,6 +534,7 @@ const Customer = {
       SELECT
         cc.*,
         mgr.first_name || ' ' || mgr.last_name as manager_name,
+        cl.name as location_name,
         (
           SELECT COUNT(*)
           FROM customer_contacts subordinates
@@ -542,6 +543,7 @@ const Customer = {
         ) as direct_reports_count
       FROM customer_contacts cc
       LEFT JOIN customer_contacts mgr ON cc.reports_to = mgr.id
+      LEFT JOIN customer_locations cl ON cc.location_id = cl.id
       WHERE cc.customer_id = $1 AND cc.tenant_id = $2
       ORDER BY cc.is_primary DESC, cc.last_name ASC, cc.first_name ASC
     `, [customerId, tenantId]);
@@ -626,8 +628,8 @@ const Customer = {
     const result = await db.query(`
       INSERT INTO customer_contacts (
         customer_id, first_name, last_name, title,
-        email, phone, mobile, is_primary, notes, reports_to, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        email, phone, mobile, is_primary, notes, reports_to, location_id, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       customerId,
@@ -640,6 +642,7 @@ const Customer = {
       data.is_primary,
       data.notes,
       data.reports_to || null,
+      data.location_id || null,
       tenantId
     ]);
     return result.rows[0];
@@ -663,8 +666,8 @@ const Customer = {
     const result = await db.query(`
       INSERT INTO customer_contacts (
         customer_id, first_name, last_name, title,
-        email, phone, mobile, is_primary, notes, reports_to, tenant_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        email, phone, mobile, is_primary, notes, reports_to, location_id, tenant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       data.customer_id || null,
@@ -677,6 +680,7 @@ const Customer = {
       data.is_primary || false,
       data.notes,
       data.reports_to || null,
+      data.location_id || null,
       tenantId
     ]);
     return result.rows[0];
@@ -715,9 +719,9 @@ const Customer = {
       UPDATE customer_contacts SET
         customer_id = $1, first_name = $2, last_name = $3, title = $4,
         email = $5, phone = $6, mobile = $7, is_primary = $8, notes = $9,
-        reports_to = $10,
+        reports_to = $10, location_id = $11,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $11
+      WHERE id = $12
       RETURNING *
     `, [
       data.customer_id !== undefined ? data.customer_id : null,
@@ -730,6 +734,7 @@ const Customer = {
       data.is_primary,
       data.notes,
       data.reports_to !== undefined ? data.reports_to : null,
+      data.location_id !== undefined ? data.location_id : null,
       contactId
     ]);
     return result.rows[0];

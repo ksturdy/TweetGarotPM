@@ -56,8 +56,10 @@ export interface CustomerContact {
   is_primary: boolean;
   notes?: string;
   reports_to?: number | null;
+  location_id?: number | null;
   manager_name?: string;
   direct_reports_count?: number;
+  location_name?: string;
   created_at: string;
   updated_at: string;
 }

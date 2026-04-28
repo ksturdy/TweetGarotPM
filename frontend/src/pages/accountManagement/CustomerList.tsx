@@ -19,7 +19,6 @@ const CustomerList: React.FC = () => {
   const [hasUserSorted, setHasUserSorted] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [showAddProspect, setShowAddProspect] = useState(false);
-  const [prospectName, setProspectName] = useState('');
   const [editingCell, setEditingCell] = useState<{ id: number; field: 'market' | 'status' } | null>(null);
   const queryClient = useQueryClient();
 
@@ -143,19 +142,6 @@ const CustomerList: React.FC = () => {
     onSettled: () => {
       // Refetch after mutation settles
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-    },
-  });
-
-  // Create prospect mutation
-  const createProspectMutation = useMutation({
-    mutationFn: (name: string) => customersApi.quickCreate(name),
-    onSuccess: (newProspect) => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
-      setShowAddProspect(false);
-      setProspectName('');
-      // Navigate to the new prospect
-      navigate(`/customers/${newProspect.id}`);
     },
   });
 
@@ -307,64 +293,37 @@ const CustomerList: React.FC = () => {
             </svg>
             Customers sync automatically from Vista
           </span>
+          <span style={{
+            fontSize: '0.85rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'rgba(139, 92, 246, 0.1)',
+            borderRadius: '8px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/>
+              <circle cx="8.5" cy="7" r="4"/>
+              <line x1="20" y1="8" x2="20" y2="14"/>
+              <line x1="23" y1="11" x2="17" y2="11"/>
+            </svg>
+            Prospects are added manually until they become active in Vista
+          </span>
 
-          {showAddProspect ? (
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: '0.5rem' }}>
-              <input
-                type="text"
-                value={prospectName}
-                onChange={(e) => setProspectName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && prospectName.trim()) {
-                    createProspectMutation.mutate(prospectName.trim());
-                  }
-                  if (e.key === 'Escape') {
-                    setShowAddProspect(false);
-                    setProspectName('');
-                  }
-                }}
-                placeholder="Prospect name..."
-                autoFocus
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  minWidth: '200px'
-                }}
-              />
-              <button
-                className="sales-btn"
-                onClick={() => prospectName.trim() && createProspectMutation.mutate(prospectName.trim())}
-                disabled={!prospectName.trim() || createProspectMutation.isPending}
-                style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white' }}
-              >
-                {createProspectMutation.isPending ? 'Creating...' : 'Create'}
-              </button>
-              <button
-                className="sales-btn"
-                onClick={() => {
-                  setShowAddProspect(false);
-                  setProspectName('');
-                }}
-                style={{ background: '#f3f4f6', color: '#6b7280' }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              className="sales-btn"
-              onClick={() => setShowAddProspect(true)}
-              style={{ marginLeft: '0.5rem', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add Prospect
-            </button>
-          )}
+          <button
+            className="sales-btn"
+            onClick={() => setShowAddProspect(true)}
+            style={{ marginLeft: '0.5rem', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Prospect
+          </button>
 
           {returnTo && (
             <button
@@ -689,6 +648,22 @@ const CustomerList: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {showAddProspect && (
+        <CustomerFormModal
+          isProspect
+          onClose={() => setShowAddProspect(false)}
+          onCreated={(newProspect) => {
+            navigate(`/customers/${newProspect.id}`);
+          }}
+        />
+      )}
+
+      {showNewCustomerModal && (
+        <CustomerFormModal
+          onClose={handleModalClose}
+        />
+      )}
 
     </div>
   );

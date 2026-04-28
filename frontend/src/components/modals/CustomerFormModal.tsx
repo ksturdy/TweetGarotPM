@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customersApi, Customer } from '../../services/customers';
 import { employeesApi } from '../../services/employees';
@@ -10,11 +10,13 @@ import { MARKETS as MARKET_OPTIONS } from '../../constants/markets';
 
 interface CustomerFormModalProps {
   customer?: Customer | null;
+  isProspect?: boolean;
   onClose: () => void;
   onDelete?: () => void;
+  onCreated?: (newCustomer: any) => void;
 }
 
-const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose, onDelete }) => {
+const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, isProspect, onClose, onDelete, onCreated }) => {
   const queryClient = useQueryClient();
   const isEditing = !!customer;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -32,6 +34,163 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
     : true;
 
   const isVista = customer?.source === 'vista';
+
+  // Searchable account manager dropdown state
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const managerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (managerDropdownRef.current && !managerDropdownRef.current.contains(event.target as Node)) {
+        setShowManagerDropdown(false);
+        setManagerSearch('');
+      }
+    };
+    if (showManagerDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+  }, [showManagerDropdown]);
+
+  const renderManagerDropdown = () => {
+    const filtered = employees.filter((emp: any) => {
+      if (!managerSearch) return true;
+      const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
+      return fullName.includes(managerSearch.toLowerCase());
+    });
+
+    return (
+    <div className="form-group" style={{ position: 'relative' }} ref={managerDropdownRef}>
+      <label htmlFor="account_manager">Account Manager</label>
+      <div
+        style={{
+          position: 'relative',
+          border: '2px solid #e5e7eb',
+          borderRadius: '8px',
+          padding: '0.75rem',
+          cursor: 'pointer',
+          background: 'white',
+          transition: 'all 0.2s'
+        }}
+        onClick={() => setShowManagerDropdown(!showManagerDropdown)}
+      >
+        {formData.account_manager ? (
+          <div>{formData.account_manager}</div>
+        ) : (
+          <div style={{ color: '#9ca3af' }}>Select an account manager...</div>
+        )}
+      </div>
+
+      {showManagerDropdown && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            right: 0,
+            background: 'white',
+            border: '2px solid #e5e7eb',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            zIndex: 1000,
+            maxHeight: '300px',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="text"
+            placeholder="Search employees..."
+            value={managerSearch}
+            onChange={(e) => setManagerSearch(e.target.value)}
+            style={{
+              padding: '0.75rem',
+              border: 'none',
+              borderBottom: '1px solid #e5e7eb',
+              outline: 'none',
+              fontSize: '0.95rem'
+            }}
+            autoFocus
+          />
+          <div style={{ overflowY: 'auto', maxHeight: '240px' }}>
+            <div
+              style={{
+                padding: '0.75rem',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+                borderBottom: '1px solid #f3f4f6',
+                background: !formData.account_manager ? '#f3f4f6' : 'transparent'
+              }}
+              onClick={() => {
+                setFormData(prev => ({ ...prev, account_manager: '' }));
+                setShowManagerDropdown(false);
+                setManagerSearch('');
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = !formData.account_manager ? '#f3f4f6' : 'transparent')}
+            >
+              <span style={{ color: '#9ca3af' }}>None</span>
+            </div>
+            {!existingManagerMatchesEmployee && formData.account_manager && (
+              <div
+                style={{
+                  padding: '0.75rem',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                  borderBottom: '1px solid #f3f4f6',
+                  background: '#f3f4f6'
+                }}
+                onClick={() => {
+                  setShowManagerDropdown(false);
+                  setManagerSearch('');
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+              >
+                <div style={{ fontWeight: 600 }}>{formData.account_manager}</div>
+                <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '0.25rem' }}>Current value</div>
+              </div>
+            )}
+            {filtered.length === 0 ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280' }}>
+                No employees found
+              </div>
+            ) : (
+              filtered.map((emp: any) => {
+                const name = `${emp.first_name} ${emp.last_name}`;
+                const isSelected = formData.account_manager === name;
+                return (
+                  <div
+                    key={emp.id}
+                    style={{
+                      padding: '0.75rem',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s',
+                      borderBottom: '1px solid #f3f4f6',
+                      background: isSelected ? '#f3f4f6' : 'transparent'
+                    }}
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, account_manager: name }));
+                      setShowManagerDropdown(false);
+                      setManagerSearch('');
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#f3f4f6' : 'transparent')}
+                  >
+                    <div style={{ fontWeight: 600 }}>{name}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+  };
 
   const [formData, setFormData] = useState({
     name: customer?.name || customer?.customer_owner || customer?.customer_facility || '',
@@ -58,11 +217,14 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
         return customersApi.create(data);
       }
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['customer', customer?.id?.toString()] });
       queryClient.invalidateQueries({ queryKey: ['customers', 'stats'] });
       onClose();
+      if (!isEditing && onCreated) {
+        onCreated(result);
+      }
     },
   });
 
@@ -120,6 +282,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
       submitData = {
         ...formData,
         customer_score: formData.customer_score ? Number(formData.customer_score) : undefined,
+        ...(isProspect ? { customer_type: 'prospect' } : {}),
       };
     }
 
@@ -153,7 +316,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
         <div className="modal-header">
-          <h2>{isEditing ? (isVista ? 'Edit Titan Information' : 'Edit Customer') : 'New Customer'}</h2>
+          <h2>{isEditing ? (isVista ? 'Edit Titan Information' : 'Edit Customer') : (isProspect ? 'New Prospect' : 'New Customer')}</h2>
           <button className="modal-close" onClick={onClose}>
             ×
           </button>
@@ -267,25 +430,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                   </div>
 
                   <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="account_manager">Account Manager</label>
-                      <select
-                        id="account_manager"
-                        name="account_manager"
-                        value={formData.account_manager}
-                        onChange={handleChange}
-                      >
-                        <option value="">Select an account manager...</option>
-                        {!existingManagerMatchesEmployee && formData.account_manager && (
-                          <option value={formData.account_manager}>{formData.account_manager}</option>
-                        )}
-                        {employees.map(emp => (
-                          <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`}>
-                            {emp.first_name} {emp.last_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {renderManagerDropdown()}
 
                     <div className="form-group">
                       <label htmlFor="field_leads">Field Leads</label>
@@ -395,25 +540,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                   </div>
 
                   <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="account_manager">Account Manager</label>
-                      <select
-                        id="account_manager"
-                        name="account_manager"
-                        value={formData.account_manager}
-                        onChange={handleChange}
-                      >
-                        <option value="">Select an account manager...</option>
-                        {!existingManagerMatchesEmployee && formData.account_manager && (
-                          <option value={formData.account_manager}>{formData.account_manager}</option>
-                        )}
-                        {employees.map(emp => (
-                          <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`}>
-                            {emp.first_name} {emp.last_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {renderManagerDropdown()}
 
                     <div className="form-group">
                       <label htmlFor="field_leads">Field Leads</label>
@@ -633,22 +760,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                   </div>
 
                   <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="account_manager">Account Manager</label>
-                      <select
-                        id="account_manager"
-                        name="account_manager"
-                        value={formData.account_manager}
-                        onChange={handleChange}
-                      >
-                        <option value="">Select an account manager...</option>
-                        {employees.map(emp => (
-                          <option key={emp.id} value={`${emp.first_name} ${emp.last_name}`}>
-                            {emp.first_name} {emp.last_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {renderManagerDropdown()}
 
                     <div className="form-group">
                       <label htmlFor="field_leads">Field Leads</label>
@@ -901,7 +1013,7 @@ const CustomerFormModal: React.FC<CustomerFormModalProps> = ({ customer, onClose
                 Cancel
               </button>
               <button type="submit" className="btn-primary" disabled={mutation.isPending}>
-                {mutation.isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Customer'}
+                {mutation.isPending ? 'Saving...' : isEditing ? 'Save Changes' : (isProspect ? 'Create Prospect' : 'Create Customer')}
               </button>
             </div>
           </div>

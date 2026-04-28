@@ -13,11 +13,11 @@ import {
   createCustomerLocation,
   updateCustomerLocation,
   deleteCustomerLocation,
-  createCustomerContact,
   customersApi,
   CustomerLocation
 } from '../services/customers';
 import CustomerFormModal from '../components/modals/CustomerFormModal';
+import ContactModal from '../components/modals/ContactModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
 import { assessmentsApi } from '../services/assessments';
 import { useTitanFeedback } from '../context/TitanFeedbackContext';
@@ -54,6 +54,7 @@ const CustomerDetail: React.FC = () => {
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [merging, setMerging] = useState(false);
 
@@ -108,12 +109,6 @@ const CustomerDetail: React.FC = () => {
   // Inline add state
   const [addingLocation, setAddingLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState('');
-  const [addingContact, setAddingContact] = useState(false);
-  const [newContactFirst, setNewContactFirst] = useState('');
-  const [newContactLast, setNewContactLast] = useState('');
-  const [newContactTitle, setNewContactTitle] = useState('');
-  const [newContactEmail, setNewContactEmail] = useState('');
-  const [newContactPhone, setNewContactPhone] = useState('');
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [editLocName, setEditLocName] = useState('');
   const [editLocAddress, setEditLocAddress] = useState('');
@@ -123,8 +118,6 @@ const CustomerDetail: React.FC = () => {
   const [deleteLocConfirm, setDeleteLocConfirm] = useState<number | null>(null);
   const locInputRef = useRef<HTMLInputElement>(null);
   const editLocRef = useRef<HTMLInputElement>(null);
-  const contactInputRef = useRef<HTMLInputElement>(null);
-
   const addLocationMutation = useMutation({
     mutationFn: (name: string) => createCustomerLocation(id!, { name }),
     onSuccess: () => {
@@ -187,19 +180,6 @@ const CustomerDetail: React.FC = () => {
     setEditLocZip('');
   };
 
-  const addContactMutation = useMutation({
-    mutationFn: (data: { first_name: string; last_name: string; title?: string; email?: string; phone?: string }) =>
-      createCustomerContact(id!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customer-contacts', id] });
-      setNewContactFirst('');
-      setNewContactLast('');
-      setNewContactTitle('');
-      setNewContactEmail('');
-      setNewContactPhone('');
-      setAddingContact(false);
-    },
-  });
 
   const { data: assessmentData } = useQuery({
     queryKey: ['assessment', id],
@@ -486,11 +466,11 @@ const CustomerDetail: React.FC = () => {
             <div className="cd-panel-header">
               <h3><span className="cd-panel-icon">📍</span> Locations <span className="cd-count">{locations.length}</span></h3>
               <button
-                className="cd-icon-btn"
+                className="sales-btn sales-btn-primary"
                 onClick={() => { setAddingLocation(true); setTimeout(() => locInputRef.current?.focus(), 50); }}
                 title="Add location"
-                style={{ fontSize: '14px', width: '22px', height: '22px' }}
-              >+</button>
+                style={{ padding: '2px 8px', fontSize: '10px' }}
+              >+ New</button>
             </div>
             <div className="cd-locations-list">
               {addingLocation && (
@@ -628,102 +608,27 @@ const CustomerDetail: React.FC = () => {
               <h3><span className="cd-panel-icon">👥</span> Contacts <span className="cd-count">{contacts.length}</span></h3>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
+                  className="sales-btn"
                   onClick={() => navigate(`/customers/${id}/org-chart`)}
                   title="View org chart"
-                  style={{
-                    fontSize: '10px',
-                    padding: '2px 8px',
-                    background: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    whiteSpace: 'nowrap'
-                  }}
+                  style={{ padding: '2px 8px', fontSize: '10px', background: '#10b981', color: 'white' }}
                 >Org Chart</button>
                 <button
-                  className="cd-icon-btn"
-                  onClick={() => { setAddingContact(true); setTimeout(() => contactInputRef.current?.focus(), 50); }}
+                  className="sales-btn sales-btn-primary"
+                  onClick={() => setShowContactModal(true)}
                   title="Add contact"
-                  style={{ fontSize: '14px', width: '22px', height: '22px' }}
-                >+</button>
+                  style={{ padding: '2px 8px', fontSize: '10px' }}
+                >+ New</button>
                 <button
-                  className="cd-icon-btn"
+                  className="sales-btn"
                   onClick={() => navigate(`/customers/${id}/contacts`)}
                   title="View all contacts"
-                  style={{ fontSize: '11px', width: '22px', height: '22px' }}
-                >↗</button>
+                  style={{ padding: '2px 8px', fontSize: '10px', background: '#3b82f6', color: 'white' }}
+                >Contacts</button>
               </div>
             </div>
             <div className="cd-locations-list">
-              {addingContact && (
-                    <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          ref={contactInputRef}
-                          type="text"
-                          value={newContactFirst}
-                          onChange={(e) => setNewContactFirst(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Escape') { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); } }}
-                          placeholder="First name..."
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                        <input
-                          type="text"
-                          value={newContactLast}
-                          onChange={(e) => setNewContactLast(e.target.value)}
-                          placeholder="Last name..."
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          type="text"
-                          value={newContactTitle}
-                          onChange={(e) => setNewContactTitle(e.target.value)}
-                          placeholder="Title..."
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                        <input
-                          type="email"
-                          value={newContactEmail}
-                          onChange={(e) => setNewContactEmail(e.target.value)}
-                          placeholder="Email..."
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                        <input
-                          type="tel"
-                          value={newContactPhone}
-                          onChange={(e) => setNewContactPhone(e.target.value)}
-                          placeholder="Phone..."
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                        <button
-                          onClick={() => {
-                            if (newContactFirst.trim() || newContactLast.trim()) {
-                              addContactMutation.mutate({
-                                first_name: newContactFirst.trim(),
-                                last_name: newContactLast.trim(),
-                                title: newContactTitle.trim() || undefined,
-                                email: newContactEmail.trim() || undefined,
-                                phone: newContactPhone.trim() || undefined,
-                              });
-                            }
-                          }}
-                          disabled={(!newContactFirst.trim() && !newContactLast.trim()) || addContactMutation.isPending}
-                          style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: (!newContactFirst.trim() && !newContactLast.trim()) ? 0.5 : 1 }}
-                        >{addContactMutation.isPending ? '...' : 'Add'}</button>
-                        <button
-                          onClick={() => { setAddingContact(false); setNewContactFirst(''); setNewContactLast(''); setNewContactTitle(''); setNewContactEmail(''); setNewContactPhone(''); }}
-                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                        >Cancel</button>
-                      </div>
-                    </div>
-                  )}
-              {contacts.length === 0 && !addingContact ? (
+              {contacts.length === 0 ? (
                 <div className="cd-empty-mini">No contacts added</div>
               ) : (
                 contacts.map((contact: Contact) => (
@@ -941,6 +846,14 @@ const CustomerDetail: React.FC = () => {
       </div>
 
       {/* Modals */}
+      {showContactModal && (
+        <ContactModal
+          customerId={parseInt(id!)}
+          customerName={displayName}
+          onClose={() => setShowContactModal(false)}
+        />
+      )}
+
       {showEditModal && (
         <CustomerFormModal
           customer={customer}
