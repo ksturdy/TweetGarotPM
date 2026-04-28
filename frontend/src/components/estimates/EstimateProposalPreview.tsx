@@ -76,7 +76,7 @@ const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estim
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '2px', fontSize: '10pt' }}>Bid Date</div>
           <div style={{ color: '#333' }}>
-            {estimate.bid_date ? format(new Date(estimate.bid_date), 'MMM d, yyyy') : 'TBD'}
+            {estimate.bid_date ? format(new Date(estimate.bid_date + 'T00:00:00'), 'MMM d, yyyy') : 'TBD'}
           </div>
         </div>
         <div>
@@ -149,7 +149,7 @@ const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estim
                 Project Start Date
               </div>
               <div style={{ fontSize: '10pt', minHeight: '18px', borderBottom: '1px solid #ddd', padding: '2px 0' }}>
-                {estimate.project_start_date ? format(new Date(estimate.project_start_date), 'MMM d, yyyy') : ''}
+                {estimate.project_start_date ? format(new Date(estimate.project_start_date + 'T00:00:00'), 'MMM d, yyyy') : ''}
               </div>
             </div>
             <div>

@@ -1515,7 +1515,7 @@ const BudgetGenerator: React.FC = () => {
                           <div className="preview-project-details" style={{ borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '6px' }}>
                             <div className="detail-item">
                               <span className="detail-label">Bid Year</span>
-                              <span className="detail-value">{project.bid_date ? new Date(project.bid_date).getFullYear() : 'N/A'}</span>
+                              <span className="detail-value">{project.bid_date ? new Date(project.bid_date + 'T00:00:00').getFullYear() : 'N/A'}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Original Cost</span>

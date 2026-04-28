@@ -75,7 +75,7 @@ const overrideFieldMap: { key: OverrideKey; inheritedKey: InheritedKey; label: s
 
 const formatDate = (val: string) => {
   if (!val) return '';
-  const d = new Date(val);
+  const d = new Date(val.includes('T') ? val : val + 'T00:00:00');
   if (isNaN(d.getTime())) return val;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
@@ -105,7 +105,7 @@ const formatInherited = (key: InheritedKey, val: string) => {
 
 const toDateInputValue = (val: string) => {
   if (!val) return '';
-  const d = new Date(val);
+  const d = new Date(val.includes('T') ? val : val + 'T00:00:00');
   if (isNaN(d.getTime())) return val;
   return d.toISOString().split('T')[0];
 };

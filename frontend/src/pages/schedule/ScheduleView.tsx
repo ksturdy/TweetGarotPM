@@ -63,11 +63,11 @@ const ScheduleView: React.FC = () => {
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Start Date</div>
-              <div>{progress.project_start ? format(new Date(progress.project_start), 'MMM d, yyyy') : '-'}</div>
+              <div>{progress.project_start ? format(new Date(progress.project_start + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>End Date</div>
-              <div>{progress.project_end ? format(new Date(progress.project_end), 'MMM d, yyyy') : '-'}</div>
+              <div>{progress.project_end ? format(new Date(progress.project_end + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
             </div>
           </div>
         </div>
@@ -88,8 +88,8 @@ const ScheduleView: React.FC = () => {
             {items?.map((item) => (
               <tr key={item.id}>
                 <td>{item.name}</td>
-                <td>{format(new Date(item.start_date), 'MMM d, yyyy')}</td>
-                <td>{format(new Date(item.end_date), 'MMM d, yyyy')}</td>
+                <td>{format(new Date(item.start_date + 'T00:00:00'), 'MMM d, yyyy')}</td>
+                <td>{format(new Date(item.end_date + 'T00:00:00'), 'MMM d, yyyy')}</td>
                 <td>{item.assigned_to_name || '-'}</td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

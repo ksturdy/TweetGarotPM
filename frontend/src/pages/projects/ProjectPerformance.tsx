@@ -44,7 +44,7 @@ const ProjectPerformance: React.FC = () => {
   });
 
   // Transform snapshot data for charts
-  const dates = snapshots.map(s => format(new Date(s.snapshot_date), 'MMM d'));
+  const dates = snapshots.map(s => format(new Date(s.snapshot_date + 'T00:00:00'), 'MMM d'));
   const hasData = snapshots.length > 0;
 
   // Original estimated margin is a constant — use project override or latest non-zero snapshot value

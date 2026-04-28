@@ -458,7 +458,7 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--warning)',
                           }}
                         >
-                          {new Date(effectiveStart).getFullYear()}
+                          {new Date(effectiveStart + 'T00:00:00').getFullYear()}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginTop: '2px' }}>
                           Year

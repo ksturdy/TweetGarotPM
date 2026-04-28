@@ -1781,7 +1781,7 @@ const VistaLinkingManager: React.FC = () => {
               <tr key={emp.id}>
                 <td style={{ fontWeight: 500 }}>{emp.employee_number}</td>
                 <td>{emp.first_name} {emp.last_name}</td>
-                <td>{emp.hire_date ? new Date(emp.hire_date).toLocaleDateString() : '-'}</td>
+                <td>{emp.hire_date ? new Date(emp.hire_date + 'T00:00:00').toLocaleDateString() : '-'}</td>
                 <td>{emp.active ? 'Yes' : 'No'}</td>
                 <td>{getStatusBadge(emp.link_status)}</td>
                 <td style={{ fontSize: '0.8rem' }}>

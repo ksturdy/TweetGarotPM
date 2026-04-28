@@ -86,8 +86,8 @@ const CostDatabase: React.FC = () => {
 
       // Convert dates
       if (sortField === 'bid_date') {
-        aVal = new Date(aVal).getTime();
-        bVal = new Date(bVal).getTime();
+        aVal = new Date(aVal + 'T00:00:00').getTime();
+        bVal = new Date(bVal + 'T00:00:00').getTime();
       }
 
       // String comparison
@@ -413,7 +413,7 @@ const CostDatabase: React.FC = () => {
                       {project.name}
                     </span>
                   </td>
-                  <td className="cd-col-date">{project.bid_date ? new Date(project.bid_date).toLocaleDateString() : '-'}</td>
+                  <td className="cd-col-date">{project.bid_date ? new Date(project.bid_date + 'T00:00:00').toLocaleDateString() : '-'}</td>
                   <td className="cd-col-btype">
                     {project.building_type && (
                       <span className="badge badge-info">{project.building_type}</span>
@@ -572,7 +572,7 @@ const CostDatabase: React.FC = () => {
                   <div>
                     <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Bid Date</label>
                     <div style={{ fontWeight: 600 }}>
-                      {selectedProject.bid_date ? new Date(selectedProject.bid_date).toLocaleDateString() : '-'}
+                      {selectedProject.bid_date ? new Date(selectedProject.bid_date + 'T00:00:00').toLocaleDateString() : '-'}
                     </div>
                   </div>
                   <div>

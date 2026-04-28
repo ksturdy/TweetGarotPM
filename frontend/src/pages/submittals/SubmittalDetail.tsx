@@ -243,7 +243,7 @@ const SubmittalDetail: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Due Date</div>
-                <div>{submittal.due_date ? format(new Date(submittal.due_date), 'MMM d, yyyy') : '-'}</div>
+                <div>{submittal.due_date ? format(new Date(submittal.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Created By</div>

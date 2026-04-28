@@ -91,8 +91,8 @@ const Campaigns: React.FC = () => {
 
     switch (sortColumn) {
       case 'start_date':
-        aValue = new Date(a.start_date).getTime();
-        bValue = new Date(b.start_date).getTime();
+        aValue = new Date(a.start_date + 'T00:00:00').getTime();
+        bValue = new Date(b.start_date + 'T00:00:00').getTime();
         break;
       case 'name':
         aValue = a.name.toLowerCase();
@@ -281,7 +281,7 @@ const Campaigns: React.FC = () => {
                     onClick={() => navigate(`/campaigns/${campaign.id}`)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td>{format(new Date(campaign.start_date), 'MMM d, yyyy')}</td>
+                    <td>{format(new Date(campaign.start_date + 'T00:00:00'), 'MMM d, yyyy')}</td>
                     <td>
                       <div className="sales-project-cell">
                         <div className="sales-project-icon" style={{ background: getCampaignGradient(campaign.status) }}>

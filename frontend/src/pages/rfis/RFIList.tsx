@@ -64,7 +64,7 @@ const RFIList: React.FC = () => {
 
   const getDaysOverdue = (dueDate: string | null, status: string) => {
     if (!dueDate || status === 'closed') return null;
-    const due = new Date(dueDate);
+    const due = new Date(dueDate + 'T00:00:00');
     const today = new Date();
     // Reset time components for accurate day comparison
     due.setHours(0, 0, 0, 0);
@@ -286,7 +286,7 @@ const RFIList: React.FC = () => {
                   </span>
                 </td>
                 <td style={{ fontSize: '0.875rem', color: '#5a5a72' }}>
-                  {rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : '-'}
+                  {rfi.due_date ? format(new Date(rfi.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}
                 </td>
                 <td>
                   {daysOverdue !== null ? (

@@ -715,7 +715,7 @@ const ProposalWizard: React.FC = () => {
           {formData.valid_until && (
             <div className="review-item">
               <div className="review-label">Valid Until</div>
-              <div className="review-data">{new Date(formData.valid_until).toLocaleDateString()}</div>
+              <div className="review-data">{new Date(formData.valid_until + 'T00:00:00').toLocaleDateString()}</div>
             </div>
           )}
           {formData.payment_terms && (

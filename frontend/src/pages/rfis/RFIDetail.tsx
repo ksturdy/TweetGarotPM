@@ -311,7 +311,7 @@ const RFIDetail: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Due Date</div>
-                <div>{rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : '-'}</div>
+                <div>{rfi.due_date ? format(new Date(rfi.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase' }}>Assigned To</div>

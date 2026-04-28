@@ -297,12 +297,12 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) 
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+    return new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
   };
 
   const getYear = (dateStr?: string) => {
     if (!dateStr) return '';
-    return new Date(dateStr).getFullYear().toString();
+    return new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00').getFullYear().toString();
   };
 
   const clearFilters = () => {

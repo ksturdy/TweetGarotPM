@@ -60,7 +60,7 @@ const DailyReportList: React.FC = () => {
                 onClick={() => navigate(`/projects/${projectId}/daily-reports/${report.id}`)}
                 style={{ cursor: 'pointer' }}
               >
-                <td>{format(new Date(report.report_date), 'MMM d, yyyy')}</td>
+                <td>{format(new Date(report.report_date + 'T00:00:00'), 'MMM d, yyyy')}</td>
                 <td>{report.weather || '-'}</td>
                 <td>{report.temperature || '-'}</td>
                 <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

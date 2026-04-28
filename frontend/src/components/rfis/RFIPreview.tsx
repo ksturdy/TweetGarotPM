@@ -83,7 +83,7 @@ const RFIPreview: React.FC<RFIPreviewProps> = ({ rfi }) => {
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '2px', fontSize: '10pt' }}>Response Due</div>
           <div style={{ color: '#333' }}>
-            {rfi.due_date ? format(new Date(rfi.due_date), 'MMM d, yyyy') : ''}
+            {rfi.due_date ? format(new Date(rfi.due_date + 'T00:00:00'), 'MMM d, yyyy') : ''}
           </div>
         </div>
         <div>

@@ -652,7 +652,7 @@ const TeamDetailPage: React.FC = () => {
                         style={{ cursor: 'pointer' }}
                       >
                         <td>{proj.project_number || proj.number || '-'}</td>
-                        <td>{proj.start_date ? new Date(proj.start_date).toLocaleDateString('en-US') : '-'}</td>
+                        <td>{proj.start_date ? new Date(proj.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-'}</td>
                         <td>
                           <div className="sales-project-cell">
                             <div className="sales-project-icon" style={{ background: proj.market ? getMarketGradient(proj.market) : getProjectGradient(proj.status) }}>
@@ -963,7 +963,7 @@ const TeamDetailPage: React.FC = () => {
                       <td>{est.project_name}</td>
                       <td>{est.customer_name || '-'}</td>
                       <td>{formatCurrency(est.total_cost || 0)}</td>
-                      <td>{est.bid_date ? new Date(est.bid_date).toLocaleDateString() : '-'}</td>
+                      <td>{est.bid_date ? new Date(est.bid_date + 'T00:00:00').toLocaleDateString() : '-'}</td>
                       <td>
                         <span style={{
                           padding: '2px 8px',

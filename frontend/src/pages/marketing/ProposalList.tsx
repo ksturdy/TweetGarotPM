@@ -71,7 +71,8 @@ const ProposalList: React.FC = () => {
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return '—';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const parsed = dateString.includes('T') ? dateString : dateString + 'T00:00:00';
+    return new Date(parsed).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

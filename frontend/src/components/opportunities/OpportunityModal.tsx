@@ -40,13 +40,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       ? Math.round(Number(opportunity.estimated_value)).toString()
       : '',
     estimated_start_date: opportunity?.estimated_start_date
-      ? new Date(opportunity.estimated_start_date).toISOString().split('T')[0]
+      ? new Date(opportunity.estimated_start_date + 'T00:00:00').toISOString().split('T')[0]
       : '',
     estimated_duration_months: opportunity?.estimated_duration_days
       ? Math.round(Number(opportunity.estimated_duration_days) / 30).toString()
       : '',
     estimated_end_date: opportunity?.estimated_end_date
-      ? new Date(opportunity.estimated_end_date).toISOString().split('T')[0]
+      ? new Date(opportunity.estimated_end_date + 'T00:00:00').toISOString().split('T')[0]
       : '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
@@ -649,7 +649,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           handleChange(e);
                           // Auto-calculate end date if duration is set
                           if (formData.estimated_duration_months && e.target.value) {
-                            const start = new Date(e.target.value);
+                            const start = new Date(e.target.value + 'T00:00:00');
                             const months = Number(formData.estimated_duration_months);
                             if (months > 0) {
                               const end = new Date(start);
@@ -673,8 +673,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           handleChange(e);
                           // Auto-calculate duration from start and end dates
                           if (formData.estimated_start_date && e.target.value) {
-                            const start = new Date(formData.estimated_start_date);
-                            const end = new Date(e.target.value);
+                            const start = new Date(formData.estimated_start_date + 'T00:00:00');
+                            const end = new Date(e.target.value + 'T00:00:00');
                             const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                             const diffMonths = Math.round(diffDays / 30);
                             if (diffMonths > 0) {
@@ -698,7 +698,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                           handleChange(e);
                           // Auto-calculate end date from start + duration
                           if (formData.estimated_start_date && e.target.value) {
-                            const start = new Date(formData.estimated_start_date);
+                            const start = new Date(formData.estimated_start_date + 'T00:00:00');
                             const months = Number(e.target.value);
                             if (months > 0) {
                               const end = new Date(start);

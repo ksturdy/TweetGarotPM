@@ -72,7 +72,7 @@ const SubmittalList: React.FC = () => {
                 <td>{submittal.description}</td>
                 <td>{submittal.subcontractor || '-'}</td>
                 <td><span className={getStatusBadge(submittal.status)}>{submittal.status.replace(/_/g, ' ')}</span></td>
-                <td>{submittal.due_date ? format(new Date(submittal.due_date), 'MMM d, yyyy') : '-'}</td>
+                <td>{submittal.due_date ? format(new Date(submittal.due_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</td>
               </tr>
             ))}
             {submittals?.length === 0 && (

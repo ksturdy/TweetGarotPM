@@ -492,7 +492,7 @@ const ProjectDetail: React.FC = () => {
             <div style={fieldStyle}>
               <div style={labelStyle}>Start Date</div>
               <div style={{ fontSize: '0.8rem' }}>
-                {project.start_date ? format(new Date(project.start_date), 'MMM d, yyyy') : '-'}
+                {project.start_date ? format(new Date(project.start_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}
               </div>
             </div>
           </div>

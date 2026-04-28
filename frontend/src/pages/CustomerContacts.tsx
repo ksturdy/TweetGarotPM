@@ -73,7 +73,8 @@ const CustomerContacts: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+    const parsed = dateString.includes('T') ? dateString : dateString + 'T00:00:00';
+    return new Date(parsed).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
   };
 
   // Build a map of contact IDs to names for the "Reports To" column

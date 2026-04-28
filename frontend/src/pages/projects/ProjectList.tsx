@@ -344,7 +344,7 @@ const ProjectList: React.FC = () => {
       (project.department_number && project.department_number.toLowerCase().includes(term)) ||
       (project.market && project.market.toLowerCase().includes(term)) ||
       (project.manager_name && project.manager_name.toLowerCase().includes(term)) ||
-      (project.start_date && new Date(project.start_date).toLocaleDateString('en-US').toLowerCase().includes(term)) ||
+      (project.start_date && new Date(project.start_date + 'T00:00:00').toLocaleDateString('en-US').toLowerCase().includes(term)) ||
       contractValueStr.toLowerCase().includes(term) ||
       backlogStr.toLowerCase().includes(term) ||
       jtdCostStr.toLowerCase().includes(term) ||
@@ -411,8 +411,8 @@ const ProjectList: React.FC = () => {
         bValue = (b.manager_name || '').toLowerCase();
         break;
       case 'start_date':
-        aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
-        bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
+        aValue = a.start_date ? new Date(a.start_date + 'T00:00:00').getTime() : 0;
+        bValue = b.start_date ? new Date(b.start_date + 'T00:00:00').getTime() : 0;
         break;
       default:
         return 0;
@@ -514,7 +514,7 @@ const ProjectList: React.FC = () => {
       fileName: `Projects_${new Date().toISOString().slice(0, 10)}.pdf`,
       columns: [
         { header: 'Number', key: 'number', width: 1 },
-        { header: 'Start Date', key: 'startDate', width: 1 },
+        { header: 'Start Month', key: 'startDate', width: 1 },
         { header: 'Project', key: 'name', width: 3 },
         { header: 'Client', key: 'client', width: 2 },
         { header: 'Contract Value', key: 'contractValue', align: 'right', width: 1.2 },
@@ -528,7 +528,7 @@ const ProjectList: React.FC = () => {
       ],
       rows: sortedProjects.map((p: Project) => ({
         number: p.number,
-        startDate: p.start_date ? new Date(p.start_date).toLocaleDateString('en-US') : '-',
+        startDate: p.start_date ? new Date(p.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-',
         name: p.name,
         client: p.owner_name || p.customer_name || p.client || '-',
         contractValue: fmtCurrency(Number(p.contract_value) || undefined),
@@ -936,7 +936,7 @@ const ProjectList: React.FC = () => {
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('number', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('start_date')}>
-                Start Date <span className="sales-sort-icon">{sortColumn === 'start_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                Start Month <span className="sales-sort-icon">{sortColumn === 'start_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('startDate', e)} />
               </th>
               <th className="sales-sortable" onClick={() => handleSort('name')}>
@@ -1023,7 +1023,7 @@ const ProjectList: React.FC = () => {
                     </span>
                   </td>
                   <td>{project.number}</td>
-                  <td>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-US') : '-'}</td>
+                  <td>{project.start_date ? new Date(project.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-'}</td>
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status) }}>

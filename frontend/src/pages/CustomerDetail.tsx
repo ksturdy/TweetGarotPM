@@ -232,8 +232,8 @@ const CustomerDetail: React.FC = () => {
         bVal = parseFloat(bVal) || 0;
       }
       if (woSortField === 'entered_date') {
-        aVal = aVal ? new Date(aVal).getTime() : 0;
-        bVal = bVal ? new Date(bVal).getTime() : 0;
+        aVal = aVal ? new Date(aVal + 'T00:00:00').getTime() : 0;
+        bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
       }
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         const comparison = aVal.localeCompare(bVal, undefined, { numeric: true });
@@ -252,8 +252,8 @@ const CustomerDetail: React.FC = () => {
       if (aVal == null) aVal = '';
       if (bVal == null) bVal = '';
       if (projSortField === 'date') {
-        aVal = aVal ? new Date(aVal).getTime() : 0;
-        bVal = bVal ? new Date(bVal).getTime() : 0;
+        aVal = aVal ? new Date(aVal + 'T00:00:00').getTime() : 0;
+        bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
         return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
       }
       if (projSortField === 'contract_value' || projSortField === 'backlog') {
@@ -294,7 +294,8 @@ const CustomerDetail: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+    const parsed = dateString.includes('T') ? dateString : dateString + 'T00:00:00';
+    return new Date(parsed).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
   };
 
   const displayName = customer.name || 'Unnamed Company';

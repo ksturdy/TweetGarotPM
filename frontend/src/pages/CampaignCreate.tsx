@@ -96,15 +96,15 @@ export default function CampaignCreate() {
 
   const calculateWeeks = () => {
     if (!startDate || !endDate) return 0;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
     const diffMs = end.getTime() - start.getTime();
     return Math.max(1, Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)));
   };
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return campaignName.trim() && startDate && endDate && new Date(endDate) > new Date(startDate);
+      case 1: return campaignName.trim() && startDate && endDate && new Date(endDate + 'T00:00:00') > new Date(startDate + 'T00:00:00');
       case 2: return ownerId !== null && teamMembers.length > 0;
       case 3: return true;
       case 4: return prospects.length > 0;
@@ -338,7 +338,7 @@ export default function CampaignCreate() {
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inputStyle} />
               </div>
             </div>
-            {startDate && endDate && new Date(endDate) > new Date(startDate) && (
+            {startDate && endDate && new Date(endDate + 'T00:00:00') > new Date(startDate + 'T00:00:00') && (
               <div style={{
                 padding: '14px 18px',
                 background: 'rgba(59, 130, 246, 0.06)',
@@ -348,7 +348,7 @@ export default function CampaignCreate() {
                 color: 'var(--accent-blue)',
                 fontWeight: 500
               }}>
-                Campaign Duration: <strong>{calculateWeeks()} weeks</strong> ({new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()})
+                Campaign Duration: <strong>{calculateWeeks()} weeks</strong> ({new Date(startDate + 'T00:00:00').toLocaleDateString()} - {new Date(endDate + 'T00:00:00').toLocaleDateString()})
               </div>
             )}
           </div>
@@ -726,7 +726,7 @@ export default function CampaignCreate() {
                 <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>{campaignName}</div>
                 {campaignDescription && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>{campaignDescription}</div>}
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()} ({calculateWeeks()} weeks)
+                  {new Date(startDate + 'T00:00:00').toLocaleDateString()} - {new Date(endDate + 'T00:00:00').toLocaleDateString()} ({calculateWeeks()} weeks)
                 </div>
               </div>
 

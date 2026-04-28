@@ -166,8 +166,8 @@ export default function CampaignDetail() {
   const activeWeeks = useMemo(() => {
     return dbWeeks.map((w: CampaignWeek) => ({
       num: w.week_number,
-      start: new Date(w.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      end: new Date(w.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      start: new Date(w.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      end: new Date(w.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       label: w.label || `Week ${w.week_number}`
     }));
   }, [dbWeeks]);
@@ -178,15 +178,15 @@ export default function CampaignDetail() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     for (const w of dbWeeks) {
-      const start = new Date(w.start_date);
-      const end = new Date(w.end_date);
+      const start = new Date(w.start_date + 'T00:00:00');
+      const end = new Date(w.end_date + 'T00:00:00');
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       if (today >= start && today <= end) return w.week_number;
     }
     // If past all weeks, use the last one; if before all, use the first
     const last = dbWeeks[dbWeeks.length - 1];
-    if (today > new Date(last.end_date)) return last.week_number;
+    if (today > new Date(last.end_date + 'T00:00:00')) return last.week_number;
     return dbWeeks[0].week_number;
   }, [dbWeeks]);
 
@@ -794,7 +794,7 @@ export default function CampaignDetail() {
             </Link>
             <h1>📣 {activeCampaignInfo.name}</h1>
             <div className="sales-subtitle">
-              {activeCampaignInfo.startDate ? new Date(activeCampaignInfo.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''} - {activeCampaignInfo.endDate ? new Date(activeCampaignInfo.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+              {activeCampaignInfo.startDate ? new Date(activeCampaignInfo.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''} - {activeCampaignInfo.endDate ? new Date(activeCampaignInfo.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
             </div>
           </div>
         </div>
@@ -1692,7 +1692,7 @@ export default function CampaignDetail() {
           const originalCount = activeData.filter((c: any) => c.source === 'seed').length;
           const addedCount = activeData.filter((c: any) => c.source === 'manual').length;
           const timelineLabel = activeCampaignInfo.startDate && activeCampaignInfo.endDate
-            ? `${new Date(activeCampaignInfo.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(activeCampaignInfo.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+            ? `${new Date(activeCampaignInfo.startDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(activeCampaignInfo.endDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
             : '';
 
           const goalCriteria = [
@@ -2223,7 +2223,7 @@ export default function CampaignDetail() {
                             {opp.stage?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </span>
                           <span style={{ fontSize: '12px', color: '#64748b' }}>{opp.probability}% probability</span>
-                          {opp.close_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Close: {new Date(opp.close_date).toLocaleDateString()}</span>}
+                          {opp.close_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Close: {new Date(opp.close_date + 'T00:00:00').toLocaleDateString()}</span>}
                           {opp.is_converted && <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: '#dcfce7', color: '#16a34a' }}>Converted</span>}
                         </div>
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2271,8 +2271,8 @@ export default function CampaignDetail() {
                           <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 10px', borderRadius: '6px', background: (estStatusColors[est.status] || '#6b7280') + '18', color: estStatusColors[est.status] || '#6b7280' }}>
                             {est.status?.charAt(0).toUpperCase() + est.status?.slice(1)}
                           </span>
-                          {est.sent_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Sent: {new Date(est.sent_date).toLocaleDateString()}</span>}
-                          {est.valid_until && <span style={{ fontSize: '12px', color: '#64748b' }}>Valid until: {new Date(est.valid_until).toLocaleDateString()}</span>}
+                          {est.sent_date && <span style={{ fontSize: '12px', color: '#64748b' }}>Sent: {new Date(est.sent_date + 'T00:00:00').toLocaleDateString()}</span>}
+                          {est.valid_until && <span style={{ fontSize: '12px', color: '#64748b' }}>Valid until: {new Date(est.valid_until + 'T00:00:00').toLocaleDateString()}</span>}
                         </div>
                         {est.notes && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontStyle: 'italic' }}>{est.notes}</div>}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
@@ -2854,7 +2854,7 @@ export default function CampaignDetail() {
                     <div>
                       <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Duration</div>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
-                        {ef.startDate && ef.endDate ? Math.ceil((new Date(ef.endDate).getTime() - new Date(ef.startDate).getTime()) / (1000 * 60 * 60 * 24 * 7)) : 0} weeks
+                        {ef.startDate && ef.endDate ? Math.ceil((new Date(ef.endDate + 'T00:00:00').getTime() - new Date(ef.startDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24 * 7)) : 0} weeks
                       </div>
                     </div>
                     <div>

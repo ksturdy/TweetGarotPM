@@ -11,7 +11,7 @@ interface ResumePreviewProps {
 const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPreviewUrl }) => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00').toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
     });

@@ -97,7 +97,7 @@ const StandardLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
 
   const formatCurrency = (value: number) => '$' + Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
   const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // Resolve effective values (override takes precedence)
   const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
@@ -380,7 +380,7 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
 
   const formatCurrency = (value: number) => '$' + Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
   const formatDate = (ds: string) =>
-    new Date(ds).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    new Date(ds.includes('T') ? ds : ds + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // Resolve effective values (override takes precedence)
   const effectiveValue = caseStudy.override_contract_value ?? caseStudy.project_value;
