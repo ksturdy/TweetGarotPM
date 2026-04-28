@@ -341,10 +341,10 @@ const Dashboard: React.FC = () => {
       case 'project': return `/projects/${item.entityId}`;
       case 'opportunity': return '/sales';
       case 'estimate': return `/estimating/estimates/${item.entityId}`;
-      case 'rfi': return item.parentId ? `/projects/${item.parentId}/rfis` : '#';
-      case 'submittal': return item.parentId ? `/projects/${item.parentId}/submittals` : '#';
-      case 'change_order': return item.parentId ? `/projects/${item.parentId}/change-orders` : '#';
-      case 'daily_report': return item.parentId ? `/projects/${item.parentId}/daily-reports` : '#';
+      case 'rfi': return item.parentId ? `/projects/${item.parentId}/rfis/${item.entityId}` : '#';
+      case 'submittal': return item.parentId ? `/projects/${item.parentId}/submittals/${item.entityId}` : '#';
+      case 'change_order': return item.parentId ? `/projects/${item.parentId}/change-orders/${item.entityId}` : '#';
+      case 'daily_report': return item.parentId ? `/projects/${item.parentId}/daily-reports/${item.entityId}` : '#';
       default: return '#';
     }
   };
@@ -728,6 +728,12 @@ const Dashboard: React.FC = () => {
                     key={`${item.type}-${item.entityId}-${index}`}
                     to={getActivityPath(item)}
                     className="activity-feed-item"
+                    {...(item.type === 'opportunity' ? {
+                      onClick: (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        navigate('/sales', { state: { selectedOpportunityId: item.entityId } });
+                      }
+                    } : {})}
                   >
                     <div className={`activity-feed-icon ${item.type}`}>
                       {getActivityIcon(item.type)}

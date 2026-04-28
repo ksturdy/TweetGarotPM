@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import opportunitiesService, { Opportunity } from '../../services/opportunities';
+import opportunitiesService, { Opportunity, OpportunityScoreInput } from '../../services/opportunities';
 import { employeesApi } from '../../services/employees';
 import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
@@ -10,6 +10,7 @@ import LocationPicker from '../LocationPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
 import TitanEstimate from './TitanEstimate';
+import OpportunityScore from './OpportunityScore';
 import FollowButton from './FollowButton';
 import { MARKETS } from '../../constants/markets';
 import { LOCATION_GROUPS } from '../../constants/locationGroups';
@@ -69,8 +70,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     awarded_status: opportunity?.awarded_status || ''
   });
 
-  const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments' | 'score'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
 
   // Fetch active employees for assignment (lightweight endpoint, no HR access needed)
   const { data: assignableResponse } = useQuery({
@@ -127,7 +129,15 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data: any) => opportunitiesService.create(data),
-    onSuccess: () => {
+    onSuccess: async (newOpportunity: any) => {
+      // Save the Go/No-Go score if one was filled out
+      if (pendingScoreData) {
+        try {
+          await opportunitiesService.createScore(newOpportunity.id, pendingScoreData);
+        } catch (err) {
+          console.error('Failed to save score for new opportunity:', err);
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['opportunities'] });
       queryClient.invalidateQueries({ queryKey: ['campaign-opportunities'] });
       onSave();
@@ -199,67 +209,31 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     return numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Validate required fields, returns true if valid
+  const validateForm = (): boolean => {
+    if (!formData.owner) { toast.error('Company is required'); return false; }
+    if (!formData.estimated_value) { toast.error('Estimated Value is required'); return false; }
+    if (!formData.priority) { toast.error('Priority is required'); return false; }
+    if (!formData.stage_id) { toast.error('Stage is required'); return false; }
+    if (!formData.construction_type) { toast.error('Construction Type is required'); return false; }
+    if (!formData.market) { toast.error('Market is required'); return false; }
+    if (!formData.location_group) { toast.error('Location Group is required'); return false; }
+    if (!formData.location) { toast.error('Location is required'); return false; }
+    if (!formData.source) { toast.error('Lead Source is required'); return false; }
+    if (!formData.estimated_duration_months) { toast.error('Duration is required'); return false; }
+    if (!formData.assigned_to) { toast.error('Assign To is required'); return false; }
+    if (!formData.probability) { toast.error('Win Probability is required'); return false; }
+    return true;
+  };
 
-    // Validate required fields that aren't handled by HTML5 validation
-    if (!formData.owner) {
-      toast.error('Company is required');
-      return;
-    }
-    if (!formData.estimated_value) {
-      toast.error('Estimated Value is required');
-      return;
-    }
-    if (!formData.priority) {
-      toast.error('Priority is required');
-      return;
-    }
-    if (!formData.stage_id) {
-      toast.error('Stage is required');
-      return;
-    }
-    if (!formData.construction_type) {
-      toast.error('Construction Type is required');
-      return;
-    }
-    if (!formData.market) {
-      toast.error('Market is required');
-      return;
-    }
-    if (!formData.location_group) {
-      toast.error('Location Group is required');
-      return;
-    }
-    if (!formData.location) {
-      toast.error('Location is required');
-      return;
-    }
-    if (!formData.source) {
-      toast.error('Lead Source is required');
-      return;
-    }
-    if (!formData.estimated_duration_months) {
-      toast.error('Duration is required');
-      return;
-    }
-    if (!formData.assigned_to) {
-      toast.error('Assign To is required');
-      return;
-    }
-    if (!formData.probability) {
-      toast.error('Win Probability is required');
-      return;
-    }
-
-    // Clean up form data: only include fields that have values
+  // Build cleaned data payload from form state
+  const buildPayload = () => {
     const cleanedData: any = {
       title: formData.title,
       stage_id: Number(formData.stage_id),
       priority: formData.priority
     };
 
-    // Add optional string fields if they have values
     if (formData.description) cleanedData.description = formData.description;
     if (formData.construction_type) cleanedData.construction_type = formData.construction_type;
     if (formData.location) cleanedData.location = formData.location;
@@ -273,35 +247,49 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.architect) cleanedData.architect = formData.architect;
     if (formData.engineer) cleanedData.engineer = formData.engineer;
 
-    // Handle customer linking (CompanyPicker clears IDs when in manual mode)
     cleanedData.customer_id = formData.customer_id ? Number(formData.customer_id) : null;
     cleanedData.gc_customer_id = formData.gc_customer_id ? Number(formData.gc_customer_id) : null;
     if (formData.facility_name) cleanedData.facility_name = formData.facility_name;
     cleanedData.facility_location_id = formData.facility_location_id ? Number(formData.facility_location_id) : null;
 
-    // Add optional number fields if they have values
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
-    // Convert months to days for backend storage (30 days per month)
     if (formData.estimated_duration_months) cleanedData.estimated_duration_days = Math.round(Number(formData.estimated_duration_months) * 30);
-    // Always include assigned_to so it can be cleared (null = unassigned)
     cleanedData.assigned_to = formData.assigned_to ? Number(formData.assigned_to) : null;
     if (formData.probability) cleanedData.probability = formData.probability;
     cleanedData.awarded_status = formData.awarded_status || null;
-    // Always include campaign_id (even if empty string, convert to null for clearing)
     if (formData.campaign_id && formData.campaign_id !== '') {
       cleanedData.campaign_id = Number(formData.campaign_id);
     } else if (isEditMode) {
-      // In edit mode, explicitly set to null to clear the campaign
       cleanedData.campaign_id = null;
     }
 
-    console.log('Submitting opportunity data:', cleanedData);
+    return cleanedData;
+  };
 
-    if (isEditMode) {
-      updateMutation.mutate(cleanedData);
-    } else {
-      createMutation.mutate(cleanedData);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    // New mode: go to score tab instead of creating immediately
+    if (!isEditMode) {
+      setActiveTab('score');
+      return;
     }
+
+    const cleanedData = buildPayload();
+    console.log('Submitting opportunity data:', cleanedData);
+    updateMutation.mutate(cleanedData);
+  };
+
+  // Called from the score tab "Create" button in new mode
+  const handleCreateFromScore = () => {
+    if (!validateForm()) {
+      setActiveTab('details');
+      return;
+    }
+    const cleanedData = buildPayload();
+    console.log('Creating opportunity with score:', cleanedData);
+    createMutation.mutate(cleanedData);
   };
 
 
@@ -351,6 +339,12 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
               Comments
             </button>
           )}
+          <button
+            className={`tab ${activeTab === 'score' ? 'active' : ''}`}
+            onClick={() => setActiveTab('score')}
+          >
+            Opportunity Score
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -362,22 +356,23 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                 <div className="opportunity-form-left">
                   {/* Required fields note */}
                   <div style={{
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
                     borderRadius: '6px',
                     padding: '0.75rem',
                     marginBottom: '1rem',
                     fontSize: '0.8rem',
-                    color: '#1e40af'
+                    color: '#166534'
                   }}>
-                    <strong>Required fields are marked with *</strong>
-                    <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#3b82f6' }}>
+                    <span style={{ display: 'inline-block', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '3px', padding: '0 4px', marginRight: '4px', fontSize: '0.7rem' }}>Green</span>
+                    <strong>= Required field</strong>
+                    <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#16a34a' }}>
                       Optional: Facility/Location, Architect, Engineer, General Contractor, Sales Campaign
                     </div>
                   </div>
 
                   {/* Row 1: Title */}
-                  <div className="form-group">
+                  <div className="form-group required">
                     <label htmlFor="title">Opportunity Title *</label>
                     <input
                       type="text"
@@ -392,7 +387,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                   {/* Row 2: Value, Priority, Stage, Probability */}
                   <div className="form-row-4">
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="estimated_value">Estimated Value *</label>
                       <input
                         type="text"
@@ -404,7 +399,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         required
                       />
                     </div>
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="priority">Priority *</label>
                       <select
                         id="priority"
@@ -420,7 +415,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         <option value="urgent">Urgent</option>
                       </select>
                     </div>
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="stage_id">Stage *</label>
                       <select
                         id="stage_id"
@@ -455,7 +450,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         </select>
                       </div>
                     )}
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="probability">Win Probability *</label>
                       <select
                         id="probability"
@@ -474,7 +469,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                   {/* Row 3: Company + GC side by side */}
                   <div className="form-row">
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="owner">Company *</label>
                       <CompanyPicker
                         companies={uniqueCompanies.map((c: Customer) => ({
@@ -552,7 +547,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                   {/* Row 5: Construction Type, Market, Location Group, Location, Source */}
                   <div className="form-row-5">
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="construction_type">Construction Type *</label>
                       <select
                         id="construction_type"
@@ -568,7 +563,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </select>
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="market">Market *</label>
                       <select
                         id="market"
@@ -584,7 +579,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </select>
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="location_group">Location Group *</label>
                       <select
                         id="location_group"
@@ -600,7 +595,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       </select>
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="location">Location *</label>
                       <input
                         type="text"
@@ -613,7 +608,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       />
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="source">Lead Source *</label>
                       <select
                         id="source"
@@ -638,7 +633,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
 
                   {/* Row 6: Start Date, End Date, Duration, Assign To, Campaign */}
                   <div className="form-row-5">
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="estimated_start_date">Est. Start Date *</label>
                       <input
                         type="date"
@@ -662,7 +657,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       />
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="estimated_end_date">Est. End Date *</label>
                       <input
                         type="date"
@@ -687,7 +682,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       />
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="estimated_duration_months">Duration (months) *</label>
                       <input
                         type="number"
@@ -715,7 +710,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                       />
                     </div>
 
-                    <div className="form-group">
+                    <div className="form-group required">
                       <label htmlFor="assigned_to">Assign To *</label>
                       <SearchableSelect
                         options={employeeOptions}
@@ -789,13 +784,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   <button
                     type="submit"
                     className="btn-primary"
-                    disabled={createMutation.isPending || updateMutation.isPending}
+                    disabled={updateMutation.isPending}
                   >
-                    {createMutation.isPending || updateMutation.isPending
+                    {updateMutation.isPending
                       ? 'Saving...'
                       : isEditMode
                       ? 'Update'
-                      : 'Create'}
+                      : 'Next: Score →'}
                   </button>
                 </div>
               </div>
@@ -805,6 +800,41 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
           ) : activeTab === 'comments' ? (
             <div className="comments-tab-content">
               <CommentThread opportunityId={opportunity!.id} />
+            </div>
+          ) : activeTab === 'score' ? (
+            <div className="score-tab-content">
+              <OpportunityScore
+                opportunityId={isEditMode ? opportunity!.id : undefined}
+                stageName={stages.find((s: any) => String(s.id) === String(formData.stage_id))?.name || ''}
+                localMode={!isEditMode}
+                onScoreChange={!isEditMode ? setPendingScoreData : undefined}
+              />
+              {!isEditMode && (
+                <div className="form-actions" style={{ marginTop: '1rem' }}>
+                  <div className="form-actions-left">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setActiveTab('details')}
+                    >
+                      ← Back to Details
+                    </button>
+                  </div>
+                  <div className="form-actions-right">
+                    <button type="button" className="btn-secondary" onClick={onClose}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handleCreateFromScore}
+                      disabled={createMutation.isPending}
+                    >
+                      {createMutation.isPending ? 'Creating...' : 'Create'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

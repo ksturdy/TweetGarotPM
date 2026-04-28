@@ -860,6 +860,15 @@ const SalesPipeline: React.FC = () => {
           <button className="sales-btn sales-btn-secondary" onClick={handleExportPdf}>
             Export
           </button>
+          <a
+            href="/TITAN_Pursuit_Pipeline_GoNoGo_Guideline.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sales-btn sales-btn-secondary"
+            style={{ textDecoration: 'none' }}
+          >
+            Go/No-Go Guide
+          </a>
           <button className="sales-btn sales-btn-primary" onClick={() => {
             setSelectedOpportunity(null);
             setIsModalOpen(true);

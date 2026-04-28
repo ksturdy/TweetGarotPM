@@ -6,6 +6,7 @@ const opportunityActivities = require('../models/opportunityActivities');
 const OpportunityComment = require('../models/OpportunityComment');
 const OpportunityFollower = require('../models/OpportunityFollower');
 const OpportunityEstimate = require('../models/OpportunityEstimate');
+const OpportunityScore = require('../models/OpportunityScore');
 const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
@@ -689,6 +690,104 @@ router.delete('/:id/estimate', async (req, res, next) => {
       return res.status(404).json({ error: 'Estimate not found' });
     }
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Go/No-Go Score Routes =====
+
+const scoreValidation = [
+  body('gate').isInt({ min: 1, max: 2 }).withMessage('Gate must be 1 or 2'),
+  body('customer_relationship').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('scope_fit').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('delivery_method').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('strategic_value').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('schedule_fit').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('margin_profile').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('win_probability_score').optional({ nullable: true }).isInt({ min: 1, max: 5 }),
+  body('db_payment_dispute').optional().isBoolean(),
+  body('db_liquidated_damages').optional().isBoolean(),
+  body('db_schedule_conflict').optional().isBoolean(),
+  body('db_scope_outside').optional().isBoolean(),
+  body('db_margin_below_floor').optional().isBoolean(),
+  body('db_bonding_unmet').optional().isBoolean(),
+  body('has_override').optional().isBoolean(),
+  body('override_reason').optional({ nullable: true }).trim(),
+  body('notes').optional({ nullable: true }).trim(),
+];
+
+// Get all scores for an opportunity (history)
+router.get('/:id/scores', async (req, res, next) => {
+  try {
+    const scores = await OpportunityScore.findByOpportunityId(req.params.id, req.tenantId);
+    res.json(scores);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get most recent score
+router.get('/:id/scores/latest', async (req, res, next) => {
+  try {
+    const score = await OpportunityScore.findLatest(req.params.id, req.tenantId);
+    res.json(score);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create a new score
+router.post('/:id/scores', scoreValidation, async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const score = await OpportunityScore.create(
+      req.params.id,
+      req.tenantId,
+      req.body,
+      req.user.id
+    );
+    res.status(201).json(score);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update an existing score
+router.put('/:id/scores/:scoreId', scoreValidation, async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const score = await OpportunityScore.update(
+      req.params.scoreId,
+      req.tenantId,
+      req.body,
+      req.user.id
+    );
+    if (!score) {
+      return res.status(404).json({ error: 'Score not found' });
+    }
+    res.json(score);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Delete a score
+router.delete('/:id/scores/:scoreId', async (req, res, next) => {
+  try {
+    const deleted = await OpportunityScore.delete(req.params.scoreId, req.tenantId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Score not found' });
+    }
+    res.json({ message: 'Score deleted successfully' });
   } catch (error) {
     next(error);
   }

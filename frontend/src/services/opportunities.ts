@@ -380,6 +380,83 @@ const opportunitiesService = {
   async unfollow(opportunityId: number): Promise<void> {
     await api.delete(`/opportunities/${opportunityId}/follow`);
   },
+
+  // ===== Go/No-Go Scores =====
+
+  async getScores(opportunityId: number): Promise<OpportunityScoreData[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/scores`);
+    return response.data;
+  },
+
+  async getLatestScore(opportunityId: number): Promise<OpportunityScoreData | null> {
+    const response = await api.get(`/opportunities/${opportunityId}/scores/latest`);
+    return response.data;
+  },
+
+  async createScore(opportunityId: number, data: OpportunityScoreInput): Promise<OpportunityScoreData> {
+    const response = await api.post(`/opportunities/${opportunityId}/scores`, data);
+    return response.data;
+  },
+
+  async updateScore(opportunityId: number, scoreId: number, data: OpportunityScoreInput): Promise<OpportunityScoreData> {
+    const response = await api.put(`/opportunities/${opportunityId}/scores/${scoreId}`, data);
+    return response.data;
+  },
+
+  async deleteScore(opportunityId: number, scoreId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/scores/${scoreId}`);
+  },
 };
+
+export interface OpportunityScoreData {
+  id: number;
+  opportunity_id: number;
+  tenant_id: number;
+  gate: 1 | 2;
+  customer_relationship: number | null;
+  scope_fit: number | null;
+  delivery_method: number | null;
+  strategic_value: number | null;
+  schedule_fit: number | null;
+  margin_profile: number | null;
+  win_probability_score: number | null;
+  total_score: number;
+  max_possible: number;
+  recommendation: 'advance' | 'review_required' | 'no_go' | 'go' | 'vp_override';
+  db_payment_dispute: boolean;
+  db_liquidated_damages: boolean;
+  db_schedule_conflict: boolean;
+  db_scope_outside: boolean;
+  db_margin_below_floor: boolean;
+  db_bonding_unmet: boolean;
+  has_override: boolean;
+  override_reason?: string;
+  override_by?: number;
+  notes?: string;
+  scored_by: number;
+  scored_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpportunityScoreInput {
+  gate: 1 | 2;
+  customer_relationship?: number | null;
+  scope_fit?: number | null;
+  delivery_method?: number | null;
+  strategic_value?: number | null;
+  schedule_fit?: number | null;
+  margin_profile?: number | null;
+  win_probability_score?: number | null;
+  db_payment_dispute?: boolean;
+  db_liquidated_damages?: boolean;
+  db_schedule_conflict?: boolean;
+  db_scope_outside?: boolean;
+  db_margin_below_floor?: boolean;
+  db_bonding_unmet?: boolean;
+  has_override?: boolean;
+  override_reason?: string;
+  notes?: string;
+}
 
 export default opportunitiesService;
