@@ -605,25 +605,23 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     <table>
       <thead>
         <tr>
-          <th style="width: 20%;">Opportunity</th>
-          <th style="width: 18%;">Company</th>
-          <th style="width: 12%;">Value</th>
-          <th style="width: 12%;">Stage</th>
-          <th style="width: 8%;">Probability</th>
-          <th style="width: 12%;">Close Date</th>
-          <th style="width: 18%;">Description</th>
+          <th style="width: 25%;">Opportunity / Owner</th>
+          <th style="width: 18%;">GC</th>
+          <th style="width: 14%;">Value</th>
+          <th style="width: 14%;">Stage</th>
+          <th style="width: 12%;">Probability</th>
+          <th style="width: 17%;">Close Date</th>
         </tr>
       </thead>
       <tbody>
         ${opportunities.map(o => `
           <tr>
-            <td style="font-weight: bold;">${o.name || ''}</td>
-            <td>${o.company_name || '-'}</td>
+            <td><span style="font-weight: bold;">${o.name || ''}</span>${o.owner ? `<br/><span style="font-size: 7pt; color: #666;">${o.owner}</span>` : ''}</td>
+            <td>${o.gc_name || '-'}</td>
             <td>${formatCurrency(o.value)}</td>
             <td>${stageLabels[o.stage] || o.stage || '-'}</td>
             <td>${typeof o.probability === 'number' ? o.probability + '%' : (o.probability || '-')}</td>
             <td>${o.close_date ? formatDate(o.close_date) : '-'}</td>
-            <td style="font-size: 7pt;">${o.description ? (o.description.length > 100 ? o.description.substring(0, 100) + '...' : o.description) : '-'}</td>
           </tr>
         `).join('')}
       </tbody>

@@ -262,10 +262,12 @@ router.get('/:id/report-pdf', async (req, res, next) => {
       campaigns.getTeamMembers(req.params.id),
       campaignOpportunities.getByCampaignId(req.params.id),
       db.query(`
-        SELECT o.*, ps.name as stage_name, u.first_name || ' ' || u.last_name as assigned_to_name
+        SELECT o.*, ps.name as stage_name, u.first_name || ' ' || u.last_name as assigned_to_name,
+          gc.name as gc_customer_name
         FROM opportunities o
         LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
         LEFT JOIN users u ON o.assigned_to = u.id
+        LEFT JOIN customers gc ON o.gc_customer_id = gc.id
         WHERE o.campaign_id = $1
         ORDER BY o.estimated_value DESC
       `, [req.params.id]),
@@ -321,11 +323,12 @@ router.get('/:id/report-pdf', async (req, res, next) => {
     const mainOpps = mainOppsResult.rows.map(o => ({
       name: o.title,
       company_name: o.client_company || '',
+      gc_name: o.gc_customer_name || o.general_contractor || '',
+      owner: o.owner || '',
       value: o.estimated_value,
       stage: o.stage_name || '',
       probability: o.probability || '',
-      close_date: o.estimated_start_date,
-      description: o.description
+      close_date: o.estimated_start_date
     }));
     const opportunitiesList = [...campaignOppsList, ...mainOpps];
 
