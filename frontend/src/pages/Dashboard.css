@@ -1,6 +1,5 @@
 .dashboard {
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
 }
 
 /* Header Row with Welcome and View Toggle */
@@ -169,7 +168,7 @@
 /* Dashboard Grid */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
+  grid-template-columns: 1fr 1fr 340px;
   gap: 1.5rem;
 }
 
@@ -566,6 +565,131 @@
   padding: 0.25rem 0.5rem;
 }
 
+/* Recent Activity Feed */
+.dashboard-activity {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-activity .dashboard-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-feed {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 840px;
+  padding: 0.25rem 0;
+}
+
+.activity-feed-item {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.activity-feed-item:last-child {
+  border-bottom: none;
+}
+
+.activity-feed-item:hover {
+  background: #f9fafb;
+  text-decoration: none;
+}
+
+.activity-feed-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.875rem;
+}
+
+.activity-feed-icon.project {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.activity-feed-icon.opportunity {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.activity-feed-icon.estimate {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.activity-feed-icon.rfi {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.activity-feed-icon.submittal {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.activity-feed-icon.change_order {
+  background: #fce7f3;
+  color: #db2777;
+}
+
+.activity-feed-icon.daily_report {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.activity-feed-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-feed-text {
+  font-size: 0.8125rem;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.activity-feed-text strong {
+  font-weight: 600;
+  color: #002356;
+}
+
+.activity-feed-project {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-feed-time {
+  font-size: 0.6875rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.activity-feed-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.8125rem;
+}
+
 /* Loading */
 .loading {
   text-align: center;
@@ -574,6 +698,16 @@
 }
 
 /* Responsive Design */
+@media (max-width: 1400px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dashboard-activity {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 1200px) {
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);

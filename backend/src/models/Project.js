@@ -45,10 +45,17 @@ const Project = {
    */
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
-      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+      `SELECT p.*, e.first_name || ' ' || e.last_name as manager_name,
+              COALESCE(d.department_number, vd.department_number) as department_number,
+              COALESCE(d.name, vd.name) as department_name,
               COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
+              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+              COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+              COALESCE(vc.backlog, p.backlog) as backlog,
+              COALESCE(p.market, vc.primary_market) as market,
+              COALESCE(p.start_date, vc.start_month::date) as start_date,
               CASE
                 WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                 ELSE NULL
@@ -59,6 +66,7 @@ const Project = {
        LEFT JOIN customers c ON p.customer_id = c.id
        LEFT JOIN customers oc ON p.owner_customer_id = oc.id
        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+       LEFT JOIN departments vd ON vc.linked_department_id = vd.id
        WHERE p.id = $1 AND p.tenant_id = $2`,
       [id, tenantId]
     );

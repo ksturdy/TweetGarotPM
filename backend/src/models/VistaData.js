@@ -2088,7 +2088,7 @@ const VistaData = {
         `SELECT id, contract_number, description, customer_name, department_code,
                 contract_amount, gross_profit_percent, backlog,
                 status, employee_number, project_manager_name, linked_department_id, link_status,
-                start_month
+                start_month, primary_market
          FROM vp_contracts
          WHERE tenant_id = $1 AND linked_project_id IS NULL
            AND (link_status = 'unmatched' OR link_status = 'auto_matched')
@@ -2153,9 +2153,9 @@ const VistaData = {
           const newProject = await client.query(
             `INSERT INTO projects (
               tenant_id, number, name, client, customer_id, status, manager_id, department_id,
-              contract_value, gross_margin_percent, backlog, start_date,
+              contract_value, gross_margin_percent, backlog, start_date, market,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
@@ -2167,6 +2167,7 @@ const VistaData = {
               gross_margin_percent = COALESCE(EXCLUDED.gross_margin_percent, projects.gross_margin_percent),
               backlog = COALESCE(EXCLUDED.backlog, projects.backlog),
               start_date = COALESCE(EXCLUDED.start_date, projects.start_date),
+              market = COALESCE(EXCLUDED.market, projects.market),
               updated_at = CURRENT_TIMESTAMP
             RETURNING id, (xmax = 0) as is_new`,
             [
@@ -2181,7 +2182,8 @@ const VistaData = {
               vpContract.contract_amount || null,
               vpContract.gross_profit_percent || null,
               vpContract.backlog || null,
-              vpContract.start_month || null
+              vpContract.start_month || null,
+              vpContract.primary_market || null
             ]
           );
 
@@ -2245,12 +2247,12 @@ const VistaData = {
         `SELECT vc.id AS vp_id, vc.contract_number, vc.status AS vista_status,
                 vc.description, vc.customer_name, vc.contract_amount,
                 vc.gross_profit_percent, vc.backlog, vc.employee_number,
-                vc.linked_department_id, vc.start_month,
+                vc.linked_department_id, vc.start_month, vc.primary_market,
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
                 p.department_id AS titan_dept, p.start_date AS titan_start,
                 p.client AS titan_client, p.contract_value AS titan_contract_value,
                 p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog,
-                p.manager_id AS titan_manager_id,
+                p.manager_id AS titan_manager_id, p.market AS titan_market,
                 COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
          FROM vp_contracts vc
          JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
@@ -2271,8 +2273,9 @@ const VistaData = {
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
         const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
+        const marketChanged = row.primary_market && row.primary_market !== row.titan_market;
 
-        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged && !managerChanged) continue;
+        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged && !managerChanged && !marketChanged) continue;
 
         await client.query('SAVEPOINT sync_contract_row');
         try {
@@ -2305,8 +2308,9 @@ const VistaData = {
               manager_id = COALESCE($8, manager_id),
               department_id = COALESCE($9, department_id),
               start_date = COALESCE($10, start_date),
+              market = COALESCE($11, market),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = $11 AND tenant_id = $12`,
+            WHERE id = $12 AND tenant_id = $13`,
             [
               mappedStatus,
               row.description ? row.description.substring(0, 255) : null,
@@ -2318,6 +2322,7 @@ const VistaData = {
               managerId,
               row.linked_department_id || null,
               row.start_month || null,
+              row.primary_market || null,
               row.project_id,
               tenantId
             ]
@@ -2332,6 +2337,7 @@ const VistaData = {
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
           if (managerChanged) changedFields.push(`manager: ${row.titan_manager_id} → ${row.vista_manager_id}`);
+          if (marketChanged) changedFields.push(`market: ${row.titan_market} → ${row.primary_market}`);
           changes.push({
             contract_number: row.contract_number,
             project_id: row.project_id,
@@ -2367,10 +2373,10 @@ const VistaData = {
         `SELECT vw.id AS vp_id, vw.work_order_number, vw.status AS vista_status,
                 vw.description, vw.customer_name, vw.contract_amount,
                 vw.gross_profit_percent, vw.backlog, vw.employee_number,
-                vw.linked_department_id,
+                vw.linked_department_id, vw.primary_market,
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
                 p.department_id AS titan_dept, p.client AS titan_client,
-                p.manager_id AS titan_manager_id,
+                p.manager_id AS titan_manager_id, p.market AS titan_market,
                 COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
          FROM vp_work_orders vw
          JOIN projects p ON p.number = 'WO-' || vw.work_order_number AND p.tenant_id = vw.tenant_id
@@ -2390,8 +2396,9 @@ const VistaData = {
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
         const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
+        const marketChanged = row.primary_market && row.primary_market !== row.titan_market;
 
-        if (!statusChanged && !deptChanged && !nameChanged && !clientChanged && !managerChanged) continue;
+        if (!statusChanged && !deptChanged && !nameChanged && !clientChanged && !managerChanged && !marketChanged) continue;
 
         await client.query('SAVEPOINT sync_wo_row');
         try {
@@ -2408,8 +2415,9 @@ const VistaData = {
               backlog = COALESCE($6, backlog),
               manager_id = COALESCE($7, manager_id),
               department_id = COALESCE($8, department_id),
+              market = COALESCE($9, market),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = $9 AND tenant_id = $10`,
+            WHERE id = $10 AND tenant_id = $11`,
             [
               mappedStatus,
               row.description ? row.description.substring(0, 255) : null,
@@ -2419,6 +2427,7 @@ const VistaData = {
               row.backlog || null,
               managerId,
               row.linked_department_id || null,
+              row.primary_market || null,
               row.project_id,
               tenantId
             ]
@@ -2432,6 +2441,7 @@ const VistaData = {
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
           if (managerChanged) changedFields.push(`manager: ${row.titan_manager_id} → ${row.vista_manager_id}`);
+          if (marketChanged) changedFields.push(`market: ${row.titan_market} → ${row.primary_market}`);
           changes.push({
             work_order_number: row.work_order_number,
             project_id: row.project_id,
@@ -2469,7 +2479,7 @@ const VistaData = {
       const unlinked = await client.query(
         `SELECT id, work_order_number, description, customer_name, department_code,
                 contract_amount, gross_profit_percent, backlog,
-                status, employee_number, project_manager_name, linked_department_id
+                status, employee_number, project_manager_name, linked_department_id, primary_market
          FROM vp_work_orders
          WHERE tenant_id = $1 AND link_status = 'unmatched'
          ORDER BY work_order_number`,
@@ -2513,9 +2523,9 @@ const VistaData = {
           const newProject = await client.query(
             `INSERT INTO projects (
               tenant_id, number, name, client, status, manager_id, department_id,
-              contract_value, gross_margin_percent, backlog,
+              contract_value, gross_margin_percent, backlog, market,
               created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (tenant_id, number) DO UPDATE SET
               name = EXCLUDED.name,
               client = EXCLUDED.client,
@@ -2525,6 +2535,7 @@ const VistaData = {
               contract_value = COALESCE(EXCLUDED.contract_value, projects.contract_value),
               gross_margin_percent = COALESCE(EXCLUDED.gross_margin_percent, projects.gross_margin_percent),
               backlog = COALESCE(EXCLUDED.backlog, projects.backlog),
+              market = COALESCE(EXCLUDED.market, projects.market),
               updated_at = CURRENT_TIMESTAMP
             RETURNING id, (xmax = 0) as is_new`,
             [
@@ -2537,7 +2548,8 @@ const VistaData = {
               vpWorkOrder.linked_department_id || null,
               vpWorkOrder.contract_amount || null,
               vpWorkOrder.gross_profit_percent || null,
-              vpWorkOrder.backlog || null
+              vpWorkOrder.backlog || null,
+              vpWorkOrder.primary_market || null
             ]
           );
 

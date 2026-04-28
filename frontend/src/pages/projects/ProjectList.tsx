@@ -47,6 +47,7 @@ const ProjectList: React.FC = () => {
     percentComplete: 90,
     status: 70,
     department: 85,
+    market: 120,
     manager: 150,
   };
   const COLUMN_KEYS = Object.keys(DEFAULT_WIDTHS);
@@ -290,6 +291,20 @@ const ProjectList: React.FC = () => {
     return gradients[status] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
   };
 
+  // Helper: safely parse a date string that may be YYYY-MM-DD or a full ISO string
+  const parseDate = (dateStr: string): Date => {
+    const dateOnly = dateStr.substring(0, 10); // "YYYY-MM-DD"
+    return new Date(dateOnly + 'T00:00:00');
+  };
+
+  // Helper: format start_date as "Start Month" (e.g. "Jan 2025")
+  const formatStartMonth = (dateStr?: string): string => {
+    if (!dateStr) return '-';
+    const d = parseDate(dateStr);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
+
   // Helper function to get manager initials
   const getManagerInitials = (name?: string): string => {
     if (!name) return 'UN';
@@ -344,7 +359,7 @@ const ProjectList: React.FC = () => {
       (project.department_number && project.department_number.toLowerCase().includes(term)) ||
       (project.market && project.market.toLowerCase().includes(term)) ||
       (project.manager_name && project.manager_name.toLowerCase().includes(term)) ||
-      (project.start_date && new Date(project.start_date + 'T00:00:00').toLocaleDateString('en-US').toLowerCase().includes(term)) ||
+      (project.start_date && formatStartMonth(project.start_date).toLowerCase().includes(term)) ||
       contractValueStr.toLowerCase().includes(term) ||
       backlogStr.toLowerCase().includes(term) ||
       jtdCostStr.toLowerCase().includes(term) ||
@@ -390,6 +405,10 @@ const ProjectList: React.FC = () => {
         aValue = (a.department_number || '').toLowerCase();
         bValue = (b.department_number || '').toLowerCase();
         break;
+      case 'market':
+        aValue = (a.market || '').toLowerCase();
+        bValue = (b.market || '').toLowerCase();
+        break;
       case 'backlog':
         aValue = Number(a.backlog) || 0;
         bValue = Number(b.backlog) || 0;
@@ -411,8 +430,8 @@ const ProjectList: React.FC = () => {
         bValue = (b.manager_name || '').toLowerCase();
         break;
       case 'start_date':
-        aValue = a.start_date ? new Date(a.start_date + 'T00:00:00').getTime() : 0;
-        bValue = b.start_date ? new Date(b.start_date + 'T00:00:00').getTime() : 0;
+        aValue = a.start_date ? parseDate(a.start_date).getTime() : 0;
+        bValue = b.start_date ? parseDate(b.start_date).getTime() : 0;
         break;
       default:
         return 0;
@@ -524,11 +543,12 @@ const ProjectList: React.FC = () => {
         { header: '% Complete', key: 'pctComplete', align: 'right', width: 0.8 },
         { header: 'Status', key: 'status', width: 0.8 },
         { header: 'Dept', key: 'dept', width: 0.6 },
+        { header: 'Market', key: 'market', width: 1.2 },
         { header: 'PM', key: 'manager', width: 1.5 },
       ],
       rows: sortedProjects.map((p: Project) => ({
         number: p.number,
-        startDate: p.start_date ? new Date(p.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-',
+        startDate: formatStartMonth(p.start_date),
         name: p.name,
         client: p.owner_name || p.customer_name || p.client || '-',
         contractValue: fmtCurrency(Number(p.contract_value) || undefined),
@@ -540,6 +560,7 @@ const ProjectList: React.FC = () => {
           ? `${Math.round(Number(p.percent_complete) * 100)}%` : '-',
         status: p.status,
         dept: p.department_number || '-',
+        market: p.market || '-',
         manager: p.manager_name || 'Unassigned',
       })),
       summaryRows: [
@@ -971,6 +992,10 @@ const ProjectList: React.FC = () => {
                 Dept <span className="sales-sort-icon">{sortColumn === 'department' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('department', e)} />
               </th>
+              <th className="sales-sortable" onClick={() => handleSort('market')}>
+                Market <span className="sales-sort-icon">{sortColumn === 'market' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('market', e)} />
+              </th>
               <th className="sales-sortable" onClick={() => handleSort('manager')}>
                 Project Manager <span className="sales-sort-icon">{sortColumn === 'manager' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                 <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('manager', e)} />
@@ -1023,7 +1048,7 @@ const ProjectList: React.FC = () => {
                     </span>
                   </td>
                   <td>{project.number}</td>
-                  <td>{project.start_date ? new Date(project.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-'}</td>
+                  <td>{formatStartMonth(project.start_date)}</td>
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status) }}>
@@ -1049,6 +1074,7 @@ const ProjectList: React.FC = () => {
                     </span>
                   </td>
                   <td>{project.department_number || '-'}</td>
+                  <td>{project.market || '-'}</td>
                   <td>
                     <div className="sales-salesperson-cell">
                       <div
@@ -1119,7 +1145,7 @@ const ProjectList: React.FC = () => {
                 <td style={{ color: '#334155' }}>
                   {footerTotals.hasPct ? `${Math.round(footerTotals.weightedPct * 100)}%` : '-'}
                 </td>
-                <td colSpan={3}></td>
+                <td colSpan={4}></td>
               </tr>
             </tfoot>
           )}

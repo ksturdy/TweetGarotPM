@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../services/projects';
 import opportunitiesService from '../services/opportunities';
 import { estimatesApi } from '../services/estimates';
-import { dashboardApi, AttentionItem } from '../services/dashboard';
+import { dashboardApi, AttentionItem, ActivityItem } from '../services/dashboard';
 import { employeesApi } from '../services/employees';
 import { teamsApi } from '../services/teams';
 import CalculateIcon from '@mui/icons-material/Calculate';
@@ -20,6 +20,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import BusinessIcon from '@mui/icons-material/Business';
+import HistoryIcon from '@mui/icons-material/History';
 import './Dashboard.css';
 import '../styles/SalesPipeline.css';
 
@@ -296,6 +297,12 @@ const Dashboard: React.FC = () => {
     queryFn: () => dashboardApi.getAttentionItems(viewScope),
   });
 
+  // Fetch recent activity (always company-wide)
+  const { data: recentActivity = [] } = useQuery<ActivityItem[]>({
+    queryKey: ['recent-activity'],
+    queryFn: () => dashboardApi.getRecentActivity(30),
+  });
+
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
       return `$${(value / 1000000).toFixed(1)}M`;
@@ -311,6 +318,50 @@ const Dashboard: React.FC = () => {
       case 'team': return "your team's";
       case 'company': return 'company-wide';
     }
+  };
+
+  const getActivityIcon = (type: string): string => {
+    const icons: Record<string, string> = {
+      project: '📁', opportunity: '🤝', estimate: '🧮',
+      rfi: '❓', submittal: '📋', change_order: '📝', daily_report: '📊',
+    };
+    return icons[type] || '📌';
+  };
+
+  const getActivityLabel = (type: string): string => {
+    const labels: Record<string, string> = {
+      project: 'Project', opportunity: 'Opportunity', estimate: 'Estimate',
+      rfi: 'RFI', submittal: 'Submittal', change_order: 'Change Order', daily_report: 'Daily Report',
+    };
+    return labels[type] || type;
+  };
+
+  const getActivityPath = (item: ActivityItem): string => {
+    switch (item.type) {
+      case 'project': return `/projects/${item.entityId}`;
+      case 'opportunity': return '/sales';
+      case 'estimate': return `/estimating/estimates/${item.entityId}`;
+      case 'rfi': return item.parentId ? `/projects/${item.parentId}/rfis` : '#';
+      case 'submittal': return item.parentId ? `/projects/${item.parentId}/submittals` : '#';
+      case 'change_order': return item.parentId ? `/projects/${item.parentId}/change-orders` : '#';
+      case 'daily_report': return item.parentId ? `/projects/${item.parentId}/daily-reports` : '#';
+      default: return '#';
+    }
+  };
+
+  const formatTimeAgo = (timestamp: string): string => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now.getTime() - then.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return then.toLocaleDateString();
   };
 
   if (projectsLoading) {
@@ -516,7 +567,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column */}
+        {/* Center Column */}
         <div className="dashboard-right">
           {/* Active Projects */}
           <div className="dashboard-card">
@@ -657,6 +708,49 @@ const Dashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column - Recent Activity */}
+        <div className="dashboard-activity">
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <HistoryIcon className="card-title-icon" />
+                Recent Activity
+              </h2>
+            </div>
+            <div className="activity-feed">
+              {recentActivity.length > 0 ? (
+                recentActivity.map((item, index) => (
+                  <Link
+                    key={`${item.type}-${item.entityId}-${index}`}
+                    to={getActivityPath(item)}
+                    className="activity-feed-item"
+                  >
+                    <div className={`activity-feed-icon ${item.type}`}>
+                      {getActivityIcon(item.type)}
+                    </div>
+                    <div className="activity-feed-body">
+                      <div className="activity-feed-text">
+                        <strong>{item.actorName || 'Someone'}</strong>
+                        {' '}{item.action === 'created' ? 'created' : 'updated'}{' '}
+                        {getActivityLabel(item.type).toLowerCase()}
+                        {' '}<strong>{item.title}</strong>
+                      </div>
+                      {item.parentName && (
+                        <div className="activity-feed-project">{item.parentName}</div>
+                      )}
+                    </div>
+                    <div className="activity-feed-time">
+                      {formatTimeAgo(item.timestamp)}
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="activity-feed-empty">No recent activity</div>
+              )}
             </div>
           </div>
         </div>

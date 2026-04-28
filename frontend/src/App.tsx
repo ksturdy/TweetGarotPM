@@ -111,6 +111,8 @@ import BacklogFitAnalysis from './pages/reports/BacklogFitAnalysis';
 import CashFlowReport from './pages/reports/CashFlowReport';
 import ScheduledReports from './pages/reports/ScheduledReports';
 import BuyoutMetricReport from './pages/reports/BuyoutMetricReport';
+import ReportsHub from './pages/reports/ReportsHub';
+import WeeklySalesReport from './pages/reports/WeeklySalesReport';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -434,11 +436,14 @@ const App: React.FC = () => {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
-                <Route path="/executive-report" element={<ExecutiveReport />} />
+                <Route path="/reports" element={<ReportsHub />} />
+                <Route path="/reports/executive-report" element={<ExecutiveReport />} />
                 <Route path="/reports/backlog-fit" element={<BacklogFitAnalysis />} />
                 <Route path="/reports/cash-flow" element={<CashFlowReport />} />
                 <Route path="/reports/scheduled" element={<ScheduledReports />} />
                 <Route path="/reports/buyout-metric" element={<BuyoutMetricReport />} />
+                <Route path="/reports/weekly-sales" element={<WeeklySalesReport />} />
+                <Route path="/executive-report" element={<Navigate to="/reports/executive-report" />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />
                 <Route path="/risk-management/contract-reviews/:id" element={<ContractReviewDetail />} />
