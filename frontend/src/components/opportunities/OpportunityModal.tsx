@@ -40,13 +40,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       ? Math.round(Number(opportunity.estimated_value)).toString()
       : '',
     estimated_start_date: opportunity?.estimated_start_date
-      ? new Date(opportunity.estimated_start_date + 'T00:00:00').toISOString().split('T')[0]
+      ? String(opportunity.estimated_start_date).substring(0, 10)
       : '',
     estimated_duration_months: opportunity?.estimated_duration_days
       ? Math.round(Number(opportunity.estimated_duration_days) / 30).toString()
       : '',
     estimated_end_date: opportunity?.estimated_end_date
-      ? new Date(opportunity.estimated_end_date + 'T00:00:00').toISOString().split('T')[0]
+      ? String(opportunity.estimated_end_date).substring(0, 10)
       : '',
     construction_type: opportunity?.construction_type || opportunity?.project_type || '',
     location: opportunity?.location || '',
