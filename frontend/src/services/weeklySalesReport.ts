@@ -16,6 +16,9 @@ export interface LocationSummary {
   won_count: number;
   won_value: number;
   lost_count: number;
+  prev_won_count?: number;
+  prev_won_value?: number;
+  prev_lost_count?: number;
 }
 
 export interface NewOpportunityRow {
@@ -69,6 +72,7 @@ export interface CompanySnapshot {
   backlog_12mo_gm_pct: number | null;
   weighted_gm_pct: number | null;
   avg_project_gm_pct: number | null;
+  gm_override_count?: number;
 }
 
 export interface NewJobRow {
@@ -78,6 +82,7 @@ export interface NewJobRow {
   status: string;
   contract_value: number | null;
   gross_margin_percent: number | null;
+  gm_overridden: boolean;
   created_at: string;
   manager_name: string | null;
   customer_name: string | null;
@@ -90,6 +95,7 @@ export interface WeeklySalesData {
   totals: LocationSummary;
   by_location: Record<string, LocationData>;
   company_snapshot: CompanySnapshot;
+  prev_snapshot: CompanySnapshot | null;
   new_jobs: NewJobRow[];
 }
 

@@ -217,6 +217,25 @@ const REPORT_HANDLERS = {
     };
   },
 
+  async weekly_sales(report) {
+    const { buildWeeklySalesData, generateWeeklySalesPdfBuffer, getCurrentMonday } =
+      require('../routes/weeklySalesReport');
+
+    const weekStart = getCurrentMonday();
+    const data = await buildWeeklySalesData(report.tenant_id, weekStart);
+    const pdfBuffer = await generateWeeklySalesPdfBuffer(data, report.tenant_id);
+
+    const fmtRange = `${data.week_start} to ${data.week_end}`;
+    const t = data.totals || {};
+
+    return {
+      pdfBuffer,
+      filename: `Weekly-Sales-Report-${weekStart}.pdf`,
+      subject: `Weekly Sales Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Weekly Sales Report for ${fmtRange}.\n\nHighlights: ${t.new_opp_count || 0} new opportunities, ${t.won_count || 0} won, ${t.lost_count || 0} lost.`,
+    };
+  },
+
   async opportunity_search(report) {
     const RecurringSearches = require('../models/RecurringSearches');
     const { generateOpportunitySearchPdfBuffer } = require('../utils/opportunitySearchPdfBuffer');
@@ -377,15 +396,30 @@ async function executeScheduledReport(report) {
   }
 
   const recipients = report.recipients || [];
-  if (recipients.length === 0) {
+  const teamRecipients = report.team_recipients || [];
+
+  if (recipients.length === 0 && teamRecipients.length === 0) {
     throw new Error('No recipients configured for this scheduled report');
   }
 
   // Generate the report PDF
   const { pdfBuffer, filename, subject, body } = await handler(report);
 
-  // Collect recipient emails
-  const toAddresses = recipients.map(r => r.email).filter(Boolean);
+  // Collect recipient emails from direct users
+  const emailSet = new Set(recipients.map(r => r.email).filter(Boolean));
+
+  // Resolve team members to emails
+  if (teamRecipients.length > 0) {
+    const Team = require('../models/Team');
+    for (const tr of teamRecipients) {
+      const members = await Team.getMembers(tr.team_id, report.tenant_id);
+      for (const m of members) {
+        if (m.email) emailSet.add(m.email);
+      }
+    }
+  }
+
+  const toAddresses = [...emailSet];
   if (toAddresses.length === 0) {
     throw new Error('No valid email addresses found for recipients');
   }

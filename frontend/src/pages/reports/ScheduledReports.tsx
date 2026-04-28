@@ -21,6 +21,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'buyout_metric', label: 'Buyout Metric Report' },
   { value: 'campaign', label: 'Campaign Report' },
   { value: 'opportunity_search', label: 'Opportunity Search' },
+  { value: 'weekly_sales', label: 'Weekly Sales Report' },
 ];
 
 const FREQUENCIES: { value: string; label: string }[] = [
@@ -82,6 +83,7 @@ interface FormState {
   filters: Record<string, unknown>;
   is_enabled: boolean;
   recipient_user_ids: number[];
+  recipient_team_ids: number[];
 }
 
 const DEFAULT_FORM: FormState = {
@@ -95,6 +97,7 @@ const DEFAULT_FORM: FormState = {
   filters: {},
   is_enabled: true,
   recipient_user_ids: [],
+  recipient_team_ids: [],
 };
 
 const ScheduledReports: React.FC = () => {
@@ -135,14 +138,14 @@ const ScheduledReports: React.FC = () => {
     enabled: dialogOpen && form.report_type === 'buyout_metric',
   });
 
-  // Fetch teams for filter dropdown
+  // Fetch teams for filter dropdown and team recipients
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ['teams'],
     queryFn: async () => {
       const response = await teamsApi.getAll();
       return response.data.data || [];
     },
-    enabled: dialogOpen && (form.report_type === 'cash_flow' || form.report_type === 'buyout_metric'),
+    enabled: dialogOpen,
   });
 
   // Fetch campaigns for campaign report type
@@ -266,6 +269,7 @@ const ScheduledReports: React.FC = () => {
       filters: report.filters || {},
       is_enabled: report.is_enabled,
       recipient_user_ids: report.recipients.map(r => r.user_id),
+      recipient_team_ids: (report.team_recipients || []).map(t => t.team_id),
     });
     setDialogOpen(true);
   };
@@ -288,6 +292,7 @@ const ScheduledReports: React.FC = () => {
       filters: form.filters,
       is_enabled: form.is_enabled,
       recipient_user_ids: form.recipient_user_ids,
+      recipient_team_ids: form.recipient_team_ids,
     };
     if (editingId) {
       updateMutation.mutate({ id: editingId, data: payload });
@@ -302,6 +307,15 @@ const ScheduledReports: React.FC = () => {
       recipient_user_ids: f.recipient_user_ids.includes(userId)
         ? f.recipient_user_ids.filter(id => id !== userId)
         : [...f.recipient_user_ids, userId],
+    }));
+  };
+
+  const toggleTeamRecipient = (teamId: number) => {
+    setForm(f => ({
+      ...f,
+      recipient_team_ids: f.recipient_team_ids.includes(teamId)
+        ? f.recipient_team_ids.filter(id => id !== teamId)
+        : [...f.recipient_team_ids, teamId],
     }));
   };
 
@@ -329,7 +343,7 @@ const ScheduledReports: React.FC = () => {
   };
   const selectStyle: React.CSSProperties = { ...inputStyle, cursor: 'pointer' };
 
-  const canSave = form.name.trim() && form.recipient_user_ids.length > 0 &&
+  const canSave = form.name.trim() && (form.recipient_user_ids.length > 0 || form.recipient_team_ids.length > 0) &&
     (form.report_type !== 'campaign' || !!form.filters.campaign_id) &&
     (form.report_type !== 'opportunity_search' || !!form.filters.recurring_search_id);
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -421,12 +435,14 @@ const ScheduledReports: React.FC = () => {
                         report.report_type === 'backlog_fit' ? 'rgba(139,92,246,0.1)' :
                         report.report_type === 'buyout_metric' ? 'rgba(245,158,11,0.1)' :
                         report.report_type === 'campaign' ? 'rgba(234,88,12,0.1)' :
-                        report.report_type === 'opportunity_search' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                        report.report_type === 'opportunity_search' ? 'rgba(16,185,129,0.1)' :
+                        report.report_type === 'weekly_sales' ? 'rgba(6,182,212,0.1)' : 'rgba(59,130,246,0.1)',
                       color: report.report_type === 'executive_report' ? '#002356' :
                         report.report_type === 'backlog_fit' ? '#7c3aed' :
                         report.report_type === 'buyout_metric' ? '#d97706' :
                         report.report_type === 'campaign' ? '#ea580c' :
-                        report.report_type === 'opportunity_search' ? '#059669' : '#2563eb',
+                        report.report_type === 'opportunity_search' ? '#059669' :
+                        report.report_type === 'weekly_sales' ? '#0891b2' : '#2563eb',
                     }}>
                       {reportTypeLabel(report.report_type)}
                     </span>
@@ -444,13 +460,26 @@ const ScheduledReports: React.FC = () => {
                     {formatDateTime(report.last_run_at)}
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      width: '24px', height: '24px', borderRadius: '50%',
-                      background: '#f1f5f9', fontSize: '0.75rem', fontWeight: 600, color: '#475569',
-                    }}>
-                      {report.recipients.length}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: '24px', height: '24px', borderRadius: '50%',
+                        background: '#f1f5f9', fontSize: '0.75rem', fontWeight: 600, color: '#475569',
+                      }}>
+                        {report.recipients.length}
+                      </span>
+                      {(report.team_recipients || []).length > 0 && (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '0 6px', height: '24px', borderRadius: '12px',
+                          background: '#eff6ff', fontSize: '0.6875rem', fontWeight: 600, color: '#2563eb',
+                        }}
+                          title={(report.team_recipients || []).map(t => t.name).join(', ')}
+                        >
+                          +{(report.team_recipients || []).length} team{(report.team_recipients || []).length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <button
@@ -809,6 +838,68 @@ const ScheduledReports: React.FC = () => {
                   <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
                     Only active recurring searches are shown. The search will be re-run with fresh results each time the report is generated.
                   </div>
+                </div>
+              )}
+
+              {/* Teams */}
+              {teams.length > 0 && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>
+                    Send to Teams ({form.recipient_team_ids.length} selected)
+                  </label>
+                  <div style={{
+                    border: '1px solid #d1d5db', borderRadius: '6px',
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{ maxHeight: '140px', overflow: 'auto' }}>
+                      {teams.map(team => {
+                        const isSelected = form.recipient_team_ids.includes(team.id);
+                        return (
+                          <div
+                            key={team.id}
+                            onClick={() => toggleTeamRecipient(team.id)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '0.75rem',
+                              padding: '0.5rem 0.75rem', cursor: 'pointer',
+                              background: isSelected ? '#eff6ff' : 'transparent',
+                              borderBottom: '1px solid #f1f5f9',
+                            }}
+                          >
+                            <div style={{
+                              width: '18px', height: '18px', borderRadius: '4px',
+                              border: isSelected ? '2px solid #2563eb' : '2px solid #d1d5db',
+                              background: isSelected ? '#2563eb' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              flexShrink: 0,
+                            }}>
+                              {isSelected && (
+                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </div>
+                            <div style={{
+                              width: '10px', height: '10px', borderRadius: '50%',
+                              background: team.color || '#3b82f6', flexShrink: 0,
+                            }} />
+                            <div style={{ flex: 1 }}>
+                              <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#1e293b' }}>
+                                {team.name}
+                              </span>
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '0.5rem' }}>
+                                {team.member_count} member{team.member_count !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {form.recipient_team_ids.length > 0 && (
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.375rem' }}>
+                      All team members will receive the report. Duplicates with individual recipients are removed automatically.
+                    </div>
+                  )}
                 </div>
               )}
 

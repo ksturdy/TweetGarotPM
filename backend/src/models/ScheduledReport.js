@@ -108,15 +108,21 @@ class ScheduledReport {
       `SELECT sr.*,
         u.first_name || ' ' || u.last_name AS created_by_name,
         COALESCE(
-          json_agg(
-            json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email)
-          ) FILTER (WHERE srr.user_id IS NOT NULL),
+          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email))
+           FROM scheduled_report_recipients srr
+           JOIN users ru ON srr.user_id = ru.id
+           WHERE srr.scheduled_report_id = sr.id),
           '[]'::json
-        ) AS recipients
+        ) AS recipients,
+        COALESCE(
+          (SELECT json_agg(json_build_object('team_id', srt.team_id, 'name', t.name, 'color', t.color))
+           FROM scheduled_report_team_recipients srt
+           JOIN teams t ON srt.team_id = t.id
+           WHERE srt.scheduled_report_id = sr.id),
+          '[]'::json
+        ) AS team_recipients
       FROM scheduled_reports sr
       LEFT JOIN users u ON sr.created_by = u.id
-      LEFT JOIN scheduled_report_recipients srr ON srr.scheduled_report_id = sr.id
-      LEFT JOIN users ru ON srr.user_id = ru.id
       WHERE sr.tenant_id = $1
       GROUP BY sr.id, u.first_name, u.last_name
       ORDER BY sr.created_at DESC`,
@@ -130,15 +136,21 @@ class ScheduledReport {
       `SELECT sr.*,
         u.first_name || ' ' || u.last_name AS created_by_name,
         COALESCE(
-          json_agg(
-            json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email)
-          ) FILTER (WHERE srr.user_id IS NOT NULL),
+          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email))
+           FROM scheduled_report_recipients srr
+           JOIN users ru ON srr.user_id = ru.id
+           WHERE srr.scheduled_report_id = sr.id),
           '[]'::json
-        ) AS recipients
+        ) AS recipients,
+        COALESCE(
+          (SELECT json_agg(json_build_object('team_id', srt.team_id, 'name', t.name, 'color', t.color))
+           FROM scheduled_report_team_recipients srt
+           JOIN teams t ON srt.team_id = t.id
+           WHERE srt.scheduled_report_id = sr.id),
+          '[]'::json
+        ) AS team_recipients
       FROM scheduled_reports sr
       LEFT JOIN users u ON sr.created_by = u.id
-      LEFT JOIN scheduled_report_recipients srr ON srr.scheduled_report_id = sr.id
-      LEFT JOIN users ru ON srr.user_id = ru.id
       WHERE sr.id = $1 AND sr.tenant_id = $2
       GROUP BY sr.id, u.first_name, u.last_name`,
       [id, tenantId]
@@ -149,7 +161,8 @@ class ScheduledReport {
   static async create(data, tenantId) {
     const {
       name, report_type, frequency, day_of_week, day_of_month,
-      time_of_day, timezone, filters, is_enabled, created_by, recipient_user_ids,
+      time_of_day, timezone, filters, is_enabled, created_by,
+      recipient_user_ids, recipient_team_ids,
     } = data;
 
     const nextRun = ScheduledReport.computeNextRun(
@@ -173,7 +186,7 @@ class ScheduledReport {
 
     const report = result.rows[0];
 
-    // Insert recipients
+    // Insert user recipients
     if (recipient_user_ids && recipient_user_ids.length > 0) {
       const values = recipient_user_ids.map((uid, i) =>
         `($1, $${i + 2})`
@@ -181,6 +194,17 @@ class ScheduledReport {
       await db.query(
         `INSERT INTO scheduled_report_recipients (scheduled_report_id, user_id) VALUES ${values}`,
         [report.id, ...recipient_user_ids]
+      );
+    }
+
+    // Insert team recipients
+    if (recipient_team_ids && recipient_team_ids.length > 0) {
+      const values = recipient_team_ids.map((tid, i) =>
+        `($1, $${i + 2})`
+      ).join(', ');
+      await db.query(
+        `INSERT INTO scheduled_report_team_recipients (scheduled_report_id, team_id) VALUES ${values}`,
+        [report.id, ...recipient_team_ids]
       );
     }
 
@@ -196,7 +220,8 @@ class ScheduledReport {
 
     const {
       name, report_type, frequency, day_of_week, day_of_month,
-      time_of_day, timezone, filters, is_enabled, recipient_user_ids,
+      time_of_day, timezone, filters, is_enabled,
+      recipient_user_ids, recipient_team_ids,
     } = data;
 
     const freq = frequency || existing.rows[0].frequency;
@@ -229,7 +254,7 @@ class ScheduledReport {
       ]
     );
 
-    // Sync recipients if provided
+    // Sync user recipients if provided
     if (recipient_user_ids !== undefined) {
       await db.query(
         'DELETE FROM scheduled_report_recipients WHERE scheduled_report_id = $1',
@@ -242,6 +267,23 @@ class ScheduledReport {
         await db.query(
           `INSERT INTO scheduled_report_recipients (scheduled_report_id, user_id) VALUES ${values}`,
           [id, ...recipient_user_ids]
+        );
+      }
+    }
+
+    // Sync team recipients if provided
+    if (recipient_team_ids !== undefined) {
+      await db.query(
+        'DELETE FROM scheduled_report_team_recipients WHERE scheduled_report_id = $1',
+        [id]
+      );
+      if (recipient_team_ids.length > 0) {
+        const values = recipient_team_ids.map((tid, i) =>
+          `($1, $${i + 2})`
+        ).join(', ');
+        await db.query(
+          `INSERT INTO scheduled_report_team_recipients (scheduled_report_id, team_id) VALUES ${values}`,
+          [id, ...recipient_team_ids]
         );
       }
     }
@@ -265,14 +307,19 @@ class ScheduledReport {
     const result = await db.query(
       `SELECT sr.*,
         COALESCE(
-          json_agg(
-            json_build_object('user_id', srr.user_id, 'email', u.email, 'first_name', u.first_name, 'last_name', u.last_name)
-          ) FILTER (WHERE srr.user_id IS NOT NULL),
+          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'email', u.email, 'first_name', u.first_name, 'last_name', u.last_name))
+           FROM scheduled_report_recipients srr
+           JOIN users u ON srr.user_id = u.id
+           WHERE srr.scheduled_report_id = sr.id),
           '[]'::json
-        ) AS recipients
+        ) AS recipients,
+        COALESCE(
+          (SELECT json_agg(json_build_object('team_id', srt.team_id))
+           FROM scheduled_report_team_recipients srt
+           WHERE srt.scheduled_report_id = sr.id),
+          '[]'::json
+        ) AS team_recipients
       FROM scheduled_reports sr
-      LEFT JOIN scheduled_report_recipients srr ON srr.scheduled_report_id = sr.id
-      LEFT JOIN users u ON srr.user_id = u.id
       WHERE sr.is_enabled = true AND sr.next_run_at <= NOW()
       GROUP BY sr.id`
     );

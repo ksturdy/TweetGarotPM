@@ -240,10 +240,15 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
   </div>
 
   <!-- Company Snapshot -->
-  ${company_snapshot ? `
+  ${company_snapshot ? (() => {
+    const oc = company_snapshot.gm_override_count || 0;
+    const overrideBadge = oc > 0
+      ? `<span style="font-size: 6.5pt; font-weight: 600; color: #d97706; background: rgba(217,119,6,0.1); padding: 1px 6px; border-radius: 3px; margin-left: 8px;">${oc} GM override${oc > 1 ? 's' : ''} applied</span>`
+      : '';
+    return `
   <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; border-top: 3px solid #002356;">
     <div style="padding: 8px 14px;">
-      <div style="font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Company Snapshot</div>
+      <div style="font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Company Snapshot${overrideBadge}</div>
       <div style="display: flex; gap: 28px;">
         <div>
           <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Total Backlog</div>
@@ -269,7 +274,8 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
         </div>
       </div>
     </div>
-  </div>` : ''}
+  </div>`;
+  })() : ''}
 
   <!-- Newly Created Jobs -->
   ${new_jobs && new_jobs.length > 0 ? `
@@ -291,14 +297,16 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
         <tbody>
           ${new_jobs.map((j, i) => {
             const bgColor = i % 2 === 0 ? '#ffffff' : '#f8fafc';
-            const gmColor = j.gross_margin_percent != null && j.gross_margin_percent >= 15 ? '#059669' : j.gross_margin_percent != null ? '#dc2626' : '#64748b';
+            const isOverridden = j.gm_overridden;
+            const gmColor = isOverridden ? '#d97706' : j.gross_margin_percent != null && j.gross_margin_percent >= 15 ? '#059669' : j.gross_margin_percent != null ? '#dc2626' : '#64748b';
+            const gmText = j.gross_margin_percent != null ? `${Number(j.gross_margin_percent).toFixed(1)}%${isOverridden ? '*' : ''}` : '-';
             return `
               <tr style="background: ${bgColor};">
                 <td style="padding: 4px 8px; font-size: 8pt; font-weight: 600; color: #002356;">${j.number || '-'}</td>
                 <td style="padding: 4px 8px; font-size: 8pt; font-weight: 500; color: #1e293b;">${j.name || '-'}</td>
                 <td style="padding: 4px 8px; font-size: 8pt; color: #475569;">${j.customer_name || '-'}</td>
                 <td style="padding: 4px 8px; font-size: 8pt; text-align: right; font-weight: 600; color: #1e293b;">${fmtCurrency(j.contract_value)}</td>
-                <td style="padding: 4px 8px; font-size: 8pt; text-align: right; font-weight: 600; color: ${gmColor};">${fmtPct(j.gross_margin_percent)}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; text-align: right; font-weight: 600; color: ${gmColor};${isOverridden ? ' font-style: italic;' : ''}">${gmText}</td>
                 <td style="padding: 4px 8px; font-size: 8pt; color: #475569;">${j.manager_name || '-'}</td>
                 <td style="padding: 4px 8px; font-size: 8pt; color: #64748b;">${fmtDate(j.created_at)}</td>
               </tr>`;

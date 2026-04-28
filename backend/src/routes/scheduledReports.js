@@ -43,7 +43,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { name, report_type, frequency, day_of_week, day_of_month,
-      time_of_day, timezone, filters, is_enabled, recipient_user_ids } = req.body;
+      time_of_day, timezone, filters, is_enabled,
+      recipient_user_ids, recipient_team_ids } = req.body;
 
     if (!name || !report_type || !frequency) {
       return res.status(400).json({ error: 'name, report_type, and frequency are required' });
@@ -57,14 +58,16 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'day_of_month is required for monthly frequency' });
     }
 
-    if (!recipient_user_ids || recipient_user_ids.length === 0) {
-      return res.status(400).json({ error: 'At least one recipient is required' });
+    const hasUserRecipients = recipient_user_ids && recipient_user_ids.length > 0;
+    const hasTeamRecipients = recipient_team_ids && recipient_team_ids.length > 0;
+    if (!hasUserRecipients && !hasTeamRecipients) {
+      return res.status(400).json({ error: 'At least one recipient or team is required' });
     }
 
     const report = await ScheduledReport.create({
       name, report_type, frequency, day_of_week, day_of_month,
       time_of_day, timezone, filters, is_enabled,
-      created_by: req.user.id, recipient_user_ids,
+      created_by: req.user.id, recipient_user_ids, recipient_team_ids,
     }, req.tenantId);
 
     res.status(201).json(report);

@@ -130,6 +130,23 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     GROUP BY ${LOC_GROUP_EXPR}
   `, [tenantId, weekStart]);
 
+  // Query 5b: Previous week won/lost counts (for delta)
+  const prevWonLostResult = await db.query(`
+    SELECT
+      CASE WHEN LOWER(ps.name) IN ('won', 'awarded', 'closed won') THEN 'won' ELSE 'lost' END AS result,
+      COUNT(*)::int AS cnt,
+      COALESCE(SUM(o.estimated_value), 0)::numeric AS total_value
+    FROM opportunities o
+    JOIN pipeline_stages ps ON o.stage_id = ps.id
+    LEFT JOIN employees e ON o.assigned_to = e.id
+    LEFT JOIN departments d ON e.department_id = d.id
+    WHERE o.tenant_id = $1
+      AND o.updated_at >= ($2::date - INTERVAL '7 days')
+      AND o.updated_at < $2::date
+      AND LOWER(ps.name) IN ('won', 'lost', 'awarded', 'closed won', 'closed lost')
+    GROUP BY result
+  `, [tenantId, weekStart]);
+
   // Query 6: Company backlog metrics (overall, weighted GM%, average project GM%)
   // GM% stored as decimal (0.15 = 15%) — multiply by 100 for display.
   // Apply GM override: when real GM is ~100% and override is set, use override value.
@@ -153,7 +170,9 @@ async function buildWeeklySalesData(tenantId, weekStart) {
         WHEN COUNT(${GM_EXPR}) > 0
         THEN AVG(${GM_EXPR}) * 100
         ELSE NULL
-      END AS avg_project_gm_pct
+      END AS avg_project_gm_pct,
+      COUNT(*) FILTER (WHERE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                         AND p.override_gm_percent IS NOT NULL)::int AS gm_override_count
     FROM projects p
     LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
     WHERE p.tenant_id = $1
@@ -185,6 +204,8 @@ async function buildWeeklySalesData(tenantId, weekStart) {
       p.id, p.name, p.number, p.status,
       COALESCE(vc.contract_amount, p.contract_value) AS contract_value,
       (${GM_EXPR}) * 100 AS gross_margin_percent,
+      (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+       AND p.override_gm_percent IS NOT NULL) AS gm_overridden,
       p.created_at,
       e.first_name || ' ' || e.last_name AS manager_name,
       COALESCE(c.name, c.customer_owner) AS customer_name,
@@ -254,6 +275,17 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     };
   }
 
+  // Build previous-week won/lost lookup
+  const prevWonLost = { won_count: 0, won_value: 0, lost_count: 0 };
+  for (const row of prevWonLostResult.rows) {
+    if (row.result === 'won') {
+      prevWonLost.won_count = parseInt(row.cnt);
+      prevWonLost.won_value = parseFloat(row.total_value) || 0;
+    } else {
+      prevWonLost.lost_count = parseInt(row.cnt);
+    }
+  }
+
   // Compute totals
   const allLocs = Object.values(byLocation);
   const totals = {
@@ -262,9 +294,13 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     activity_count: 0, prev_activity_count: 0,
     call: 0, meeting: 0, email: 0, note: 0, task: 0, voice_note: 0,
     won_count: 0, won_value: 0, lost_count: 0,
+    prev_won_count: prevWonLost.won_count,
+    prev_won_value: prevWonLost.won_value,
+    prev_lost_count: prevWonLost.lost_count,
   };
   for (const loc of allLocs) {
     for (const key of Object.keys(totals)) {
+      if (key.startsWith('prev_won') || key.startsWith('prev_lost')) continue;
       totals[key] += loc.summary[key] || 0;
     }
   }
@@ -294,7 +330,62 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     backlog_12mo_gm_pct: snapshot.backlog_12mo_gm_pct,
     weighted_gm_pct: backlogRow.weighted_gm_pct != null ? parseFloat(backlogRow.weighted_gm_pct) : null,
     avg_project_gm_pct: backlogRow.avg_project_gm_pct != null ? parseFloat(backlogRow.avg_project_gm_pct) : null,
+    gm_override_count: parseInt(backlogRow.gm_override_count) || 0,
   };
+
+  // Persist snapshot for this week (upsert) so future weeks can compare
+  try {
+    await db.query(`
+      INSERT INTO weekly_report_snapshots
+        (tenant_id, week_start, total_backlog, backlog_6mo, backlog_6mo_gm_pct,
+         backlog_12mo, backlog_12mo_gm_pct, weighted_gm_pct, avg_project_gm_pct)
+      VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (tenant_id, week_start)
+      DO UPDATE SET
+        total_backlog = EXCLUDED.total_backlog,
+        backlog_6mo = EXCLUDED.backlog_6mo,
+        backlog_6mo_gm_pct = EXCLUDED.backlog_6mo_gm_pct,
+        backlog_12mo = EXCLUDED.backlog_12mo,
+        backlog_12mo_gm_pct = EXCLUDED.backlog_12mo_gm_pct,
+        weighted_gm_pct = EXCLUDED.weighted_gm_pct,
+        avg_project_gm_pct = EXCLUDED.avg_project_gm_pct,
+        created_at = NOW()
+    `, [
+      tenantId, weekStart,
+      company_snapshot.total_backlog, company_snapshot.backlog_6mo, company_snapshot.backlog_6mo_gm_pct,
+      company_snapshot.backlog_12mo, company_snapshot.backlog_12mo_gm_pct,
+      company_snapshot.weighted_gm_pct, company_snapshot.avg_project_gm_pct,
+    ]);
+  } catch (e) {
+    // Non-fatal — table may not exist yet if migration hasn't run
+    console.warn('Could not persist weekly snapshot:', e.message);
+  }
+
+  // Fetch previous week's snapshot for comparison
+  let prev_snapshot = null;
+  try {
+    const prevSnapResult = await db.query(`
+      SELECT total_backlog, backlog_6mo, backlog_6mo_gm_pct,
+             backlog_12mo, backlog_12mo_gm_pct, weighted_gm_pct, avg_project_gm_pct
+      FROM weekly_report_snapshots
+      WHERE tenant_id = $1 AND week_start = ($2::date - INTERVAL '7 days')
+    `, [tenantId, weekStart]);
+    if (prevSnapResult.rows.length > 0) {
+      const r = prevSnapResult.rows[0];
+      prev_snapshot = {
+        total_backlog: r.total_backlog != null ? parseFloat(r.total_backlog) : null,
+        backlog_6mo: r.backlog_6mo != null ? parseFloat(r.backlog_6mo) : null,
+        backlog_6mo_gm_pct: r.backlog_6mo_gm_pct != null ? parseFloat(r.backlog_6mo_gm_pct) : null,
+        backlog_12mo: r.backlog_12mo != null ? parseFloat(r.backlog_12mo) : null,
+        backlog_12mo_gm_pct: r.backlog_12mo_gm_pct != null ? parseFloat(r.backlog_12mo_gm_pct) : null,
+        weighted_gm_pct: r.weighted_gm_pct != null ? parseFloat(r.weighted_gm_pct) : null,
+        avg_project_gm_pct: r.avg_project_gm_pct != null ? parseFloat(r.avg_project_gm_pct) : null,
+      };
+    }
+  } catch (e) {
+    // Non-fatal
+    console.warn('Could not fetch previous weekly snapshot:', e.message);
+  }
 
   return {
     week_start: weekStart,
@@ -302,6 +393,7 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     totals,
     by_location: byLocation,
     company_snapshot,
+    prev_snapshot,
     new_jobs: newJobsResult.rows,
   };
 }
@@ -365,3 +457,5 @@ router.get('/pdf-download', async (req, res, next) => {
 
 module.exports = router;
 module.exports.buildWeeklySalesData = buildWeeklySalesData;
+module.exports.generateWeeklySalesPdfBuffer = generateWeeklySalesPdfBuffer;
+module.exports.getCurrentMonday = getCurrentMonday;

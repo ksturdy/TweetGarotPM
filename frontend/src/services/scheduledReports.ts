@@ -7,11 +7,17 @@ export interface ScheduledReportRecipient {
   email: string;
 }
 
+export interface ScheduledReportTeamRecipient {
+  team_id: number;
+  name: string;
+  color: string;
+}
+
 export interface ScheduledReport {
   id: number;
   tenant_id: number;
   name: string;
-  report_type: 'executive_report' | 'backlog_fit' | 'cash_flow' | 'buyout_metric' | 'campaign' | 'opportunity_search';
+  report_type: 'executive_report' | 'backlog_fit' | 'cash_flow' | 'buyout_metric' | 'campaign' | 'opportunity_search' | 'weekly_sales';
   frequency: 'daily' | 'weekly' | 'monthly';
   day_of_week: number | null;
   day_of_month: number | null;
@@ -24,6 +30,7 @@ export interface ScheduledReport {
   created_by: number | null;
   created_by_name: string | null;
   recipients: ScheduledReportRecipient[];
+  team_recipients: ScheduledReportTeamRecipient[];
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +46,7 @@ export interface ScheduledReportInput {
   filters?: Record<string, unknown>;
   is_enabled?: boolean;
   recipient_user_ids: number[];
+  recipient_team_ids?: number[];
 }
 
 export const scheduledReportsApi = {

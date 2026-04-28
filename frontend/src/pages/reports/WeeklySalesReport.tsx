@@ -120,13 +120,19 @@ const KpiCard: React.FC<{ card: KpiCardData }> = ({ card }) => (
   </div>
 );
 
-const Delta: React.FC<{ current: number; previous: number; isCurrency?: boolean }> = ({ current, previous, isCurrency }) => {
+const SnapshotDelta: React.FC<{ current: number | null; previous: number | null; isCurrency?: boolean; isPct?: boolean }> = ({ current, previous, isCurrency, isPct }) => {
+  if (current == null || previous == null) return <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '2px' }}>No prior data</div>;
   const diff = current - previous;
-  if (previous === 0 && current === 0) return null;
-  const color = diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : '#64748b';
-  const arrow = diff > 0 ? '\u2191' : diff < 0 ? '\u2193' : '';
-  const label = isCurrency ? fmtCurrency(Math.abs(diff)) : Math.abs(diff).toString();
-  return <span style={{ color, fontSize: '0.7rem', fontWeight: 600 }}>{arrow} {label} vs prev week</span>;
+  const isUp = diff > 0;
+  const isDown = diff < 0;
+  const color = isUp ? '#10b981' : isDown ? '#ef4444' : '#64748b';
+  const arrow = isUp ? '\u25B2' : isDown ? '\u25BC' : '';
+  const label = isPct ? `${Math.abs(diff).toFixed(1)}pp` : isCurrency ? fmtCurrency(Math.abs(diff)) : String(Math.abs(diff));
+  return (
+    <div style={{ fontSize: '0.65rem', fontWeight: 600, color, marginTop: '2px' }}>
+      {arrow}{arrow ? ' ' : ''}{diff === 0 ? 'No change' : label} vs prev
+    </div>
+  );
 };
 
 // ── Activity type badge ──────────────────────────────────
@@ -590,34 +596,48 @@ const WeeklySalesReport: React.FC = () => {
           position: 'relative', overflow: 'hidden',
         }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(135deg, #002356, #0369a1)' }} />
-          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>Company Snapshot</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Company Snapshot</div>
+            {data.company_snapshot.gm_override_count != null && data.company_snapshot.gm_override_count > 0 && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#f59e0b', background: '#f59e0b14', padding: '1px 8px', borderRadius: '4px' }}
+                title="Some projects have GM% manually overridden from ~100% because Vista has no cost projection yet">
+                {data.company_snapshot.gm_override_count} GM override{data.company_snapshot.gm_override_count > 1 ? 's' : ''} applied
+              </span>
+            )}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
             {/* Total Backlog + GM% */}
             <div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Total Backlog</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#002356' }}>{fmtCurrency(data.company_snapshot.total_backlog)}</div>
+              <SnapshotDelta current={data.company_snapshot.total_backlog} previous={data.prev_snapshot?.total_backlog ?? null} isCurrency />
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.weighted_gm_pct != null && data.company_snapshot.weighted_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
                 {data.company_snapshot.weighted_gm_pct != null ? `${data.company_snapshot.weighted_gm_pct.toFixed(1)}%` : '-'}
               </div>
+              <SnapshotDelta current={data.company_snapshot.weighted_gm_pct} previous={data.prev_snapshot?.weighted_gm_pct ?? null} isPct />
             </div>
             {/* 6 Mo Out + GM% */}
             <div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Backlog (6 Mo Out)</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0369a1' }}>{fmtCurrency(data.company_snapshot.backlog_6mo)}</div>
+              <SnapshotDelta current={data.company_snapshot.backlog_6mo} previous={data.prev_snapshot?.backlog_6mo ?? null} isCurrency />
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.backlog_6mo_gm_pct != null && data.company_snapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
                 {data.company_snapshot.backlog_6mo_gm_pct != null ? `${data.company_snapshot.backlog_6mo_gm_pct.toFixed(1)}%` : '-'}
               </div>
+              <SnapshotDelta current={data.company_snapshot.backlog_6mo_gm_pct} previous={data.prev_snapshot?.backlog_6mo_gm_pct ?? null} isPct />
             </div>
             {/* 12 Mo Out + GM% */}
             <div>
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Backlog (12 Mo Out)</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#6366f1' }}>{fmtCurrency(data.company_snapshot.backlog_12mo)}</div>
+              <SnapshotDelta current={data.company_snapshot.backlog_12mo} previous={data.prev_snapshot?.backlog_12mo ?? null} isCurrency />
               <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.backlog_12mo_gm_pct != null && data.company_snapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
                 {data.company_snapshot.backlog_12mo_gm_pct != null ? `${data.company_snapshot.backlog_12mo_gm_pct.toFixed(1)}%` : '-'}
               </div>
+              <SnapshotDelta current={data.company_snapshot.backlog_12mo_gm_pct} previous={data.prev_snapshot?.backlog_12mo_gm_pct ?? null} isPct />
             </div>
             {/* Average Project GM% */}
             <div>
@@ -625,6 +645,7 @@ const WeeklySalesReport: React.FC = () => {
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: data.company_snapshot.avg_project_gm_pct != null && data.company_snapshot.avg_project_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
                 {data.company_snapshot.avg_project_gm_pct != null ? `${data.company_snapshot.avg_project_gm_pct.toFixed(1)}%` : '-'}
               </div>
+              <SnapshotDelta current={data.company_snapshot.avg_project_gm_pct} previous={data.prev_snapshot?.avg_project_gm_pct ?? null} isPct />
             </div>
           </div>
         </div>
@@ -658,8 +679,15 @@ const WeeklySalesReport: React.FC = () => {
                   <td style={{ color: '#3b82f6', fontWeight: 500 }}>{job.name}</td>
                   <td>{job.customer_name || '-'}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(job.contract_value)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: job.gross_margin_percent != null && job.gross_margin_percent >= 15 ? '#059669' : job.gross_margin_percent != null ? '#dc2626' : '#64748b' }}>
-                    {job.gross_margin_percent != null ? `${Number(job.gross_margin_percent).toFixed(1)}%` : '-'}
+                  <td
+                    style={{
+                      textAlign: 'right', fontWeight: 600,
+                      color: job.gm_overridden ? '#f59e0b' : job.gross_margin_percent != null && job.gross_margin_percent >= 15 ? '#059669' : job.gross_margin_percent != null ? '#dc2626' : '#64748b',
+                      fontStyle: job.gm_overridden ? 'italic' : undefined,
+                    }}
+                    title={job.gm_overridden ? 'GM% overridden — actual Vista GM is ~100% (no cost projection yet)' : undefined}
+                  >
+                    {job.gross_margin_percent != null ? `${Number(job.gross_margin_percent).toFixed(1)}%${job.gm_overridden ? '*' : ''}` : '-'}
                   </td>
                   <td>{job.manager_name || '-'}</td>
                   <td>{fmtDate(job.created_at)}</td>
