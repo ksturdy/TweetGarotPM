@@ -13,6 +13,17 @@ class TraceoverDocument {
        ORDER BY td.created_at DESC`,
       [takeoffId]
     );
+
+    // Attach pages and calibrations so hydration has full data
+    for (const doc of result.rows) {
+      const [pages, cals] = await Promise.all([
+        pool.query('SELECT * FROM traceover_page_metadata WHERE document_id = $1 ORDER BY page_number', [doc.id]),
+        pool.query('SELECT * FROM traceover_calibrations WHERE document_id = $1 ORDER BY page_number', [doc.id]),
+      ]);
+      doc.pages = pages.rows;
+      doc.calibrations = cals.rows;
+    }
+
     return result.rows;
   }
 
