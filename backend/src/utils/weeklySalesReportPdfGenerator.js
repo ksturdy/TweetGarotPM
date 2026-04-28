@@ -32,8 +32,13 @@ const LOC_META = {
  * @param {string} [logoBase64] - Base64 data URL for tenant logo
  * @returns {string} Full HTML document
  */
+const fmtPct = (v) => {
+  if (v === null || v === undefined || isNaN(Number(v))) return '-';
+  return `${Number(v).toFixed(1)}%`;
+};
+
 function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
-  const { week_start, week_end, totals: t, by_location } = data;
+  const { week_start, week_end, totals: t, by_location, company_snapshot, new_jobs } = data;
 
   const startDisplay = new Date(week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const endDisplay = new Date(week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -233,6 +238,75 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
       t.lost_count > 0 ? '#991b1b' : '#64748b',
       t.lost_count > 0 ? '#dc2626' : '#64748b')}
   </div>
+
+  <!-- Company Snapshot -->
+  ${company_snapshot ? `
+  <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; border-top: 3px solid #002356;">
+    <div style="padding: 8px 14px;">
+      <div style="font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Company Snapshot</div>
+      <div style="display: flex; gap: 28px;">
+        <div>
+          <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Total Backlog</div>
+          <div style="font-size: 14pt; font-weight: 700; color: #002356;">${fmtCurrency(company_snapshot.total_backlog)}</div>
+          <div style="font-size: 6pt; color: #64748b; font-weight: 600; text-transform: uppercase; margin-top: 4px;">GM% in Backlog</div>
+          <div style="font-size: 10pt; font-weight: 700; color: ${company_snapshot.weighted_gm_pct != null && company_snapshot.weighted_gm_pct >= 15 ? '#059669' : '#dc2626'};">${fmtPct(company_snapshot.weighted_gm_pct)}</div>
+        </div>
+        <div>
+          <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Backlog (6 Mo Out)</div>
+          <div style="font-size: 14pt; font-weight: 700; color: #0369a1;">${fmtCurrency(company_snapshot.backlog_6mo)}</div>
+          <div style="font-size: 6pt; color: #64748b; font-weight: 600; text-transform: uppercase; margin-top: 4px;">GM% in Backlog</div>
+          <div style="font-size: 10pt; font-weight: 700; color: ${company_snapshot.backlog_6mo_gm_pct != null && company_snapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626'};">${fmtPct(company_snapshot.backlog_6mo_gm_pct)}</div>
+        </div>
+        <div>
+          <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Backlog (12 Mo Out)</div>
+          <div style="font-size: 14pt; font-weight: 700; color: #6366f1;">${fmtCurrency(company_snapshot.backlog_12mo)}</div>
+          <div style="font-size: 6pt; color: #64748b; font-weight: 600; text-transform: uppercase; margin-top: 4px;">GM% in Backlog</div>
+          <div style="font-size: 10pt; font-weight: 700; color: ${company_snapshot.backlog_12mo_gm_pct != null && company_snapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626'};">${fmtPct(company_snapshot.backlog_12mo_gm_pct)}</div>
+        </div>
+        <div>
+          <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Average Project GM%</div>
+          <div style="font-size: 14pt; font-weight: 700; color: ${company_snapshot.avg_project_gm_pct != null && company_snapshot.avg_project_gm_pct >= 15 ? '#059669' : '#dc2626'};">${fmtPct(company_snapshot.avg_project_gm_pct)}</div>
+        </div>
+      </div>
+    </div>
+  </div>` : ''}
+
+  <!-- Newly Created Jobs -->
+  ${new_jobs && new_jobs.length > 0 ? `
+  <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid; border-top: 3px solid #059669;">
+    <div style="padding: 8px 14px 6px;">
+      <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Newly Created Jobs (${new_jobs.length})</div>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 10%;">Job #</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 25%;">Name</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 20%;">Customer</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.05em; width: 14%;">Contract Value</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.05em; width: 8%;">GM%</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 14%;">Manager</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 9%;">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${new_jobs.map((j, i) => {
+            const bgColor = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+            const gmColor = j.gross_margin_percent != null && j.gross_margin_percent >= 15 ? '#059669' : j.gross_margin_percent != null ? '#dc2626' : '#64748b';
+            return `
+              <tr style="background: ${bgColor};">
+                <td style="padding: 4px 8px; font-size: 8pt; font-weight: 600; color: #002356;">${j.number || '-'}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; font-weight: 500; color: #1e293b;">${j.name || '-'}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; color: #475569;">${j.customer_name || '-'}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; text-align: right; font-weight: 600; color: #1e293b;">${fmtCurrency(j.contract_value)}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; text-align: right; font-weight: 600; color: ${gmColor};">${fmtPct(j.gross_margin_percent)}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; color: #475569;">${j.manager_name || '-'}</td>
+                <td style="padding: 4px 8px; font-size: 8pt; color: #64748b;">${fmtDate(j.created_at)}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>` : ''}
 
   <!-- Location Sections -->
   ${locSectionsHtml}

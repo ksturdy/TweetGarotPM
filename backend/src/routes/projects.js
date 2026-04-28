@@ -278,6 +278,118 @@ router.get('/geocode/status', authorize('admin', 'manager'), (req, res) => {
   res.json(geocodeJob);
 });
 
+// POST /api/projects/gm-override — bulk apply GM override to all ~100% GM projects
+router.post('/gm-override', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const overridePercent = parseFloat(req.body.percent);
+    if (isNaN(overridePercent) || overridePercent < 0 || overridePercent > 100) {
+      return res.status(400).json({ error: 'Invalid override percentage' });
+    }
+    // Convert from display % (16.5) to decimal (0.165)
+    const decimal = overridePercent / 100;
+    const count = await Project.applyGmOverride(req.tenantId, decimal);
+    res.json({ applied: count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/projects/gm-override — clear all GM overrides
+router.delete('/gm-override', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const count = await Project.clearGmOverrides(req.tenantId);
+    res.json({ cleared: count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/projects/gm-override/count — count active GM overrides
+router.get('/gm-override/count', async (req, res, next) => {
+  try {
+    const count = await Project.countGmOverrides(req.tenantId);
+    res.json({ count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/projects/backlog-snapshot — backlog totals, 6/12mo projections, and weighted GM%
+router.get('/backlog-snapshot', async (req, res, next) => {
+  try {
+    const db = require('../config/database');
+    const VistaData = require('../models/VistaData');
+    const { calcBacklogSnapshot } = require('../utils/backlogFitCalculator');
+
+    // Use effective GM%: apply override when real GM is ~100%
+    const GM_EXPR = `CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                          AND p.override_gm_percent IS NOT NULL
+                     THEN p.override_gm_percent
+                     ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) END`;
+
+    const [backlogResult, contracts] = await Promise.all([
+      db.query(`
+        SELECT
+          COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0)::numeric AS total_backlog,
+          CASE
+            WHEN SUM(COALESCE(vc.backlog, p.backlog)) > 0
+            THEN (
+              SUM(COALESCE(vc.backlog, p.backlog) * (${GM_EXPR}))
+              / SUM(CASE WHEN (${GM_EXPR}) IS NOT NULL THEN COALESCE(vc.backlog, p.backlog) ELSE 0 END)
+            ) * 100
+            ELSE NULL
+          END AS weighted_gm_pct,
+          CASE
+            WHEN COUNT(${GM_EXPR}) > 0
+            THEN AVG(${GM_EXPR}) * 100
+            ELSE NULL
+          END AS avg_project_gm_pct
+        FROM projects p
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1
+          AND COALESCE(vc.backlog, p.backlog) > 0
+          AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
+      `, [req.tenantId]),
+      VistaData.getAllContracts({ status: '' }, req.tenantId),
+    ]);
+
+    const backlogRow = backlogResult.rows[0] || {};
+    const totalBacklog = parseFloat(backlogRow.total_backlog) || 0;
+
+    // Fetch GM overrides for linked projects so calcBacklogSnapshot can apply them
+    const overrideRows = await db.query(`
+      SELECT vc.id AS contract_id, p.override_gm_percent
+      FROM projects p
+      JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1 AND p.override_gm_percent IS NOT NULL
+    `, [req.tenantId]);
+    const overrideMap = {};
+    for (const r of overrideRows.rows) {
+      overrideMap[r.contract_id] = parseFloat(r.override_gm_percent);
+    }
+
+    const snapshot = calcBacklogSnapshot(contracts, overrideMap);
+
+    const nonVpBacklog = Math.max(0, totalBacklog - contracts.reduce((s, c) => {
+      const st = (c.status || '').toLowerCase();
+      if (!st.includes('open') && !st.includes('soft')) return s;
+      return s + (parseFloat(c.backlog) || 0);
+    }, 0));
+
+    res.json({
+      total_backlog: totalBacklog,
+      weighted_gm_pct: backlogRow.weighted_gm_pct != null ? parseFloat(backlogRow.weighted_gm_pct) : null,
+      avg_project_gm_pct: backlogRow.avg_project_gm_pct != null ? parseFloat(backlogRow.avg_project_gm_pct) : null,
+      backlog_6mo: snapshot.backlog_6mo + nonVpBacklog,
+      backlog_6mo_gm_pct: snapshot.backlog_6mo_gm_pct,
+      backlog_12mo: snapshot.backlog_12mo + nonVpBacklog,
+      backlog_12mo_gm_pct: snapshot.backlog_12mo_gm_pct,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single project (with tenant check)
 router.get('/:id', async (req, res, next) => {
   try {

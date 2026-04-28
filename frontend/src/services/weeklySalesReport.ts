@@ -61,11 +61,36 @@ export interface LocationData {
   won_lost: WonLostRow[];
 }
 
+export interface CompanySnapshot {
+  total_backlog: number;
+  backlog_6mo: number;
+  backlog_6mo_gm_pct: number | null;
+  backlog_12mo: number;
+  backlog_12mo_gm_pct: number | null;
+  weighted_gm_pct: number | null;
+  avg_project_gm_pct: number | null;
+}
+
+export interface NewJobRow {
+  id: number;
+  name: string;
+  number: string;
+  status: string;
+  contract_value: number | null;
+  gross_margin_percent: number | null;
+  created_at: string;
+  manager_name: string | null;
+  customer_name: string | null;
+  department_name: string | null;
+}
+
 export interface WeeklySalesData {
   week_start: string;
   week_end: string;
   totals: LocationSummary;
   by_location: Record<string, LocationData>;
+  company_snapshot: CompanySnapshot;
+  new_jobs: NewJobRow[];
 }
 
 export const weeklySalesReportApi = {

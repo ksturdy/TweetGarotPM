@@ -219,6 +219,85 @@ function calcProjectMonthlyRevenue(contracts, stateFilter, regionFilter) {
   return monthly;
 }
 
+/**
+ * Compute remaining backlog and weighted GM% at 6-month and 12-month horizons.
+ * Uses the same per-contract contour projection as calcProjectMonthlyRevenue,
+ * but tracks per-contract remaining backlog to properly weight GM%.
+ * @param {Array} contracts - VP contracts from VistaData.getAllContracts()
+ * @returns {{ backlog_6mo: number, backlog_6mo_gm_pct: number|null, backlog_12mo: number, backlog_12mo_gm_pct: number|null }}
+ */
+function calcBacklogSnapshot(contracts, gmOverrideMap) {
+  const result = { backlog_6mo: 0, backlog_6mo_gm_pct: null, backlog_12mo: 0, backlog_12mo_gm_pct: null };
+  if (!contracts) return result;
+  const overrides = gmOverrideMap || {};
+
+  let rem6 = 0, gmNum6 = 0, gmDen6 = 0;
+  let rem12 = 0, gmNum12 = 0, gmDen12 = 0;
+
+  for (const c of contracts) {
+    const status = (c.status || '').toLowerCase();
+    if (!status.includes('open') && !status.includes('soft')) continue;
+
+    const backlog = parseNum(c.backlog);
+    if (backlog <= 0) continue;
+
+    // Apply GM override: when real GM is ~100% and override exists, use override
+    let gm = parseNum(c.gross_profit_percent); // decimal (0.15 = 15%)
+    let hasGm = c.gross_profit_percent != null;
+    if (gm >= 0.995 && overrides[c.id] != null) {
+      gm = overrides[c.id];
+      hasGm = true;
+    }
+
+    const earnedRevenue = parseNum(c.earned_revenue);
+    const projectedRevenue = parseNum(c.projected_revenue);
+    const contractValue = parseNum(c.contract_amount) || projectedRevenue;
+
+    let remainingMonths;
+    if (c.user_adjusted_end_months != null) {
+      remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+    } else {
+      const totalDuration = getDurationForValue(contractValue, projectDurationRules);
+      const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
+      remainingMonths = Math.max(1, Math.min(36, Math.ceil(totalDuration * (1 - pctComplete))));
+    }
+
+    const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
+    const contour = c.user_selected_contour || getDefaultContour(pctComplete);
+    const multipliers = getContourMultipliers(remainingMonths, contour);
+    const baseMonthly = backlog / remainingMonths;
+
+    // Sum projected revenue burned in first 6 and 12 months
+    let rev6 = 0, rev12 = 0;
+    for (let i = 0; i < remainingMonths; i++) {
+      const monthRevenue = baseMonthly * multipliers[i];
+      if (i < 6) rev6 += monthRevenue;
+      if (i < 12) rev12 += monthRevenue;
+    }
+
+    const remaining6 = Math.max(0, backlog - rev6);
+    const remaining12 = Math.max(0, backlog - rev12);
+
+    rem6 += remaining6;
+    rem12 += remaining12;
+
+    if (hasGm && remaining6 > 0) {
+      gmNum6 += remaining6 * gm;
+      gmDen6 += remaining6;
+    }
+    if (hasGm && remaining12 > 0) {
+      gmNum12 += remaining12 * gm;
+      gmDen12 += remaining12;
+    }
+  }
+
+  result.backlog_6mo = rem6;
+  result.backlog_6mo_gm_pct = gmDen6 > 0 ? (gmNum6 / gmDen6) * 100 : null;
+  result.backlog_12mo = rem12;
+  result.backlog_12mo_gm_pct = gmDen12 > 0 ? (gmNum12 / gmDen12) * 100 : null;
+  return result;
+}
+
 function calcProjectMonthlyLabor(contracts, stateFilter, regionFilter) {
   const monthly = new Map();
   if (!contracts) return monthly;
@@ -670,6 +749,8 @@ function generateStrategyRecommendations(variants, settings, regional12) {
 module.exports = {
   buildBacklogFitReport,
   generateStrategyRecommendations,
+  calcProjectMonthlyRevenue,
+  calcBacklogSnapshot,
   REGIONS,
   // Exported for formatting in HTML generator
   fmtCurrency,

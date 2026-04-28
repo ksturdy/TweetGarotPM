@@ -53,6 +53,7 @@ class Team {
 
   /**
    * Update a team
+   * When team_lead_id changes, also syncs team_members roles.
    */
   static async update(id, data, tenantId) {
     const result = await db.query(`
@@ -74,6 +75,26 @@ class Team {
       id,
       tenantId
     ]);
+
+    if (result.rows.length > 0 && data.team_lead_id) {
+      // Demote all current leads in team_members
+      await db.query(`
+        UPDATE team_members SET role = 'member'
+        WHERE team_id = $1 AND role = 'lead'
+      `, [id]);
+      // Promote the new lead (if they're a member)
+      await db.query(`
+        UPDATE team_members SET role = 'lead'
+        WHERE team_id = $1 AND employee_id = $2
+      `, [id, data.team_lead_id]);
+    } else if (result.rows.length > 0 && !data.team_lead_id) {
+      // Lead was cleared — demote all leads in team_members
+      await db.query(`
+        UPDATE team_members SET role = 'member'
+        WHERE team_id = $1 AND role = 'lead'
+      `, [id]);
+    }
+
     return result.rows[0];
   }
 
@@ -120,6 +141,7 @@ class Team {
 
   /**
    * Add member to team
+   * When adding with role 'lead', also updates teams.team_lead_id to keep them in sync.
    */
   static async addMember(teamId, employeeId, role = 'member') {
     const result = await db.query(`
@@ -128,6 +150,17 @@ class Team {
       ON CONFLICT (team_id, employee_id) DO UPDATE SET role = $3
       RETURNING *
     `, [teamId, employeeId, role]);
+
+    if (result.rows.length > 0 && role === 'lead') {
+      // Sync teams.team_lead_id
+      await db.query('UPDATE teams SET team_lead_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [employeeId, teamId]);
+      // Demote any other leads in team_members to 'member'
+      await db.query(`
+        UPDATE team_members SET role = 'member'
+        WHERE team_id = $1 AND employee_id != $2 AND role = 'lead'
+      `, [teamId, employeeId]);
+    }
+
     return result.rows[0];
   }
 
@@ -144,6 +177,8 @@ class Team {
 
   /**
    * Update member role
+   * When setting role to 'lead', also updates teams.team_lead_id to keep them in sync.
+   * When demoting a lead, clears team_lead_id if it matches this employee.
    */
   static async updateMemberRole(teamId, employeeId, role) {
     const result = await db.query(`
@@ -151,6 +186,25 @@ class Team {
       WHERE team_id = $2 AND employee_id = $3
       RETURNING *
     `, [role, teamId, employeeId]);
+
+    if (result.rows.length > 0) {
+      if (role === 'lead') {
+        // Sync teams.team_lead_id
+        await db.query('UPDATE teams SET team_lead_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [employeeId, teamId]);
+        // Demote any other leads in team_members to 'member'
+        await db.query(`
+          UPDATE team_members SET role = 'member'
+          WHERE team_id = $1 AND employee_id != $2 AND role = 'lead'
+        `, [teamId, employeeId]);
+      } else {
+        // Demoting from lead — clear team_lead_id if it was this employee
+        await db.query(`
+          UPDATE teams SET team_lead_id = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND team_lead_id = $2
+        `, [teamId, employeeId]);
+      }
+    }
+
     return result.rows[0];
   }
 

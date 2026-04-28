@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { projectsApi, Project } from '../../services/projects';
+import { projectsApi, Project, BacklogSnapshot } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
@@ -140,6 +140,18 @@ const ProjectList: React.FC = () => {
     queryKey: ['teams', 'my-team-members'],
     queryFn: () => teamsApi.getMyTeamMemberIds()
   });
+  const { data: backlogSnapshot } = useQuery({
+    queryKey: ['projects', 'backlog-snapshot'],
+    queryFn: () => projectsApi.getBacklogSnapshot(),
+  });
+
+  // GM Override state
+  const [gmOverridePercent, setGmOverridePercent] = useState('16.5');
+  const { data: gmOverrideCountData } = useQuery({
+    queryKey: ['projects', 'gm-override-count'],
+    queryFn: () => projectsApi.getGmOverrideCount(),
+  });
+  const gmOverrideCount = gmOverrideCountData?.count ?? 0;
   const teamMemberEmployeeIds = useMemo(() => {
     const ids = (myTeamResponse?.data as any)?.data?.employeeIds || [];
     return new Set<number>(ids);
@@ -163,6 +175,24 @@ const ProjectList: React.FC = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['favorites', 'project'] });
+    },
+  });
+
+  const applyGmOverrideMutation = useMutation({
+    mutationFn: (percent: number) => projectsApi.applyGmOverride(percent),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'backlog-snapshot'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'gm-override-count'] });
+    },
+  });
+
+  const clearGmOverridesMutation = useMutation({
+    mutationFn: () => projectsApi.clearGmOverrides(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'backlog-snapshot'] });
+      queryClient.invalidateQueries({ queryKey: ['projects', 'gm-override-count'] });
     },
   });
 
@@ -454,17 +484,33 @@ const ProjectList: React.FC = () => {
   };
 
   // Calculate KPIs from filtered projects
-  const kpis = {
-    projectCount: filteredProjects.length,
-    totalContractValue: filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0),
-    totalBacklog: filteredProjects.reduce((sum, p) => sum + (Number(p.backlog) || 0), 0),
-    avgGrossMargin: filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null).length > 0
-      ? filteredProjects.reduce((sum, p) => sum + (Number(p.gross_margin_percent) || 0), 0) / filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null).length
-      : 0,
-    avgProjectValue: filteredProjects.length > 0
-      ? filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0) / filteredProjects.length
-      : 0
-  };
+  const kpis = (() => {
+    const projectCount = filteredProjects.length;
+    const totalContractValue = filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0);
+    const totalBacklog = filteredProjects.reduce((sum, p) => sum + (Number(p.backlog) || 0), 0);
+    const projectsWithGm = filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null);
+    const avgGrossMargin = projectsWithGm.length > 0
+      ? projectsWithGm.reduce((sum, p) => sum + (Number(p.gross_margin_percent) || 0), 0) / projectsWithGm.length
+      : 0;
+    // Backlog-weighted GM%: each project's GM weighted by its backlog dollars
+    const backlogGmNumerator = filteredProjects.reduce((sum, p) => {
+      const bl = Number(p.backlog) || 0;
+      const gm = Number(p.gross_margin_percent);
+      if (!bl || gm === null || gm === undefined || isNaN(gm)) return sum;
+      return sum + bl * gm;
+    }, 0);
+    const backlogGmDenominator = filteredProjects.reduce((sum, p) => {
+      const bl = Number(p.backlog) || 0;
+      const gm = Number(p.gross_margin_percent);
+      if (!bl || gm === null || gm === undefined || isNaN(gm)) return sum;
+      return sum + bl;
+    }, 0);
+    const gmInBacklog = backlogGmDenominator > 0 ? backlogGmNumerator / backlogGmDenominator : 0;
+    return {
+      projectCount, totalContractValue, totalBacklog, avgGrossMargin, gmInBacklog,
+      avgProjectValue: projectCount > 0 ? totalContractValue / projectCount : 0,
+    };
+  })();
 
   // Totals for the footer row (weighted averages for percentages)
   const footerTotals = useMemo(() => {
@@ -689,33 +735,39 @@ const ProjectList: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Strip */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '1rem',
-        marginBottom: '1rem'
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0',
+        padding: '0.5rem 1rem', marginBottom: '0.75rem',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
       }}>
-        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Project Count</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1e293b' }}>{kpis.projectCount.toLocaleString()}</div>
-        </div>
-        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Contract Value</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#3b82f6' }}>${(kpis.totalContractValue / 1000000).toFixed(1)}M</div>
-        </div>
-        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Backlog</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#8b5cf6' }}>${(kpis.totalBacklog / 1000000).toFixed(1)}M</div>
-        </div>
-        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Average GM%</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: kpis.avgGrossMargin >= 0 ? '#10b981' : '#ef4444' }}>{(kpis.avgGrossMargin * 100).toFixed(1)}%</div>
-        </div>
-        <div className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Avg. Project Value</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f59e0b' }}>${Math.round(kpis.avgProjectValue).toLocaleString()}</div>
-        </div>
+        {[
+          { label: 'Projects', value: kpis.projectCount.toLocaleString(), color: '#1e293b' },
+          { label: 'Contract Value', value: `$${(kpis.totalContractValue / 1000000).toFixed(1)}M`, color: '#3b82f6' },
+          { label: 'Total Backlog', value: backlogSnapshot ? `$${(backlogSnapshot.total_backlog / 1000000).toFixed(1)}M` : '-', color: '#002356',
+            gm: backlogSnapshot?.weighted_gm_pct, gmColor: backlogSnapshot?.weighted_gm_pct != null && backlogSnapshot.weighted_gm_pct >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Backlog 6 Mo', value: backlogSnapshot ? `$${(backlogSnapshot.backlog_6mo / 1000000).toFixed(1)}M` : '-', color: '#0369a1',
+            gm: backlogSnapshot?.backlog_6mo_gm_pct, gmColor: backlogSnapshot?.backlog_6mo_gm_pct != null && backlogSnapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Backlog 12 Mo', value: backlogSnapshot ? `$${(backlogSnapshot.backlog_12mo / 1000000).toFixed(1)}M` : '-', color: '#6366f1',
+            gm: backlogSnapshot?.backlog_12mo_gm_pct, gmColor: backlogSnapshot?.backlog_12mo_gm_pct != null && backlogSnapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Avg Project GM%', value: backlogSnapshot?.avg_project_gm_pct != null ? `${backlogSnapshot.avg_project_gm_pct.toFixed(1)}%` : '-',
+            color: backlogSnapshot?.avg_project_gm_pct != null && backlogSnapshot.avg_project_gm_pct >= 15 ? '#10b981' : '#ef4444' },
+          { label: 'Avg Project Value', value: `$${Math.round(kpis.avgProjectValue).toLocaleString()}`, color: '#f59e0b' },
+        ].map((kpi, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <div style={{ width: '1px', height: '32px', background: '#e2e8f0', flexShrink: 0 }} />}
+            <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+              <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kpi.label}</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: kpi.color, lineHeight: 1.2 }}>{kpi.value}</div>
+              {kpi.gm !== undefined && (
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: kpi.gmColor, lineHeight: 1.2 }}>
+                  GM: {kpi.gm != null ? `${kpi.gm.toFixed(1)}%` : '-'}
+                </div>
+              )}
+            </div>
+          </React.Fragment>
+        ))}
       </div>
 
       {/* Filter Bar */}
@@ -816,6 +868,54 @@ const ProjectList: React.FC = () => {
             ))}
           </select>
         </div>
+        {/* GM Override Control */}
+        <div style={{ minWidth: '200px', display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>
+              GM Override {gmOverrideCount > 0 && <span style={{ color: '#f59e0b' }}>({gmOverrideCount})</span>}
+            </label>
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={gmOverridePercent}
+                onChange={(e) => setGmOverridePercent(e.target.value)}
+                style={{ width: '60px', padding: '0.5rem 0.4rem', fontSize: '0.875rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>%</span>
+              <button
+                onClick={() => {
+                  const pct = parseFloat(gmOverridePercent);
+                  if (!isNaN(pct) && pct >= 0 && pct <= 100) applyGmOverrideMutation.mutate(pct);
+                }}
+                disabled={applyGmOverrideMutation.isPending}
+                style={{
+                  padding: '0.5rem 0.5rem', fontSize: '0.75rem', fontWeight: 600,
+                  background: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px',
+                  cursor: 'pointer', whiteSpace: 'nowrap'
+                }}
+              >
+                Apply
+              </button>
+              {gmOverrideCount > 0 && (
+                <button
+                  onClick={() => clearGmOverridesMutation.mutate()}
+                  disabled={clearGmOverridesMutation.isPending}
+                  style={{
+                    padding: '0.5rem 0.5rem', fontSize: '0.7rem', fontWeight: 600,
+                    background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '4px',
+                    cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || myProjectsOnly || myTeamOnly || searchTerm) && (
           <button
             className="sales-filter-btn"
@@ -1061,8 +1161,13 @@ const ProjectList: React.FC = () => {
                     </div>
                   </td>
                   <td>{project.contract_value ? `$${Math.round(Number(project.contract_value)).toLocaleString()}` : '-'}</td>
-                  <td style={{ color: project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'inherit' }}>
-                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null ? `${Math.round(Number(project.gross_margin_percent) * 100)}%` : '-'}
+                  <td style={{
+                    color: project.gm_overridden ? '#f59e0b' : project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'inherit',
+                    fontStyle: project.gm_overridden ? 'italic' : undefined,
+                  }} title={project.gm_overridden ? 'Overridden from 100% (no cost projection yet)' : undefined}>
+                    {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
+                      ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%${project.gm_overridden ? '*' : ''}`
+                      : '-'}
                   </td>
                   <td>{project.backlog ? `$${Math.round(Number(project.backlog)).toLocaleString()}` : '-'}</td>
                   <td>{project.actual_cost ? `$${Math.round(Number(project.actual_cost)).toLocaleString()}` : '-'}</td>

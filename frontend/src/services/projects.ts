@@ -35,6 +35,8 @@ export interface Project {
   email_distribution_list?: string;
   override_original_estimated_margin?: number | null;
   override_original_estimated_margin_pct?: number | null;
+  override_gm_percent?: number | null;
+  gm_overridden?: boolean;
   created_at: string;
   // Note: favorite is now managed per-user via favoritesService
   isFavorited?: boolean; // Runtime property added by UI
@@ -150,4 +152,27 @@ export const projectsApi = {
 
   // Use the new per-user favorites system
   toggleFavorite: (id: number) => favoritesService.toggle('project', id),
+
+  getBacklogSnapshot: (): Promise<BacklogSnapshot> =>
+    api.get<BacklogSnapshot>('/projects/backlog-snapshot').then(r => r.data),
+
+  // GM Override
+  applyGmOverride: (percent: number) =>
+    api.post<{ applied: number }>('/projects/gm-override', { percent }).then(r => r.data),
+
+  clearGmOverrides: () =>
+    api.delete<{ cleared: number }>('/projects/gm-override').then(r => r.data),
+
+  getGmOverrideCount: () =>
+    api.get<{ count: number }>('/projects/gm-override/count').then(r => r.data),
 };
+
+export interface BacklogSnapshot {
+  total_backlog: number;
+  weighted_gm_pct: number | null;
+  avg_project_gm_pct: number | null;
+  backlog_6mo: number;
+  backlog_6mo_gm_pct: number | null;
+  backlog_12mo: number;
+  backlog_12mo_gm_pct: number | null;
+}

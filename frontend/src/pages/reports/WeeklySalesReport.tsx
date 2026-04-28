@@ -581,6 +581,95 @@ const WeeklySalesReport: React.FC = () => {
         </div>
       )}
 
+      {/* Company Snapshot — backlog KPIs */}
+      {data?.company_snapshot && (
+        <div style={{
+          background: '#fff', borderRadius: '12px', border: '1px solid #e0e2e7',
+          padding: '1rem 1.25rem', marginBottom: '1rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(135deg, #002356, #0369a1)' }} />
+          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>Company Snapshot</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
+            {/* Total Backlog + GM% */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Total Backlog</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#002356' }}>{fmtCurrency(data.company_snapshot.total_backlog)}</div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.weighted_gm_pct != null && data.company_snapshot.weighted_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
+                {data.company_snapshot.weighted_gm_pct != null ? `${data.company_snapshot.weighted_gm_pct.toFixed(1)}%` : '-'}
+              </div>
+            </div>
+            {/* 6 Mo Out + GM% */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Backlog (6 Mo Out)</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0369a1' }}>{fmtCurrency(data.company_snapshot.backlog_6mo)}</div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.backlog_6mo_gm_pct != null && data.company_snapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
+                {data.company_snapshot.backlog_6mo_gm_pct != null ? `${data.company_snapshot.backlog_6mo_gm_pct.toFixed(1)}%` : '-'}
+              </div>
+            </div>
+            {/* 12 Mo Out + GM% */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Backlog (12 Mo Out)</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#6366f1' }}>{fmtCurrency(data.company_snapshot.backlog_12mo)}</div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginTop: '8px', marginBottom: '2px' }}>GM% in Backlog</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: data.company_snapshot.backlog_12mo_gm_pct != null && data.company_snapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
+                {data.company_snapshot.backlog_12mo_gm_pct != null ? `${data.company_snapshot.backlog_12mo_gm_pct.toFixed(1)}%` : '-'}
+              </div>
+            </div>
+            {/* Average Project GM% */}
+            <div>
+              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>Average Project GM%</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: data.company_snapshot.avg_project_gm_pct != null && data.company_snapshot.avg_project_gm_pct >= 15 ? '#059669' : '#dc2626' }}>
+                {data.company_snapshot.avg_project_gm_pct != null ? `${data.company_snapshot.avg_project_gm_pct.toFixed(1)}%` : '-'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Newly Created Jobs */}
+      {data?.new_jobs && data.new_jobs.length > 0 && (
+        <div className="sales-table-section" style={{ position: 'relative', overflow: 'hidden', marginBottom: '1rem' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(135deg, #059669, #10b981)' }} />
+          <div className="sales-table-header" style={{ paddingTop: '0.875rem' }}>
+            <div className="sales-table-title">
+              Newly Created Jobs <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.375rem' }}>({data.new_jobs.length})</span>
+            </div>
+          </div>
+          <table className="sales-table">
+            <thead>
+              <tr>
+                <th>Job #</th>
+                <th>Name</th>
+                <th>Customer</th>
+                <th style={{ textAlign: 'right' }}>Contract Value</th>
+                <th style={{ textAlign: 'right' }}>GM%</th>
+                <th>Manager</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.new_jobs.map(job => (
+                <tr key={job.id}>
+                  <td style={{ fontWeight: 600, color: '#002356' }}>{job.number || '-'}</td>
+                  <td style={{ color: '#3b82f6', fontWeight: 500 }}>{job.name}</td>
+                  <td>{job.customer_name || '-'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCurrency(job.contract_value)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: job.gross_margin_percent != null && job.gross_margin_percent >= 15 ? '#059669' : job.gross_margin_percent != null ? '#dc2626' : '#64748b' }}>
+                    {job.gross_margin_percent != null ? `${Number(job.gross_margin_percent).toFixed(1)}%` : '-'}
+                  </td>
+                  <td>{job.manager_name || '-'}</td>
+                  <td>{fmtDate(job.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Location sections */}
       {orderedLocations.map(loc => (
         <LocationSection key={loc} code={loc} data={data!.by_location[loc]} prefs={prefs} onOppClick={onOppClick} />

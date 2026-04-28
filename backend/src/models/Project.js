@@ -52,7 +52,13 @@ const Project = {
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
               COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-              COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+              CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                        AND p.override_gm_percent IS NOT NULL
+                   THEN p.override_gm_percent
+                   ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
+              END as gross_margin_percent,
+              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
               COALESCE(vc.backlog, p.backlog) as backlog,
               COALESCE(p.market, vc.primary_market) as market,
               COALESCE(p.start_date, vc.start_month::date) as start_date,
@@ -83,7 +89,13 @@ const Project = {
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-             COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+             CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                       AND p.override_gm_percent IS NOT NULL
+                  THEN p.override_gm_percent
+                  ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
+             END as gross_margin_percent,
+             (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+              AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              COALESCE(vc.backlog, p.backlog) as backlog,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
@@ -125,7 +137,13 @@ const Project = {
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-             COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
+             CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                       AND p.override_gm_percent IS NOT NULL
+                  THEN p.override_gm_percent
+                  ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
+             END as gross_margin_percent,
+             (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+              AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              COALESCE(vc.backlog, p.backlog) as backlog,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
@@ -295,6 +313,55 @@ const Project = {
       [id, tenantId]
     );
     return result.rows.length > 0;
+  },
+
+  /**
+   * Bulk-apply GM override to all projects where the current GM% is ~100%
+   * @param {number} tenantId
+   * @param {number} overridePercent - decimal value (e.g. 0.165 for 16.5%)
+   * @returns {number} count of updated rows
+   */
+  async applyGmOverride(tenantId, overridePercent) {
+    const result = await db.query(`
+      UPDATE projects p
+      SET override_gm_percent = $2, updated_at = NOW()
+      FROM (
+        SELECT p2.id
+        FROM projects p2
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p2.id
+        WHERE p2.tenant_id = $1
+          AND COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) >= 0.995
+          AND p2.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
+      ) sub
+      WHERE p.id = sub.id
+    `, [tenantId, overridePercent]);
+    return result.rowCount;
+  },
+
+  /**
+   * Clear all GM overrides for a tenant
+   */
+  async clearGmOverrides(tenantId) {
+    const result = await db.query(`
+      UPDATE projects SET override_gm_percent = NULL, updated_at = NOW()
+      WHERE tenant_id = $1 AND override_gm_percent IS NOT NULL
+    `, [tenantId]);
+    return result.rowCount;
+  },
+
+  /**
+   * Count projects with active GM overrides (where real GM is still ~100%)
+   */
+  async countGmOverrides(tenantId) {
+    const result = await db.query(`
+      SELECT COUNT(*) as count
+      FROM projects p
+      LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      WHERE p.tenant_id = $1
+        AND p.override_gm_percent IS NOT NULL
+        AND COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+    `, [tenantId]);
+    return parseInt(result.rows[0].count, 10);
   },
 };
 

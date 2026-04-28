@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
+const VistaData = require('../models/VistaData');
+const { calcBacklogSnapshot } = require('../utils/backlogFitCalculator');
 
 router.use(authenticate);
 router.use(tenantContext);
@@ -128,6 +130,76 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     GROUP BY ${LOC_GROUP_EXPR}
   `, [tenantId, weekStart]);
 
+  // Query 6: Company backlog metrics (overall, weighted GM%, average project GM%)
+  // GM% stored as decimal (0.15 = 15%) — multiply by 100 for display.
+  // Apply GM override: when real GM is ~100% and override is set, use override value.
+  const GM_EXPR = `CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                        AND p.override_gm_percent IS NOT NULL
+                   THEN p.override_gm_percent
+                   ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) END`;
+
+  const backlogResult = await db.query(`
+    SELECT
+      COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0)::numeric AS total_backlog,
+      CASE
+        WHEN SUM(COALESCE(vc.backlog, p.backlog)) > 0
+        THEN (
+          SUM(COALESCE(vc.backlog, p.backlog) * (${GM_EXPR}))
+          / SUM(CASE WHEN (${GM_EXPR}) IS NOT NULL THEN COALESCE(vc.backlog, p.backlog) ELSE 0 END)
+        ) * 100
+        ELSE NULL
+      END AS weighted_gm_pct,
+      CASE
+        WHEN COUNT(${GM_EXPR}) > 0
+        THEN AVG(${GM_EXPR}) * 100
+        ELSE NULL
+      END AS avg_project_gm_pct
+    FROM projects p
+    LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+    WHERE p.tenant_id = $1
+      AND COALESCE(vc.backlog, p.backlog) > 0
+      AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
+  `, [tenantId]);
+
+  // Backlog projections: use the contour-based revenue projection system (same as backlog fit report).
+  // Computes per-contract remaining backlog at 6 and 12 months with weighted GM%.
+  const contracts = await VistaData.getAllContracts({ status: '' }, tenantId);
+
+  // Fetch GM overrides for linked projects so calcBacklogSnapshot can apply them
+  const overrideRows = await db.query(`
+    SELECT vc.id AS contract_id, p.override_gm_percent
+    FROM projects p
+    JOIN vp_contracts vc ON vc.linked_project_id = p.id
+    WHERE p.tenant_id = $1 AND p.override_gm_percent IS NOT NULL
+  `, [tenantId]);
+  const overrideMap = {};
+  for (const r of overrideRows.rows) {
+    overrideMap[r.contract_id] = parseFloat(r.override_gm_percent);
+  }
+
+  const snapshot = calcBacklogSnapshot(contracts, overrideMap);
+
+  // Query 7: Newly created jobs (projects) this week
+  const newJobsResult = await db.query(`
+    SELECT
+      p.id, p.name, p.number, p.status,
+      COALESCE(vc.contract_amount, p.contract_value) AS contract_value,
+      (${GM_EXPR}) * 100 AS gross_margin_percent,
+      p.created_at,
+      e.first_name || ' ' || e.last_name AS manager_name,
+      COALESCE(c.name, c.customer_owner) AS customer_name,
+      d.name AS department_name
+    FROM projects p
+    LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+    LEFT JOIN employees e ON p.manager_id = e.id
+    LEFT JOIN customers c ON p.customer_id = c.id
+    LEFT JOIN departments d ON p.department_id = d.id
+    WHERE p.tenant_id = $1
+      AND p.created_at >= $2::date
+      AND p.created_at < ($2::date + INTERVAL '7 days')
+    ORDER BY p.created_at DESC
+  `, [tenantId, weekStart]);
+
   // Build previous-week lookup maps
   const prevOppsByLoc = {};
   for (const row of prevOppsResult.rows) {
@@ -203,7 +275,35 @@ async function buildWeeklySalesData(tenantId, weekStart) {
   endDate.setDate(endDate.getDate() + 6);
   const weekEnd = endDate.toISOString().split('T')[0];
 
-  return { week_start: weekStart, week_end: weekEnd, totals, by_location: byLocation };
+  // Parse backlog metrics — combine SQL totals with contour-based projections.
+  // Non-VP project backlogs (included in SQL total but not in contour projections)
+  // are treated as persisting at all horizons.
+  const backlogRow = backlogResult.rows[0] || {};
+  const totalBacklog = parseFloat(backlogRow.total_backlog) || 0;
+  const vpBacklogTotal = snapshot.backlog_6mo + (totalBacklog - snapshot.backlog_6mo - (totalBacklog - snapshot.backlog_6mo)); // just use snapshot directly
+  const nonVpBacklog = Math.max(0, totalBacklog - contracts.reduce((s, c) => {
+    const st = (c.status || '').toLowerCase();
+    if (!st.includes('open') && !st.includes('soft')) return s;
+    return s + (parseFloat(c.backlog) || 0);
+  }, 0));
+  const company_snapshot = {
+    total_backlog: totalBacklog,
+    backlog_6mo: snapshot.backlog_6mo + nonVpBacklog,
+    backlog_6mo_gm_pct: snapshot.backlog_6mo_gm_pct,
+    backlog_12mo: snapshot.backlog_12mo + nonVpBacklog,
+    backlog_12mo_gm_pct: snapshot.backlog_12mo_gm_pct,
+    weighted_gm_pct: backlogRow.weighted_gm_pct != null ? parseFloat(backlogRow.weighted_gm_pct) : null,
+    avg_project_gm_pct: backlogRow.avg_project_gm_pct != null ? parseFloat(backlogRow.avg_project_gm_pct) : null,
+  };
+
+  return {
+    week_start: weekStart,
+    week_end: weekEnd,
+    totals,
+    by_location: byLocation,
+    company_snapshot,
+    new_jobs: newJobsResult.rows,
+  };
 }
 
 // ── PDF generation ─────────────────────────────────────────
