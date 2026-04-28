@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { OpportunityActivity } from '../../services/opportunities';
-import VoiceNoteButton from './VoiceNoteButton';
 import '../../styles/ActivityTimeline.css';
 
 interface ActivityTimelineProps {
@@ -51,13 +50,6 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ opportunityId }) =>
   const handleSubmitActivity = (e: React.FormEvent) => {
     e.preventDefault();
     createActivityMutation.mutate(activityForm);
-  };
-
-  const handleVoiceNote = (transcript: string) => {
-    setActivityForm(prev => ({
-      ...prev,
-      notes: prev.notes ? `${prev.notes}\n\n${transcript}` : transcript
-    }));
   };
 
   const getActivityIcon = (type: string) => {
@@ -148,18 +140,15 @@ const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ opportunityId }) =>
 
           <div className="form-group">
             <label>Notes</label>
-            <div className="textarea-with-voice">
-              <textarea
-                value={activityForm.notes}
-                onChange={(e) => setActivityForm(prev => ({
-                  ...prev,
-                  notes: e.target.value
-                }))}
-                rows={3}
-                placeholder="Add details..."
-              />
-              <VoiceNoteButton onTranscript={handleVoiceNote} />
-            </div>
+            <textarea
+              value={activityForm.notes}
+              onChange={(e) => setActivityForm(prev => ({
+                ...prev,
+                notes: e.target.value
+              }))}
+              rows={3}
+              placeholder="Add details..."
+            />
           </div>
 
           {(activityForm.activity_type === 'meeting' || activityForm.activity_type === 'task') && (

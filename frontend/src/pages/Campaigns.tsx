@@ -7,6 +7,11 @@ import OpportunityModal from '../components/opportunities/OpportunityModal';
 import { Opportunity } from '../services/opportunities';
 import '../styles/SalesPipeline.css';
 
+const parseLocalDate = (dateStr: string): Date => {
+  const d = dateStr.includes('T') ? dateStr.substring(0, 10) : dateStr;
+  return new Date(d + 'T00:00:00');
+};
+
 const Campaigns: React.FC = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,8 +96,8 @@ const Campaigns: React.FC = () => {
 
     switch (sortColumn) {
       case 'start_date':
-        aValue = new Date(a.start_date + 'T00:00:00').getTime();
-        bValue = new Date(b.start_date + 'T00:00:00').getTime();
+        aValue = a.start_date ? parseLocalDate(a.start_date).getTime() : 0;
+        bValue = b.start_date ? parseLocalDate(b.start_date).getTime() : 0;
         break;
       case 'name':
         aValue = a.name.toLowerCase();
@@ -281,7 +286,7 @@ const Campaigns: React.FC = () => {
                     onClick={() => navigate(`/campaigns/${campaign.id}`)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td>{format(new Date(campaign.start_date + 'T00:00:00'), 'MMM d, yyyy')}</td>
+                    <td>{campaign.start_date ? format(parseLocalDate(campaign.start_date), 'MMM d, yyyy') : '-'}</td>
                     <td>
                       <div className="sales-project-cell">
                         <div className="sales-project-icon" style={{ background: getCampaignGradient(campaign.status) }}>

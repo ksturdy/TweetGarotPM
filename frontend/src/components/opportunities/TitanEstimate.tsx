@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { OpportunityEstimateData } from '../../services/opportunities';
 
 interface TitanEstimateProps {
-  opportunityId: number;
+  opportunityId?: number;
   estimatedValue: number;
 }
 
@@ -14,9 +14,9 @@ const DEFAULT_ESTIMATE: OpportunityEstimateData = {
   rentals_pct: 0.05,
   mep_equip_pct: 0.05,
   general_conditions_pct: 0.10,
-  pf_labor_pct: 0.45,
-  sm_labor_pct: 0.35,
-  pl_labor_pct: 0.20,
+  pf_labor_pct: 0,
+  sm_labor_pct: 0,
+  pl_labor_pct: 0,
   pf_shop_pct: 0.30,
   pf_field_pct: 0.70,
   sm_shop_pct: 0.35,
@@ -44,7 +44,7 @@ function fmtHrs(v: number): string { return v.toLocaleString(undefined, { maximu
 function p2d(pct: number): string { return (pct * 100).toFixed(1); }
 function d2p(s: string): number { const v = parseFloat(s); return isNaN(v) ? 0 : Math.max(0, Math.min(100, v)) / 100; }
 
-const PercentInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => {
+const PercentInput: React.FC<{ value: number; onChange: (v: number) => void; variant?: 'suggested' | 'required' }> = ({ value, onChange, variant }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const focused = useRef(false);
   const onChangeRef = useRef(onChange);
@@ -56,12 +56,15 @@ const PercentInput: React.FC<{ value: number; onChange: (v: number) => void }> =
     }
   }, [value]);
 
+  const inputClass = variant === 'suggested' ? 'te-input-suggested' : variant === 'required' ? 'te-input-required' : '';
+
   return (
     <span className="te-pi">
       <input
         ref={inputRef}
         type="text"
         inputMode="decimal"
+        className={inputClass}
         defaultValue={p2d(value)}
         onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
         onChange={(e) => {
@@ -123,7 +126,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
 
   const { data: savedEstimate } = useQuery({
     queryKey: ['opportunity-estimate', opportunityId],
-    queryFn: () => opportunitiesService.getEstimate(opportunityId),
+    queryFn: () => opportunitiesService.getEstimate(opportunityId!),
     enabled: !!opportunityId,
   });
 
@@ -140,8 +143,13 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data: OpportunityEstimateData) => opportunitiesService.saveEstimate(opportunityId, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['opportunity-estimate', opportunityId] }); },
+    mutationFn: async (data: OpportunityEstimateData) => {
+      if (!opportunityId) return;
+      await opportunitiesService.saveEstimate(opportunityId, data);
+    },
+    onSuccess: () => {
+      if (opportunityId) queryClient.invalidateQueries({ queryKey: ['opportunity-estimate', opportunityId] });
+    },
   });
 
   useEffect(() => {
@@ -224,16 +232,15 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
 
   const resetToDefaults = useCallback(async () => {
     try {
-      // Fetch defaults for all 3 trades (full reset)
-      const allDefaults = await opportunitiesService.getEstimateDefaults(['pf', 'sm', 'pl']);
-      setPct(allDefaults);
-      debouncedSave(allDefaults);
+      // Fetch defaults for no trades (cost split only, trades deselected)
+      const noTradeDefaults = await opportunitiesService.getEstimateDefaults([]);
+      setPct(noTradeDefaults);
+      debouncedSave(noTradeDefaults);
     } catch {
-      const source = defaults || DEFAULT_ESTIMATE;
-      setPct(source);
-      debouncedSave(source);
+      setPct(DEFAULT_ESTIMATE);
+      debouncedSave(DEFAULT_ESTIMATE);
     }
-  }, [defaults, debouncedSave]);
+  }, [debouncedSave]);
 
   const calc = useMemo(() => {
     const ev = estimatedValue || 0;
@@ -288,12 +295,12 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
       <table className="te-tbl">
         <thead><tr><th></th><th>%</th><th className="r">Amount</th></tr></thead>
         <tbody>
-          <tr><td>Labor</td><td><PercentInput value={pct.labor_pct} onChange={(v) => updateField('labor_pct', v)} /></td><td className="r">{fmtCur(calc.laborAmt)}</td></tr>
-          <tr><td>Material</td><td><PercentInput value={pct.material_pct} onChange={(v) => updateField('material_pct', v)} /></td><td className="r">{fmtCur(calc.materialAmt)}</td></tr>
-          <tr><td>Subcontracts</td><td><PercentInput value={pct.subcontracts_pct} onChange={(v) => updateField('subcontracts_pct', v)} /></td><td className="r">{fmtCur(calc.subAmt)}</td></tr>
-          <tr><td>Rentals</td><td><PercentInput value={pct.rentals_pct} onChange={(v) => updateField('rentals_pct', v)} /></td><td className="r">{fmtCur(calc.rentAmt)}</td></tr>
-          <tr><td>MEP Equip</td><td><PercentInput value={pct.mep_equip_pct} onChange={(v) => updateField('mep_equip_pct', v)} /></td><td className="r">{fmtCur(calc.mepAmt)}</td></tr>
-          <tr><td>Gen. Cond.</td><td><PercentInput value={pct.general_conditions_pct} onChange={(v) => updateField('general_conditions_pct', v)} /></td><td className="r">{fmtCur(calc.gcAmt)}</td></tr>
+          <tr><td>Labor</td><td><PercentInput value={pct.labor_pct} onChange={(v) => updateField('labor_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.laborAmt)}</td></tr>
+          <tr><td>Material</td><td><PercentInput value={pct.material_pct} onChange={(v) => updateField('material_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.materialAmt)}</td></tr>
+          <tr><td>Subcontracts</td><td><PercentInput value={pct.subcontracts_pct} onChange={(v) => updateField('subcontracts_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.subAmt)}</td></tr>
+          <tr><td>Rentals</td><td><PercentInput value={pct.rentals_pct} onChange={(v) => updateField('rentals_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.rentAmt)}</td></tr>
+          <tr><td>MEP Equip</td><td><PercentInput value={pct.mep_equip_pct} onChange={(v) => updateField('mep_equip_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.mepAmt)}</td></tr>
+          <tr><td>Gen. Cond.</td><td><PercentInput value={pct.general_conditions_pct} onChange={(v) => updateField('general_conditions_pct', v)} variant="suggested" /></td><td className="r">{fmtCur(calc.gcAmt)}</td></tr>
         </tbody>
         <tfoot>
           <tr className="te-tbl-total">
@@ -326,10 +333,10 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
                       {trade.label}
                     </label>
                   </td>
-                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_labor_pct` as keyof OpportunityEstimateData, v)} />}</td>
+                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_labor_pct` as keyof OpportunityEstimateData, v)} variant="required" />}</td>
                   <td className="r">{t.enabled ? fmtCur(t.amt) : '—'}</td>
                   <td className="r">{t.enabled ? fmtHrs(t.hrs) : '—'}</td>
-                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_shop_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_shop_pct` as keyof OpportunityEstimateData, v)} />}</td>
+                  <td>{t.enabled && <PercentInput value={pct[`${t.key}_shop_pct` as keyof OpportunityEstimateData] as number} onChange={(v) => updateField(`${t.key}_shop_pct` as keyof OpportunityEstimateData, v)} variant="required" />}</td>
                 </tr>
                 {t.enabled && (
                   <tr className="te-sf-detail">

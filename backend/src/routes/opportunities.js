@@ -587,11 +587,46 @@ router.post('/:id/comments',
       }
 
       // Notify other followers about the new comment
+      const followerIds = await OpportunityFollower.getFollowerUserIds(Number(req.params.id), req.tenantId);
       notifyFollowers(Number(req.params.id), req.tenantId, req.user.id, {
         eventType: 'comment_added',
         title: 'New Comment on Opportunity',
         message: `New comment on "${opportunity.title}"`,
       });
+
+      // Notify @mentioned users (skip commenter and existing followers to avoid duplicates)
+      const mentionedUserIds = req.body.mentioned_user_ids || [];
+      if (mentionedUserIds.length > 0) {
+        const followerSet = new Set(followerIds);
+        for (const mentionedUserId of mentionedUserIds) {
+          if (mentionedUserId === req.user.id) continue;
+          // Only create a mention notification if they won't already get the follower notification
+          if (!followerSet.has(mentionedUserId)) {
+            try {
+              await Notification.create({
+                tenantId: req.tenantId,
+                userId: mentionedUserId,
+                entityType: 'opportunity',
+                entityId: Number(req.params.id),
+                eventType: 'mentioned_in_comment',
+                title: 'You were mentioned in a comment',
+                message: `You were mentioned in a comment on "${opportunity.title}"`,
+                link: '/sales',
+                createdBy: req.user.id,
+                emailSent: false,
+              });
+            } catch (err) {
+              console.error('Error notifying mentioned user:', err);
+            }
+          }
+          // Auto-follow mentioned users
+          try {
+            await OpportunityFollower.follow(req.params.id, mentionedUserId, req.tenantId);
+          } catch (err) {
+            // Ignore if already following
+          }
+        }
+      }
 
       res.status(201).json(comment);
     } catch (error) {

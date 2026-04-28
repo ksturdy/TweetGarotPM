@@ -2,14 +2,27 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import opportunitiesService, { OpportunityComment } from '../../services/opportunities';
 import { useAuth } from '../../context/AuthContext';
+import MentionTextarea from './MentionTextarea';
+import MentionText from './MentionText';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 interface CommentThreadProps {
   opportunityId: number;
+  employees?: Array<{ id: number; first_name: string; last_name: string; job_title?: string | null }>;
 }
 
-const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
+function extractMentionIds(text: string): number[] {
+  const regex = /@\[([^\]]+)\]\((\d+)\)/g;
+  const ids: number[] = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    ids.push(parseInt(match[2], 10));
+  }
+  return ids;
+}
+
+const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId, employees = [] }) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [newComment, setNewComment] = useState('');
@@ -31,8 +44,8 @@ const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
   }, [comments.length]);
 
   const addMutation = useMutation({
-    mutationFn: (comment: string) =>
-      opportunitiesService.addComment(opportunityId, comment),
+    mutationFn: ({ comment, mentionedUserIds }: { comment: string; mentionedUserIds: number[] }) =>
+      opportunitiesService.addComment(opportunityId, comment, true, mentionedUserIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['opportunities', opportunityId, 'comments'] });
       // Auto-follow is handled server-side; refresh follow status
@@ -62,7 +75,8 @@ const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
   const handlePost = () => {
     const trimmed = newComment.trim();
     if (!trimmed) return;
-    addMutation.mutate(trimmed);
+    const mentionedUserIds = extractMentionIds(trimmed);
+    addMutation.mutate({ comment: trimmed, mentionedUserIds });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -146,9 +160,10 @@ const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
                 </div>
                 {editingId === comment.id ? (
                   <div className="comment-edit-area">
-                    <textarea
+                    <MentionTextarea
                       value={editText}
-                      onChange={e => setEditText(e.target.value)}
+                      onChange={setEditText}
+                      employees={employees}
                       rows={2}
                       autoFocus
                     />
@@ -166,7 +181,7 @@ const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
                     </div>
                   </div>
                 ) : (
-                  <p className="comment-text">{comment.comment}</p>
+                  <MentionText text={comment.comment} className="comment-text" />
                 )}
               </div>
             </div>
@@ -175,11 +190,12 @@ const CommentThread: React.FC<CommentThreadProps> = ({ opportunityId }) => {
       </div>
 
       <div className="comment-input-area">
-        <textarea
+        <MentionTextarea
           value={newComment}
-          onChange={e => setNewComment(e.target.value)}
+          onChange={setNewComment}
           onKeyDown={handleKeyDown}
-          placeholder="Add a comment..."
+          employees={employees}
+          placeholder="Add a comment... Use @ to mention someone"
           rows={2}
         />
         <div className="comment-input-footer">

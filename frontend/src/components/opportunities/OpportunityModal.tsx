@@ -70,7 +70,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     awarded_status: opportunity?.awarded_status || ''
   });
 
-  const [activeTab, setActiveTab] = useState<'details' | 'activities' | 'comments' | 'score'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
 
@@ -270,14 +270,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     e.preventDefault();
     if (!validateForm()) return;
 
-    // New mode: go to score tab instead of creating immediately
     if (!isEditMode) {
-      setActiveTab('score');
+      // Go to estimate tab; Create button lives there
+      setActiveTab('estimate');
       return;
     }
 
     const cleanedData = buildPayload();
-    console.log('Submitting opportunity data:', cleanedData);
     updateMutation.mutate(cleanedData);
   };
 
@@ -320,31 +319,23 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
           >
             Details
           </button>
+          <button
+            className={`tab ${activeTab === 'estimate' ? 'active' : ''}`}
+            onClick={() => setActiveTab('estimate')}
+          >
+            Estimate
+          </button>
           {isEditMode && (
             <button
-              className={`tab ${activeTab === 'activities' ? 'active' : ''}`}
-              onClick={() => setActiveTab('activities')}
+              className={`tab ${activeTab === 'activity_comments' ? 'active' : ''}`}
+              onClick={() => setActiveTab('activity_comments')}
             >
-              Activities
+              Activity & Comments
               {opportunity?.activity_count && opportunity.activity_count > 0 && (
                 <span className="tab-badge">{opportunity.activity_count}</span>
               )}
             </button>
           )}
-          {isEditMode && (
-            <button
-              className={`tab ${activeTab === 'comments' ? 'active' : ''}`}
-              onClick={() => setActiveTab('comments')}
-            >
-              Comments
-            </button>
-          )}
-          <button
-            className={`tab ${activeTab === 'score' ? 'active' : ''}`}
-            onClick={() => setActiveTab('score')}
-          >
-            Opportunity Score
-          </button>
         </div>
 
         {/* Tab Content */}
@@ -752,15 +743,16 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   </div>
                 </div>
 
-                {/* Right column: Titan Estimate */}
-                {isEditMode && (
-                  <div className="opportunity-form-right">
-                    <TitanEstimate
-                      opportunityId={opportunity!.id}
-                      estimatedValue={Number(formData.estimated_value) || 0}
-                    />
-                  </div>
-                )}
+                {/* Right column: Score + Estimate */}
+                <div className="opportunity-form-right">
+                  <OpportunityScore
+                    opportunityId={isEditMode ? opportunity!.id : undefined}
+                    stageName={stages.find((s: any) => String(s.id) === String(formData.stage_id))?.name || ''}
+                    localMode={!isEditMode}
+                    onScoreChange={!isEditMode ? (data: OpportunityScoreInput) => setPendingScoreData(data) : undefined}
+                    compact
+                  />
+                </div>
               </div>
 
               {/* Form Actions */}
@@ -784,45 +776,99 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   <button
                     type="submit"
                     className="btn-primary"
-                    disabled={updateMutation.isPending}
+                    disabled={updateMutation.isPending || createMutation.isPending}
                   >
                     {updateMutation.isPending
                       ? 'Saving...'
                       : isEditMode
                       ? 'Update'
-                      : 'Next: Score →'}
+                      : 'Next: Estimate \u2192'}
                   </button>
                 </div>
               </div>
             </form>
-          ) : activeTab === 'activities' ? (
-            <ActivityTimeline opportunityId={opportunity!.id} />
-          ) : activeTab === 'comments' ? (
-            <div className="comments-tab-content">
-              <CommentThread opportunityId={opportunity!.id} />
+          ) : activeTab === 'activity_comments' ? (
+            <div className="activity-comments-split">
+              <div className="split-activities">
+                <ActivityTimeline opportunityId={opportunity!.id} />
+              </div>
+              <div className="split-divider" />
+              <div className="split-comments">
+                <CommentThread opportunityId={opportunity!.id} employees={employees} />
+              </div>
             </div>
-          ) : activeTab === 'score' ? (
-            <div className="score-tab-content">
-              <OpportunityScore
-                opportunityId={isEditMode ? opportunity!.id : undefined}
-                stageName={stages.find((s: any) => String(s.id) === String(formData.stage_id))?.name || ''}
-                localMode={!isEditMode}
-                onScoreChange={!isEditMode ? setPendingScoreData : undefined}
-              />
-              {!isEditMode && (
-                <div className="form-actions" style={{ marginTop: '1rem' }}>
-                  <div className="form-actions-left">
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setActiveTab('details')}
-                    >
-                      ← Back to Details
-                    </button>
+          ) : activeTab === 'estimate' ? (
+            <div className="estimate-tab-wrapper">
+              <div className="estimate-tab-content">
+                <div className="estimate-main">
+                  <TitanEstimate
+                    opportunityId={isEditMode ? opportunity!.id : undefined}
+                    estimatedValue={Number(formData.estimated_value) || 0}
+                  />
+                </div>
+                <div className="estimate-divider" />
+                <div className="estimate-instructions">
+                  <h4 className="estimate-instructions-title">How to Use This Estimate</h4>
+
+                  <div className="estimate-legend">
+                    <div className="estimate-legend-item">
+                      <span className="estimate-legend-swatch estimate-legend-green" />
+                      <span><strong>Required</strong> — Select your trades and set shop fab % for each</span>
+                    </div>
+                    <div className="estimate-legend-item">
+                      <span className="estimate-legend-swatch estimate-legend-yellow" />
+                      <span><strong>Suggested</strong> — Pre-filled from historical data. Adjust to match this project</span>
+                    </div>
                   </div>
+
+                  <div className="estimate-steps">
+                    <div className="estimate-step">
+                      <span className="estimate-step-num">1</span>
+                      <div>
+                        <strong>Select trades</strong>
+                        <p>Check the trades that apply to this project (Pipefitting, Sheet Metal, Plumbing). At least one trade is required.</p>
+                      </div>
+                    </div>
+                    <div className="estimate-step">
+                      <span className="estimate-step-num">2</span>
+                      <div>
+                        <strong>Set shop fab hours %</strong>
+                        <p>For each selected trade, enter the percentage of labor hours performed in the shop vs. field.</p>
+                      </div>
+                    </div>
+                    <div className="estimate-step">
+                      <span className="estimate-step-num">3</span>
+                      <div>
+                        <strong>Review cost breakdown</strong>
+                        <p>The yellow-highlighted percentages are derived from historical project data. Adjust them to better reflect this specific project's scope.</p>
+                      </div>
+                    </div>
+                    <div className="estimate-step">
+                      <span className="estimate-step-num">4</span>
+                      <div>
+                        <strong>Verify labor rates</strong>
+                        <p>Confirm the $/hr rates at the bottom match current rates for each trade.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="estimate-why">
+                    <strong>Why this matters</strong>
+                    <p>This estimate overlays projected field and shop hours onto your existing backlog to forecast labor workforce needs by trade and shop/field. Accurate inputs here drive reliable capacity planning across the pipeline.</p>
+                  </div>
+
+                  <div className="estimate-note">
+                    All changes auto-save. Use the <strong>Reset</strong> button to restore default values.
+                  </div>
+                </div>
+              </div>
+
+              {!isEditMode && (
+                <div className="form-actions">
+                  <div className="form-actions-left" />
                   <div className="form-actions-right">
-                    <button type="button" className="btn-secondary" onClick={onClose}>
-                      Cancel
+                    <button type="button" className="btn-secondary" onClick={() => setActiveTab('details')}>
+                      &#8592; Back
                     </button>
                     <button
                       type="button"

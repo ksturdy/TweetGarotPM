@@ -9,6 +9,8 @@ interface OpportunityScoreProps {
   /** When true, skips API calls and reports form data via onScoreChange */
   localMode?: boolean;
   onScoreChange?: (data: OpportunityScoreInput) => void;
+  /** When true, renders in compact sidebar layout */
+  compact?: boolean;
 }
 
 // Factor definitions matching the TITAN Pursuit Pipeline guideline
@@ -142,7 +144,7 @@ function formFromScore(score: OpportunityScoreData): ScoreFormState {
   };
 }
 
-const OpportunityScore: React.FC<OpportunityScoreProps> = ({ opportunityId, stageName, localMode, onScoreChange }) => {
+const OpportunityScore: React.FC<OpportunityScoreProps> = ({ opportunityId, stageName, localMode, onScoreChange, compact }) => {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [form, setForm] = useState<ScoreFormState>(EMPTY_FORM);
@@ -296,7 +298,7 @@ const OpportunityScore: React.FC<OpportunityScoreProps> = ({ opportunityId, stag
   };
 
   if (!localMode && isLoading) {
-    return <div className="opp-score"><div className="opp-score-loading">Loading scorecard...</div></div>;
+    return <div className={`opp-score${compact ? ' opp-score--compact' : ''}`}><div className="opp-score-loading">Loading scorecard...</div></div>;
   }
 
   const visibleFactors = FACTORS.filter(f => gate === 2 || f.gate === 1);
@@ -304,7 +306,7 @@ const OpportunityScore: React.FC<OpportunityScoreProps> = ({ opportunityId, stag
   const recInfo = REC_LABELS[recommendation] || REC_LABELS.no_go;
 
   return (
-    <div className="opp-score">
+    <div className={`opp-score${compact ? ' opp-score--compact' : ''}`}>
       {/* Header */}
       <div className="opp-score-hdr">
         <div className="opp-score-hdr-left">

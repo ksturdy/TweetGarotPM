@@ -327,10 +327,11 @@ const opportunitiesService = {
     return response.data;
   },
 
-  async addComment(opportunityId: number, comment: string, autoFollow: boolean = true): Promise<OpportunityComment> {
+  async addComment(opportunityId: number, comment: string, autoFollow: boolean = true, mentionedUserIds: number[] = []): Promise<OpportunityComment> {
     const response = await api.post(`/opportunities/${opportunityId}/comments`, {
       comment,
       auto_follow: autoFollow,
+      mentioned_user_ids: mentionedUserIds,
     });
     return response.data;
   },
