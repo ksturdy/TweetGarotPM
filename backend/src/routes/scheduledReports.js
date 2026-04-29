@@ -109,21 +109,29 @@ router.delete('/:id', async (req, res) => {
 
 /**
  * POST /api/scheduled-reports/:id/send-now
- * Manually trigger a one-off send for testing
+ * Manually trigger a one-off send. Responds immediately and processes in background
+ * so the user can navigate away without interrupting the report generation.
  */
 router.post('/:id/send-now', async (req, res) => {
   try {
     const report = await ScheduledReport.findById(parseInt(req.params.id), req.tenantId);
     if (!report) return res.status(404).json({ error: 'Scheduled report not found' });
 
-    // Lazy-load the runner to avoid circular dependencies at startup
-    const { executeScheduledReport } = require('../jobs/scheduledReportRunner');
-    const result = await executeScheduledReport(report);
+    // Respond immediately — report will generate and send in the background
+    res.status(202).json({ message: 'Report queued — it will be emailed shortly.' });
 
-    res.json({ message: 'Report sent successfully', result });
+    // Fire-and-forget: run in background so navigation doesn't cancel it
+    const { executeScheduledReport } = require('../jobs/scheduledReportRunner');
+    executeScheduledReport(report)
+      .then(result => {
+        console.log(`[Scheduled Reports] Send-now completed for "${report.name}" (id=${report.id}), sent to ${result.recipientCount} recipient(s)`);
+      })
+      .catch(error => {
+        console.error(`[Scheduled Reports] Send-now failed for "${report.name}" (id=${report.id}):`, error.message);
+      });
   } catch (error) {
-    console.error('Error sending scheduled report:', error);
-    res.status(500).json({ error: `Failed to send report: ${error.message}` });
+    console.error('Error queuing scheduled report:', error);
+    res.status(500).json({ error: `Failed to queue report: ${error.message}` });
   }
 });
 

@@ -259,13 +259,13 @@ const opportunities = {
         lost_reason = COALESCE($15, lost_reason),
         market = COALESCE($16, market),
         owner = COALESCE($17, owner),
-        general_contractor = COALESCE($18, general_contractor),
-        architect = COALESCE($19, architect),
-        engineer = COALESCE($20, engineer),
+        general_contractor = $18,
+        architect = $19,
+        engineer = $20,
         campaign_id = $21,
         customer_id = $22,
         gc_customer_id = $23,
-        facility_name = COALESCE($24, facility_name),
+        facility_name = $24,
         facility_location_id = $25,
         awarded_status = COALESCE($26, awarded_status),
         updated_at = CURRENT_TIMESTAMP
@@ -277,8 +277,8 @@ const opportunities = {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date || null,
       typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, probability, lost_reason,
-      market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-      facility_name, facility_location_id, awarded_status || null, id, tenantId
+      market, owner, general_contractor || null, architect || null, engineer || null, campaign_id, customer_id, gc_customer_id,
+      facility_name || null, facility_location_id, awarded_status || null, id, tenantId
     ]);
 
     return result.rows[0];

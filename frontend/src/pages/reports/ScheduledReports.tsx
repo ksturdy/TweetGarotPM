@@ -222,11 +222,11 @@ const ScheduledReports: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-reports'] });
       setSendingId(null);
-      showToast('Report sent successfully', 'success');
+      showToast('Report queued — it will be emailed shortly', 'success');
     },
     onError: (err: any) => {
       setSendingId(null);
-      showToast(err?.response?.data?.error || 'Failed to send report', 'error');
+      showToast(err?.response?.data?.error || 'Failed to queue report', 'error');
     },
   });
 

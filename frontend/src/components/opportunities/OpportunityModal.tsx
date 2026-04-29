@@ -243,13 +243,13 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     if (formData.source) cleanedData.source = formData.source;
     if (formData.market) cleanedData.market = formData.market;
     if (formData.owner) cleanedData.owner = formData.owner;
-    if (formData.general_contractor) cleanedData.general_contractor = formData.general_contractor;
-    if (formData.architect) cleanedData.architect = formData.architect;
-    if (formData.engineer) cleanedData.engineer = formData.engineer;
+    cleanedData.general_contractor = formData.general_contractor || null;
+    cleanedData.architect = formData.architect || null;
+    cleanedData.engineer = formData.engineer || null;
 
     cleanedData.customer_id = formData.customer_id ? Number(formData.customer_id) : null;
     cleanedData.gc_customer_id = formData.gc_customer_id ? Number(formData.gc_customer_id) : null;
-    if (formData.facility_name) cleanedData.facility_name = formData.facility_name;
+    cleanedData.facility_name = formData.facility_name || null;
     cleanedData.facility_location_id = formData.facility_location_id ? Number(formData.facility_location_id) : null;
 
     if (formData.estimated_value) cleanedData.estimated_value = Number(formData.estimated_value);
