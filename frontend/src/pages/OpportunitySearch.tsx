@@ -1176,6 +1176,9 @@ const OpportunitySearch: React.FC = () => {
                   <div className="opp-search-lead-tags">
                     <span className="opp-search-tag market">{lead.market_sector}</span>
                     <span className="opp-search-tag construction">{lead.construction_type}</span>
+                    {lead.project_phase && (
+                      <span className="opp-search-tag phase">{lead.project_phase}</span>
+                    )}
                     <span className="opp-search-tag location">{lead.location}</span>
                     <span className="opp-search-tag timeline">{lead.timeline}</span>
                     {lead.estimated_start_date && (

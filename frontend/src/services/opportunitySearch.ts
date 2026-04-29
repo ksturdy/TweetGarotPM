@@ -25,6 +25,7 @@ export interface GeneratedLead {
   location: string;
   construction_type: string;
   market_sector: string;
+  project_phase: string | null;
   general_contractor: string;
   estimated_start_date: string;
   mechanical_scope: string;
