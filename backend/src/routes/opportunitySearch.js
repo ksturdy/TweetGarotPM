@@ -24,8 +24,8 @@ CRITICAL RULES:
 - Every project you return MUST be based on a real news article, press release, permit filing, or official announcement found via web search.
 - If you cannot find verified projects matching the criteria, say so honestly. Do NOT invent projects to fill results.
 - Include the source URL for every project.
-- Run multiple searches to be thorough - search for news articles, owner press releases, permit filings, and GC announcements.
-- LOCATION INTERPRETATION: When given a specific city/location, interpret it broadly to include the surrounding region, metro area, and state. For example, "Marquette, MI" should include searches for Michigan, Upper Peninsula, Northern Michigan, etc. Look for projects within a reasonable service area (typically 100-200 mile radius for large mechanical contractors).
+- Run AT LEAST 5-8 different web searches with varied search terms. Do NOT stop after 1-2 searches. Use different combinations of: location names, market sectors, project types, owner types, "construction planned", "new facility", permit databases, and industry publications. More searches = more leads found.
+- LOCATION INTERPRETATION: When given a specific city/location, interpret it broadly to include the surrounding region, metro area, and state. For example, "Marquette, MI" should include searches for Michigan, Upper Peninsula, Northern Michigan, etc. Look for projects within a reasonable service area (typically 100-200 mile radius for large mechanical contractors). Run separate searches for the city, metro area, surrounding counties, and state-level project lists.
 
 PROJECT PHASE FILTERING (VERY IMPORTANT):
 - ONLY return projects that are in planning, design, pre-construction, or early bidding phases — these are UPCOMING opportunities where a mechanical contractor can still win work.
@@ -70,7 +70,7 @@ function buildUserMessage(criteria) {
     parts.push(`- Keywords/Focus: ${criteria.keywords}`);
   }
   if (criteria.additional_criteria) {
-    parts.push(`- Additional Context: ${criteria.additional_criteria}`);
+    parts.push(`\nUSER INSTRUCTIONS (follow these closely):\n${criteria.additional_criteria}`);
   }
 
   parts.push(`\nIMPORTANT SEARCH GUIDANCE:`);
@@ -304,11 +304,34 @@ router.post('/generate', async (req, res, next) => {
       min_value, max_value, keywords, additional_criteria
     });
 
+    // Build web search tool config with location-aware search and generous search budget
+    const webSearchTool = {
+      type: 'web_search_20250305',
+      name: 'web_search',
+      max_uses: 10,
+    };
+
+    // If a location was provided, set user_location to localize search results
+    if (location) {
+      const locParts = location.split(',').map(s => s.trim());
+      const locConfig = { type: 'approximate' };
+      if (locParts.length >= 2) {
+        locConfig.city = locParts[0];
+        locConfig.region = locParts[1];
+        locConfig.country = 'US';
+      } else if (locParts.length === 1) {
+        locConfig.region = locParts[0];
+        locConfig.country = 'US';
+      }
+      webSearchTool.user_location = locConfig;
+      console.log('[Opportunity Search] User location set to:', JSON.stringify(locConfig));
+    }
+
     const response = await callAnthropicWithRetry({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 16000,
       system: SYSTEM_PROMPT,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      tools: [webSearchTool],
       messages: [{ role: 'user', content: userMessage }]
     });
 

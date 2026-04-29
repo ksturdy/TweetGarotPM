@@ -274,12 +274,32 @@ const REPORT_HANDLERS = {
     const criteria = recurringSearch.criteria;
     const userMessage = buildUserMessage(criteria);
 
+    // Build web search tool config (same logic as main route)
+    const webSearchTool = {
+      type: 'web_search_20250305',
+      name: 'web_search',
+      max_uses: 10,
+    };
+    if (criteria.location) {
+      const locParts = criteria.location.split(',').map(s => s.trim());
+      const locConfig = { type: 'approximate' };
+      if (locParts.length >= 2) {
+        locConfig.city = locParts[0];
+        locConfig.region = locParts[1];
+        locConfig.country = 'US';
+      } else if (locParts.length === 1) {
+        locConfig.region = locParts[0];
+        locConfig.country = 'US';
+      }
+      webSearchTool.user_location = locConfig;
+    }
+
       try {
         const response = await anthropic.messages.create({
           model: 'claude-sonnet-4-5-20250929',
           max_tokens: 16000,
           system: SYSTEM_PROMPT,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          tools: [webSearchTool],
           messages: [{ role: 'user', content: userMessage }]
         });
 
