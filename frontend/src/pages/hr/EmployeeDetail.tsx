@@ -326,7 +326,14 @@ const EmployeeDetail: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Hire Date</div>
-                <div style={{ fontSize: '14px' }}>{employee.hire_date ? format(new Date(employee.hire_date + 'T00:00:00'), 'MMM d, yyyy') : '-'}</div>
+                <div style={{ fontSize: '14px' }}>{(() => {
+                  if (!employee.hire_date) return '-';
+                  try {
+                    const raw = String(employee.hire_date);
+                    const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + 'T00:00:00' : raw);
+                    return isNaN(d.getTime()) ? '-' : format(d, 'MMM d, yyyy');
+                  } catch { return '-'; }
+                })()}</div>
               </div>
               <div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>HR Role</div>
