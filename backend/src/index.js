@@ -111,6 +111,7 @@ const directMessageRoutes = require('./routes/directMessages');
 const customMapLayerRoutes = require('./routes/customMapLayers');
 const leadInboxRoutes = require('./routes/leadInbox');
 const weeklySalesReportRoutes = require('./routes/weeklySalesReport');
+const projectCostModelRoutes = require('./routes/projectCostModel');
 
 const app = express();
 const server = http.createServer(app);
@@ -259,6 +260,7 @@ app.use('/api/dm', directMessageRoutes);
 app.use('/api/custom-map-layers', customMapLayerRoutes);
 app.use('/api/lead-inbox', leadInboxRoutes);
 app.use('/api/reports/weekly-sales', weeklySalesReportRoutes);
+app.use('/api/projects', projectCostModelRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -28,6 +28,7 @@ const MODULE_ICONS: Record<string, string> = {
   'phase-schedule': '📊',
   'weekly-goals': '🎯',
   issues: '⚠️',
+  'cost-model': '🔧',
 };
 
 const MODULES = [
@@ -43,6 +44,7 @@ const MODULES = [
   { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
   { path: 'phase-schedule', label: 'Phase Schedule', description: 'Schedule phase codes with work contours' },
   { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
+  { path: 'cost-model', label: 'Cost Model', description: 'Equipment counts and cost data' },
 ];
 
 // ── Formatting helpers ──────────────────────────────────────────────

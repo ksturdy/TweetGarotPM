@@ -82,6 +82,7 @@ import SecuritySettings from './pages/SecuritySettings';
 import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
+import ProjectCostModel from './pages/projects/ProjectCostModel';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
 import CostDrillIn from './pages/projects/CostDrillIn';
@@ -479,6 +480,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:id/specifications/:specId" element={<SpecificationDetail />} />
                 <Route path="/projects/:id/drawings" element={<ProjectDrawings />} />
                 <Route path="/projects/:id/drawings/:drawingId" element={<DrawingDetail />} />
+                <Route path="/projects/:id/cost-model" element={<ProjectCostModel />} />
               </Routes>
             </Layout>
               </ForemanRoute>
