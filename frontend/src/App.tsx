@@ -31,6 +31,7 @@ import Branding from './pages/marketing/Branding';
 import CaseStudyList from './pages/marketing/CaseStudyList';
 import CaseStudyForm from './pages/marketing/CaseStudyForm';
 import CaseStudyDetail from './pages/marketing/CaseStudyDetail';
+import CaseStudyImport from './pages/marketing/CaseStudyImport';
 import CaseStudyTemplateList from './pages/marketing/CaseStudyTemplateList';
 import CaseStudyTemplateForm from './pages/marketing/CaseStudyTemplateForm';
 import SellSheetList from './pages/marketing/SellSheetList';
@@ -374,6 +375,7 @@ const App: React.FC = () => {
                 <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
                 <Route path="/marketing/custom-maps" element={<CustomMaps />} />
                 <Route path="/case-studies" element={<CaseStudyList />} />
+                <Route path="/case-studies/import" element={<CaseStudyImport />} />
                 <Route path="/case-studies/create" element={<CaseStudyForm />} />
                 <Route path="/case-studies/:id" element={<CaseStudyDetail />} />
                 <Route path="/sell-sheets" element={<SellSheetList />} />

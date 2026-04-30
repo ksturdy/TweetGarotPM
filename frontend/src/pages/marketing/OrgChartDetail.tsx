@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { orgChartsApi, OrgChartMember } from '../../services/orgCharts';
@@ -24,6 +24,19 @@ const OrgChartDetail: React.FC = () => {
     queryFn: () => orgChartsApi.getById(parseInt(id!)),
     enabled: !!id,
   });
+
+  const members: OrgChartPerson[] = useMemo(() =>
+    (chart?.members || []).map(m => ({
+      id: m.id,
+      first_name: m.first_name,
+      last_name: m.last_name,
+      title: m.title,
+      email: m.email,
+      phone: m.phone,
+      reports_to: m.reports_to,
+    })),
+    [chart?.members]
+  );
 
   const updateMutation = useMutation({
     mutationFn: (data: { name: string; description?: string; project_id?: number }) =>
@@ -94,16 +107,6 @@ const OrgChartDetail: React.FC = () => {
       </div>
     );
   }
-
-  const members: OrgChartPerson[] = (chart.members || []).map(m => ({
-    id: m.id,
-    first_name: m.first_name,
-    last_name: m.last_name,
-    title: m.title,
-    email: m.email,
-    phone: m.phone,
-    reports_to: m.reports_to,
-  }));
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '100%', height: '100vh', overflow: 'auto' }}>
@@ -318,7 +321,9 @@ const OrgChartDetail: React.FC = () => {
         borderRadius: '8px',
         padding: '2rem',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        minHeight: 'calc(100vh - 300px)'
+        height: 'calc(100vh - 300px)',
+        display: 'flex',
+        flexDirection: 'column'
       }}>
         {members.length === 0 ? (
           <div style={{

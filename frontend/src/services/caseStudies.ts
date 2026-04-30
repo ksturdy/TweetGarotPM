@@ -86,6 +86,61 @@ export interface CaseStudyImage {
   uploaded_at: string;
 }
 
+// --- Import types ---
+
+export interface ImportParsedData {
+  title: string;
+  subtitle?: string | null;
+  project_name: string;
+  location?: string | null;
+  market?: string | null;
+  construction_type?: string[];
+  services_provided?: string[];
+  challenge: string;
+  solution: string;
+  results: string;
+  executive_summary?: string | null;
+  general_contractor?: string | null;
+  owner?: string | null;
+  architect?: string | null;
+  engineer?: string | null;
+  square_footage?: number | null;
+  contract_value?: number | null;
+  project_duration?: string | null;
+  extracted_images?: Array<{
+    file_name: string;
+    file_path: string;
+    file_size: number;
+    file_type: string;
+  }>;
+}
+
+export interface ImportProjectMatch {
+  project_id: number;
+  project_name: string;
+  project_number: string;
+  client: string;
+  market?: string;
+  contract_value?: number;
+  confidence: number;
+  match_reasons: string[];
+}
+
+export interface ImportCustomerMatch {
+  customer_id: number;
+  customer_name: string;
+  confidence: number;
+}
+
+export interface ImportResult {
+  filename: string;
+  status: 'success' | 'error';
+  error?: string;
+  parsed?: ImportParsedData;
+  project_matches?: ImportProjectMatch[];
+  customer_matches?: ImportCustomerMatch[];
+}
+
 export const caseStudiesApi = {
   // Case study CRUD
   getAll: (filters?: {
@@ -146,4 +201,19 @@ export const caseStudiesApi = {
   // PDF
   downloadPdf: (id: number) =>
     api.get(`/case-studies/${id}/pdf-download`, { responseType: 'blob' }),
+
+  // Import from Word documents
+  importDocx: (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    return api.post<{ results: ImportResult[] }>('/case-studies/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 10 minutes for large batches
+    });
+  },
+
+  confirmImport: (caseStudies: Record<string, any>[]) =>
+    api.post<{ created: any[]; errors: any[] }>('/case-studies/import/confirm', {
+      case_studies: caseStudies,
+    }),
 };

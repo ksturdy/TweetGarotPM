@@ -112,6 +112,12 @@ const CaseStudyList: React.FC = () => {
         </div>
         <div className="sales-header-actions">
           <button
+            className="btn btn-secondary"
+            onClick={() => navigate('/case-studies/import')}
+          >
+            Import from Word
+          </button>
+          <button
             className="btn btn-primary"
             onClick={() => navigate('/case-studies/create')}
           >

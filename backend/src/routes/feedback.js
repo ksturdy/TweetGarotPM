@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/database');
 const Feedback = require('../models/Feedback');
 const Notification = require('../models/Notification');
 const { sendEmail } = require('../utils/emailService');
@@ -75,6 +76,88 @@ router.post('/', async (req, res) => {
       type,
       priority
     }, req.tenantId);
+
+    // Notify all admin users (fire-and-forget)
+    (async () => {
+      try {
+        const adminResult = await db.query(
+          `SELECT id, email, first_name, last_name FROM users
+           WHERE tenant_id = $1 AND role = 'admin' AND is_active = true AND id != $2`,
+          [req.tenantId, req.user.id]
+        );
+        const admins = adminResult.rows;
+
+        const submitterName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'A user';
+        const typeLabel = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const appBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
+
+        for (const admin of admins) {
+          let emailSent = false;
+
+          if (admin.email) {
+            const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #002356, #004080); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 5px 0 0; opacity: 0.9; font-size: 14px; }
+    .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; }
+    .info-row { display: flex; margin-bottom: 10px; }
+    .info-label { font-weight: 600; color: #6b7280; width: 120px; flex-shrink: 0; }
+    .info-value { color: #1f2937; }
+    .btn { display: inline-block; background: #002356; color: white !important; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 15px; }
+    .footer { background: #f3f4f6; padding: 15px 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; font-size: 12px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>New Feedback Submitted</h1>
+    <p>${title}</p>
+  </div>
+  <div class="content">
+    <div class="info-row"><span class="info-label">Submitted By:</span><span class="info-value">${submitterName}</span></div>
+    <div class="info-row"><span class="info-label">Type:</span><span class="info-value">${typeLabel}</span></div>
+    <div class="info-row"><span class="info-label">Module:</span><span class="info-value">${module || '-'}</span></div>
+    <div class="info-row"><span class="info-label">Priority:</span><span class="info-value">${(priority || 'medium').charAt(0).toUpperCase() + (priority || 'medium').slice(1)}</span></div>
+    <p style="margin-top: 15px; color: #374151;">${description}</p>
+    ${appBaseUrl ? `<p><a href="${appBaseUrl}/feedback" class="btn">View in TITAN</a></p>` : ''}
+  </div>
+  <div class="footer">
+    <p>This is an automated notification from TITAN Project Management.</p>
+  </div>
+</body>
+</html>`;
+
+            const result = await sendEmail({
+              to: admin.email,
+              subject: `[TITAN] New Feedback: ${title}`,
+              html,
+              text: `${submitterName} submitted new feedback: "${title}"\n\nType: ${typeLabel}\nModule: ${module || '-'}\nPriority: ${priority || 'medium'}\n\n${description}`,
+            });
+            emailSent = result.success === true;
+          }
+
+          await Notification.create({
+            tenantId: req.tenantId,
+            userId: admin.id,
+            entityType: 'feedback',
+            entityId: feedback.id,
+            eventType: 'created',
+            title: 'New Feedback Submitted',
+            message: `${submitterName} submitted feedback: "${title}"`,
+            link: '/feedback',
+            createdBy: req.user.id,
+            emailSent,
+          });
+        }
+      } catch (err) {
+        console.error('Feedback admin notification error:', err);
+      }
+    })();
 
     res.status(201).json(feedback);
   } catch (error) {

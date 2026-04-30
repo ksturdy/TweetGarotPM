@@ -326,7 +326,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
     // Calculate zoom to fit
     const zoomX = (containerRect.width - PADDING * 2) / contentWidth;
     const zoomY = (containerRect.height - PADDING * 2) / contentHeight;
-    const newZoom = Math.min(zoomX, zoomY, 1); // Don't zoom in beyond 100%
+    const newZoom = Math.max(0.05, Math.min(zoomX, zoomY, 1)); // Clamp to [0.05, 1]
 
     // Center the content
     const newPan = {
@@ -362,22 +362,20 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
     return { width, height };
   };
 
-  // Generate SVG connectors
+  // Generate SVG connectors directly from contacts (avoids tree closure issues)
   const generateConnectors = () => {
-    const connectors: JSX.Element[] = [];
+    if (nodes.size === 0) return [];
 
-    const traverse = (node: OrgNode) => {
-      const parentPos = nodes.get(node.id);
-      if (!parentPos) return;
+    const CARD_WIDTH = 320;
+    const CARD_HEIGHT = 140;
 
-      node.children.forEach(child => {
-        const childPos = nodes.get(child.id);
-        if (!childPos) return;
+    return contacts
+      .filter(c => c.reports_to != null)
+      .map(contact => {
+        const childPos = nodes.get(contact.id);
+        const parentPos = nodes.get(contact.reports_to!);
+        if (!childPos || !parentPos) return null;
 
-        const CARD_WIDTH = 320;
-        const CARD_HEIGHT = 140;
-
-        // Calculate start and end points (center bottom of parent to center top of child)
         const x1 = parentPos.x + CARD_WIDTH / 2;
         const y1 = parentPos.y + CARD_HEIGHT;
         const x2 = childPos.x + CARD_WIDTH / 2;
@@ -385,32 +383,25 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
 
         let path: string;
         if (connectorStyle === 'orthogonal') {
-          // Create 90-degree connectors
           const midY = (y1 + y2) / 2;
           path = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
         } else {
-          // Create curved connectors
           const midY = (y1 + y2) / 2;
           path = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
         }
 
-        connectors.push(
+        return (
           <path
-            key={`${node.id}-${child.id}`}
+            key={`connector-${contact.reports_to}-${contact.id}`}
             d={path}
-            stroke="#cbd5e1"
-            strokeWidth="2"
+            stroke="#94a3b8"
+            strokeWidth="2.5"
             fill="none"
             className="org-connector"
           />
         );
-
-        traverse(child);
-      });
-    };
-
-    tree.forEach(root => traverse(root));
-    return connectors;
+      })
+      .filter((el): el is JSX.Element => el !== null);
   };
 
   const svgDims = getSvgDimensions();
@@ -424,7 +415,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   }
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', flex: 1, minHeight: 0 }}>
       {/* Zoom Controls */}
       <div className="org-zoom-controls">
         <button onClick={handleZoomIn} title="Zoom In" className="org-zoom-btn">+</button>

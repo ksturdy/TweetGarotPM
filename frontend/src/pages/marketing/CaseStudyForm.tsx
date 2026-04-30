@@ -153,6 +153,7 @@ const CaseStudyForm: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerLogoUrl, setCustomerLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Load existing case study if editing
@@ -328,6 +329,14 @@ const CaseStudyForm: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
       queryClient.invalidateQueries({ queryKey: ['caseStudy', id] });
+      navigate('/case-studies');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => caseStudiesApi.delete(parseInt(id!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['caseStudies'] });
       navigate('/case-studies');
     },
   });
@@ -1055,7 +1064,26 @@ const CaseStudyForm: React.FC = () => {
         )}
 
         {/* Form Actions */}
-        <div className="form-actions" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+        <div className="form-actions" style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+          {isEditMode && (
+            <button
+              type="button"
+              style={{
+                marginRight: 'auto',
+                background: 'none',
+                border: '1px solid var(--danger)',
+                color: 'var(--danger)',
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleteMutation.isPending}
+            >
+              Delete Case Study
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-secondary"
@@ -1080,6 +1108,53 @@ const CaseStudyForm: React.FC = () => {
         {(createMutation.isError || updateMutation.isError) && (
           <div className="error-message" style={{ marginTop: '1rem' }}>
             Failed to save case study. Please try again.
+          </div>
+        )}
+
+        {deleteMutation.isError && (
+          <div className="error-message" style={{ marginTop: '1rem' }}>
+            Failed to delete case study. Please try again.
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+          }}>
+            <div style={{
+              backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem',
+              maxWidth: '420px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}>
+              <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.1rem' }}>Delete Case Study</h3>
+              <p style={{ margin: '0 0 1.25rem', color: '#4b5563', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                Are you sure you want to delete <strong>{formData.title || 'this case study'}</strong>? This action cannot be undone and will also remove all associated images.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleteMutation.isPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    backgroundColor: 'var(--danger)', color: 'white', border: 'none',
+                    padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer',
+                    fontSize: '0.875rem', fontWeight: 500,
+                  }}
+                  onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
+                >
+                  {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </form>

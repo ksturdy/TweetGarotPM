@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
@@ -73,6 +73,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Get tenant branding
   const logoUrl = tenant?.settings?.branding?.logo_url;
   const companyName = tenant?.settings?.branding?.company_name || tenant?.name;
+
 
   return (
     <div className="layout">

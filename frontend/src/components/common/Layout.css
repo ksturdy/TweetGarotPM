@@ -244,20 +244,17 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
-.btn-header {
+.btn.btn-header.btn-sm {
   background: rgba(255, 255, 255, 0.15);
   color: var(--white);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
 }
 
-.btn-header:hover {
+.btn.btn-header.btn-sm:hover {
   background: rgba(255, 255, 255, 0.25);
   color: var(--white);
-}
-
-.btn-sm {
-  padding: 0.375rem 0.875rem;
-  font-size: 0.8125rem;
 }
 
 /* ===== Responsive: Tablet & Mobile (sidebar hidden, hamburger visible) ===== */

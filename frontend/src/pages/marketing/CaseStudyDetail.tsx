@@ -204,8 +204,8 @@ const CaseStudyDetail: React.FC = () => {
                 {unarchiveMutation.isPending ? 'Un-archiving...' : 'Un-archive'}
               </button>
             )}
-            <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>Edit</button>
-            <button className="btn btn-primary" onClick={() => setShowPreview(true)}>Preview / PDF</button>
+            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }} onClick={() => setIsEditing(true)}>Edit</button>
+            <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }} onClick={() => setShowPreview(true)}>Preview / PDF</button>
           </div>
         </div>
       </div>
