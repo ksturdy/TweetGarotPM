@@ -7,6 +7,7 @@ import { customersApi, Customer, getCustomerContacts } from '../../services/cust
 import { caseStudyTemplatesApi, CaseStudyTemplate } from '../../services/caseStudyTemplates';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
 import SearchableSelect from '../../components/SearchableSelect';
+import SearchableMultiSelect from '../../components/SearchableMultiSelect';
 import { MARKETS } from '../../constants/markets';
 import '../../styles/SalesPipeline.css';
 
@@ -119,7 +120,7 @@ const CaseStudyForm: React.FC = () => {
   const [formData, setFormData] = useState({
     title: '',
     subtitle: '',
-    project_id: '',
+    project_ids: [] as string[],
     customer_id: '',
     challenge: '',
     solution: '',
@@ -212,9 +213,9 @@ const CaseStudyForm: React.FC = () => {
     }));
   }, [formData.customer_id, customers, customerContacts]);
 
-  // Update inherited project values when project changes
+  // Update inherited project values when selected projects change (aggregate across all)
   useEffect(() => {
-    if (!formData.project_id) {
+    if (!formData.project_ids || formData.project_ids.length === 0) {
       setInherited(prev => ({
         ...prev,
         start_date: '',
@@ -225,17 +226,36 @@ const CaseStudyForm: React.FC = () => {
       return;
     }
 
-    const project = projects?.find((p: Project) => p.id === parseInt(formData.project_id));
-    if (project) {
+    const selectedProjects = (projects || []).filter((p: Project) =>
+      formData.project_ids.includes(p.id.toString())
+    );
+
+    if (selectedProjects.length > 0) {
+      // Aggregate: SUM values, MIN start, MAX end
+      let totalValue = 0;
+      let totalSqft = 0;
+      let minStart = '';
+      let maxEnd = '';
+
+      for (const p of selectedProjects) {
+        if (p.contract_value) totalValue += Number(p.contract_value);
+        if ((p as any).square_footage) totalSqft += Number((p as any).square_footage);
+
+        const sd = p.start_date || '';
+        const ed = p.end_date || '';
+        if (sd && (!minStart || sd < minStart)) minStart = sd;
+        if (ed && (!maxEnd || ed > maxEnd)) maxEnd = ed;
+      }
+
       setInherited(prev => ({
         ...prev,
-        start_date: project.start_date || '',
-        end_date: project.end_date || '',
-        contract_value: project.contract_value?.toString() || '',
-        square_footage: (project as any).square_footage?.toString() || '',
+        start_date: minStart,
+        end_date: maxEnd,
+        contract_value: totalValue ? totalValue.toString() : '',
+        square_footage: totalSqft ? totalSqft.toString() : '',
       }));
     }
-  }, [formData.project_id, projects]);
+  }, [formData.project_ids, projects]);
 
   // Populate form from existing case study
   useEffect(() => {
@@ -243,7 +263,7 @@ const CaseStudyForm: React.FC = () => {
       setFormData({
         title: caseStudy.title || '',
         subtitle: caseStudy.subtitle || '',
-        project_id: caseStudy.project_id?.toString() || '',
+        project_ids: (caseStudy.project_ids || (caseStudy.project_id ? [caseStudy.project_id] : [])).map((id: number) => id.toString()),
         customer_id: caseStudy.customer_id?.toString() || '',
         challenge: caseStudy.challenge || '',
         solution: caseStudy.solution || '',
@@ -341,7 +361,7 @@ const CaseStudyForm: React.FC = () => {
 
     const submitData: any = {
       ...formData,
-      project_id: formData.project_id ? parseInt(formData.project_id) : null,
+      project_ids: formData.project_ids.map(id => parseInt(id)).filter(id => !isNaN(id)),
       customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
       template_id: formData.template_id ? parseInt(formData.template_id) : null,
       cost_savings: formData.cost_savings ? parseFloat(formData.cost_savings) : null,
@@ -472,13 +492,13 @@ const CaseStudyForm: React.FC = () => {
 
   const projectOptions = useMemo(
     () => (projects || []).map((p: Project) => ({
-      value: p.id,
+      value: p.id.toString(),
       label: p.name,
     })),
     [projects]
   );
 
-  const hasCustomerOrProject = !!formData.customer_id || !!formData.project_id;
+  const hasCustomerOrProject = !!formData.customer_id || formData.project_ids.length > 0;
   const contactFields = overrideFieldMap.filter(f => f.group === 'contact');
   const projectFields = overrideFieldMap.filter(f => f.group === 'project');
 
@@ -643,15 +663,14 @@ const CaseStudyForm: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Project</label>
-              <SearchableSelect
+              <label className="form-label">Projects</label>
+              <SearchableMultiSelect
                 options={projectOptions}
-                value={formData.project_id}
-                onChange={(val) => {
-                  setFormData(prev => ({ ...prev, project_id: val }));
-                  if (errors.project_id) setErrors(prev => ({ ...prev, project_id: '' }));
+                values={formData.project_ids}
+                onChange={(vals) => {
+                  setFormData(prev => ({ ...prev, project_ids: vals }));
                 }}
-                placeholder="Search projects..."
+                placeholder="Search and select projects..."
                 style={{ width: '100%' }}
               />
             </div>
@@ -691,7 +710,7 @@ const CaseStudyForm: React.FC = () => {
               </>
             )}
 
-            {formData.project_id && (
+            {formData.project_ids.length > 0 && (
               <>
                 <div style={{
                   fontSize: '0.8rem',
@@ -702,7 +721,7 @@ const CaseStudyForm: React.FC = () => {
                   marginBottom: '0.5rem',
                   marginTop: formData.customer_id ? '1rem' : '0.25rem',
                 }}>
-                  Project Details
+                  Project Details {formData.project_ids.length > 1 ? `(aggregated from ${formData.project_ids.length} projects)` : ''}
                 </div>
                 {projectFields.map(renderOverrideRow)}
               </>

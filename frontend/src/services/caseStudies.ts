@@ -1,16 +1,28 @@
 import api from './api';
 
+export interface CaseStudyProject {
+  id: number;
+  name: string;
+  contract_value?: number;
+  start_date?: string;
+  end_date?: string;
+  square_footage?: number;
+}
+
 export interface CaseStudy {
   id: number;
   tenant_id: number;
   title: string;
   subtitle?: string;
   project_id?: number;
+  project_ids?: number[];
+  projects?: CaseStudyProject[];
   project_name?: string;
   project_value?: number;
   project_start_date?: string;
   project_end_date?: string;
   project_square_footage?: number;
+  project_count?: number;
   customer_id?: number;
   customer_name?: string;
   customer_account_manager?: string;

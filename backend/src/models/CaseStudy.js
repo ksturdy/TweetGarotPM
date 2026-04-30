@@ -8,7 +8,7 @@ const CaseStudy = {
     const {
       title,
       subtitle,
-      project_id,
+      project_ids,
       customer_id,
       challenge,
       solution,
@@ -36,35 +36,65 @@ const CaseStudy = {
       created_by
     } = data;
 
-    const result = await db.query(
-      `INSERT INTO case_studies (
-        title, subtitle, project_id, customer_id, challenge, solution, results,
-        executive_summary, cost_savings, timeline_improvement_days, quality_score,
-        additional_metrics, market, construction_type, project_size, services_provided,
-        template_id, customer_logo_url,
-        override_contact_name, override_contact_title, override_contact_email,
-        override_contact_phone, override_account_manager,
-        override_start_date, override_end_date, override_contract_value, override_square_footage,
-        created_by, tenant_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
-      RETURNING *`,
-      [
-        title, subtitle, project_id, customer_id, challenge, solution, results,
-        executive_summary, cost_savings, timeline_improvement_days, quality_score,
-        additional_metrics ? JSON.stringify(additional_metrics) : null,
-        market, construction_type, project_size,
-        services_provided, template_id || null, customer_logo_url || null,
-        override_contact_name || null, override_contact_title || null,
-        override_contact_email || null, override_contact_phone || null,
-        override_account_manager || null,
-        override_start_date || null, override_end_date || null,
-        override_contract_value != null ? override_contract_value : null,
-        override_square_footage != null ? override_square_footage : null,
-        created_by, tenantId, 'draft'
-      ]
-    );
-    return result.rows[0];
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `INSERT INTO case_studies (
+          title, subtitle, project_id, customer_id, challenge, solution, results,
+          executive_summary, cost_savings, timeline_improvement_days, quality_score,
+          additional_metrics, market, construction_type, project_size, services_provided,
+          template_id, customer_logo_url,
+          override_contact_name, override_contact_title, override_contact_email,
+          override_contact_phone, override_account_manager,
+          override_start_date, override_end_date, override_contract_value, override_square_footage,
+          created_by, tenant_id, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                  $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        RETURNING *`,
+        [
+          title, subtitle,
+          // Keep project_id populated with first project for backward compat
+          (project_ids && project_ids.length > 0) ? project_ids[0] : null,
+          customer_id, challenge, solution, results,
+          executive_summary, cost_savings, timeline_improvement_days, quality_score,
+          additional_metrics ? JSON.stringify(additional_metrics) : null,
+          market, construction_type, project_size,
+          services_provided, template_id || null, customer_logo_url || null,
+          override_contact_name || null, override_contact_title || null,
+          override_contact_email || null, override_contact_phone || null,
+          override_account_manager || null,
+          override_start_date || null, override_end_date || null,
+          override_contract_value != null ? override_contract_value : null,
+          override_square_footage != null ? override_square_footage : null,
+          created_by, tenantId, 'draft'
+        ]
+      );
+
+      const caseStudy = result.rows[0];
+
+      // Insert junction rows for all linked projects
+      if (project_ids && project_ids.length > 0) {
+        const values = project_ids.map((pid, i) =>
+          `($1, $${i + 2}, $${project_ids.length + 2})`
+        ).join(', ');
+        await client.query(
+          `INSERT INTO case_study_projects (case_study_id, project_id, tenant_id)
+           VALUES ${values}
+           ON CONFLICT (case_study_id, project_id) DO NOTHING`,
+          [caseStudy.id, ...project_ids, tenantId]
+        );
+      }
+
+      await client.query('COMMIT');
+      return caseStudy;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   /**
@@ -73,12 +103,22 @@ const CaseStudy = {
   async findById(id) {
     const result = await db.query(
       `SELECT cs.*,
-              p.name as project_name,
+              pa.project_name,
+              pa.project_ids,
+              pa.projects,
               COALESCE(c.name, c.customer_owner) as customer_name,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
               CONCAT(r.first_name, ' ', r.last_name) as reviewed_by_name
        FROM case_studies cs
-       LEFT JOIN projects p ON cs.project_id = p.id
+       LEFT JOIN LATERAL (
+         SELECT
+           string_agg(p.name, ', ' ORDER BY p.name) as project_name,
+           array_agg(p.id ORDER BY p.name) as project_ids,
+           json_agg(json_build_object('id', p.id, 'name', p.name) ORDER BY p.name) as projects
+         FROM case_study_projects csp
+         JOIN projects p ON p.id = csp.project_id
+         WHERE csp.case_study_id = cs.id
+       ) pa ON true
        LEFT JOIN customers c ON cs.customer_id = c.id
        LEFT JOIN users u ON cs.created_by = u.id
        LEFT JOIN users r ON cs.reviewed_by = r.id
@@ -94,11 +134,13 @@ const CaseStudy = {
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
       `SELECT cs.*,
-              p.name as project_name,
-              p.contract_value as project_value,
-              p.start_date as project_start_date,
-              p.end_date as project_end_date,
-              p.square_footage as project_square_footage,
+              pa.project_name,
+              pa.project_value,
+              pa.project_start_date,
+              pa.project_end_date,
+              pa.project_square_footage,
+              pa.project_ids,
+              pa.projects,
               COALESCE(c.name, c.customer_owner) as customer_name,
               c.account_manager as customer_account_manager,
               CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
@@ -109,7 +151,27 @@ const CaseStudy = {
               pc.email as primary_contact_email,
               COALESCE(pc.phone, pc.mobile) as primary_contact_phone
        FROM case_studies cs
-       LEFT JOIN projects p ON cs.project_id = p.id
+       LEFT JOIN LATERAL (
+         SELECT
+           string_agg(p.name, ', ' ORDER BY p.name) as project_name,
+           SUM(COALESCE(vc.contract_amount, p.contract_value, 0)) as project_value,
+           MIN(COALESCE(p.start_date, vc.start_month::date)) as project_start_date,
+           MAX(p.end_date) as project_end_date,
+           SUM(COALESCE(p.square_footage, 0)) as project_square_footage,
+           array_agg(p.id ORDER BY p.name) as project_ids,
+           json_agg(json_build_object(
+             'id', p.id,
+             'name', p.name,
+             'contract_value', COALESCE(vc.contract_amount, p.contract_value),
+             'start_date', COALESCE(p.start_date, vc.start_month::date),
+             'end_date', p.end_date,
+             'square_footage', p.square_footage
+           ) ORDER BY p.name) as projects
+         FROM case_study_projects csp
+         JOIN projects p ON p.id = csp.project_id
+         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+         WHERE csp.case_study_id = cs.id
+       ) pa ON true
        LEFT JOIN customers c ON cs.customer_id = c.id
        LEFT JOIN users u ON cs.created_by = u.id
        LEFT JOIN users r ON cs.reviewed_by = r.id
@@ -127,11 +189,13 @@ const CaseStudy = {
   async findAllByTenant(tenantId, filters = {}) {
     let query = `
       SELECT cs.*,
-             p.name as project_name,
-             p.contract_value as project_value,
-             p.start_date as project_start_date,
-             p.end_date as project_end_date,
-             p.square_footage as project_square_footage,
+             pa.project_name,
+             pa.project_value,
+             pa.project_start_date,
+             pa.project_end_date,
+             pa.project_square_footage,
+             pa.project_ids,
+             pa.project_count,
              COALESCE(c.name, c.customer_owner) as customer_name,
              CONCAT(u.first_name, ' ', u.last_name) as created_by_name,
              cst.name as template_name,
@@ -139,7 +203,20 @@ const CaseStudy = {
              (SELECT json_agg(json_build_object('id', csi.id, 'file_path', csi.file_path, 'is_hero_image', csi.is_hero_image) ORDER BY csi.display_order)
               FROM case_study_images csi WHERE csi.case_study_id = cs.id) as images
       FROM case_studies cs
-      LEFT JOIN projects p ON cs.project_id = p.id
+      LEFT JOIN LATERAL (
+        SELECT
+          string_agg(p.name, ', ' ORDER BY p.name) as project_name,
+          SUM(COALESCE(vc.contract_amount, p.contract_value, 0)) as project_value,
+          MIN(COALESCE(p.start_date, vc.start_month::date)) as project_start_date,
+          MAX(p.end_date) as project_end_date,
+          SUM(COALESCE(p.square_footage, 0)) as project_square_footage,
+          array_agg(p.id ORDER BY p.name) as project_ids,
+          COUNT(p.id) as project_count
+        FROM case_study_projects csp
+        JOIN projects p ON p.id = csp.project_id
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE csp.case_study_id = cs.id
+      ) pa ON true
       LEFT JOIN customers c ON cs.customer_id = c.id
       LEFT JOIN users u ON cs.created_by = u.id
       LEFT JOIN case_study_templates cst ON cs.template_id = cst.id
@@ -168,8 +245,8 @@ const CaseStudy = {
     }
 
     if (filters.project_id) {
-      params.push(filters.project_id);
-      query += ` AND cs.project_id = $${params.length}`;
+      params.push(parseInt(filters.project_id));
+      query += ` AND EXISTS (SELECT 1 FROM case_study_projects csp WHERE csp.case_study_id = cs.id AND csp.project_id = $${params.length})`;
     }
 
     query += ' ORDER BY cs.created_at DESC';
@@ -185,7 +262,7 @@ const CaseStudy = {
     const {
       title,
       subtitle,
-      project_id,
+      project_ids,
       customer_id,
       challenge,
       solution,
@@ -214,56 +291,91 @@ const CaseStudy = {
       display_order
     } = data;
 
-    const result = await db.query(
-      `UPDATE case_studies SET
-        title = COALESCE($1, title),
-        subtitle = COALESCE($2, subtitle),
-        project_id = COALESCE($3, project_id),
-        customer_id = COALESCE($4, customer_id),
-        challenge = COALESCE($5, challenge),
-        solution = COALESCE($6, solution),
-        results = COALESCE($7, results),
-        executive_summary = COALESCE($8, executive_summary),
-        cost_savings = $9,
-        timeline_improvement_days = $10,
-        quality_score = $11,
-        additional_metrics = COALESCE($12, additional_metrics),
-        market = COALESCE($13, market),
-        construction_type = COALESCE($14, construction_type),
-        project_size = COALESCE($15, project_size),
-        services_provided = COALESCE($16, services_provided),
-        template_id = $17,
-        customer_logo_url = COALESCE($18, customer_logo_url),
-        override_contact_name = $19,
-        override_contact_title = $20,
-        override_contact_email = $21,
-        override_contact_phone = $22,
-        override_account_manager = $23,
-        override_start_date = $24,
-        override_end_date = $25,
-        override_contract_value = $26,
-        override_square_footage = $27,
-        featured = COALESCE($28, featured),
-        display_order = COALESCE($29, display_order),
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $30 AND tenant_id = $31
-       RETURNING *`,
-      [
-        title, subtitle, project_id, customer_id, challenge, solution, results,
-        executive_summary, cost_savings, timeline_improvement_days, quality_score,
-        additional_metrics ? JSON.stringify(additional_metrics) : null,
-        market, construction_type, project_size, services_provided,
-        template_id || null, customer_logo_url !== undefined ? (customer_logo_url || null) : undefined,
-        override_contact_name || null, override_contact_title || null,
-        override_contact_email || null, override_contact_phone || null,
-        override_account_manager || null,
-        override_start_date || null, override_end_date || null,
-        override_contract_value != null ? override_contract_value : null,
-        override_square_footage != null ? override_square_footage : null,
-        featured, display_order, id, tenantId
-      ]
-    );
-    return result.rows[0];
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `UPDATE case_studies SET
+          title = COALESCE($1, title),
+          subtitle = COALESCE($2, subtitle),
+          project_id = $3,
+          customer_id = COALESCE($4, customer_id),
+          challenge = COALESCE($5, challenge),
+          solution = COALESCE($6, solution),
+          results = COALESCE($7, results),
+          executive_summary = COALESCE($8, executive_summary),
+          cost_savings = $9,
+          timeline_improvement_days = $10,
+          quality_score = $11,
+          additional_metrics = COALESCE($12, additional_metrics),
+          market = COALESCE($13, market),
+          construction_type = COALESCE($14, construction_type),
+          project_size = COALESCE($15, project_size),
+          services_provided = COALESCE($16, services_provided),
+          template_id = $17,
+          customer_logo_url = COALESCE($18, customer_logo_url),
+          override_contact_name = $19,
+          override_contact_title = $20,
+          override_contact_email = $21,
+          override_contact_phone = $22,
+          override_account_manager = $23,
+          override_start_date = $24,
+          override_end_date = $25,
+          override_contract_value = $26,
+          override_square_footage = $27,
+          featured = COALESCE($28, featured),
+          display_order = COALESCE($29, display_order),
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $30 AND tenant_id = $31
+         RETURNING *`,
+        [
+          title, subtitle,
+          // Keep project_id in sync with first project for backward compat
+          (project_ids && project_ids.length > 0) ? project_ids[0] : null,
+          customer_id, challenge, solution, results,
+          executive_summary, cost_savings, timeline_improvement_days, quality_score,
+          additional_metrics ? JSON.stringify(additional_metrics) : null,
+          market, construction_type, project_size, services_provided,
+          template_id || null, customer_logo_url !== undefined ? (customer_logo_url || null) : undefined,
+          override_contact_name || null, override_contact_title || null,
+          override_contact_email || null, override_contact_phone || null,
+          override_account_manager || null,
+          override_start_date || null, override_end_date || null,
+          override_contract_value != null ? override_contract_value : null,
+          override_square_footage != null ? override_square_footage : null,
+          featured, display_order, id, tenantId
+        ]
+      );
+
+      // Replace junction table rows
+      if (project_ids !== undefined) {
+        await client.query(
+          'DELETE FROM case_study_projects WHERE case_study_id = $1',
+          [id]
+        );
+
+        if (project_ids && project_ids.length > 0) {
+          const values = project_ids.map((pid, i) =>
+            `($1, $${i + 2}, $${project_ids.length + 2})`
+          ).join(', ');
+          await client.query(
+            `INSERT INTO case_study_projects (case_study_id, project_id, tenant_id)
+             VALUES ${values}
+             ON CONFLICT (case_study_id, project_id) DO NOTHING`,
+            [id, ...project_ids, tenantId]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   /**
@@ -349,13 +461,18 @@ const CaseStudy = {
   async getFeatured(tenantId, limit = 6) {
     const result = await db.query(
       `SELECT cs.*,
-              p.name as project_name,
+              pa.project_name,
               COALESCE(c.name, c.customer_owner) as customer_name,
               (SELECT file_path FROM case_study_images
                WHERE case_study_id = cs.id AND is_hero_image = true
                LIMIT 1) as hero_image_path
        FROM case_studies cs
-       LEFT JOIN projects p ON cs.project_id = p.id
+       LEFT JOIN LATERAL (
+         SELECT string_agg(p.name, ', ' ORDER BY p.name) as project_name
+         FROM case_study_projects csp
+         JOIN projects p ON p.id = csp.project_id
+         WHERE csp.case_study_id = cs.id
+       ) pa ON true
        LEFT JOIN customers c ON cs.customer_id = c.id
        WHERE cs.tenant_id = $1
          AND cs.status = 'published'
@@ -379,8 +496,12 @@ const CaseStudy = {
                LIMIT 1) as hero_image_path
        FROM case_studies cs
        LEFT JOIN customers c ON cs.customer_id = c.id
-       WHERE cs.project_id = $1 AND cs.tenant_id = $2
-         AND cs.status = 'published'
+       WHERE EXISTS (
+         SELECT 1 FROM case_study_projects csp
+         WHERE csp.case_study_id = cs.id AND csp.project_id = $1
+       )
+       AND cs.tenant_id = $2
+       AND cs.status = 'published'
        ORDER BY cs.published_at DESC`,
       [projectId, tenantId]
     );
@@ -388,7 +509,7 @@ const CaseStudy = {
   },
 
   /**
-   * Delete a case study (cascades to images)
+   * Delete a case study (cascades to images and project links)
    */
   async delete(id, tenantId) {
     const result = await db.query(
