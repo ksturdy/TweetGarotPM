@@ -139,6 +139,15 @@ const Drawing = {
     );
   },
 
+  async updatePageCount(id, pageCount) {
+    const result = await db.query(
+      `UPDATE drawings SET page_count = $2, is_drawing_set = $3, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, pageCount, pageCount > 1]
+    );
+    return result.rows[0];
+  },
+
   async delete(id) {
     await db.query('DELETE FROM drawings WHERE id = $1', [id]);
   }

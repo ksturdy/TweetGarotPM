@@ -708,6 +708,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                         value={formData.assigned_to?.toString() || ''}
                         onChange={(val) => setFormData(prev => ({ ...prev, assigned_to: val }))}
                         placeholder="Select assignee"
+                        style={{ minWidth: 0 }}
                       />
                     </div>
 

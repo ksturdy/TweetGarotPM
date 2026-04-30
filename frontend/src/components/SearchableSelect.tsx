@@ -272,6 +272,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
       {/* Display field */}
       <div
         ref={triggerRef}
+        className="searchable-select-trigger"
         onClick={handleToggle}
         style={{
           padding: '0.4rem 0.75rem',

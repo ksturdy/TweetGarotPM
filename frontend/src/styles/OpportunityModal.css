@@ -240,8 +240,20 @@
 
 .opportunity-modal .form-group.required input:not([type="checkbox"]),
 .opportunity-modal .form-group.required select,
-.opportunity-modal .form-group.required textarea {
-  background-color: #f0fdf4;
+.opportunity-modal .form-group.required textarea,
+.opportunity-modal .form-group.required .searchable-select-trigger {
+  background-color: #f0fdf4 !important;
+}
+
+/* Match SearchableSelect trigger to native input sizing */
+.opportunity-modal .form-group .searchable-select-trigger {
+  padding: 5px 8px !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  line-height: normal !important;
+  min-height: unset !important;
+  box-sizing: border-box !important;
 }
 
 .opportunity-modal .form-group label {

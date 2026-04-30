@@ -206,18 +206,28 @@ router.post('/:projectId/cost-model/scan-drawings', verifyProject, async (req, r
       : combinedText;
 
     const standardTypes = ProjectCostModel.getStandardTypes();
-    const allTypes = [...standardTypes.hvac, ...standardTypes.plumbing];
-    const typeList = allTypes.map(t => `${t.type}: ${t.label}`).join('\n');
+    const { equipment: sections, columns: sectionCols } = standardTypes;
+
+    // Build type list with section-specific column info for the AI prompt
+    const typeLines = [];
+    for (const [secKey, types] of Object.entries(sections)) {
+      const cols = sectionCols[secKey] || [];
+      const colDesc = cols.map(c => `spec_${c.slot}=${c.label} (${c.unit})`).join(', ');
+      for (const t of types) {
+        typeLines.push(`${t.type}: ${t.label} [${colDesc}, weight_lbs]`);
+      }
+    }
+    const typeList = typeLines.join('\n');
 
     const systemPrompt = `You are an expert HVAC and mechanical construction estimator analyzing construction drawing text for equipment schedules.
 
-Your task is to identify and count mechanical equipment from the extracted text of construction drawings. Equipment is typically found in:
+Your task is to identify and count mechanical equipment AND extract key specifications (capacity, sizing data) from the extracted text of construction drawings. Equipment is typically found in:
 - Equipment schedules (tables listing equipment tags, types, capacities)
 - Mechanical schedules
 - Equipment lists and legends
 - Drawing notes referencing specific equipment
 
-STANDARD EQUIPMENT TYPES (use these keys when possible):
+STANDARD EQUIPMENT TYPES with spec slots (use these keys when possible):
 ${typeList}
 
 COUNTING RULES:
@@ -225,6 +235,15 @@ COUNTING RULES:
 - If a schedule lists equipment with quantities, use those quantities
 - Do NOT count the same equipment twice across different drawings
 - If uncertain about a count, provide your best estimate and lower the confidence
+
+SPECIFICATION EXTRACTION RULES:
+- Extract specs into the numbered slots shown above (spec_1, spec_2, etc.) matching the labels
+- BTU and MBH are the most critical specs — prioritize finding these for all equipment
+- When multiple units of the same type have different specs, use the LARGEST value or the most common value
+- Common spec locations: equipment schedule columns, tag callouts, mechanical notes
+- MBH = thousands of BTU/hr. If a value is given in BTU, convert: BTU / 1000 = MBH
+- Record weight in lbs when listed (typically for chillers, boilers, cooling towers, dry coolers)
+- If a spec is not found in the drawings, omit the key or set to null (do not guess)
 
 RESPONSE FORMAT - Return ONLY valid JSON:
 {
@@ -234,7 +253,9 @@ RESPONSE FORMAT - Return ONLY valid JSON:
       "label": "Air Handling Units",
       "count": 3,
       "confidence": 0.95,
-      "evidence": "AHU-1, AHU-2, AHU-3 listed in mechanical schedule"
+      "evidence": "AHU-1 (10,000 CFM, 120 tons clg, 450 MBH htg), AHU-2, AHU-3 in mechanical schedule",
+      "specs": { "spec_1": 15000, "spec_2": 120, "spec_3": 450, "spec_4": 25 },
+      "weight_lbs": 4500
     }
   ],
   "custom_equipment": [
@@ -243,7 +264,9 @@ RESPONSE FORMAT - Return ONLY valid JSON:
       "label": "Display Name",
       "count": 2,
       "confidence": 0.8,
-      "evidence": "Found in equipment schedule but not a standard type"
+      "evidence": "Found in equipment schedule but not a standard type",
+      "specs": {},
+      "weight_lbs": null
     }
   ],
   "notes": "Brief summary of what was found and any limitations"
@@ -296,15 +319,17 @@ Only include equipment types where you found actual evidence. Do not guess or in
       });
     }
 
-    // Normalize the result
+    // Normalize the result — ensure specs is always an object
     const equipment = [
       ...(aiResult.equipment || []).map(e => ({
         ...e,
         is_custom: false,
+        specs: e.specs || {},
       })),
       ...(aiResult.custom_equipment || []).map(e => ({
         ...e,
         is_custom: true,
+        specs: e.specs || {},
       })),
     ];
 

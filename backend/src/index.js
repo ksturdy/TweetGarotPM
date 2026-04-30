@@ -163,8 +163,8 @@ app.set('io', io);
 app.options('*', cors(corsOptions));
 
 app.use(morgan('dev'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '260mb' }));
+app.use(express.urlencoded({ extended: true, limit: '260mb' }));
 
 // Static files for uploads (only when using local storage)
 // When R2 is enabled, files are served via presigned URLs from download endpoints

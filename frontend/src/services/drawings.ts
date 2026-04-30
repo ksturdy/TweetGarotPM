@@ -23,6 +23,28 @@ export interface Drawing {
   created_at?: string;
   updated_at?: string;
   parent_version?: string;
+  page_count?: number;
+  is_drawing_set?: boolean;
+}
+
+export interface DrawingPage {
+  id: number;
+  drawing_id: number;
+  page_number: number;
+  discipline: string | null;
+  confidence: number | null;
+  drawing_number: string | null;
+  title: string | null;
+  ai_classified: boolean;
+  classified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClassificationResult {
+  pages: DrawingPage[];
+  summary: Record<string, number>;
+  notes?: string;
 }
 
 export interface CreateDrawingData {
@@ -60,6 +82,15 @@ export const drawingsApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
 
+  uploadWithProgress: (formData: FormData, onProgress: (percent: number) => void) =>
+    api.post<{ data: Drawing }>('/drawings', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+        onProgress(percent);
+      },
+    }),
+
   update: (id: number, data: Partial<Drawing>) =>
     api.put<{ data: Drawing }>(`/drawings/${id}`, data),
 
@@ -79,4 +110,24 @@ export const drawingsApi = {
       link.remove();
     });
   },
+
+  // Drawing pages API
+  getPages: (drawingId: number, params?: { discipline?: string }) =>
+    api.get<{ data: { pages: DrawingPage[]; summary: Record<string, number> } }>(
+      `/drawings/${drawingId}/pages`, { params }
+    ),
+
+  classifyPagesQuick: (drawingId: number) =>
+    api.post<{ data: ClassificationResult }>(`/drawings/${drawingId}/classify-pages-quick`),
+
+  classifyPagesAI: (drawingId: number) =>
+    api.post<{ data: ClassificationResult }>(`/drawings/${drawingId}/classify-pages`),
+
+  updatePage: (drawingId: number, pageNumber: number, data: { discipline: string }) =>
+    api.put<{ data: DrawingPage }>(`/drawings/${drawingId}/pages/${pageNumber}`, data),
+
+  bulkUpdatePages: (drawingId: number, pages: Array<{ page_number: number; discipline: string }>) =>
+    api.put<{ data: { pages: DrawingPage[]; summary: Record<string, number> } }>(
+      `/drawings/${drawingId}/pages/bulk`, { pages }
+    ),
 };

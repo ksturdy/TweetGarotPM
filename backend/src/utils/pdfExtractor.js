@@ -1,51 +1,46 @@
 const fs = require('fs').promises;
-const pdfParse = require('pdf-parse');
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
 
 /**
  * Extract text from PDF with page number mapping
+ * Uses pdfjs-dist directly for reliable Node.js support
  * @param {string} filePath - Path to the PDF file
- * @returns {Promise<{fullText: string, pageTexts: Array<{page: number, text: string}>}>}
+ * @returns {Promise<{fullText: string, numPages: number, pageTexts: Array<{page: number, text: string}>}>}
  */
 async function extractPDFText(filePath) {
+  let doc;
   try {
     const dataBuffer = await fs.readFile(filePath);
-    const data = await pdfParse(dataBuffer);
+    const data = new Uint8Array(dataBuffer);
 
-    // Extract full text
-    const fullText = data.text;
+    doc = await pdfjsLib.getDocument({ data, useSystemFonts: true }).promise;
+    const numPages = doc.numPages;
 
-    // Try to split text by pages (pdf-parse provides page info)
     const pageTexts = [];
+    const allTexts = [];
 
-    // pdf-parse doesn't always provide clean page breaks, so we'll use a workaround
-    // We'll re-parse with custom render function to track pages
-    const pdfData = await pdfParse(dataBuffer, {
-      pagerender: (pageData) => {
-        return pageData.getTextContent().then((textContent) => {
-          const page = pageData.pageNumber;
-          const pageText = textContent.items
-            .map((item) => item.str)
-            .join(' ')
-            .trim();
+    for (let i = 1; i <= numPages; i++) {
+      const page = await doc.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => item.str)
+        .join(' ')
+        .trim();
 
-          pageTexts.push({
-            page,
-            text: pageText,
-          });
-
-          return pageText;
-        });
-      },
-    });
+      pageTexts.push({ page: i, text: pageText });
+      allTexts.push(pageText);
+    }
 
     return {
-      fullText: pdfData.text,
-      numPages: pdfData.numpages,
+      fullText: allTexts.join('\n\n'),
+      numPages,
       pageTexts,
     };
   } catch (error) {
     console.error('Error extracting PDF text:', error);
     throw new Error(`Failed to extract PDF text: ${error.message}`);
+  } finally {
+    if (doc) doc.destroy();
   }
 }
 
@@ -83,7 +78,7 @@ async function extractTextFile(filePath) {
     return {
       fullText,
       numPages: 1,
-      pageTexts: null, // Text files don't have pages
+      pageTexts: null,
     };
   } catch (error) {
     console.error('Error reading text file:', error);

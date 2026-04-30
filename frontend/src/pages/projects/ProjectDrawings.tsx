@@ -4,6 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { drawingsApi, Drawing, CreateDrawingData } from '../../services/drawings';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
+const DISCIPLINES = [
+  'Mechanical', 'Plumbing', 'Sheet Metal', 'Electrical',
+  'Architectural', 'Structural', 'Civil', 'Fire Protection', 'General',
+];
+
 const ProjectDrawings: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -12,6 +17,7 @@ const ProjectDrawings: React.FC = () => {
   const [disciplineFilter, setDisciplineFilter] = useState('');
   const [showAllVersions, setShowAllVersions] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const { data: drawings, isLoading } = useQuery({
     queryKey: ['drawings', projectId, disciplineFilter, showAllVersions],
@@ -34,11 +40,13 @@ const ProjectDrawings: React.FC = () => {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (formDataToSend: FormData) => drawingsApi.upload(formDataToSend),
+    mutationFn: (formDataToSend: FormData) =>
+      drawingsApi.uploadWithProgress(formDataToSend, (percent) => setUploadProgress(percent)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drawings'] });
       setShowUploadForm(false);
       setSelectedFile(null);
+      setUploadProgress(0);
       setFormData({
         project_id: Number(projectId),
         drawing_number: '',
@@ -50,6 +58,9 @@ const ProjectDrawings: React.FC = () => {
         is_original_bid: false,
         notes: '',
       });
+    },
+    onError: () => {
+      setUploadProgress(0);
     },
   });
 
@@ -78,6 +89,7 @@ const ProjectDrawings: React.FC = () => {
       formDataToSend.append('file', selectedFile);
     }
 
+    setUploadProgress(0);
     uploadMutation.mutate(formDataToSend);
   };
 
@@ -93,7 +105,7 @@ const ProjectDrawings: React.FC = () => {
   return (
     <div>
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
-        <h2 className="section-title">📐 Drawings</h2>
+        <h2 className="section-title">Drawings</h2>
         <button onClick={() => setShowUploadForm(!showUploadForm)} className="btn btn-primary">
           {showUploadForm ? 'Cancel' : 'Upload Drawing'}
         </button>
@@ -155,12 +167,9 @@ const ProjectDrawings: React.FC = () => {
                   value={formData.discipline}
                   onChange={(e) => setFormData({ ...formData, discipline: e.target.value })}
                 >
-                  <option value="Mechanical">Mechanical</option>
-                  <option value="Plumbing">Plumbing</option>
-                  <option value="Sheet Metal">Sheet Metal</option>
-                  <option value="Electrical">Electrical</option>
-                  <option value="Architectural">Architectural</option>
-                  <option value="Structural">Structural</option>
+                  {DISCIPLINES.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -197,6 +206,33 @@ const ProjectDrawings: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Upload progress bar */}
+            {uploadMutation.isPending && uploadProgress > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                  <span>Uploading...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div style={{ width: '100%', height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${uploadProgress}%`,
+                      height: '100%',
+                      backgroundColor: uploadProgress === 100 ? '#10b981' : '#3b82f6',
+                      transition: 'width 0.3s ease',
+                      borderRadius: '4px',
+                    }}
+                  />
+                </div>
+                {uploadProgress === 100 && (
+                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
+                    Processing file...
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" className="btn btn-primary" disabled={uploadMutation.isPending}>
                 {uploadMutation.isPending ? 'Uploading...' : 'Upload Drawing'}
@@ -219,10 +255,9 @@ const ProjectDrawings: React.FC = () => {
               onChange={(e) => setDisciplineFilter(e.target.value)}
             >
               <option value="">All Disciplines</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Plumbing">Plumbing</option>
-              <option value="Sheet Metal">Sheet Metal</option>
-              <option value="Electrical">Electrical</option>
+              {DISCIPLINES.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -245,7 +280,7 @@ const ProjectDrawings: React.FC = () => {
               <th>Drawing #</th>
               <th>Title</th>
               <th>Discipline</th>
-              <th>Sheet</th>
+              <th>Pages</th>
               <th>Version</th>
               <th>Uploaded</th>
               <th>Actions</th>
@@ -254,7 +289,17 @@ const ProjectDrawings: React.FC = () => {
           <tbody>
             {drawings?.map((drawing) => (
               <tr key={drawing.id}>
-                <td><strong>{drawing.drawing_number}</strong></td>
+                <td>
+                  <strong>{drawing.drawing_number}</strong>
+                  {drawing.is_drawing_set && (
+                    <span
+                      className="badge badge-info"
+                      style={{ marginLeft: '0.5rem', fontSize: '0.7rem' }}
+                    >
+                      Drawing Set
+                    </span>
+                  )}
+                </td>
                 <td>
                   <Link to={`/projects/${projectId}/drawings/${drawing.id}`}>
                     {drawing.title}
@@ -266,7 +311,13 @@ const ProjectDrawings: React.FC = () => {
                   )}
                 </td>
                 <td>{drawing.discipline}</td>
-                <td>{drawing.sheet_number || 'N/A'}</td>
+                <td>
+                  {drawing.page_count && drawing.page_count > 0 ? (
+                    <span>{drawing.page_count}</span>
+                  ) : (
+                    <span style={{ color: '#999' }}>1</span>
+                  )}
+                </td>
                 <td>
                   {drawing.version_number}
                   {drawing.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}

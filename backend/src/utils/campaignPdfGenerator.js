@@ -111,9 +111,9 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 15px;
+      margin-bottom: 8px;
       border-bottom: 2px solid #000;
-      padding-bottom: 10px;
+      padding-bottom: 6px;
     }
     .header-left h1 {
       font-size: 18pt;
@@ -138,8 +138,8 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
 
     /* Campaign Info */
     .campaign-info {
-      margin-bottom: 15px;
-      font-size: 10pt;
+      margin-bottom: 8px;
+      font-size: 9pt;
     }
     .campaign-info strong {
       font-weight: bold;
@@ -147,11 +147,11 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
 
     /* Section Title */
     .section-title {
-      font-size: 11pt;
+      font-size: 10pt;
       font-weight: bold;
       text-transform: uppercase;
-      margin: 20px 0 8px 0;
-      padding-bottom: 4px;
+      margin: 12px 0 6px 0;
+      padding-bottom: 3px;
       border-bottom: 1px solid #000;
     }
 
@@ -159,7 +159,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       font-size: 8pt;
     }
     thead {
@@ -187,9 +187,9 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     .summary {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
-      padding: 10px;
+      gap: 6px;
+      margin-bottom: 10px;
+      padding: 6px;
       background-color: #f8f8f8;
       border: 1px solid #ddd;
     }
@@ -200,10 +200,10 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       font-size: 7pt;
       text-transform: uppercase;
       color: #666;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .summary-value {
-      font-size: 16pt;
+      font-size: 13pt;
       font-weight: bold;
       color: #000;
     }
@@ -212,12 +212,12 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
     .goals-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      margin-bottom: 15px;
+      gap: 6px;
+      margin-bottom: 10px;
     }
     .goal-item {
       border: 1px solid #ddd;
-      padding: 8px;
+      padding: 4px 6px;
       text-align: center;
       background: #fff;
     }
@@ -225,14 +225,14 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       font-size: 7pt;
       text-transform: uppercase;
       color: #666;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
     .goal-actual {
-      font-size: 14pt;
+      font-size: 11pt;
       font-weight: bold;
     }
     .goal-target {
-      font-size: 8pt;
+      font-size: 7pt;
       color: #666;
     }
     .goal-bar {
@@ -322,7 +322,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       </div>
       <div class="summary-item">
         <div class="summary-label">Pipeline Value</div>
-        <div class="summary-value" style="font-size: 13pt;">${formatCurrency(totalOppValue)}</div>
+        <div class="summary-value" style="font-size: 11pt;">${formatCurrency(totalOppValue)}</div>
       </div>
       <div class="summary-item">
         <div class="summary-label">Follow Up Needed</div>
@@ -330,7 +330,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       </div>
     </div>
     ${addedProspects > 0 ? `
-    <div style="padding: 8px 12px; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 4px; margin-bottom: 15px; font-size: 8pt;">
+    <div style="padding: 5px 10px; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 4px; margin-bottom: 10px; font-size: 8pt;">
       <strong style="color: #0e7490;">+${addedProspects} New Prospect${addedProspects !== 1 ? 's' : ''} Discovered During Campaign</strong>
       <span style="color: #666;"> — Started with ${originalProspects} original targets, team identified ${addedProspects} additional prospect${addedProspects !== 1 ? 's' : ''} through outreach.</span>
     </div>
@@ -351,19 +351,19 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       if (totalOpps === 0) return '';
       return `
       <div class="section-title">Opportunities by Customer Score</div>
-      <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-        <div style="flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; text-align: center;">
-          <div style="font-size: 16pt; font-weight: 700; color: #111827;">${totalOpps}</div>
-          <div style="font-size: 7pt; color: #6b7280; margin-top: 2px;">Total</div>
+      <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+        <div style="flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px 6px; text-align: center;">
+          <div style="font-size: 13pt; font-weight: 700; color: #111827;">${totalOpps}</div>
+          <div style="font-size: 7pt; color: #6b7280; margin-top: 1px;">Total</div>
         </div>
         ${tiers.map(tier => {
           const config = tierConfig[tier];
           const data = breakdownMap[tier];
           const count = data ? parseInt(data.count) : 0;
           return `
-          <div style="flex: 1; background: ${config.bg}; border: 1px solid ${config.color}22; border-radius: 6px; padding: 10px; text-align: center;">
-            <div style="font-size: 16pt; font-weight: 700; color: ${config.color};">${count}</div>
-            <div style="font-size: 7pt; color: ${config.color}; margin-top: 2px; opacity: 0.8;">${config.label}</div>
+          <div style="flex: 1; background: ${config.bg}; border: 1px solid ${config.color}22; border-radius: 4px; padding: 4px 6px; text-align: center;">
+            <div style="font-size: 13pt; font-weight: 700; color: ${config.color};">${count}</div>
+            <div style="font-size: 7pt; color: ${config.color}; margin-top: 1px; opacity: 0.8;">${config.label}</div>
           </div>`;
         }).join('')}
       </div>`;
@@ -423,7 +423,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
       ${targetPipelineValue > 0 ? `
       <div class="goal-item">
         <div class="goal-label">Pipeline Value</div>
-        <div class="goal-actual" style="font-size: 11pt;">${formatCurrency(actualPipelineValue)}</div>
+        <div class="goal-actual" style="font-size: 9pt;">${formatCurrency(actualPipelineValue)}</div>
         <div class="goal-target">of ${formatCurrency(targetPipelineValue)} target</div>
         <div class="goal-bar"><div class="goal-bar-fill" style="width: ${Math.min(100, Math.round((actualPipelineValue / targetPipelineValue) * 100))}%"></div></div>
       </div>` : ''}
@@ -434,7 +434,7 @@ const generateCampaignPdfHtml = (campaign, companies, weeks, team, opportunities
         <div class="goal-target" style="color: #0e7490; font-weight: bold;">BONUS</div>
       </div>` : ''}
     </div>
-    ${campaign.goal_description ? `<p style="font-size: 8pt; color: #666; margin-top: -10px; margin-bottom: 15px;"><strong>Goal:</strong> ${campaign.goal_description}</p>` : ''}
+    ${campaign.goal_description ? `<p style="font-size: 8pt; color: #666; margin-top: -6px; margin-bottom: 10px;"><strong>Goal:</strong> ${campaign.goal_description}</p>` : ''}
     ` : ''}
 
     <!-- Team Performance -->

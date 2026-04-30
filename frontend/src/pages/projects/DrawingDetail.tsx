@@ -2,6 +2,8 @@ import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { drawingsApi } from '../../services/drawings';
+import DrawingSetReview from '../../components/drawings/DrawingSetReview';
+import DrawingPdfViewer from '../../components/drawings/DrawingPdfViewer';
 import '../../styles/SalesPipeline.css';
 
 const DrawingDetail: React.FC = () => {
@@ -25,73 +27,96 @@ const DrawingDetail: React.FC = () => {
 
   if (!drawing) return <div>Loading...</div>;
 
+  const isDrawingSet = drawing.is_drawing_set && (drawing.page_count || 0) > 1;
+  const isPdf = drawing.file_type === 'application/pdf';
+
   return (
     <div>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to={`/projects/${projectId}`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Project
+            <Link to={`/projects/${projectId}/drawings`} style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+              &larr; Back to Drawings
             </Link>
-            <h1>📐 {drawing.drawing_number} - {drawing.title}</h1>
+            <h1>{drawing.drawing_number} - {drawing.title}</h1>
             <div className="sales-subtitle">
               Version {drawing.version_number}
               {drawing.is_latest && <span className="badge badge-success" style={{ marginLeft: '0.5rem' }}>Latest</span>}
               {drawing.is_original_bid && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Original Bid</span>}
+              {isDrawingSet && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>{drawing.page_count} Pages</span>}
             </div>
           </div>
         </div>
         <div className="sales-header-actions">
+          {drawing.file_name && (
+            <button onClick={() => drawingsApi.download(drawing.id)} className="btn btn-primary">
+              Download
+            </button>
+          )}
           <button onClick={() => navigate(`/projects/${projectId}/drawings`)} className="btn btn-secondary">
             Close
           </button>
         </div>
       </div>
 
-      {/* Drawing Details */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h3 style={{ marginTop: 0 }}>Drawing Details</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-          <div>
-            <strong>Drawing Number:</strong> {drawing.drawing_number}
+      {/* Drawing Set Review — full page layout for multi-page PDFs */}
+      {isDrawingSet && (
+        <DrawingSetReview drawing={drawing} />
+      )}
+
+      {/* Single-page PDF inline viewer */}
+      {!isDrawingSet && isPdf && drawing.file_name && (
+        <div className="card" style={{ marginBottom: '1.5rem', padding: 0, overflow: 'hidden', height: 'calc(100vh - 350px)', minHeight: 400 }}>
+          <DrawingPdfViewer drawingId={drawing.id} />
+        </div>
+      )}
+
+      {/* Drawing Details (collapsed for drawing sets, shown for single drawings) */}
+      {!isDrawingSet && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ marginTop: 0 }}>Drawing Details</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+            <div>
+              <strong>Drawing Number:</strong> {drawing.drawing_number}
+            </div>
+            <div>
+              <strong>Sheet Number:</strong> {drawing.sheet_number || 'N/A'}
+            </div>
+            <div>
+              <strong>Discipline:</strong> {drawing.discipline || 'N/A'}
+            </div>
+            <div>
+              <strong>Version:</strong> {drawing.version_number}
+            </div>
+            <div>
+              <strong>Uploaded By:</strong> {drawing.uploaded_by_name || 'N/A'}
+            </div>
+            <div>
+              <strong>Uploaded:</strong> {formatDate(drawing.uploaded_at)}
+            </div>
+            {drawing.file_name && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <strong>File:</strong> {drawing.file_name}
+                {drawing.file_size && <span style={{ marginLeft: '0.5rem', color: '#666' }}>
+                  ({(drawing.file_size / (1024 * 1024)).toFixed(2)} MB)
+                </span>}
+              </div>
+            )}
           </div>
-          <div>
-            <strong>Sheet Number:</strong> {drawing.sheet_number || 'N/A'}
-          </div>
-          <div>
-            <strong>Discipline:</strong> {drawing.discipline || 'N/A'}
-          </div>
-          <div>
-            <strong>Version:</strong> {drawing.version_number}
-          </div>
-          <div>
-            <strong>Uploaded By:</strong> {drawing.uploaded_by_name || 'N/A'}
-          </div>
-          <div>
-            <strong>Uploaded:</strong> {formatDate(drawing.uploaded_at)}
-          </div>
-          {drawing.file_name && (
-            <div style={{ gridColumn: '1 / -1' }}>
-              <strong>File:</strong> {drawing.file_name}
-              {drawing.file_size && <span style={{ marginLeft: '0.5rem', color: '#666' }}>
-                ({(drawing.file_size / (1024 * 1024)).toFixed(2)} MB)
-              </span>}
+          {drawing.description && (
+            <div style={{ marginTop: '1rem' }}>
+              <strong>Description:</strong>
+              <p style={{ marginTop: '0.5rem' }}>{drawing.description}</p>
+            </div>
+          )}
+          {drawing.notes && (
+            <div style={{ marginTop: '1rem' }}>
+              <strong>Notes:</strong>
+              <p style={{ marginTop: '0.5rem' }}>{drawing.notes}</p>
             </div>
           )}
         </div>
-        {drawing.description && (
-          <div style={{ marginTop: '1rem' }}>
-            <strong>Description:</strong>
-            <p style={{ marginTop: '0.5rem' }}>{drawing.description}</p>
-          </div>
-        )}
-        {drawing.notes && (
-          <div style={{ marginTop: '1rem' }}>
-            <strong>Notes:</strong>
-            <p style={{ marginTop: '0.5rem' }}>{drawing.notes}</p>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Version History */}
       {versions && versions.length > 1 && (
