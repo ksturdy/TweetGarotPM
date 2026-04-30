@@ -116,14 +116,13 @@ const ScheduledReports: React.FC = () => {
     queryFn: scheduledReportsApi.getAll,
   });
 
-  const { data: usersResponse } = useQuery({
+  const { data: allUsers = [] } = useQuery({
     queryKey: ['users'],
-    queryFn: usersApi.getAll,
+    queryFn: () => usersApi.getAll().then((res) => res.data),
   });
   const users: User[] = useMemo(() => {
-    const raw = (usersResponse as any)?.data || usersResponse || [];
-    return (Array.isArray(raw) ? raw : []).filter((u: User) => u.is_active);
-  }, [usersResponse]);
+    return allUsers.filter((u: User) => u.is_active);
+  }, [allUsers]);
 
   // Fetch cash flow data for filter dropdowns
   const { data: cashFlowProjects = [] } = useQuery({

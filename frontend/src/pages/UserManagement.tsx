@@ -28,14 +28,12 @@ const UserManagement: React.FC = () => {
   // Check if current user has HR write access
   const hasHRWriteAccess = currentUser?.role === 'admin' || currentUser?.hrAccess === 'write';
 
-  const { data: users = [], isLoading, error } = useQuery({
+  const { data: usersRaw, isLoading, error } = useQuery({
     queryKey: ['users'],
-    queryFn: async () => {
-      const res = await usersApi.getAll();
-      return Array.isArray(res.data) ? res.data : [];
-    },
+    queryFn: () => usersApi.getAll().then((res) => res.data),
     retry: false,
   });
+  const users: User[] = Array.isArray(usersRaw) ? usersRaw : [];
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUserData }) =>
