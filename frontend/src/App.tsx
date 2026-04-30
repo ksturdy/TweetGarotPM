@@ -41,6 +41,8 @@ import EmployeeResumeList from './pages/hr/EmployeeResumeList';
 import EmployeeResumeForm from './pages/hr/EmployeeResumeForm';
 import ProposalTemplateList from './pages/marketing/ProposalTemplateList';
 import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
+import OrgChartList from './pages/marketing/OrgChartList';
+import OrgChartDetail from './pages/marketing/OrgChartDetail';
 import ProposalList from './pages/marketing/ProposalList';
 import ProposalDetail from './pages/marketing/ProposalDetail';
 import ProposalWizard from './pages/marketing/ProposalWizard';
@@ -387,6 +389,8 @@ const App: React.FC = () => {
                 <Route path="/proposals" element={<ProposalList />} />
                 <Route path="/proposals/create" element={<ProposalWizard />} />
                 <Route path="/proposals/:id" element={<ProposalDetail />} />
+                <Route path="/org-charts" element={<OrgChartList />} />
+                <Route path="/org-charts/:id" element={<OrgChartDetail />} />
                 <Route path="/estimating" element={<EstimatesList />} />
                 <Route path="/estimating/estimates/new" element={<EstimateNew />} />
                 <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />

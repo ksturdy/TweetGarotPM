@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCustomer, getCustomerContactsHierarchy, CustomerContact } from '../services/customers';
-import ContactOrgChart from '../components/customers/ContactOrgChart';
+import ContactOrgChart, { OrgChartPerson } from '../components/customers/ContactOrgChart';
 import ContactModal from '../components/modals/ContactModal';
 import './CustomerDetail.css';
 
@@ -187,7 +187,7 @@ const CustomerOrgChartPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          <ContactOrgChart contacts={contacts} onContactEdit={setEditingContact} layout={layout} />
+          <ContactOrgChart contacts={contacts} onContactEdit={(p: OrgChartPerson) => setEditingContact(p as CustomerContact)} layout={layout} />
         )}
       </div>
 

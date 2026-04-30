@@ -6,6 +6,7 @@ import { caseStudiesApi } from '../../services/caseStudies';
 import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
 import { sellSheetsApi } from '../../services/sellSheets';
+import { orgChartsApi } from '../../services/orgCharts';
 import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalDetail.css';
@@ -23,6 +24,7 @@ const ProposalDetail: React.FC = () => {
   const [ssSearch, setSsSearch] = useState('');
   const [soSearch, setSoSearch] = useState('');
   const [resumeSearch, setResumeSearch] = useState('');
+  const [ocSearch, setOcSearch] = useState('');
 
   // Fetch proposal
   const { data: proposal, isLoading } = useQuery({
@@ -93,6 +95,16 @@ const ProposalDetail: React.FC = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
   });
 
+  const addOrgChartMutation = useMutation({
+    mutationFn: (orgChartId: number) => proposalsApi.addOrgChart(parseInt(id!), orgChartId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
+  const removeOrgChartMutation = useMutation({
+    mutationFn: (orgChartId: number) => proposalsApi.removeOrgChart(parseInt(id!), orgChartId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+  });
+
   // Fetch available items for editing
   const { data: availableCaseStudies = [] } = useQuery({
     queryKey: ['caseStudies', { status: 'published' }],
@@ -127,6 +139,12 @@ const ProposalDetail: React.FC = () => {
       const response = await employeeResumesApi.getAll({ is_active: true });
       return response.data;
     },
+    enabled: isEditing,
+  });
+
+  const { data: availableOrgCharts = [] } = useQuery({
+    queryKey: ['org-charts'],
+    queryFn: () => orgChartsApi.getAll(),
     enabled: isEditing,
   });
 
@@ -556,6 +574,68 @@ const ProposalDetail: React.FC = () => {
               {availableResumes.length === 0 && (
                 <p className="empty-text">No active resumes available</p>
               )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Attached Org Charts */}
+      {((proposal.org_charts && proposal.org_charts.length > 0) || isEditing) && (
+        <div className="card">
+          <h2 className="section-title">Project Org Charts ({proposal.org_charts?.length || 0})</h2>
+          {!isEditing ? (
+            <div className="attachment-list">
+              {proposal.org_charts?.map((oc: any) => (
+                <div key={oc.id} className="attachment-display-item">
+                  <div className="attachment-name">{oc.name}</div>
+                  <div className="attachment-meta">
+                    {oc.project_name || 'No project'}
+                    {' | '}{oc.member_count} {Number(oc.member_count) === 1 ? 'member' : 'members'}
+                  </div>
+                  {oc.description && <div className="attachment-notes">{oc.description}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input search-input"
+                placeholder="Search org charts..."
+                value={ocSearch}
+                onChange={(e) => setOcSearch(e.target.value)}
+              />
+              <div className="attachment-checklist">
+                {availableOrgCharts
+                  .filter((oc: any) =>
+                    !ocSearch || oc.name?.toLowerCase().includes(ocSearch.toLowerCase()) ||
+                    oc.project_name?.toLowerCase().includes(ocSearch.toLowerCase())
+                  )
+                  .map((oc: any) => {
+                  const isAttached = proposal.org_charts?.some((a: any) => a.id === oc.id);
+                  return (
+                    <label key={oc.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={isAttached}
+                        onChange={() => isAttached
+                          ? removeOrgChartMutation.mutate(oc.id)
+                          : addOrgChartMutation.mutate(oc.id)
+                        }
+                      />
+                      <div className="attachment-info">
+                        <div className="attachment-name">{oc.name}</div>
+                        <div className="attachment-meta">
+                          {oc.project_name || 'No project'} | {oc.member_count || 0} members
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {availableOrgCharts.length === 0 && (
+                  <p className="empty-text">No org charts available. <a href="/org-charts" style={{ color: '#3b82f6' }}>Create one</a></p>
+                )}
               </div>
             </>
           )}

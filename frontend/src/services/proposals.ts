@@ -163,6 +163,13 @@ export const proposalsApi = {
   removeResume: (id: number, resumeId: number) =>
     api.delete(`/proposals/${id}/resumes/${resumeId}`),
 
+  // Org Charts
+  getOrgCharts: (id: number) => api.get(`/proposals/${id}/org-charts`),
+  addOrgChart: (id: number, orgChartId: number, data?: { notes?: string }) =>
+    api.post(`/proposals/${id}/org-charts`, { org_chart_id: orgChartId, ...data }),
+  removeOrgChart: (id: number, orgChartId: number) =>
+    api.delete(`/proposals/${id}/org-charts/${orgChartId}`),
+
   // PDF
   downloadPdf: (id: number) =>
     api.get(`/proposals/${id}/pdf-download`, { responseType: 'blob' }),

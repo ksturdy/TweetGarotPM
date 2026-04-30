@@ -15,6 +15,7 @@ const { getFileUrl } = require('../utils/fileStorage');
 const SellSheet = require('../models/SellSheet');
 const SellSheetImage = require('../models/SellSheetImage');
 const { generateSellSheetPdfHtml } = require('../utils/sellSheetPdfGenerator');
+const OrgChart = require('../models/OrgChart');
 
 // Apply middleware to all routes
 router.use(authenticate);
@@ -339,6 +340,30 @@ router.delete('/:id/sell-sheets/:sellSheetId', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// === ORG CHART ATTACHMENT ROUTES ===
+
+// POST /api/proposals/:id/org-charts
+router.post('/:id/org-charts', async (req, res, next) => {
+  try {
+    const proposal = await Proposal.findByIdAndTenant(parseInt(req.params.id), req.tenantId);
+    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    if (!req.body.org_chart_id) return res.status(400).json({ error: 'org_chart_id is required' });
+    const result = await Proposal.addOrgChart(parseInt(req.params.id), req.body.org_chart_id, req.body);
+    res.status(201).json(result);
+  } catch (error) { next(error); }
+});
+
+// DELETE /api/proposals/:id/org-charts/:orgChartId
+router.delete('/:id/org-charts/:orgChartId', async (req, res, next) => {
+  try {
+    const proposal = await Proposal.findByIdAndTenant(parseInt(req.params.id), req.tenantId);
+    if (!proposal) return res.status(404).json({ error: 'Proposal not found' });
+    const removed = await Proposal.removeOrgChart(parseInt(req.params.id), parseInt(req.params.orgChartId));
+    if (!removed) return res.status(404).json({ error: 'Org chart not attached to this proposal' });
+    res.json({ message: 'Org chart removed', item: removed });
+  } catch (error) { next(error); }
+});
+
 // === PDF / PREVIEW ===
 
 // Helper: load full case study HTML for each attached case study
@@ -388,6 +413,16 @@ async function buildSellSheetPages(sellSheets, tenantId, logoBase64) {
   return pages;
 }
 
+// Helper: load full org chart data for each attached org chart
+async function buildOrgChartData(orgCharts, tenantId) {
+  const data = [];
+  for (const oc of orgCharts) {
+    const fullChart = await OrgChart.findByIdAndTenant(oc.id, tenantId);
+    if (fullChart) data.push(fullChart);
+  }
+  return data;
+}
+
 // GET /api/proposals/:id/pdf - HTML preview (for browser print)
 router.get('/:id/pdf', async (req, res, next) => {
   try {
@@ -397,7 +432,8 @@ router.get('/:id/pdf', async (req, res, next) => {
     const logoBase64 = await fetchLogoBase64(req.tenantId);
     const caseStudyPages = await buildCaseStudyPages(proposal.case_studies || [], req.tenantId, logoBase64);
     const sellSheetPages = await buildSellSheetPages(proposal.sell_sheets || [], req.tenantId, logoBase64);
-    const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages);
+    const orgChartData = await buildOrgChartData(proposal.org_charts || [], req.tenantId);
+    const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages, orgChartData);
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error) {
@@ -414,7 +450,8 @@ router.get('/:id/pdf-download', async (req, res, next) => {
     const logoBase64 = await fetchLogoBase64(req.tenantId);
     const caseStudyPages = await buildCaseStudyPages(proposal.case_studies || [], req.tenantId, logoBase64);
     const sellSheetPages = await buildSellSheetPages(proposal.sell_sheets || [], req.tenantId, logoBase64);
-    const pdfBuffer = await generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages, sellSheetPages);
+    const orgChartData = await buildOrgChartData(proposal.org_charts || [], req.tenantId);
+    const pdfBuffer = await generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages, sellSheetPages, orgChartData);
 
     const filename = `Proposal-${(proposal.proposal_number || proposal.title).replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

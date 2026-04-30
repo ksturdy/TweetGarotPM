@@ -94,6 +94,14 @@ const MarketingList: React.FC = () => {
       ready: true,
     },
     {
+      name: 'Project Org Charts',
+      icon: '🏗️',
+      path: '/org-charts',
+      desc: 'Project team structures for proposals',
+      color: '#7c3aed',
+      ready: true,
+    },
+    {
       name: 'Social Media',
       icon: '📱',
       path: '/marketing/social-media',

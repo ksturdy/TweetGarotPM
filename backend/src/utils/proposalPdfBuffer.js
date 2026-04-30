@@ -1,8 +1,8 @@
 const { launchBrowser } = require('./launchBrowser');
 const { generateProposalPdfHtml } = require('./proposalPdfGenerator');
 
-async function generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages = [], sellSheetPages = []) {
-  const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages);
+async function generateProposalPdfBuffer(proposal, logoBase64, caseStudyPages = [], sellSheetPages = [], orgChartData = []) {
+  const html = generateProposalPdfHtml(proposal, logoBase64, caseStudyPages, sellSheetPages, orgChartData);
   let browser = null;
 
   try {

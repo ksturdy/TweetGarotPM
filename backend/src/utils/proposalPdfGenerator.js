@@ -27,7 +27,7 @@ function formatDate(dateString) {
  * @param {string[]} caseStudyPages - Array of full HTML documents from generateCaseStudyPdfHtml
  * @param {string[]} sellSheetPages - Array of full HTML documents from generateSellSheetPdfHtml
  */
-function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = [], sellSheetPages = []) {
+function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = [], sellSheetPages = [], orgChartData = []) {
   const sections = proposal.sections || [];
   const caseStudies = proposal.case_studies || [];
   const serviceOfferings = proposal.service_offerings || [];
@@ -93,6 +93,18 @@ function generateProposalPdfHtml(proposal, logoBase64 = '', caseStudyPages = [],
   .footer { margin-top: 30px; padding-top: 12px; border-top: 2px solid ${primaryColor}; font-size: 9pt; color: #6b7280; display: flex; justify-content: space-between; }
 
   .cs-page { page-break-before: always; }
+
+  .org-chart-section { page-break-inside: avoid; margin-bottom: 20px; }
+  .org-chart-section h2 { font-size: 14pt; font-weight: 700; color: ${primaryColor}; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 16px; }
+  .org-tree { position: relative; }
+  .org-member-card { display: inline-block; width: 200px; padding: 10px 12px; background: #f9fafb; border: 1.5px solid #d1d5db; border-radius: 8px; text-align: center; vertical-align: top; }
+  .org-member-name { font-size: 10.5pt; font-weight: 600; color: #1a202c; }
+  .org-member-title { font-size: 9pt; color: #6b7280; margin-top: 2px; }
+  .org-member-contact { font-size: 8pt; color: #9ca3af; margin-top: 4px; }
+  .org-level { margin-bottom: 12px; text-align: center; }
+  .org-level-children { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+  .org-connector-line { width: 2px; height: 16px; background: #cbd5e1; margin: 0 auto; }
+  .org-h-line { height: 2px; background: #cbd5e1; margin: 0 auto 0 auto; }
 
   @media print {
     .content-section, .attachment-section { page-break-inside: avoid; }
@@ -175,6 +187,9 @@ ${resumes.length > 0 ? `
 </div>
 ` : ''}
 
+<!-- Project Org Charts -->
+${orgChartData.map(chart => renderOrgChartSection(chart)).join('\n')}
+
 <!-- Terms & Conditions -->
 ${renderContentSection('Terms & Conditions', proposal.terms_and_conditions)}
 
@@ -208,6 +223,57 @@ function renderContentSection(title, content) {
 <div class="content-section">
   <h2>${escapeHtml(title)}</h2>
   <div class="body">${escapeHtml(content)}</div>
+</div>`;
+}
+
+function renderOrgChartSection(chart) {
+  if (!chart || !chart.members || chart.members.length === 0) return '';
+
+  const members = chart.members;
+
+  // Build tree
+  const map = new Map();
+  members.forEach(m => map.set(m.id, { ...m, children: [] }));
+  const roots = [];
+  members.forEach(m => {
+    const node = map.get(m.id);
+    if (m.reports_to && map.has(m.reports_to)) {
+      map.get(m.reports_to).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  // Render tree as nested HTML levels
+  function renderLevel(nodes) {
+    if (nodes.length === 0) return '';
+    const cards = nodes.map(n => {
+      const contactInfo = [n.email, n.phone].filter(Boolean).join(' | ');
+      return `<div class="org-member-card">
+        <div class="org-member-name">${escapeHtml(n.first_name)} ${escapeHtml(n.last_name)}</div>
+        ${n.title ? `<div class="org-member-title">${escapeHtml(n.title)}</div>` : ''}
+        ${contactInfo ? `<div class="org-member-contact">${escapeHtml(contactInfo)}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    // Collect all children from this level
+    const allChildren = nodes.flatMap(n => n.children);
+    const childHtml = allChildren.length > 0
+      ? `<div class="org-connector-line"></div>\n${renderLevel(allChildren)}`
+      : '';
+
+    return `<div class="org-level">
+      <div class="org-level-children">${cards}</div>
+    </div>\n${childHtml}`;
+  }
+
+  return `
+<div class="org-chart-section">
+  <h2>Project Organization &mdash; ${escapeHtml(chart.name)}</h2>
+  ${chart.description ? `<p style="font-size: 9.5pt; color: #6b7280; margin-bottom: 12px;">${escapeHtml(chart.description)}</p>` : ''}
+  <div class="org-tree">
+    ${renderLevel(roots)}
+  </div>
 </div>`;
 }
 

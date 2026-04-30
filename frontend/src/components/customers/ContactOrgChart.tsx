@@ -1,9 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CustomerContact } from '../../services/customers';
 import './ContactOrgChart.css';
 
+export interface OrgChartPerson {
+  id: number;
+  first_name: string;
+  last_name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  reports_to?: number | null;
+  is_primary?: boolean;
+}
+
 interface OrgNode {
-  contact: CustomerContact;
+  contact: OrgChartPerson;
   children: OrgNode[];
   x: number;
   y: number;
@@ -11,12 +21,13 @@ interface OrgNode {
 }
 
 interface ContactOrgChartProps {
-  contacts: CustomerContact[];
-  onContactEdit: (contact: CustomerContact) => void;
+  contacts: OrgChartPerson[];
+  onContactEdit: (contact: OrgChartPerson) => void;
   layout?: 'vertical' | 'horizontal' | 'compact';
+  showReportsCount?: boolean;
 }
 
-const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEdit, layout = 'vertical' }) => {
+const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEdit, layout = 'vertical', showReportsCount = true }) => {
   const [nodes, setNodes] = useState<Map<number, { x: number; y: number }>>(new Map());
   const [dragging, setDragging] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -36,7 +47,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   useEffect(() => { panRef.current = pan; }, [pan]);
 
   // Build tree structure from flat contact list
-  const buildTree = (contacts: CustomerContact[]): OrgNode[] => {
+  const buildTree = (contacts: OrgChartPerson[]): OrgNode[] => {
     const map = new Map<number, OrgNode>();
 
     // Initialize all nodes with default positions
@@ -277,7 +288,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
     setIsPanning(false);
   };
 
-  const handleCardClick = (contact: CustomerContact) => {
+  const handleCardClick = (contact: OrgChartPerson) => {
     // Only trigger edit if we didn't drag
     if (!hasDragged.current) {
       onContactEdit(contact);
@@ -485,6 +496,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
                 onClick={handleCardClick}
                 onEdit={onContactEdit}
                 isDragging={dragging === nodeId}
+                showReportsCount={showReportsCount}
               />
             );
           })}
@@ -505,16 +517,17 @@ const findNode = (tree: OrgNode[], nodeId: number): OrgNode | null => {
 };
 
 interface OrgCardProps {
-  contact: CustomerContact;
+  contact: OrgChartPerson;
   position: { x: number; y: number };
   childCount: number;
   onMouseDown: (e: React.MouseEvent) => void;
-  onClick: (contact: CustomerContact) => void;
-  onEdit: (contact: CustomerContact) => void;
+  onClick: (contact: OrgChartPerson) => void;
+  onEdit: (contact: OrgChartPerson) => void;
   isDragging: boolean;
+  showReportsCount?: boolean;
 }
 
-const OrgCard: React.FC<OrgCardProps> = ({ contact, position, childCount, onMouseDown, onClick, onEdit, isDragging }) => {
+const OrgCard: React.FC<OrgCardProps> = ({ contact, position, childCount, onMouseDown, onClick, onEdit, isDragging, showReportsCount = true }) => {
   const initials = `${contact.first_name[0] || ''}${contact.last_name[0] || ''}`.toUpperCase();
 
   const getAvatarColor = (name: string) => {
@@ -560,7 +573,7 @@ const OrgCard: React.FC<OrgCardProps> = ({ contact, position, childCount, onMous
           {contact.email && <div className="org-email">📧 {contact.email}</div>}
           {contact.phone && <div className="org-phone">📞 {contact.phone}</div>}
         </div>
-        {childCount > 0 && (
+        {showReportsCount && childCount > 0 && (
           <div className="org-reports-count">
             {childCount} {childCount === 1 ? 'report' : 'reports'}
           </div>

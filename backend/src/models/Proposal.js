@@ -150,6 +150,20 @@ class Proposal {
     `, [id]);
     proposal.sell_sheets = sellSheetsResult.rows;
 
+    // Get attached org charts with member counts
+    const orgChartsResult = await db.query(`
+      SELECT poc.id as junction_id, poc.display_order, poc.notes,
+             oc.id, oc.name, oc.description, oc.project_id,
+             p.name as project_name,
+             (SELECT COUNT(*) FROM org_chart_members WHERE org_chart_id = oc.id) as member_count
+      FROM proposal_org_charts poc
+      JOIN org_charts oc ON poc.org_chart_id = oc.id
+      LEFT JOIN projects p ON oc.project_id = p.id
+      WHERE poc.proposal_id = $1
+      ORDER BY poc.display_order
+    `, [id]);
+    proposal.org_charts = orgChartsResult.rows;
+
     return proposal;
   }
 
@@ -813,6 +827,40 @@ class Proposal {
     const result = await db.query(
       'DELETE FROM proposal_sell_sheets WHERE proposal_id = $1 AND sell_sheet_id = $2 RETURNING *',
       [proposalId, sellSheetId]
+    );
+    return result.rows[0];
+  }
+
+  // --- Org Charts ---
+
+  static async getOrgCharts(proposalId) {
+    const result = await db.query(`
+      SELECT poc.id as junction_id, poc.display_order, poc.notes,
+             oc.id, oc.name, oc.description, oc.project_id,
+             (SELECT COUNT(*) FROM org_chart_members WHERE org_chart_id = oc.id) as member_count
+      FROM proposal_org_charts poc
+      JOIN org_charts oc ON poc.org_chart_id = oc.id
+      WHERE poc.proposal_id = $1
+      ORDER BY poc.display_order
+    `, [proposalId]);
+    return result.rows;
+  }
+
+  static async addOrgChart(proposalId, orgChartId, data = {}) {
+    const result = await db.query(`
+      INSERT INTO proposal_org_charts (proposal_id, org_chart_id, display_order, notes)
+      VALUES ($1, $2, COALESCE($3, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM proposal_org_charts WHERE proposal_id = $1)), $4)
+      ON CONFLICT (proposal_id, org_chart_id)
+      DO UPDATE SET notes = COALESCE(EXCLUDED.notes, proposal_org_charts.notes)
+      RETURNING *
+    `, [proposalId, orgChartId, data.display_order || null, data.notes || null]);
+    return result.rows[0];
+  }
+
+  static async removeOrgChart(proposalId, orgChartId) {
+    const result = await db.query(
+      'DELETE FROM proposal_org_charts WHERE proposal_id = $1 AND org_chart_id = $2 RETURNING *',
+      [proposalId, orgChartId]
     );
     return result.rows[0];
   }
