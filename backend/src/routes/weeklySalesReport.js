@@ -240,8 +240,8 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     const acts = activitiesResult.rows.filter(r => r.location_group === loc);
     const wl = wonLostResult.rows.filter(r => r.location_group === loc);
 
-    if (opps.length === 0 && acts.length === 0 && wl.length === 0 && !prevOppsByLoc[loc] && !prevActByLoc[loc]) {
-      continue; // skip empty locations
+    if (loc === 'NONE' && opps.length === 0 && acts.length === 0 && wl.length === 0) {
+      continue; // only skip Unassigned when truly empty
     }
 
     const activityBreakdown = { call: 0, meeting: 0, email: 0, note: 0, task: 0, voice_note: 0 };

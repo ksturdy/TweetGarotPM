@@ -19,9 +19,9 @@ const fmtDate = (d) => {
 };
 
 const LOC_META = {
-  NEW:  { label: 'NE Wisconsin', color: '#3b82f6' },
-  CW:   { label: 'Central WI',  color: '#8b5cf6' },
-  WW:   { label: 'Western WI',  color: '#f59e0b' },
+  NEW:  { label: 'De Pere, WI', color: '#3b82f6' },
+  CW:   { label: 'Wisconsin Rapids, WI',  color: '#8b5cf6' },
+  WW:   { label: 'Altoona, WI',  color: '#f59e0b' },
   AZ:   { label: 'Tempe, AZ',   color: '#ef4444' },
   NONE: { label: 'Unassigned',  color: '#64748b' },
 };
@@ -241,14 +241,10 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
 
   <!-- Company Snapshot -->
   ${company_snapshot ? (() => {
-    const oc = company_snapshot.gm_override_count || 0;
-    const overrideBadge = oc > 0
-      ? `<span style="font-size: 6.5pt; font-weight: 600; color: #d97706; background: rgba(217,119,6,0.1); padding: 1px 6px; border-radius: 3px; margin-left: 8px;">${oc} GM override${oc > 1 ? 's' : ''} applied</span>`
-      : '';
     return `
   <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; border-top: 3px solid #002356;">
     <div style="padding: 8px 14px;">
-      <div style="font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Company Snapshot${overrideBadge}</div>
+      <div style="font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Company Snapshot</div>
       <div style="display: flex; gap: 28px;">
         <div>
           <div style="font-size: 6.5pt; color: #64748b; font-weight: 600; text-transform: uppercase;">Total Backlog</div>
@@ -278,10 +274,19 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
   })() : ''}
 
   <!-- Newly Created Jobs -->
-  ${new_jobs && new_jobs.length > 0 ? `
+  ${new_jobs && new_jobs.length > 0 ? (() => {
+    const oc = (company_snapshot && company_snapshot.gm_override_count) || 0;
+    const overrideBadge = oc > 0
+      ? `<span style="font-size: 6.5pt; font-weight: 600; color: #d97706; background: rgba(217,119,6,0.1); padding: 1px 6px; border-radius: 3px; margin-left: 8px;">${oc} GM override${oc > 1 ? 's' : ''} applied</span>`
+      : '';
+    const hasOverrides = new_jobs.some(j => j.gm_overridden);
+    const overrideFootnote = hasOverrides
+      ? `<div style="padding: 4px 8px 6px; font-size: 7pt; color: #d97706; font-style: italic;">* GM% shown in orange italics has been overridden from the default 100% GM applied on import.</div>`
+      : '';
+    return `
   <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid; border-top: 3px solid #059669;">
     <div style="padding: 8px 14px 6px;">
-      <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Newly Created Jobs (${new_jobs.length})</div>
+      <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Newly Created Jobs (${new_jobs.length})${overrideBadge}</div>
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
@@ -313,8 +318,10 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
           }).join('')}
         </tbody>
       </table>
+      ${overrideFootnote}
     </div>
-  </div>` : ''}
+  </div>`;
+  })() : ''}
 
   <!-- Location Sections -->
   ${locSectionsHtml}
