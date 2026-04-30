@@ -504,6 +504,23 @@ router.delete('/saved/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/opportunity-search/saved/:id/duplicate - Duplicate a saved search
+router.post('/saved/:id/duplicate', async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const duplicated = await SavedSearches.duplicate(
+      Number(req.params.id), req.userId, req.tenantId, name
+    );
+    if (!duplicated) {
+      return res.status(404).json({ error: 'Saved search not found' });
+    }
+    res.status(201).json(duplicated);
+  } catch (error) {
+    console.error('[Opportunity Search] Error duplicating saved search:', error);
+    next(error);
+  }
+});
+
 // GET /api/opportunity-search/saved/:id/pdf - Download PDF of a saved search
 router.get('/saved/:id/pdf', async (req, res, next) => {
   try {
@@ -699,6 +716,23 @@ router.delete('/recurring/:id', async (req, res, next) => {
     res.json({ success: true });
   } catch (error) {
     console.error('[Opportunity Search] Error deleting recurring search:', error);
+    next(error);
+  }
+});
+
+// POST /api/opportunity-search/recurring/:id/duplicate - Duplicate a recurring search
+router.post('/recurring/:id/duplicate', async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const duplicated = await RecurringSearches.duplicate(
+      Number(req.params.id), req.userId, req.tenantId, name
+    );
+    if (!duplicated) {
+      return res.status(404).json({ error: 'Recurring search not found' });
+    }
+    res.status(201).json(duplicated);
+  } catch (error) {
+    console.error('[Opportunity Search] Error duplicating recurring search:', error);
     next(error);
   }
 });

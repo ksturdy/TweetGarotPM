@@ -83,6 +83,14 @@ const recurringSearchesService = {
     return response.data;
   },
 
+  async duplicate(id: number, name?: string): Promise<RecurringSearch> {
+    const response = await api.post<RecurringSearch>(
+      `/opportunity-search/recurring/${id}/duplicate`,
+      { name }
+    );
+    return response.data;
+  },
+
   async delete(id: number): Promise<void> {
     await api.delete(`/opportunity-search/recurring/${id}`);
   },

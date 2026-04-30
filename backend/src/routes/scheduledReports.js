@@ -117,13 +117,36 @@ router.post('/:id/send-now', async (req, res) => {
     const report = await ScheduledReport.findById(parseInt(req.params.id), req.tenantId);
     if (!report) return res.status(404).json({ error: 'Scheduled report not found' });
 
+    const recipients = report.recipients || [];
+    const teamRecipients = report.team_recipients || [];
+    if (recipients.length === 0 && teamRecipients.length === 0) {
+      return res.status(400).json({ error: 'No recipients configured for this scheduled report' });
+    }
+
+    // Pre-flight validation for opportunity_search reports
+    if (report.report_type === 'opportunity_search') {
+      const recurringSearchId = report.filters?.recurring_search_id;
+      if (!recurringSearchId) {
+        return res.status(400).json({ error: 'No recurring search linked to this scheduled report. Edit the schedule and select a recurring search.' });
+      }
+      const RecurringSearches = require('../models/RecurringSearches');
+      const recurringSearch = await RecurringSearches.findById(recurringSearchId, req.tenantId);
+      if (!recurringSearch) {
+        return res.status(400).json({ error: `Linked recurring search (ID ${recurringSearchId}) no longer exists. Edit the schedule and select a different recurring search.` });
+      }
+      if (!recurringSearch.is_active) {
+        return res.status(400).json({ error: `Recurring search "${recurringSearch.name}" is inactive. Reactivate it or choose a different search.` });
+      }
+    }
+
     // Respond immediately — report will generate and send in the background
     res.status(202).json({ message: 'Report queued — it will be emailed shortly.' });
 
     // Fire-and-forget: run in background so navigation doesn't cancel it
     const { executeScheduledReport } = require('../jobs/scheduledReportRunner');
     executeScheduledReport(report)
-      .then(result => {
+      .then(async (result) => {
+        await ScheduledReport.markRun(report.id);
         console.log(`[Scheduled Reports] Send-now completed for "${report.name}" (id=${report.id}), sent to ${result.recipientCount} recipient(s)`);
       })
       .catch(error => {

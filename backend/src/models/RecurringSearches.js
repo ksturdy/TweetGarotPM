@@ -142,6 +142,30 @@ const RecurringSearches = {
     );
     return result.rows[0];
   },
+
+  /**
+   * Duplicate a recurring search
+   */
+  async duplicate(id, userId, tenantId, newName) {
+    const original = await this.findById(id, tenantId);
+    if (!original) return null;
+
+    const result = await pool.query(
+      `INSERT INTO opportunity_recurring_searches
+        (name, description, criteria, is_active, created_by, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        newName || `${original.name} (Copy)`,
+        original.description,
+        JSON.stringify(original.criteria),
+        original.is_active,
+        userId,
+        tenantId
+      ]
+    );
+    return result.rows[0];
+  },
 };
 
 module.exports = RecurringSearches;

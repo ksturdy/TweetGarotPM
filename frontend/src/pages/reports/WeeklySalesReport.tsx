@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { weeklySalesReportApi, LocationData } from '../../services/weeklySalesReport';
+import opportunitiesApi, { Opportunity } from '../../services/opportunities';
+import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { LOCATION_GROUPS } from '../../constants/locationGroups';
 import { useAuth } from '../../context/AuthContext';
 import { parseLocalDate } from '../../utils/dateUtils';
@@ -402,12 +404,13 @@ const SettingsPanel: React.FC<{
 // ── Main component ───────────────────────────────────────
 
 const WeeklySalesReport: React.FC = () => {
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { tenant } = useAuth();
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prefs, setPrefs] = useState<WeeklySalesPreferences>(loadPrefs);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
 
   const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
 
@@ -421,9 +424,14 @@ const WeeklySalesReport: React.FC = () => {
     queryFn: () => weeklySalesReportApi.getData(weekStart),
   });
 
-  const onOppClick = useCallback((id: number) => {
-    navigate(`/sales-pipeline?id=${id}`);
-  }, [navigate]);
+  const onOppClick = useCallback(async (id: number) => {
+    try {
+      const opp = await opportunitiesApi.getById(id);
+      setSelectedOpportunity(opp);
+    } catch (e) {
+      console.error('Failed to load opportunity', e);
+    }
+  }, []);
 
   const orderedLocations = useMemo(() => {
     if (!data) return [];
@@ -713,6 +721,18 @@ const WeeklySalesReport: React.FC = () => {
           <div style={{ fontWeight: 600, color: '#002356', marginBottom: '0.25rem' }}>No sales activity this week</div>
           <div style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>Try selecting a different week or adjusting your location filters</div>
         </div>
+      )}
+
+      {/* Opportunity detail modal */}
+      {selectedOpportunity && (
+        <OpportunityModal
+          opportunity={selectedOpportunity}
+          onClose={() => setSelectedOpportunity(null)}
+          onSave={() => {
+            setSelectedOpportunity(null);
+            queryClient.invalidateQueries({ queryKey: ['weeklySalesReport'] });
+          }}
+        />
       )}
     </div>
   );

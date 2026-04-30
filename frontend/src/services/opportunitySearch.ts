@@ -124,6 +124,14 @@ const opportunitySearchService = {
     await api.post('/opportunity-search/saved/bulk-delete', { ids });
   },
 
+  async duplicateSavedSearch(id: number, name?: string): Promise<SavedSearch> {
+    const response = await api.post<SavedSearch>(
+      `/opportunity-search/saved/${id}/duplicate`,
+      { name }
+    );
+    return response.data;
+  },
+
   async downloadPdf(id: number): Promise<void> {
     const response = await api.get(`/opportunity-search/saved/${id}/pdf`, {
       responseType: 'blob',

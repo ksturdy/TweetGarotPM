@@ -766,6 +766,58 @@
   color: var(--text-primary);
 }
 
+/* Actions cell — keeps icon buttons on one line */
+.opp-search-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Icon-only action buttons */
+.opp-action-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  cursor: pointer;
+  margin-left: 4px;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  vertical-align: middle;
+}
+
+.opp-action-icon-btn:first-child {
+  margin-left: 0;
+}
+
+.opp-action-icon-btn:hover {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+
+.opp-action-icon-btn.danger:hover {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.opp-action-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.opp-action-icon-btn:disabled:hover {
+  background: none;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+/* Legacy text buttons (bulk actions bar) */
 .opp-saved-view-btn,
 .opp-saved-delete-btn {
   background: none;

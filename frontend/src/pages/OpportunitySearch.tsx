@@ -181,19 +181,40 @@ const OpportunitySearch: React.FC = () => {
     queryFn: () => recurringSearchesService.getAll(),
   });
 
-  const toggleRecurringMutation = useMutation({
-    mutationFn: (id: number) => recurringSearchesService.toggleActive(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
-      setSuccessMessage('Recurring search status updated.');
-    },
-  });
-
   const deleteRecurringMutation = useMutation({
     mutationFn: (id: number) => recurringSearchesService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
       setSuccessMessage('Recurring search deleted.');
+    },
+  });
+
+  const duplicateSavedMutation = useMutation({
+    mutationFn: (id: number) => opportunitySearchService.duplicateSavedSearch(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
+      setSuccessMessage(`Duplicated as "${data.name}". Click to view and modify.`);
+    },
+    onError: () => {
+      setError('Failed to duplicate search.');
+    },
+  });
+
+  const duplicateRecurringMutation = useMutation({
+    mutationFn: (id: number) => recurringSearchesService.duplicate(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-searches'] });
+      // Open the edit dialog for the new copy so user can rename it
+      setRecurringDialogMode('edit');
+      setRecurringDialogData({
+        id: data.id,
+        name: data.name,
+        description: data.description || '',
+      });
+      setRecurringDialogOpen(true);
+    },
+    onError: () => {
+      setError('Failed to duplicate recurring search.');
     },
   });
 
@@ -759,7 +780,7 @@ const OpportunitySearch: React.FC = () => {
                     <th>Leads</th>
                     <th>Est. Value</th>
                     <th>Market</th>
-                    <th>Actions</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -798,16 +819,43 @@ const OpportunitySearch: React.FC = () => {
                           {item.criteria?.market_sector || 'All'}
                         </span>
                       </td>
-                      <td>
+                      <td className="opp-search-actions-cell">
                         <button
-                          className="opp-saved-view-btn"
+                          className="opp-action-icon-btn"
                           onClick={(e) => { e.stopPropagation(); handleLoadSaved(item.id); }}
                           title="View results"
                         >
-                          View
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                         <button
-                          className="opp-saved-view-btn"
+                          className="opp-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            duplicateSavedMutation.mutate(item.id);
+                          }}
+                          title="Duplicate search"
+                          disabled={duplicateSavedMutation.isPending}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <button
+                          className="opp-action-icon-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecurringDialogMode('create');
+                            setRecurringDialogData({
+                              savedSearchId: item.id,
+                              name: item.name,
+                              description: '',
+                            });
+                            setRecurringDialogOpen(true);
+                          }}
+                          title="Save as recurring search"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </button>
+                        <button
+                          className="opp-action-icon-btn"
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
@@ -815,8 +863,6 @@ const OpportunitySearch: React.FC = () => {
                               setSuccessMessage('PDF downloaded successfully');
                             } catch (err: any) {
                               console.error('PDF download error:', err);
-
-                              // Handle blob error responses
                               let errorMsg = 'Unknown error';
                               if (err.response?.data instanceof Blob) {
                                 try {
@@ -834,26 +880,10 @@ const OpportunitySearch: React.FC = () => {
                           }}
                           title="Download PDF"
                         >
-                          PDF
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         </button>
                         <button
-                          className="opp-saved-view-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRecurringDialogMode('create');
-                            setRecurringDialogData({
-                              savedSearchId: item.id,
-                              name: item.name,
-                              description: '',
-                            });
-                            setRecurringDialogOpen(true);
-                          }}
-                          title="Save as recurring search for scheduling"
-                        >
-                          Recurring
-                        </button>
-                        <button
-                          className="opp-saved-delete-btn"
+                          className="opp-action-icon-btn danger"
                           onClick={async (e) => {
                             e.stopPropagation();
                             const ok = await confirm({ message: 'Delete this search?', danger: true });
@@ -868,7 +898,7 @@ const OpportunitySearch: React.FC = () => {
                           }}
                           title="Delete"
                         >
-                          Delete
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                         </button>
                       </td>
                     </tr>
@@ -909,8 +939,7 @@ const OpportunitySearch: React.FC = () => {
                   <th>User</th>
                   <th>Last Run</th>
                   <th>Last Results</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -934,24 +963,19 @@ const OpportunitySearch: React.FC = () => {
                         : '-'
                       }
                     </td>
-                    <td>
-                      <span className={`opp-search-tag ${item.is_active ? 'market' : 'construction'}`}>
-                        {item.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td>
+                    <td className="opp-search-actions-cell">
                       <button
-                        className="opp-saved-view-btn"
+                        className="opp-action-icon-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleViewRecurring(item);
                         }}
-                        title="View and edit search criteria"
+                        title="View results and criteria"
                       >
-                        View
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                       </button>
                       <button
-                        className="opp-saved-view-btn"
+                        className="opp-action-icon-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           setRecurringDialogMode('edit');
@@ -964,21 +988,32 @@ const OpportunitySearch: React.FC = () => {
                         }}
                         title="Edit name and description"
                       >
-                        Edit
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
                       <button
-                        className="opp-saved-view-btn"
+                        className="opp-action-icon-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRerunRecurring(item);
                         }}
-                        title="Re-run search and view fresh results"
+                        title="Re-run search with fresh results"
                         disabled={searchMutation.isPending}
                       >
-                        {searchMutation.isPending ? 'Running...' : 'Rerun'}
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                       </button>
                       <button
-                        className="opp-saved-view-btn"
+                        className="opp-action-icon-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicateRecurringMutation.mutate(item.id);
+                        }}
+                        title="Duplicate search"
+                        disabled={duplicateRecurringMutation.isPending}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      </button>
+                      <button
+                        className="opp-action-icon-btn"
                         onClick={async (e) => {
                           e.stopPropagation();
                           try {
@@ -986,8 +1021,6 @@ const OpportunitySearch: React.FC = () => {
                             setSuccessMessage('PDF downloaded successfully');
                           } catch (err: any) {
                             console.error('Recurring PDF download error:', err);
-
-                            // Handle blob error responses
                             let errorMsg = 'Unknown error';
                             if (err.response?.data instanceof Blob) {
                               try {
@@ -1003,23 +1036,12 @@ const OpportunitySearch: React.FC = () => {
                             setError(`PDF generation failed: ${errorMsg}. Note: This runs a fresh AI search which may take 30-60 seconds.`);
                           }
                         }}
-                        title="Download PDF (runs fresh search)"
+                        title="Download PDF"
                       >
-                        PDF
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       </button>
                       <button
-                        className="opp-saved-view-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleRecurringMutation.mutate(item.id);
-                        }}
-                        title={item.is_active ? 'Deactivate' : 'Activate'}
-                        disabled={toggleRecurringMutation.isPending}
-                      >
-                        {item.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        className="opp-saved-delete-btn"
+                        className="opp-action-icon-btn danger"
                         onClick={async (e) => {
                           e.stopPropagation();
                           const ok = await confirm({ message: 'Delete this recurring search?', danger: true });
@@ -1029,7 +1051,7 @@ const OpportunitySearch: React.FC = () => {
                         }}
                         title="Delete"
                       >
-                        Delete
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                       </button>
                     </td>
                   </tr>

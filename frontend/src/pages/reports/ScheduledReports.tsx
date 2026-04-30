@@ -107,6 +107,7 @@ const ScheduledReports: React.FC = () => {
   const [form, setForm] = useState<FormState>({ ...DEFAULT_FORM });
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [sentId, setSentId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [recipientSearch, setRecipientSearch] = useState('');
 
@@ -219,9 +220,11 @@ const ScheduledReports: React.FC = () => {
 
   const sendNowMutation = useMutation({
     mutationFn: (id: number) => scheduledReportsApi.sendNow(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-reports'] });
       setSendingId(null);
+      setSentId(id);
+      setTimeout(() => setSentId(prev => prev === id ? null : prev), 3000);
       showToast('Report queued — it will be emailed shortly', 'success');
     },
     onError: (err: any) => {
@@ -514,16 +517,17 @@ const ScheduledReports: React.FC = () => {
                       </button>
                       <button
                         onClick={() => { setSendingId(report.id); sendNowMutation.mutate(report.id); }}
-                        disabled={sendingId === report.id}
-                        title="Send now"
+                        disabled={sendingId === report.id || sentId === report.id}
+                        title={sendingId === report.id ? 'Sending report…' : sentId === report.id ? 'Report queued' : 'Send now'}
                         style={{
                           padding: '5px 12px', fontSize: '0.75rem', fontWeight: 500,
-                          background: sendingId === report.id ? '#94a3b8' : '#002356',
-                          border: 'none', borderRadius: '6px', cursor: 'pointer', color: 'white',
-                          whiteSpace: 'nowrap',
+                          background: sentId === report.id ? '#16a34a' : sendingId === report.id ? '#94a3b8' : '#002356',
+                          border: 'none', borderRadius: '6px',
+                          cursor: (sendingId === report.id || sentId === report.id) ? 'not-allowed' : 'pointer',
+                          color: 'white', whiteSpace: 'nowrap',
                         }}
                       >
-                        {sendingId === report.id ? '...' : 'Send'}
+                        {sendingId === report.id ? 'Sending…' : sentId === report.id ? 'Sent \u2713' : 'Send'}
                       </button>
                       <button
                         onClick={() => setDeleteConfirmId(report.id)}

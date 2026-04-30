@@ -69,6 +69,29 @@ const SavedSearches = {
       [ids, tenantId]
     );
     return result.rows;
+  },
+
+  async duplicate(id, userId, tenantId, newName) {
+    const original = await this.findById(id, tenantId);
+    if (!original) return null;
+
+    const result = await pool.query(
+      `INSERT INTO opportunity_saved_searches
+        (name, criteria, results, summary, lead_count, total_estimated_value, created_by, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        newName || `${original.name} (Copy)`,
+        JSON.stringify(original.criteria),
+        JSON.stringify(original.results),
+        JSON.stringify(original.summary),
+        original.lead_count,
+        original.total_estimated_value,
+        userId,
+        tenantId
+      ]
+    );
+    return result.rows[0];
   }
 };
 
