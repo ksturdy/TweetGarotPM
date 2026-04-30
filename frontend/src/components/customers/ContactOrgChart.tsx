@@ -28,6 +28,12 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   const hasDragged = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+
+  // Keep refs in sync so the native wheel handler always reads current values
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { panRef.current = pan; }, [pan]);
 
   // Build tree structure from flat contact list
   const buildTree = (contacts: CustomerContact[]): OrgNode[] => {
@@ -202,11 +208,49 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0 && dragging === null) {
+    // Left-click or middle-click to pan
+    if ((e.button === 0 || e.button === 1) && dragging === null) {
+      if (e.button === 1) e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
   };
+
+  // Mouse wheel to zoom, centered on cursor position (native listener for non-passive)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom = Math.min(Math.max(currentZoom * zoomFactor, 0.1), 3);
+
+      // Adjust pan so the point under the cursor stays fixed
+      const newPan = {
+        x: mouseX - (mouseX - currentPan.x) * (newZoom / currentZoom),
+        y: mouseY - (mouseY - currentPan.y) * (newZoom / currentZoom)
+      };
+
+      // Update refs immediately for rapid successive events
+      zoomRef.current = newZoom;
+      panRef.current = newPan;
+
+      setZoom(newZoom);
+      setPan(newPan);
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (dragging !== null && containerRef.current) {
@@ -394,6 +438,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onAuxClick={(e) => e.preventDefault()}
         style={{ cursor: isPanning ? 'grabbing' : dragging !== null ? 'default' : 'grab' }}
       >
         <div
