@@ -6,6 +6,7 @@ const config = require('../config');
 const { authenticate } = require('../middleware/auth');
 const { getTenantById } = require('../middleware/tenant');
 const { sendEmail, generatePasswordResetEmailHtml, generatePasswordResetEmailText } = require('../utils/emailService');
+const { passwordValidationRules } = require('../utils/passwordValidator');
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.post(
   '/register',
   [
     body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 8 }),
+    ...passwordValidationRules('password'),
     body('firstName').trim().notEmpty(),
     body('lastName').trim().notEmpty(),
   ],
@@ -67,10 +68,31 @@ router.post(
         return res.status(401).json({ error: 'Account is inactive. Please contact HR.' });
       }
 
+      // Check account lockout
+      const lockStatus = User.isAccountLocked(user);
+      if (lockStatus.locked) {
+        return res.status(423).json({
+          error: `Account is locked due to too many failed attempts. Try again in ${lockStatus.remainingMinutes} minute(s).`,
+          lockedMinutes: lockStatus.remainingMinutes,
+        });
+      }
+
       const isMatch = await User.comparePassword(password, user.password);
       if (!isMatch) {
+        const lockResult = await User.incrementFailedAttempts(user.id);
+        if (lockResult.locked) {
+          await User.logSecurityEvent(user.id, 'account_locked', null, req.ip, req.get('User-Agent'),
+            { reason: 'max_failed_attempts', attempts: lockResult.attempts });
+          return res.status(423).json({
+            error: 'Account has been locked due to too many failed attempts. Try again in 15 minutes.',
+            lockedMinutes: 15,
+          });
+        }
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      // Successful password — reset failed attempts
+      await User.resetFailedAttempts(user.id);
 
       // Check if 2FA is enabled
       if (user.two_factor_enabled) {
@@ -93,6 +115,16 @@ router.post(
         return res.status(401).json({ error: 'Your organization account is inactive. Please contact support.' });
       }
 
+      // Check password aging
+      const expiryStatus = User.checkPasswordExpired(user);
+      let forcePasswordChange = user.force_password_change;
+      if (expiryStatus.expired) {
+        forcePasswordChange = true;
+        // Persist the flag so it's enforced even if user navigates away
+        const db = require('../config/database');
+        await db.query('UPDATE users SET force_password_change = TRUE WHERE id = $1', [user.id]);
+      }
+
       const token = jwt.sign({
         id: user.id,
         email: user.email,
@@ -112,7 +144,7 @@ router.post(
           lastName: user.last_name,
           role: user.role,
           hrAccess: user.hr_access,
-          forcePasswordChange: user.force_password_change,
+          forcePasswordChange,
           twoFactorEnabled: user.two_factor_enabled,
           tenantId: user.tenant_id,
           isPlatformAdmin: user.is_platform_admin || false,
@@ -127,6 +159,7 @@ router.post(
           planFeatures: tenant.plan_features,
         } : null,
         token,
+        ...(expiryStatus.warning && { passwordExpiresInDays: expiryStatus.daysUntilExpiry }),
       });
     } catch (error) {
       next(error);
@@ -196,6 +229,15 @@ router.post(
         return res.status(401).json({ error: 'Your organization account is inactive. Please contact support.' });
       }
 
+      // Check password aging
+      const expiryStatus = User.checkPasswordExpired(user);
+      let forcePasswordChange = user.force_password_change;
+      if (expiryStatus.expired) {
+        forcePasswordChange = true;
+        const db = require('../config/database');
+        await db.query('UPDATE users SET force_password_change = TRUE WHERE id = $1', [user.id]);
+      }
+
       // Issue JWT token
       const jwtToken = jwt.sign(
         {
@@ -218,7 +260,7 @@ router.post(
           lastName: user.last_name,
           role: user.role,
           hrAccess: user.hr_access,
-          forcePasswordChange: user.force_password_change,
+          forcePasswordChange,
           twoFactorEnabled: user.two_factor_enabled,
           tenantId: user.tenant_id,
           isPlatformAdmin: user.is_platform_admin || false,
@@ -233,6 +275,7 @@ router.post(
           planFeatures: tenant.plan_features,
         } : null,
         token: jwtToken,
+        ...(expiryStatus.warning && { passwordExpiresInDays: expiryStatus.daysUntilExpiry }),
       });
     } catch (error) {
       next(error);
@@ -324,15 +367,7 @@ router.post(
   '/reset-password',
   [
     body('token').notEmpty().isLength({ min: 64, max: 64 }),
-    body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters')
-      .matches(/[A-Z]/)
-      .withMessage('Password must contain at least one uppercase letter')
-      .matches(/[a-z]/)
-      .withMessage('Password must contain at least one lowercase letter')
-      .matches(/[0-9]/)
-      .withMessage('Password must contain at least one number'),
+    ...passwordValidationRules('password'),
   ],
   validate,
   async (req, res, next) => {
@@ -348,11 +383,22 @@ router.post(
         });
       }
 
+      // Check password history
+      const reused = await User.checkPasswordHistory(resetToken.user_id, password);
+      if (reused) {
+        return res.status(400).json({
+          error: 'This password was used recently. Please choose a different password.'
+        });
+      }
+
       // Reset password (forceChange = false since user just set it)
       await User.resetPassword(resetToken.user_id, password, false);
 
       // Mark token as used
       await User.markTokenAsUsed(token);
+
+      // Reset any lockout from failed attempts
+      await User.resetFailedAttempts(resetToken.user_id);
 
       // Log security event
       await User.logSecurityEvent(resetToken.user_id, 'password_reset_completed', null,

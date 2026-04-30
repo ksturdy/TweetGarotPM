@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { PASSWORD_POLICY } = require('../utils/passwordValidator');
 
 const User = {
   /**
@@ -163,6 +164,7 @@ const User = {
        RETURNING id, email, first_name, last_name, role`,
       [hashedPassword, id]
     );
+    await this.addPasswordToHistory(id, hashedPassword);
     return result.rows[0];
   },
 
@@ -175,6 +177,7 @@ const User = {
        RETURNING id, email, first_name, last_name, role`,
       [hashedPassword, id, forceChange]
     );
+    await this.addPasswordToHistory(id, hashedPassword);
     return result.rows[0];
   },
 
@@ -183,6 +186,96 @@ const User = {
       'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1',
       [id]
     );
+  },
+
+  // Password history methods
+  async addPasswordToHistory(userId, hashedPassword) {
+    await db.query(
+      'INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)',
+      [userId, hashedPassword]
+    );
+    // Prune old entries beyond the policy limit
+    await db.query(
+      `DELETE FROM password_history
+       WHERE id NOT IN (
+         SELECT id FROM password_history
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2
+       ) AND user_id = $1`,
+      [userId, PASSWORD_POLICY.maxHistoryCount]
+    );
+  },
+
+  async checkPasswordHistory(userId, newPassword) {
+    const result = await db.query(
+      `SELECT password_hash FROM password_history
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, PASSWORD_POLICY.maxHistoryCount]
+    );
+    for (const row of result.rows) {
+      const match = await bcrypt.compare(newPassword, row.password_hash);
+      if (match) return true;
+    }
+    return false;
+  },
+
+  // Account lockout methods
+  async incrementFailedAttempts(userId) {
+    const result = await db.query(
+      `UPDATE users
+       SET failed_login_attempts = COALESCE(failed_login_attempts, 0) + 1
+       WHERE id = $1
+       RETURNING failed_login_attempts`,
+      [userId]
+    );
+    const attempts = result.rows[0]?.failed_login_attempts || 0;
+    if (attempts >= PASSWORD_POLICY.maxFailedAttempts) {
+      await db.query(
+        `UPDATE users SET locked_until = CURRENT_TIMESTAMP + INTERVAL '${PASSWORD_POLICY.lockoutMinutes} minutes' WHERE id = $1`,
+        [userId]
+      );
+      return { locked: true, attempts };
+    }
+    return { locked: false, attempts };
+  },
+
+  async resetFailedAttempts(userId) {
+    await db.query(
+      'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1',
+      [userId]
+    );
+  },
+
+  isAccountLocked(user) {
+    if (!user.locked_until) return { locked: false, remainingMinutes: 0 };
+    const now = new Date();
+    const lockedUntil = new Date(user.locked_until);
+    if (lockedUntil > now) {
+      const remainingMs = lockedUntil - now;
+      const remainingMinutes = Math.ceil(remainingMs / 60000);
+      return { locked: true, remainingMinutes };
+    }
+    return { locked: false, remainingMinutes: 0 };
+  },
+
+  // Password aging methods
+  checkPasswordExpired(user) {
+    if (!user.password_changed_at) {
+      return { expired: true, daysUntilExpiry: 0, warning: true };
+    }
+    const changedAt = new Date(user.password_changed_at);
+    const now = new Date();
+    const ageMs = now - changedAt;
+    const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+    const daysUntilExpiry = PASSWORD_POLICY.maxAgeDays - ageDays;
+    return {
+      expired: daysUntilExpiry <= 0,
+      daysUntilExpiry: Math.max(0, daysUntilExpiry),
+      warning: daysUntilExpiry <= PASSWORD_POLICY.warningDays && daysUntilExpiry > 0,
+    };
   },
 
   // 2FA methods

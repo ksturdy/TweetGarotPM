@@ -10,6 +10,7 @@ const Login: React.FC = () => {
   const [requires2FA, setRequires2FA] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [lockedMinutes, setLockedMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const { login, login2FA } = useAuth();
   const navigate = useNavigate();
@@ -30,7 +31,13 @@ const Login: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+      if (err.response?.status === 423) {
+        setLockedMinutes(err.response.data.lockedMinutes || 15);
+        setError(err.response.data.error);
+      } else {
+        setLockedMinutes(null);
+        setError(err.response?.data?.error || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -62,7 +69,16 @@ const Login: React.FC = () => {
         </div>
         <h1 className="login-title">TITAN</h1>
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="alert alert-error">
+            {error}
+            {lockedMinutes && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.9 }}>
+                Please wait {lockedMinutes} minute(s) or contact an administrator to unlock your account.
+              </div>
+            )}
+          </div>
+        )}
 
         {!requires2FA ? (
           <form onSubmit={handleSubmit}>

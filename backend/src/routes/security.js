@@ -5,6 +5,7 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { authenticate, authorizeHR } = require('../middleware/auth');
 const crypto = require('crypto');
+const { passwordValidationRules } = require('../utils/passwordValidator');
 
 const router = express.Router();
 
@@ -254,7 +255,7 @@ router.post(
   authenticate,
   [
     body('currentPassword').notEmpty(),
-    body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    ...passwordValidationRules('newPassword'),
   ],
   async (req, res, next) => {
     try {
@@ -273,10 +274,10 @@ router.post(
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
 
-      // Don't allow same password
-      const isSamePassword = await User.comparePassword(newPassword, user.password);
-      if (isSamePassword) {
-        return res.status(400).json({ error: 'New password must be different from current password' });
+      // Check password history (includes current password)
+      const reused = await User.checkPasswordHistory(req.user.id, newPassword);
+      if (reused) {
+        return res.status(400).json({ error: 'This password was used recently. Please choose a different password.' });
       }
 
       // Change password

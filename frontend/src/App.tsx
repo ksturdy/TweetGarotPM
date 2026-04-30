@@ -212,8 +212,9 @@ const ForemanRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 };
 
 const App: React.FC = () => {
-  const { user } = useAuth();
+  const { user, passwordExpiresInDays } = useAuth();
   const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+  const [dismissedExpiryWarning, setDismissedExpiryWarning] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     // Initialize based on token existence
     return !!localStorage.getItem('token');
@@ -485,6 +486,56 @@ const App: React.FC = () => {
         }
       />
     </Routes>
+
+      {/* Password expiry warning banner */}
+      {user && passwordExpiresInDays !== null && !dismissedExpiryWarning && !showPasswordChangeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#f59e0b',
+          color: '#78350f',
+          padding: '0.75rem 1rem',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '1rem',
+          zIndex: 9998,
+          fontSize: '0.9rem',
+          fontWeight: 500,
+        }}>
+          <span>Your password expires in {passwordExpiresInDays} day{passwordExpiresInDays !== 1 ? 's' : ''}. Please change it soon.</span>
+          <button
+            onClick={() => setShowPasswordChangeModal(true)}
+            style={{
+              background: '#78350f',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '0.25rem 0.75rem',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+            }}
+          >
+            Change Now
+          </button>
+          <button
+            onClick={() => setDismissedExpiryWarning(true)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#78350f',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              padding: '0 0.25rem',
+              lineHeight: 1,
+            }}
+          >
+            x
+          </button>
+        </div>
+      )}
 
       {/* Force password change modal */}
       {user && (

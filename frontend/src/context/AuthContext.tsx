@@ -64,6 +64,7 @@ interface AuthContextType {
   user: User | null;
   tenant: Tenant | null;
   loading: boolean;
+  passwordExpiresInDays: number | null;
   login: (email: string, password: string) => Promise<any>;
   login2FA: (userId: number, token: string) => Promise<void>;
   logout: () => void;
@@ -100,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loading, setLoading] = useState(true);
+  const [passwordExpiresInDays, setPasswordExpiresInDays] = useState<number | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -154,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     setUser(res.data.user);
     setTenant(res.data.tenant);
+    setPasswordExpiresInDays(res.data.passwordExpiresInDays ?? null);
 
     return { requires2FA: false };
   }, []);
@@ -164,6 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     setUser(res.data.user);
     setTenant(res.data.tenant);
+    setPasswordExpiresInDays(res.data.passwordExpiresInDays ?? null);
   }, []);
 
   const logout = useCallback(() => {
@@ -172,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
     setTenant(null);
+    setPasswordExpiresInDays(null);
   }, []);
 
   const register = useCallback(async (data: RegisterData) => {
@@ -222,6 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user,
       tenant,
       loading,
+      passwordExpiresInDays,
       login,
       login2FA,
       logout,

@@ -35,12 +35,22 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     },
   });
 
+  const passwordChecks = {
+    length: newPassword.length >= 8,
+    uppercase: /[A-Z]/.test(newPassword),
+    lowercase: /[a-z]/.test(newPassword),
+    number: /[0-9]/.test(newPassword),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(newPassword),
+  };
+
+  const allChecksPassed = Object.values(passwordChecks).every(Boolean);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long');
+    if (!allChecksPassed) {
+      setError('Password does not meet all requirements');
       return;
     }
 
@@ -180,7 +190,26 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
                   {showNewPassword ? '👁️' : '👁️‍🗨️'}
                 </button>
               </div>
-              <small style={{ color: '#64748b', fontSize: '0.85rem' }}>Minimum 8 characters</small>
+              {newPassword.length > 0 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', lineHeight: '1.6' }}>
+                  {[
+                    { key: 'length', label: 'At least 8 characters' },
+                    { key: 'uppercase', label: 'One uppercase letter' },
+                    { key: 'lowercase', label: 'One lowercase letter' },
+                    { key: 'number', label: 'One number' },
+                    { key: 'special', label: 'One special character (!@#$%...)' },
+                  ].map(({ key, label }) => (
+                    <div key={key} style={{ color: passwordChecks[key as keyof typeof passwordChecks] ? '#16a34a' : '#9ca3af' }}>
+                      {passwordChecks[key as keyof typeof passwordChecks] ? '\u2713' : '\u2022'} {label}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {newPassword.length === 0 && (
+                <small style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                  At least 8 characters with uppercase, lowercase, number, and special character
+                </small>
+              )}
             </div>
 
             <div className="form-group">

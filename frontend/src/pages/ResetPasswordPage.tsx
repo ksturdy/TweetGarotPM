@@ -33,6 +33,9 @@ const ResetPasswordPage: React.FC = () => {
     if (!/[0-9]/.test(password)) {
       return 'Password must contain at least one number';
     }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+      return 'Password must contain at least one special character';
+    }
     if (password !== confirmPassword) {
       return 'Passwords do not match';
     }
@@ -104,7 +107,7 @@ const ResetPasswordPage: React.FC = () => {
                 autoFocus
               />
               <small style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                At least 8 characters with uppercase, lowercase, and number
+                At least 8 characters with uppercase, lowercase, number, and special character
               </small>
             </div>
 
