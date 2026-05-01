@@ -92,6 +92,8 @@
 
 .org-card-inner {
   width: 300px;
+  min-height: 140px;
+  box-sizing: border-box;
   background: white;
   border: 2px solid #e5e7eb;
   border-radius: 12px;

@@ -84,7 +84,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
 
   // Calculate initial positions based on layout
   useEffect(() => {
-    const CARD_WIDTH = 320;
+    const CARD_WIDTH = 300;
     const CARD_HEIGHT = 140;
     const H_SPACING = layout === 'compact' ? 80 : 150;
     const V_SPACING = layout === 'compact' ? 60 : 100;
@@ -306,7 +306,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   const handleFitToView = () => {
     if (nodes.size === 0 || !containerRef.current) return;
 
-    const CARD_WIDTH = 320;
+    const CARD_WIDTH = 300;
     const CARD_HEIGHT = 140;
     const PADDING = 100;
 
@@ -342,7 +342,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   const getSvgDimensions = () => {
     if (nodes.size === 0) return { width: 4000, height: 4000 };
 
-    const CARD_WIDTH = 320;
+    const CARD_WIDTH = 300;
     const CARD_HEIGHT = 140;
     const PADDING = 1000;
 
@@ -366,7 +366,7 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
   const generateConnectors = () => {
     if (nodes.size === 0) return [];
 
-    const CARD_WIDTH = 320;
+    const CARD_WIDTH = 300;
     const CARD_HEIGHT = 140;
 
     return contacts
