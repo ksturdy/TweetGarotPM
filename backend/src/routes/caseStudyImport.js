@@ -73,7 +73,7 @@ async function extractDocxContent(buffer) {
   const images = [];
   await mammoth.convertToHtml({ buffer }, {
     convertImage: mammoth.images.imgElement(function(image) {
-      return image.read('buffer').then(function(imageBuffer) {
+      return image.read().then(function(imageBuffer) {
         images.push({
           buffer: imageBuffer,
           contentType: image.contentType,

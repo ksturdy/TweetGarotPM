@@ -21,8 +21,11 @@ const CaseStudyList: React.FC = () => {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [marketFilter, setMarketFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sliderMin, setSliderMin] = useState<number>(0);
   const [sliderMax, setSliderMax] = useState<number>(0);
+  const [yearMin, setYearMin] = useState<number>(0);
+  const [yearMax, setYearMax] = useState<number>(0);
 
   const { data: caseStudies, isLoading, error } = useQuery({
     queryKey: ['caseStudies', statusFilter, marketFilter],
@@ -53,17 +56,61 @@ const CaseStudyList: React.FC = () => {
     }
   }, [dataMax, sliderMax]);
 
+  // Helper: parse year from a date that may be plain "YYYY-MM-DD" or full ISO.
+  const getYearFromDate = (val: any): number | null => {
+    if (!val) return null;
+    const s = String(val);
+    const d = new Date(s.includes('T') ? s : s + 'T00:00:00');
+    const y = d.getFullYear();
+    return isNaN(y) ? null : y;
+  };
+
+  // Year range slider
+  const { yearDataMin, yearDataMax } = useMemo(() => {
+    if (!caseStudies || caseStudies.length === 0) return { yearDataMin: 0, yearDataMax: 0 };
+    const years = caseStudies
+      .map(cs => getYearFromDate(cs.override_start_date || cs.project_start_date))
+      .filter((y): y is number => y !== null);
+    if (years.length === 0) return { yearDataMin: 0, yearDataMax: 0 };
+    return { yearDataMin: Math.min(...years), yearDataMax: Math.max(...years) };
+  }, [caseStudies]);
+
+  useEffect(() => {
+    if (yearDataMax > 0 && yearMax === 0) {
+      setYearMin(yearDataMin);
+      setYearMax(yearDataMax);
+    }
+  }, [yearDataMin, yearDataMax, yearMax]);
+
   const valueFilterActive = dataMax > 0 && sliderMax > 0 && (sliderMin > dataMin || sliderMax < dataMax);
+  const yearFilterActive = yearDataMax > 0 && yearMax > 0 && (yearMin > yearDataMin || yearMax < yearDataMax);
+  const searchActive = searchQuery.trim().length > 0;
 
   const filteredCaseStudies = useMemo(() => {
     if (!caseStudies) return [];
-    if (!valueFilterActive) return caseStudies;
+    const q = searchQuery.trim().toLowerCase();
     return caseStudies.filter(cs => {
-      const val = Number(cs.override_contract_value ?? cs.project_value ?? 0);
-      if (val === 0) return true;
-      return val >= sliderMin && val <= sliderMax;
+      if (valueFilterActive) {
+        const val = Number(cs.override_contract_value ?? cs.project_value ?? 0);
+        if (val !== 0 && (val < sliderMin || val > sliderMax)) return false;
+      }
+      if (yearFilterActive) {
+        const year = getYearFromDate(cs.override_start_date || cs.project_start_date);
+        if (year !== null && (year < yearMin || year > yearMax)) return false;
+      }
+      if (q) {
+        const haystack = [
+          cs.title,
+          cs.subtitle,
+          cs.customer_name,
+          cs.project_name,
+          cs.market,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
     });
-  }, [caseStudies, sliderMin, sliderMax, valueFilterActive]);
+  }, [caseStudies, sliderMin, sliderMax, valueFilterActive, yearMin, yearMax, yearFilterActive, searchQuery]);
 
   const formatSliderValue = (val: number) => {
     if (val === 0) return '$0';
@@ -74,6 +121,10 @@ const CaseStudyList: React.FC = () => {
 
   const minPercent = dataMax > 0 ? (sliderMin / dataMax) * 100 : 0;
   const maxPercent = dataMax > 0 ? (sliderMax / dataMax) * 100 : 100;
+
+  const yearSpan = yearDataMax - yearDataMin;
+  const yearMinPercent = yearSpan > 0 ? ((yearMin - yearDataMin) / yearSpan) * 100 : 0;
+  const yearMaxPercent = yearSpan > 0 ? ((yearMax - yearDataMin) / yearSpan) * 100 : 100;
 
   const getStatusBadge = (status: string) => {
     const classes: Record<string, string> = {
@@ -99,7 +150,7 @@ const CaseStudyList: React.FC = () => {
   }
 
   return (
-    <div className="container">
+    <div className="container" style={{ maxWidth: 'min(100%, 1800px)', padding: '0 1.5rem' }}>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -139,6 +190,29 @@ const CaseStudyList: React.FC = () => {
           }}
         >
           <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Search</label>
+            <input
+              className="form-input"
+              type="text"
+              list="case-study-suggestions"
+              placeholder="Type to search title, customer, project…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <datalist id="case-study-suggestions">
+              {Array.from(new Set(
+                (caseStudies || []).flatMap(cs => [
+                  cs.title,
+                  cs.customer_name,
+                  cs.project_name,
+                ].filter((x): x is string => Boolean(x)))
+              )).slice(0, 50).map(s => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Status</label>
             <select
               className="form-input"
@@ -166,15 +240,18 @@ const CaseStudyList: React.FC = () => {
             </select>
           </div>
 
-          {(statusFilter || marketFilter || valueFilterActive) && (
+          {(statusFilter || marketFilter || valueFilterActive || yearFilterActive || searchActive) && (
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button
                 className="btn btn-secondary"
                 onClick={() => {
                   setStatusFilter('');
                   setMarketFilter('');
+                  setSearchQuery('');
                   setSliderMin(dataMin);
                   setSliderMax(dataMax);
+                  setYearMin(yearDataMin);
+                  setYearMax(yearDataMax);
                 }}
                 style={{ width: '100%' }}
               >
@@ -184,9 +261,16 @@ const CaseStudyList: React.FC = () => {
           )}
         </div>
 
-        {/* Value Range Slider */}
+        {/* Range Sliders (side-by-side at wider widths) */}
+        {(dataMax > 0 && sliderMax > 0) || (yearSpan > 0 && yearMax > 0) ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '1.5rem 2rem',
+          marginTop: '1rem',
+        }}>
         {dataMax > 0 && sliderMax > 0 && (
-          <div style={{ marginTop: '1rem' }}>
+          <div>
             <style>{`
               .value-range-slider input[type="range"] {
                 -webkit-appearance: none;
@@ -289,6 +373,75 @@ const CaseStudyList: React.FC = () => {
             </div>
           </div>
         )}
+
+        {yearSpan > 0 && yearMax > 0 && (
+          <div>
+            <label className="form-label" style={{ marginBottom: '0.5rem' }}>
+              Year: {yearMin} — {yearMax}
+            </label>
+            <div
+              className="value-range-slider"
+              style={{ position: 'relative', height: '36px' }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: 0,
+                right: 0,
+                height: '6px',
+                transform: 'translateY(-50%)',
+                backgroundColor: '#e2e8f0',
+                borderRadius: '3px',
+              }} />
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                height: '6px',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'var(--primary, #3b82f6)',
+                borderRadius: '3px',
+                left: `${yearMinPercent}%`,
+                width: `${yearMaxPercent - yearMinPercent}%`,
+              }} />
+              <input
+                type="range"
+                min={yearDataMin}
+                max={yearDataMax}
+                step={1}
+                value={yearMin}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val <= yearMax - 1) setYearMin(val);
+                }}
+                style={{ zIndex: yearMin > yearDataMin + yearSpan * 0.5 ? 5 : 3 }}
+              />
+              <input
+                type="range"
+                min={yearDataMin}
+                max={yearDataMax}
+                step={1}
+                value={yearMax}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (val >= yearMin + 1) setYearMax(val);
+                }}
+                style={{ zIndex: 4 }}
+              />
+            </div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '0.75rem',
+              color: 'var(--secondary)',
+              marginTop: '-4px',
+            }}>
+              <span>{yearDataMin}</span>
+              <span>{yearDataMax}</span>
+            </div>
+          </div>
+        )}
+        </div>
+        ) : null}
       </div>
 
       {/* Case Studies Grid */}
@@ -464,7 +617,7 @@ const CaseStudyList: React.FC = () => {
                             color: 'var(--warning)',
                           }}
                         >
-                          {new Date(effectiveStart + 'T00:00:00').getFullYear()}
+                          {new Date(String(effectiveStart).includes('T') ? String(effectiveStart) : String(effectiveStart) + 'T00:00:00').getFullYear()}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--secondary)', marginTop: '2px' }}>
                           Year

@@ -3,7 +3,14 @@
     "allow": [
       "Edit",
       "Write",
-      "Bash"
+      "Bash",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Start-Process *)",
+      "PowerShell(Start-Sleep *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ],
     "deny": [],
     "ask": []

@@ -281,9 +281,9 @@ const CaseStudyDetail: React.FC = () => {
                 Project Dates
               </div>
               <div style={{ fontWeight: 600 }}>
-                {effectiveStart && new Date(effectiveStart + 'T00:00:00').toLocaleDateString()}
+                {effectiveStart && new Date(String(effectiveStart).includes('T') ? String(effectiveStart) : String(effectiveStart) + 'T00:00:00').toLocaleDateString()}
                 {effectiveStart && effectiveEnd && ' – '}
-                {effectiveEnd && new Date(effectiveEnd + 'T00:00:00').toLocaleDateString()}
+                {effectiveEnd && new Date(String(effectiveEnd).includes('T') ? String(effectiveEnd) : String(effectiveEnd) + 'T00:00:00').toLocaleDateString()}
               </div>
             </div>
           )}

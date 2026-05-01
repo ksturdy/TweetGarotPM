@@ -1,8 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { caseStudyTemplatesApi, CaseStudyTemplate, LayoutSection } from '../../services/caseStudyTemplates';
+import { CaseStudy } from '../../services/caseStudies';
+import CaseStudyPreview from '../../components/caseStudies/CaseStudyPreview';
 import '../../styles/SalesPipeline.css';
+
+const SAMPLE_CASE_STUDY: CaseStudy = {
+  id: 0,
+  tenant_id: 0,
+  title: 'Riverview Medical Center Expansion',
+  subtitle: 'Delivering complex mechanical systems on an active hospital campus',
+  project_name: 'Riverview Medical Center',
+  customer_name: 'Riverside Health Systems',
+  market: 'Healthcare',
+  construction_type: ['New Construction'],
+  project_size: 'Large',
+  project_value: 12500000,
+  project_square_footage: 85000,
+  project_start_date: '2024-03-15',
+  project_end_date: '2025-08-30',
+  executive_summary:
+    '<p>Tweet Garot delivered a complete mechanical system installation for this 85,000 sq ft medical center, finishing 30 days ahead of schedule and $400K under budget.</p>',
+  challenge:
+    '<p>The project required tight coordination across multiple trades on an active hospital campus. Existing infrastructure constraints and a compressed schedule demanded innovative solutions.</p>',
+  solution:
+    '<p>We deployed a prefabrication-first approach, fabricating 70% of piping assemblies offsite. Daily coordination meetings with the GC and electrical contractor kept all trades aligned.</p>',
+  results:
+    '<p>Project delivered ahead of schedule with zero rework. Owner expressed strong satisfaction and has invited Tweet Garot to bid on two additional facilities.</p>',
+  cost_savings: 400000,
+  timeline_improvement_days: 30,
+  quality_score: 98,
+  services_provided: ['Plumbing', 'HVAC', 'Piping', 'Service'],
+  status: 'published',
+  featured: false,
+  created_by: 0,
+  created_at: '',
+  updated_at: '',
+};
 
 const DEFAULT_SECTIONS: LayoutSection[] = [
   { key: 'company_info', label: 'Company Information', visible: true, order: 1, column: 'left' },
@@ -186,8 +221,59 @@ const CaseStudyTemplateForm: React.FC = () => {
   // Sections that support column assignment in magazine layout
   const columnSectionKeys = new Set(['company_info', 'project_info', 'executive_summary', 'challenge', 'solution', 'results', 'services_provided']);
 
+  // Letter-portrait page dimensions at 96dpi
+  const PAGE_WIDTH_PX = 816;   // 8.5in
+  const PAGE_HEIGHT_PX = 1056; // 11in
+  const PAGE_LABEL = 'Letter (8.5" × 11") • Portrait';
+
+  // Auto-scale the full-size letter page to fit the preview column width
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [zoomScale, setZoomScale] = useState(1);
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      setZoomScale(w >= PAGE_WIDTH_PX ? 1 : w / PAGE_WIDTH_PX);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Synthesize a template object from current form state for live preview
+  const previewTemplate: CaseStudyTemplate = {
+    id: 0,
+    tenant_id: 0,
+    name: formData.name,
+    description: formData.description,
+    category: formData.category,
+    layout_config: {
+      layout_style: layoutStyle,
+      sections,
+      page_size: 'letter',
+      orientation: 'portrait',
+    },
+    color_scheme: formData.color_scheme,
+    show_logo: formData.show_logo,
+    show_images: formData.show_images,
+    show_metrics: formData.show_metrics,
+    is_default: formData.is_default,
+    is_active: formData.is_active,
+    created_at: '',
+    updated_at: '',
+  };
+
   return (
-    <div className="container">
+    <div style={{ maxWidth: '1700px', margin: '0 auto', padding: '0 1rem' }}>
+      <style>{`
+        @media (max-width: 1200px) {
+          .cs-template-editor-grid { grid-template-columns: 1fr !important; }
+          .cs-template-preview-pane { position: static !important; max-height: none !important; }
+        }
+      `}</style>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -208,10 +294,32 @@ const CaseStudyTemplateForm: React.FC = () => {
         </div>
       </div>
 
+      <div
+        className="cs-template-editor-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          gap: '1.5rem',
+          alignItems: 'start',
+        }}
+      >
       <form onSubmit={handleSubmit}>
         {/* Basic Info */}
         <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Basic Information</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 style={{ margin: 0 }}>Basic Information</h3>
+            <span style={{
+              fontSize: '0.75rem',
+              color: '#475569',
+              backgroundColor: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '4px',
+              fontWeight: 500,
+            }}>
+              Page Size: {PAGE_LABEL}
+            </span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="form-label">Template Name *</label>
@@ -463,6 +571,57 @@ const CaseStudyTemplateForm: React.FC = () => {
           </button>
         </div>
       </form>
+
+      <aside
+        className="cs-template-preview-pane"
+        style={{
+          position: 'sticky',
+          top: '1rem',
+          maxHeight: 'calc(100vh - 2rem)',
+          overflow: 'auto',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          backgroundColor: '#f3f4f6',
+          padding: '0.75rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '0.5rem',
+            padding: '0 0.25rem',
+            gap: '0.5rem',
+          }}
+        >
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Live Preview
+          </span>
+          <span style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 500 }}>
+            {PAGE_LABEL}
+          </span>
+          <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+            Sample data
+          </span>
+        </div>
+        <div ref={previewContainerRef} style={{ width: '100%' }}>
+          <div
+            style={{
+              width: `${PAGE_WIDTH_PX}px`,
+              minHeight: `${PAGE_HEIGHT_PX}px`,
+              zoom: zoomScale,
+              backgroundColor: 'white',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              border: '1px solid #d1d5db',
+            } as React.CSSProperties}
+          >
+            <CaseStudyPreview caseStudy={SAMPLE_CASE_STUDY as any} template={previewTemplate} />
+          </div>
+        </div>
+      </aside>
+      </div>
     </div>
   );
 };

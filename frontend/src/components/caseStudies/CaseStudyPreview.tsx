@@ -567,9 +567,9 @@ const MagazineLayout: React.FC<LayoutProps> = ({ caseStudy, template, logoUrl, s
       <div className="case-study-hero" style={{
         position: 'relative',
         width: '100%',
-        height: heroSrc ? '160px' : '110px',
+        minHeight: heroSrc ? '160px' : '110px',
         backgroundColor: darkColor,
-        overflow: 'hidden',
+        overflow: 'visible',
       }}>
         {heroSrc && (
           <img src={heroSrc} alt="" style={{
