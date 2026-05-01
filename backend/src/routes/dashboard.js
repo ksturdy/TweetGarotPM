@@ -277,11 +277,15 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             NULL::text as parent_name,
             NULL::integer as parent_id,
             p.status,
-            e.first_name || ' ' || e.last_name as actor_name,
+            COALESCE(
+              updater.first_name || ' ' || updater.last_name,
+              e.first_name || ' ' || e.last_name
+            ) as actor_name,
             p.created_at,
             p.updated_at,
             CASE WHEN p.updated_at > p.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
           FROM projects p
+          LEFT JOIN users updater ON p.updated_by = updater.id
           LEFT JOIN employees e ON p.manager_id = e.id
           WHERE p.tenant_id = $1
           ORDER BY GREATEST(p.created_at, p.updated_at) DESC
@@ -296,12 +300,16 @@ router.get('/recent-activity', authenticate, async (req, res) => {
             NULL::text as parent_name,
             NULL::integer as parent_id,
             ps.name as status,
-            e.first_name || ' ' || e.last_name as actor_name,
+            COALESCE(
+              updater.first_name || ' ' || updater.last_name,
+              creator.first_name || ' ' || creator.last_name
+            ) as actor_name,
             o.created_at,
             o.updated_at,
             CASE WHEN o.updated_at > o.created_at + interval '5 seconds' THEN 'updated' ELSE 'created' END as action
           FROM opportunities o
-          LEFT JOIN employees e ON o.assigned_to = e.id
+          LEFT JOIN users updater ON o.updated_by = updater.id
+          LEFT JOIN users creator ON o.created_by = creator.id
           LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
           WHERE o.tenant_id = $1
           ORDER BY GREATEST(o.created_at, o.updated_at) DESC

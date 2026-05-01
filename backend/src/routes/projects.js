@@ -445,7 +445,7 @@ router.post(
 // Update project (with tenant check)
 router.put('/:id', authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const project = await Project.update(req.params.id, req.body, req.tenantId);
+    const project = await Project.update(req.params.id, req.body, req.tenantId, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }

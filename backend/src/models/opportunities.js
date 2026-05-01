@@ -228,7 +228,7 @@ const opportunities = {
   /**
    * Update opportunity with tenant check
    */
-  async update(id, opportunityData, tenantId) {
+  async update(id, opportunityData, tenantId, userId = null) {
     const {
       title, description, estimated_value, estimated_start_date, estimated_duration_days,
       estimated_end_date,
@@ -268,8 +268,9 @@ const opportunities = {
         facility_name = $24,
         facility_location_id = $25,
         awarded_status = COALESCE($26, awarded_status),
+        updated_by = COALESCE($27, updated_by),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $27 AND tenant_id = $28
+      WHERE id = $28 AND tenant_id = $29
       RETURNING *
     `;
 
@@ -278,7 +279,7 @@ const opportunities = {
       estimated_end_date || null,
       typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor || null, architect || null, engineer || null, campaign_id, customer_id, gc_customer_id,
-      facility_name || null, facility_location_id, awarded_status || null, id, tenantId
+      facility_name || null, facility_location_id, awarded_status || null, userId, id, tenantId
     ]);
 
     return result.rows[0];
@@ -287,15 +288,15 @@ const opportunities = {
   /**
    * Move opportunity to different stage with tenant check
    */
-  async updateStage(id, stageId, tenantId) {
+  async updateStage(id, stageId, tenantId, userId = null) {
     const query = `
       UPDATE opportunities
-      SET stage_id = $1, updated_at = CURRENT_TIMESTAMP
+      SET stage_id = $1, updated_by = COALESCE($4, updated_by), updated_at = CURRENT_TIMESTAMP
       WHERE id = $2 AND tenant_id = $3
       RETURNING *
     `;
 
-    const result = await pool.query(query, [stageId, id, tenantId]);
+    const result = await pool.query(query, [stageId, id, tenantId, userId]);
     return result.rows[0];
   },
 
@@ -321,18 +322,19 @@ const opportunities = {
   /**
    * Mark as lost with tenant check
    */
-  async markAsLost(id, reason, tenantId) {
+  async markAsLost(id, reason, tenantId, userId = null) {
     const query = `
       UPDATE opportunities
       SET
         lost_reason = $1,
         stage_id = (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $3 LIMIT 1),
+        updated_by = COALESCE($4, updated_by),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $2 AND tenant_id = $3
       RETURNING *
     `;
 
-    const result = await pool.query(query, [reason, id, tenantId]);
+    const result = await pool.query(query, [reason, id, tenantId, userId]);
     return result.rows[0];
   },
 
@@ -414,7 +416,7 @@ const opportunities = {
   /**
    * Update projection overrides for opportunity revenue grid
    */
-  async updateProjectionOverrides(id, overrides, tenantId) {
+  async updateProjectionOverrides(id, overrides, tenantId, userId = null) {
     const sets = [];
     const params = [];
     let paramCount = 1;
@@ -434,6 +436,10 @@ const opportunities = {
 
     if (sets.length === 0) return null;
 
+    if (userId) {
+      sets.push(`updated_by = $${paramCount++}`);
+      params.push(userId);
+    }
     sets.push('updated_at = CURRENT_TIMESTAMP');
 
     const query = `

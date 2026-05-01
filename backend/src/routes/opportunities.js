@@ -257,7 +257,7 @@ router.put('/:id',
         ? await opportunities.findByIdAndTenant(req.params.id, req.tenantId)
         : null;
 
-      const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId);
+      const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId, req.user.id);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -296,7 +296,8 @@ router.patch('/:id/projection', async (req, res, next) => {
     const opportunity = await opportunities.updateProjectionOverrides(
       req.params.id,
       { contour_type, user_adjusted_start_date, user_adjusted_duration_months },
-      req.tenantId
+      req.tenantId,
+      req.user.id
     );
 
     if (!opportunity) {
@@ -325,7 +326,7 @@ router.patch('/:id/stage',
         return res.status(404).json({ error: 'Opportunity not found' });
       }
 
-      const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id, req.tenantId);
+      const opportunity = await opportunities.updateStage(req.params.id, req.body.stage_id, req.tenantId, req.user.id);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
@@ -385,7 +386,7 @@ router.post('/:id/lost',
   [body('reason').optional().trim()],
   async (req, res, next) => {
     try {
-      const opportunity = await opportunities.markAsLost(req.params.id, req.body.reason, req.tenantId);
+      const opportunity = await opportunities.markAsLost(req.params.id, req.body.reason, req.tenantId, req.user.id);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });

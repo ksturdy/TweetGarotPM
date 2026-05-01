@@ -278,7 +278,7 @@ const Project = {
   /**
    * Update project (with tenant check)
    */
-  async update(id, updates, tenantId) {
+  async update(id, updates, tenantId, userId = null) {
     const fields = [];
     const values = [];
     let paramCount = 1;
@@ -291,6 +291,12 @@ const Project = {
         paramCount++;
       }
     });
+
+    if (userId) {
+      fields.push(`updated_by = $${paramCount}`);
+      values.push(userId);
+      paramCount++;
+    }
 
     values.push(id);
     values.push(tenantId);
