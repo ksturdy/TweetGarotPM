@@ -49,6 +49,9 @@ coverage/
 *.pptx
 *.ppt
 
+# Allow public assets shipped with the frontend
+!frontend/public/*.pdf
+
 # Temporary files
 *.tmp
 *.temp
