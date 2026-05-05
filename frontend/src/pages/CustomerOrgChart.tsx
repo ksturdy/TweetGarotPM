@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getCustomer, getCustomerContactsHierarchy, CustomerContact } from '../services/customers';
-import ContactOrgChart, { OrgChartPerson } from '../components/customers/ContactOrgChart';
+import ContactOrgChart, { OrgChartPerson, ContactOrgChartHandle } from '../components/customers/ContactOrgChart';
 import ContactModal from '../components/modals/ContactModal';
 import './CustomerDetail.css';
 
@@ -11,6 +11,8 @@ const CustomerOrgChartPage: React.FC = () => {
   const navigate = useNavigate();
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
   const [layout, setLayout] = useState<'vertical' | 'horizontal' | 'compact'>('vertical');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const orgChartRef = useRef<ContactOrgChartHandle>(null);
 
   const { data: customer, isLoading: customerLoading } = useQuery({
     queryKey: ['customer', id],
@@ -21,6 +23,24 @@ const CustomerOrgChartPage: React.FC = () => {
     queryKey: ['customer-contacts-hierarchy', id],
     queryFn: () => getCustomerContactsHierarchy(id!),
   });
+
+  const handleExportPdf = async () => {
+    if (!customer || contacts.length === 0) return;
+    setPdfLoading(true);
+    try {
+      const safeName = customer.name.replace(/[^a-z0-9_-]+/gi, '_');
+      const subtitle = `${contacts.length} ${contacts.length === 1 ? 'contact' : 'contacts'}`;
+      await orgChartRef.current?.exportToPdf(
+        `${safeName}-Org-Chart.pdf`,
+        `${customer.name} — Organizational Chart`,
+        subtitle
+      );
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   if (customerLoading || contactsLoading) {
     return (
@@ -132,6 +152,22 @@ const CustomerOrgChartPage: React.FC = () => {
           </div>
 
           <button
+            onClick={handleExportPdf}
+            disabled={pdfLoading || contacts.length === 0}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'white',
+              color: pdfLoading || contacts.length === 0 ? '#9ca3af' : '#1f2937',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              cursor: pdfLoading || contacts.length === 0 ? 'default' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 600
+            }}
+          >
+            {pdfLoading ? 'Generating...' : 'Export PDF'}
+          </button>
+          <button
             onClick={() => setEditingContact({} as CustomerContact)}
             style={{
               padding: '0.5rem 1rem',
@@ -187,7 +223,7 @@ const CustomerOrgChartPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          <ContactOrgChart contacts={contacts} onContactEdit={(p: OrgChartPerson) => setEditingContact(p as CustomerContact)} layout={layout} />
+          <ContactOrgChart ref={orgChartRef} contacts={contacts} onContactEdit={(p: OrgChartPerson) => setEditingContact(p as CustomerContact)} layout={layout} />
         )}
       </div>
 

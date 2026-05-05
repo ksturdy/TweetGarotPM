@@ -198,27 +198,45 @@ async function buildWeeklySalesData(tenantId, weekStart) {
 
   const snapshot = calcBacklogSnapshot(contracts, overrideMap);
 
-  // Query 7: Newly created jobs (projects) this week
+  // Query 7: Newly created contracts this week (from vp_contracts).
+  // Sourced from vp_contracts so the section reflects contracts that came in
+  // from Vista, not shell project records. Manager/department fall back through
+  // the linked project since contract-level employee/department links are often
+  // null on import.
+  // Sub-jobs (e.g. "44448-10", "44448-20") are excluded — only parent
+  // contracts (whose Vista contract_number has no hyphen suffix) are shown.
   const newJobsResult = await db.query(`
     SELECT
-      p.id, p.name, p.number, p.status,
-      COALESCE(vc.contract_amount, p.contract_value) AS contract_value,
-      (${GM_EXPR}) * 100 AS gross_margin_percent,
-      (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+      vc.id,
+      COALESCE(p.name, vc.description) AS name,
+      vc.contract_number AS number,
+      vc.status,
+      vc.contract_amount AS contract_value,
+      CASE WHEN vc.gross_profit_percent >= 0.995
+                AND p.override_gm_percent IS NOT NULL
+           THEN p.override_gm_percent * 100
+           ELSE vc.gross_profit_percent * 100 END AS gross_margin_percent,
+      (vc.gross_profit_percent >= 0.995
        AND p.override_gm_percent IS NOT NULL) AS gm_overridden,
-      p.created_at,
-      e.first_name || ' ' || e.last_name AS manager_name,
-      COALESCE(c.name, c.customer_owner) AS customer_name,
+      vc.created_at,
+      COALESCE(
+        pe.first_name || ' ' || pe.last_name,
+        vce.first_name || ' ' || vce.last_name,
+        vc.project_manager_name
+      ) AS manager_name,
+      COALESCE(c.name, vc.customer_name) AS customer_name,
       d.name AS department_name
-    FROM projects p
-    LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
-    LEFT JOIN employees e ON p.manager_id = e.id
-    LEFT JOIN customers c ON p.customer_id = c.id
-    LEFT JOIN departments d ON p.department_id = d.id
-    WHERE p.tenant_id = $1
-      AND p.created_at >= $2::date
-      AND p.created_at < ($2::date + INTERVAL '7 days')
-    ORDER BY p.created_at DESC
+    FROM vp_contracts vc
+    LEFT JOIN projects p ON vc.linked_project_id = p.id
+    LEFT JOIN employees vce ON vc.linked_employee_id = vce.id
+    LEFT JOIN employees pe ON p.manager_id = pe.id
+    LEFT JOIN customers c ON vc.linked_customer_id = c.id
+    LEFT JOIN departments d ON COALESCE(vc.linked_department_id, p.department_id) = d.id
+    WHERE vc.tenant_id = $1
+      AND vc.created_at >= $2::date
+      AND vc.created_at < ($2::date + INTERVAL '7 days')
+      AND vc.contract_number NOT LIKE '%-%'
+    ORDER BY vc.created_at DESC
   `, [tenantId, weekStart]);
 
   // Build previous-week lookup maps
@@ -333,42 +351,56 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     gm_override_count: parseInt(backlogRow.gm_override_count) || 0,
   };
 
-  // Persist snapshot for this week (upsert) so future weeks can compare
-  try {
-    await db.query(`
-      INSERT INTO weekly_report_snapshots
-        (tenant_id, week_start, total_backlog, backlog_6mo, backlog_6mo_gm_pct,
-         backlog_12mo, backlog_12mo_gm_pct, weighted_gm_pct, avg_project_gm_pct)
-      VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (tenant_id, week_start)
-      DO UPDATE SET
-        total_backlog = EXCLUDED.total_backlog,
-        backlog_6mo = EXCLUDED.backlog_6mo,
-        backlog_6mo_gm_pct = EXCLUDED.backlog_6mo_gm_pct,
-        backlog_12mo = EXCLUDED.backlog_12mo,
-        backlog_12mo_gm_pct = EXCLUDED.backlog_12mo_gm_pct,
-        weighted_gm_pct = EXCLUDED.weighted_gm_pct,
-        avg_project_gm_pct = EXCLUDED.avg_project_gm_pct,
-        created_at = NOW()
-    `, [
-      tenantId, weekStart,
-      company_snapshot.total_backlog, company_snapshot.backlog_6mo, company_snapshot.backlog_6mo_gm_pct,
-      company_snapshot.backlog_12mo, company_snapshot.backlog_12mo_gm_pct,
-      company_snapshot.weighted_gm_pct, company_snapshot.avg_project_gm_pct,
-    ]);
-  } catch (e) {
-    // Non-fatal — table may not exist yet if migration hasn't run
-    console.warn('Could not persist weekly snapshot:', e.message);
+  // Persist snapshot only when the requested week is the actual current week.
+  // Why: company_snapshot is computed from CURRENT projects/contracts data — it
+  // has no historical view. Upserting on every visit (the old behavior) would
+  // overwrite past weeks' snapshots with today's numbers, making prev-week
+  // comparisons always show "No change". By writing only when weekStart equals
+  // the real-current Monday, snapshots get captured during their actual week
+  // and frozen thereafter.
+  const currentRealMonday = getCurrentMonday();
+  if (weekStart === currentRealMonday) {
+    try {
+      await db.query(`
+        INSERT INTO weekly_report_snapshots
+          (tenant_id, week_start, total_backlog, backlog_6mo, backlog_6mo_gm_pct,
+           backlog_12mo, backlog_12mo_gm_pct, weighted_gm_pct, avg_project_gm_pct)
+        VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (tenant_id, week_start)
+        DO UPDATE SET
+          total_backlog = EXCLUDED.total_backlog,
+          backlog_6mo = EXCLUDED.backlog_6mo,
+          backlog_6mo_gm_pct = EXCLUDED.backlog_6mo_gm_pct,
+          backlog_12mo = EXCLUDED.backlog_12mo,
+          backlog_12mo_gm_pct = EXCLUDED.backlog_12mo_gm_pct,
+          weighted_gm_pct = EXCLUDED.weighted_gm_pct,
+          avg_project_gm_pct = EXCLUDED.avg_project_gm_pct,
+          created_at = NOW()
+      `, [
+        tenantId, weekStart,
+        company_snapshot.total_backlog, company_snapshot.backlog_6mo, company_snapshot.backlog_6mo_gm_pct,
+        company_snapshot.backlog_12mo, company_snapshot.backlog_12mo_gm_pct,
+        company_snapshot.weighted_gm_pct, company_snapshot.avg_project_gm_pct,
+      ]);
+    } catch (e) {
+      // Non-fatal — table may not exist yet if migration hasn't run
+      console.warn('Could not persist weekly snapshot:', e.message);
+    }
   }
 
-  // Fetch previous week's snapshot for comparison
+  // Fetch previous week's snapshot for comparison.
+  // Only trust snapshots captured close to their own week — older code used to
+  // overwrite stored snapshots whenever a past week was viewed, leaving stale
+  // rows whose created_at is long after week_start. Treat those as untrusted.
   let prev_snapshot = null;
   try {
     const prevSnapResult = await db.query(`
       SELECT total_backlog, backlog_6mo, backlog_6mo_gm_pct,
              backlog_12mo, backlog_12mo_gm_pct, weighted_gm_pct, avg_project_gm_pct
       FROM weekly_report_snapshots
-      WHERE tenant_id = $1 AND week_start = ($2::date - INTERVAL '7 days')
+      WHERE tenant_id = $1
+        AND week_start = ($2::date - INTERVAL '7 days')
+        AND created_at < week_start + INTERVAL '7 days'
     `, [tenantId, weekStart]);
     if (prevSnapResult.rows.length > 0) {
       const r = prevSnapResult.rows[0];

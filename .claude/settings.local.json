@@ -10,7 +10,8 @@
       "PowerShell(Start-Process *)",
       "PowerShell(Start-Sleep *)",
       "Skill(update-config)",
-      "Skill(update-config:*)"
+      "Skill(update-config:*)",
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, StartTime, @{N='CmdLine';E={\\(Get-CimInstance Win32_Process -Filter \"ProcessId=$\\($_.Id\\)\"\\).CommandLine}} | Format-Table -AutoSize -Wrap)"
     ],
     "deny": [],
     "ask": []

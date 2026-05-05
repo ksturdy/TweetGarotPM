@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import './ContactOrgChart.css';
 
 export interface OrgChartPerson {
@@ -10,6 +10,10 @@ export interface OrgChartPerson {
   phone?: string;
   reports_to?: number | null;
   is_primary?: boolean;
+}
+
+export interface ContactOrgChartHandle {
+  exportToPdf: (filename: string, title?: string, subtitle?: string) => Promise<void>;
 }
 
 interface OrgNode {
@@ -27,7 +31,7 @@ interface ContactOrgChartProps {
   showReportsCount?: boolean;
 }
 
-const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEdit, layout = 'vertical', showReportsCount = true }) => {
+const ContactOrgChart = forwardRef<ContactOrgChartHandle, ContactOrgChartProps>(({ contacts, onContactEdit, layout = 'vertical', showReportsCount = true }, ref) => {
   const [nodes, setNodes] = useState<Map<number, { x: number; y: number }>>(new Map());
   const [dragging, setDragging] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -406,6 +410,98 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
 
   const svgDims = getSvgDimensions();
 
+  // Expose imperative export method to parent components
+  useImperativeHandle(ref, () => ({
+    exportToPdf: async (filename: string, title?: string, subtitle?: string) => {
+      if (!canvasRef.current || nodes.size === 0) return;
+
+      const CARD_WIDTH = 300;
+      const CARD_HEIGHT = 140;
+      const PADDING = 60;
+
+      // Compute tight bounds around actual content
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      nodes.forEach(pos => {
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x + CARD_WIDTH);
+        maxY = Math.max(maxY, pos.y + CARD_HEIGHT);
+      });
+      if (!isFinite(minX)) return;
+
+      const tightX = Math.max(0, minX - PADDING);
+      const tightY = Math.max(0, minY - PADDING);
+      const tightW = (maxX - minX) + PADDING * 2;
+      const tightH = (maxY - minY) + PADDING * 2;
+
+      const canvas = canvasRef.current;
+      const originalTransform = canvas.style.transform;
+      canvas.style.transform = 'translate(0px, 0px) scale(1)';
+
+      // Allow a frame for the layout to settle before capture
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+
+      try {
+        const html2canvas = (await import('html2canvas')).default;
+        const { jsPDF } = await import('jspdf');
+
+        const captured = await html2canvas(canvas, {
+          x: tightX,
+          y: tightY,
+          width: tightW,
+          height: tightH,
+          backgroundColor: '#ffffff',
+          scale: 2,
+          logging: false,
+          useCORS: true,
+        });
+
+        const orientation: 'portrait' | 'landscape' = tightW >= tightH ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'pt', format: 'letter' });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 36;
+        const headerHeight = title ? (subtitle ? 44 : 28) : 0;
+        const availW = pageWidth - margin * 2;
+        const availH = pageHeight - margin * 2 - headerHeight;
+
+        const imgRatio = captured.width / captured.height;
+        let drawW = availW;
+        let drawH = availW / imgRatio;
+        if (drawH > availH) {
+          drawH = availH;
+          drawW = availH * imgRatio;
+        }
+        const drawX = (pageWidth - drawW) / 2;
+        const drawY = margin + headerHeight + (availH - drawH) / 2;
+
+        if (title) {
+          pdf.setFontSize(16);
+          pdf.setTextColor(31, 41, 55);
+          pdf.text(title, margin, margin + 14);
+          if (subtitle) {
+            pdf.setFontSize(10);
+            pdf.setTextColor(107, 114, 128);
+            pdf.text(subtitle, margin, margin + 30);
+          }
+        }
+
+        pdf.addImage(
+          captured.toDataURL('image/png'),
+          'PNG',
+          drawX,
+          drawY,
+          drawW,
+          drawH
+        );
+
+        pdf.save(filename);
+      } finally {
+        canvas.style.transform = originalTransform;
+      }
+    },
+  }), [nodes, contacts]);
+
   if (contacts.length === 0) {
     return (
       <div className="org-chart-empty">
@@ -495,7 +591,9 @@ const ContactOrgChart: React.FC<ContactOrgChartProps> = ({ contacts, onContactEd
       </div>
     </div>
   );
-};
+});
+
+ContactOrgChart.displayName = 'ContactOrgChart';
 
 // Helper to find node in tree
 const findNode = (tree: OrgNode[], nodeId: number): OrgNode | null => {

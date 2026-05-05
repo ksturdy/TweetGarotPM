@@ -273,7 +273,7 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
   </div>`;
   })() : ''}
 
-  <!-- Newly Created Jobs -->
+  <!-- Newly Created Contracts -->
   ${new_jobs && new_jobs.length > 0 ? (() => {
     const oc = (company_snapshot && company_snapshot.gm_override_count) || 0;
     const overrideBadge = oc > 0
@@ -286,11 +286,11 @@ function generateWeeklySalesReportPdfHtml(data, logoBase64 = '') {
     return `
   <div style="margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid; border-top: 3px solid #059669;">
     <div style="padding: 8px 14px 6px;">
-      <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Newly Created Jobs (${new_jobs.length})${overrideBadge}</div>
+      <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Newly Created Contracts (${new_jobs.length})${overrideBadge}</div>
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 10%;">Job #</th>
+            <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 10%;">Contract #</th>
             <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 25%;">Name</th>
             <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; width: 20%;">Customer</th>
             <th style="background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 5px 8px; text-align: right; text-transform: uppercase; letter-spacing: 0.05em; width: 14%;">Contract Value</th>

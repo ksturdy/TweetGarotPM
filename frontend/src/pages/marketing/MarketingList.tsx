@@ -27,7 +27,7 @@ const MarketingList: React.FC = () => {
       path: '/marketing/trade-shows',
       desc: 'Events, booths & conferences',
       color: '#ec4899',
-      ready: false,
+      ready: true,
     },
     {
       name: 'Website',

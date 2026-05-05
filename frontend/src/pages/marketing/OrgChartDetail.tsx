@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { orgChartsApi, OrgChartMember } from '../../services/orgCharts';
-import ContactOrgChart, { OrgChartPerson } from '../../components/customers/ContactOrgChart';
+import ContactOrgChart, { OrgChartPerson, ContactOrgChartHandle } from '../../components/customers/ContactOrgChart';
 import OrgChartMemberModal from '../../components/modals/OrgChartMemberModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../CustomerDetail.css';
@@ -18,6 +18,8 @@ const OrgChartDetail: React.FC = () => {
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const orgChartRef = useRef<ContactOrgChartHandle>(null);
 
   const { data: chart, isLoading } = useQuery({
     queryKey: ['org-chart', id],
@@ -78,6 +80,26 @@ const OrgChartDetail: React.FC = () => {
     const member = chart?.members?.find(m => m.id === person.id);
     if (member) {
       setEditingMember(member);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!chart || members.length === 0) return;
+    setPdfLoading(true);
+    try {
+      const safeName = chart.name.replace(/[^a-z0-9_-]+/gi, '_');
+      const subtitleParts: string[] = [];
+      if (chart.project_name) subtitleParts.push(chart.project_name);
+      subtitleParts.push(`${members.length} ${members.length === 1 ? 'member' : 'members'}`);
+      await orgChartRef.current?.exportToPdf(
+        `${safeName}-Org-Chart.pdf`,
+        chart.name,
+        subtitleParts.join('  ·  ')
+      );
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -231,6 +253,22 @@ const OrgChartDetail: React.FC = () => {
           </div>
 
           <button
+            onClick={handleExportPdf}
+            disabled={pdfLoading || members.length === 0}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'white',
+              color: pdfLoading || members.length === 0 ? '#9ca3af' : '#1f2937',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              cursor: pdfLoading || members.length === 0 ? 'default' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 600
+            }}
+          >
+            {pdfLoading ? 'Generating...' : 'Export PDF'}
+          </button>
+          <button
             onClick={() => setShowAddMember(true)}
             style={{
               padding: '0.5rem 1rem',
@@ -356,6 +394,7 @@ const OrgChartDetail: React.FC = () => {
           </div>
         ) : (
           <ContactOrgChart
+            ref={orgChartRef}
             contacts={members}
             onContactEdit={handlePersonEdit}
             layout={layout}

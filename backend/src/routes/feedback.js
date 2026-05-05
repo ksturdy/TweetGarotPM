@@ -87,7 +87,12 @@ router.post('/', async (req, res) => {
         );
         const admins = adminResult.rows;
 
-        const submitterName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'A user';
+        const submitterResult = await db.query(
+          `SELECT first_name, last_name FROM users WHERE id = $1`,
+          [req.user.id]
+        );
+        const submitter = submitterResult.rows[0] || {};
+        const submitterName = `${submitter.first_name || ''} ${submitter.last_name || ''}`.trim() || 'A user';
         const typeLabel = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const appBaseUrl = process.env.APP_URL || process.env.FRONTEND_URL || '';
 

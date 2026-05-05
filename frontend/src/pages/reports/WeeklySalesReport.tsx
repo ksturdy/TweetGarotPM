@@ -15,9 +15,25 @@ const fmtCurrency = (v: number | null | undefined): string => {
   if (v === null || v === undefined || isNaN(Number(v))) return '-';
   const n = Number(v);
   if (n === 0) return '$0';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000).toLocaleString()}K`;
-  return `$${Math.round(n).toLocaleString()}`;
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}$${Math.round(abs / 1_000).toLocaleString()}K`;
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
+};
+
+const formatCountDelta = (current: number, prev: number | null | undefined): string | undefined => {
+  if (prev == null) return undefined;
+  const diff = current - prev;
+  if (diff === 0) return 'no change vs prev';
+  return `${diff > 0 ? '+' : ''}${diff} vs prev`;
+};
+
+const formatCurrencyDelta = (current: number, prev: number | null | undefined): string | undefined => {
+  if (prev == null) return undefined;
+  const diff = current - prev;
+  if (diff === 0) return 'no change vs prev';
+  return `${diff > 0 ? '+' : ''}${fmtCurrency(diff)} vs prev`;
 };
 
 const fmtDate = (d: string | null | undefined): string => {
@@ -471,30 +487,31 @@ const WeeklySalesReport: React.FC = () => {
   const kpiCards: KpiCardData[] = t ? [
     {
       label: 'New Opportunities', value: String(t.new_opp_count),
-      subValue: t.prev_new_opp_count > 0 ? `${t.new_opp_count > t.prev_new_opp_count ? '+' : ''}${t.new_opp_count - t.prev_new_opp_count} vs prev` : undefined,
+      subValue: formatCountDelta(t.new_opp_count, t.prev_new_opp_count),
       style: KPI_STYLES.blue,
       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
     },
     {
       label: 'Pipeline Added', value: fmtCurrency(t.new_opp_value),
-      subValue: t.prev_new_opp_value > 0 ? `${t.new_opp_value >= t.prev_new_opp_value ? '+' : ''}${fmtCurrency(t.new_opp_value - t.prev_new_opp_value)} vs prev` : undefined,
+      subValue: formatCurrencyDelta(t.new_opp_value, t.prev_new_opp_value),
       style: KPI_STYLES.purple,
       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
     },
     {
       label: 'Activities', value: String(t.activity_count),
-      subValue: t.prev_activity_count > 0 ? `${t.activity_count >= t.prev_activity_count ? '+' : ''}${t.activity_count - t.prev_activity_count} vs prev` : undefined,
+      subValue: formatCountDelta(t.activity_count, t.prev_activity_count),
       style: KPI_STYLES.amber,
       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
     },
     {
       label: 'Won', value: `${t.won_count}`,
-      subValue: t.won_value > 0 ? fmtCurrency(t.won_value) : undefined,
+      subValue: formatCountDelta(t.won_count, t.prev_won_count),
       style: KPI_STYLES.green,
       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
     },
     {
       label: 'Lost', value: String(t.lost_count),
+      subValue: formatCountDelta(t.lost_count, t.prev_lost_count),
       style: KPI_STYLES.rose,
       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>,
     },
@@ -659,19 +676,19 @@ const WeeklySalesReport: React.FC = () => {
         </div>
       )}
 
-      {/* Newly Created Jobs */}
+      {/* Newly Created Contracts */}
       {data?.new_jobs && data.new_jobs.length > 0 && (
         <div className="sales-table-section" style={{ position: 'relative', overflow: 'hidden', marginBottom: '1rem' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(135deg, #059669, #10b981)' }} />
           <div className="sales-table-header" style={{ paddingTop: '0.875rem' }}>
             <div className="sales-table-title">
-              Newly Created Jobs <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.375rem' }}>({data.new_jobs.length})</span>
+              Newly Created Contracts <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: '#6b7280', marginLeft: '0.375rem' }}>({data.new_jobs.length})</span>
             </div>
           </div>
           <table className="sales-table">
             <thead>
               <tr>
-                <th>Job #</th>
+                <th>Contract #</th>
                 <th>Name</th>
                 <th>Customer</th>
                 <th style={{ textAlign: 'right' }}>Contract Value</th>

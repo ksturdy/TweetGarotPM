@@ -44,6 +44,9 @@ import ProposalTemplateList from './pages/marketing/ProposalTemplateList';
 import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
 import OrgChartList from './pages/marketing/OrgChartList';
 import OrgChartDetail from './pages/marketing/OrgChartDetail';
+import TradeShowList from './pages/marketing/trade-shows/TradeShowList';
+import TradeShowForm from './pages/marketing/trade-shows/TradeShowForm';
+import TradeShowDetail from './pages/marketing/trade-shows/TradeShowDetail';
 import ProposalList from './pages/marketing/ProposalList';
 import ProposalDetail from './pages/marketing/ProposalDetail';
 import ProposalWizard from './pages/marketing/ProposalWizard';
@@ -374,6 +377,10 @@ const App: React.FC = () => {
                 <Route path="/marketing/project-locations" element={<ProjectLocations />} />
                 <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
                 <Route path="/marketing/custom-maps" element={<CustomMaps />} />
+                <Route path="/marketing/trade-shows" element={<TradeShowList />} />
+                <Route path="/marketing/trade-shows/create" element={<TradeShowForm />} />
+                <Route path="/marketing/trade-shows/:id" element={<TradeShowDetail />} />
+                <Route path="/marketing/trade-shows/:id/edit" element={<TradeShowForm />} />
                 <Route path="/case-studies" element={<CaseStudyList />} />
                 <Route path="/case-studies/import" element={<CaseStudyImport />} />
                 <Route path="/case-studies/create" element={<CaseStudyForm />} />
