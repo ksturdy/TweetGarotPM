@@ -736,8 +736,8 @@ const ProjectList: React.FC = () => {
       </div>
 
       {/* KPI Strip */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '0.75rem',
+      <div className="projects-kpi-strip" style={{
+        display: 'flex', alignItems: 'stretch', gap: '0.75rem',
         background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0',
         padding: '0.5rem 1rem', marginBottom: '0.75rem',
         boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
@@ -756,12 +756,12 @@ const ProjectList: React.FC = () => {
           { label: 'Avg Project Value', value: `$${Math.round(kpis.avgProjectValue).toLocaleString()}`, color: '#f59e0b' },
         ].map((kpi, i) => (
           <React.Fragment key={i}>
-            {i > 0 && <div style={{ width: '1px', height: '32px', background: '#e2e8f0', flexShrink: 0 }} />}
-            <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
-              <div style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kpi.label}</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: kpi.color, lineHeight: 1.2 }}>{kpi.value}</div>
+            {i > 0 && <div style={{ width: '1px', background: '#e2e8f0', flexShrink: 0, alignSelf: 'stretch' }} />}
+            <div className="projects-kpi-cell" style={{ flex: 1, textAlign: 'center', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
+              <div className="projects-kpi-label" style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>{kpi.label}</div>
+              <div className="projects-kpi-value" style={{ fontSize: '1.1rem', fontWeight: 700, color: kpi.color, lineHeight: 1.2 }}>{kpi.value}</div>
               {kpi.gm !== undefined && (
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: kpi.gmColor, lineHeight: 1.2 }}>
+                <div className="projects-kpi-gm" style={{ fontSize: '0.7rem', fontWeight: 600, color: kpi.gmColor, lineHeight: 1.2 }}>
                   GM: {kpi.gm != null ? `${kpi.gm.toFixed(1)}%` : '-'}
                 </div>
               )}

@@ -909,6 +909,34 @@
   }
 }
 
+/* Projects KPI strip - responsive scaling for laptops/tablets */
+@media (max-width: 1400px) {
+  .projects-kpi-strip {
+    gap: 0.5rem !important;
+    padding: 0.4rem 0.6rem !important;
+  }
+  .projects-kpi-strip .projects-kpi-label {
+    font-size: 0.6rem !important;
+  }
+  .projects-kpi-strip .projects-kpi-value {
+    font-size: 0.95rem !important;
+  }
+  .projects-kpi-strip .projects-kpi-gm {
+    font-size: 0.65rem !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .projects-kpi-strip {
+    flex-wrap: wrap !important;
+    row-gap: 0.5rem !important;
+  }
+  .projects-kpi-strip .projects-kpi-cell {
+    flex: 1 1 calc(25% - 0.5rem) !important;
+    min-width: 110px !important;
+  }
+}
+
 @media (max-width: 768px) {
   .sales-container {
     padding: 16px;

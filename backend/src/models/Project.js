@@ -84,7 +84,9 @@ const Project = {
    */
   async findAll(filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name,
+             COALESCE(d.name, vd.name) as department_name,
+             COALESCE(d.department_number, vd.department_number) as department_number,
              COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
@@ -97,6 +99,7 @@ const Project = {
              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              COALESCE(vc.backlog, p.backlog) as backlog,
+             COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                ELSE NULL
@@ -107,6 +110,7 @@ const Project = {
       LEFT JOIN customers c ON p.customer_id = c.id
       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      LEFT JOIN departments vd ON vc.linked_department_id = vd.id
       WHERE 1=1
     `;
     const params = [];
@@ -132,7 +136,9 @@ const Project = {
    */
   async findAllByTenant(tenantId, filters = {}) {
     let query = `
-      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name, d.name as department_name, d.department_number,
+      SELECT p.*, e.first_name || ' ' || e.last_name as manager_name,
+             COALESCE(d.name, vd.name) as department_name,
+             COALESCE(d.department_number, vd.department_number) as department_number,
              COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
@@ -145,6 +151,7 @@ const Project = {
              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              COALESCE(vc.backlog, p.backlog) as backlog,
+             COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                ELSE NULL
@@ -155,6 +162,7 @@ const Project = {
       LEFT JOIN customers c ON p.customer_id = c.id
       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+      LEFT JOIN departments vd ON vc.linked_department_id = vd.id
       WHERE p.tenant_id = $1
     `;
     const params = [tenantId];
