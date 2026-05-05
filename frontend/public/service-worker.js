@@ -1,5 +1,5 @@
 // Service Worker for Titan PM
-const CACHE_NAME = 'titan-pm-v1';
+const CACHE_NAME = 'titan-pm-v2';
 const urlsToCache = [
   '/',
   '/static/css/main.css',
