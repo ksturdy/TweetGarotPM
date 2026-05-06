@@ -215,9 +215,10 @@ const TradeShow = {
         u.first_name AS user_first_name,
         u.last_name AS user_last_name,
         u.email AS user_email,
-        u.job_title AS user_job_title
+        e.job_title AS user_job_title
       FROM trade_show_attendees a
       LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN employees e ON e.user_id = u.id
       WHERE a.trade_show_id = $1
       ORDER BY a.created_at ASC
     `, [tradeShowId]);

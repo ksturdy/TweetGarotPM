@@ -274,17 +274,17 @@ async function createTenantDefaults(tenantId) {
     [tenantId]
   );
 
-  // Create default pipeline stages
+  // Create default pipeline stages (TITAN Pursuit Pipeline & Go/No-Go Guideline)
   await db.query(
     `INSERT INTO pipeline_stages (tenant_id, name, display_order, color, probability)
      VALUES
-       ($1, 'New Lead', 1, '#6B7280', 10),
-       ($1, 'Contacted', 2, '#3B82F6', 20),
-       ($1, 'Qualified', 3, '#8B5CF6', 40),
-       ($1, 'Proposal Sent', 4, '#F59E0B', 60),
-       ($1, 'Negotiation', 5, '#EF4444', 75),
-       ($1, 'Won', 6, '#10B981', 100),
-       ($1, 'Lost', 7, '#374151', 0)
+       ($1, 'Lead', 1, '#6B7280', 'Low'),
+       ($1, 'Pursuit', 2, '#F59E0B', 'Low'),
+       ($1, 'Opportunity', 3, '#3B82F6', 'Low'),
+       ($1, 'Quoted', 4, '#8B5CF6', 'Medium'),
+       ($1, 'Awarded', 5, '#10B981', 'High'),
+       ($1, 'Lost', 6, '#EF4444', 'Low'),
+       ($1, 'Passed', 7, '#374151', 'Low')
      ON CONFLICT DO NOTHING`,
     [tenantId]
   );

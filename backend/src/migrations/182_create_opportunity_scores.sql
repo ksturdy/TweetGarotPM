@@ -1,5 +1,5 @@
 -- Migration 182: Create opportunity_scores table for Go/No-Go scoring
--- Stores scoring events for Gate 1 (Lead→Opportunity) and Gate 2 (Opportunity→Quoted)
+-- Stores scoring events for Gate 1 (Lead→Pursuit) and Gate 2 (Opportunity→Quoted)
 -- Each row is one scoring event; latest per opportunity is the "current" score.
 
 CREATE TABLE IF NOT EXISTS opportunity_scores (
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS opportunity_scores (
   opportunity_id INTEGER NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
   tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
 
-  -- Gate indicator: 1 = Lead→Opportunity, 2 = Opportunity→Quoted
+  -- Gate indicator: 1 = Lead→Pursuit, 2 = Opportunity→Quoted
   gate SMALLINT NOT NULL CHECK (gate IN (1, 2)),
 
   -- Factor scores (1-5 scale, NULL = TBD / not yet scored)

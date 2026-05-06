@@ -64,6 +64,7 @@ const platformRoutes = require('./routes/platform');
 const placesRoutes = require('./routes/places');
 const teamRoutes = require('./routes/teams');
 const dashboardRoutes = require('./routes/dashboard');
+const dashboardLayoutRoutes = require('./routes/dashboardLayout');
 const budgetGeneratorRoutes = require('./routes/budgetGenerator');
 const budgetRoutes = require('./routes/budgets');
 const vistaAutoUploadRoutes = require('./routes/vistaAutoUpload');
@@ -149,6 +150,7 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-API-Key'],
+  exposedHeaders: ['X-New-Token'],
   maxAge: 86400 // Cache preflight for 24 hours
 };
 
@@ -217,6 +219,7 @@ app.use('/api/platform', platformRoutes);
 app.use('/api/places', placesRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/dashboard-layout', dashboardLayoutRoutes);
 app.use('/api/budget-generator', budgetGeneratorRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/vista-auto', vistaAutoUploadRoutes);

@@ -324,7 +324,7 @@ const Platform = {
   async getAllUsers({ search, tenantId, isActive, limit = 50, offset = 0 } = {}) {
     let query = `
       SELECT
-        u.id, u.email, u.first_name, u.last_name, u.role, u.is_active, u.created_at, u.last_login_at,
+        u.id, u.email, u.first_name, u.last_name, u.role, u.is_active, u.created_at, u.last_login_at, u.last_seen_at,
         t.name as tenant_name, t.slug as tenant_slug
       FROM users u
       LEFT JOIN tenants t ON u.tenant_id = t.id

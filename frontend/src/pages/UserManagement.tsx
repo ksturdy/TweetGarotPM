@@ -14,7 +14,7 @@ const UserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
-  const [sortField, setSortField] = useState<'name' | 'last_login' | 'created'>('name');
+  const [sortField, setSortField] = useState<'name' | 'last_active' | 'created'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UpdateUserData>({
     email: '',
@@ -152,7 +152,7 @@ const UserManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const formatLastLogin = (dateString?: string) => {
+  const formatLastActive = (dateString?: string) => {
     if (!dateString) return 'Never';
     const date = new Date(dateString);
     const now = new Date();
@@ -208,12 +208,12 @@ const UserManagement: React.FC = () => {
     });
   }, [users, deferredSearch, statusFilter]);
 
-  const handleSort = (field: 'name' | 'last_login' | 'created') => {
+  const handleSort = (field: 'name' | 'last_active' | 'created') => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection(field === 'last_login' ? 'desc' : 'asc');
+      setSortDirection(field === 'last_active' ? 'desc' : 'asc');
     }
   };
 
@@ -225,9 +225,9 @@ const UserManagement: React.FC = () => {
         const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
         return nameA.localeCompare(nameB) * dir;
       }
-      case 'last_login': {
-        const dateA = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
-        const dateB = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+      case 'last_active': {
+        const dateA = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0;
+        const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
         return (dateA - dateB) * dir;
       }
       case 'created': {
@@ -240,7 +240,7 @@ const UserManagement: React.FC = () => {
     }
   }), [filteredUsers, sortField, sortDirection]);
 
-  const getSortIndicator = (field: 'name' | 'last_login' | 'created') => {
+  const getSortIndicator = (field: 'name' | 'last_active' | 'created') => {
     if (sortField !== field) return ' ↕';
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   };
@@ -362,7 +362,7 @@ const UserManagement: React.FC = () => {
                 <th>HR Access</th>
                 <th>2FA</th>
                 <th>Status</th>
-                <th onClick={() => handleSort('last_login')} style={{ cursor: 'pointer', userSelect: 'none' }}>Last Login{getSortIndicator('last_login')}</th>
+                <th onClick={() => handleSort('last_active')} style={{ cursor: 'pointer', userSelect: 'none' }}>Last Active{getSortIndicator('last_active')}</th>
                 <th onClick={() => handleSort('created')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created{getSortIndicator('created')}</th>
                 <th>Actions</th>
               </tr>
@@ -437,7 +437,7 @@ const UserManagement: React.FC = () => {
                           <option value="inactive">Inactive</option>
                         </select>
                       </td>
-                      <td>{formatLastLogin(user.last_login_at)}</td>
+                      <td>{formatLastActive(user.last_seen_at)}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div className="sales-actions-cell">
@@ -487,7 +487,7 @@ const UserManagement: React.FC = () => {
                           {user.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td>{formatLastLogin(user.last_login_at)}</td>
+                      <td>{formatLastActive(user.last_seen_at)}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div className="sales-actions-cell">

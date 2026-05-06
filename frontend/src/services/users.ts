@@ -10,6 +10,7 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login_at?: string;
+  last_seen_at?: string;
   two_factor_enabled?: boolean;
 }
 

@@ -76,9 +76,11 @@ const EMPTY_FORM: ScoreFormState = {
 
 function getGateForStage(stageName: string): 1 | 2 | null {
   const name = stageName.toLowerCase();
+  // Gate 1 (Lead -> Pursuit): score the 4 Pursuit categories
   if (name.includes('lead')) return 1;
-  if (name.includes('opportunity') || name.includes('quoted') || name.includes('qualified') || name.includes('proposal') || name.includes('negotiation')) return 2;
-  return null; // Awarded, Won, Lost, Passed → read-only
+  // Gate 2 (Pursuit -> Opportunity): re-score the 4 + add remaining 3 factors
+  if (name.includes('pursuit')) return 2;
+  return null; // Opportunity, Quoted, Awarded, Lost, Passed → read-only (decision made)
 }
 
 function computeTotal(gate: 1 | 2, form: ScoreFormState) {
@@ -312,7 +314,7 @@ const OpportunityScore: React.FC<OpportunityScoreProps> = ({ opportunityId, stag
         <div className="opp-score-hdr-left">
           <span className="opp-score-title">GO / NO-GO SCORECARD</span>
           <span className={`opp-score-gate-badge gate-${gate}`}>
-            Gate {gate}{gate === 1 ? ' · Lead → Opportunity' : ' · Opportunity → Quoted'}
+            Gate {gate}{gate === 1 ? ' · Lead → Pursuit' : ' · Pursuit → Opportunity'}
           </span>
         </div>
         <div className="opp-score-hdr-right">

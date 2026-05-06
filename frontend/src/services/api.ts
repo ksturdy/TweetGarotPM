@@ -22,7 +22,13 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const refreshed = response.headers?.['x-new-token'];
+    if (refreshed) {
+      localStorage.setItem('token', refreshed);
+    }
+    return response;
+  },
   (error) => {
     // Only redirect to login on 401 if it's NOT the /auth/me check
     // The AuthContext handles /auth/me failures gracefully

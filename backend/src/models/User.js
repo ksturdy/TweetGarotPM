@@ -86,7 +86,7 @@ const User = {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
               two_factor_enabled, force_password_change, password_changed_at,
-              last_login_at, tenant_id, created_at
+              last_login_at, last_seen_at, tenant_id, created_at
        FROM users WHERE tenant_id = $1 ORDER BY last_name, first_name`,
       [tenantId]
     );
