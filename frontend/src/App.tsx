@@ -27,6 +27,9 @@ import ScheduleView from './pages/schedule/ScheduleView';
 import ProjectWeeklyGoals from './pages/projects/ProjectWeeklyGoals';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
+import TemplatesHub from './pages/marketing/TemplatesHub';
+import ResumeTemplateList from './pages/marketing/ResumeTemplateList';
+import ResumeTemplateForm from './pages/marketing/ResumeTemplateForm';
 import Branding from './pages/marketing/Branding';
 import CaseStudyList from './pages/marketing/CaseStudyList';
 import CaseStudyForm from './pages/marketing/CaseStudyForm';
@@ -40,6 +43,7 @@ import SellSheetDetail from './pages/marketing/SellSheetDetail';
 import ServiceOfferingList from './pages/settings/ServiceOfferingList';
 import EmployeeResumeList from './pages/hr/EmployeeResumeList';
 import EmployeeResumeForm from './pages/hr/EmployeeResumeForm';
+import EmployeeResumeImport from './pages/hr/EmployeeResumeImport';
 import ProposalTemplateList from './pages/marketing/ProposalTemplateList';
 import ProposalTemplateForm from './pages/marketing/ProposalTemplateForm';
 import OrgChartList from './pages/marketing/OrgChartList';
@@ -373,6 +377,10 @@ const App: React.FC = () => {
                 <Route path="/campaigns/new" element={<CampaignCreate />} />
                 <Route path="/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing" element={<MarketingList />} />
+                <Route path="/marketing/templates" element={<TemplatesHub />} />
+                <Route path="/resume-templates" element={<ResumeTemplateList />} />
+                <Route path="/resume-templates/create" element={<ResumeTemplateForm />} />
+                <Route path="/resume-templates/:id" element={<ResumeTemplateForm />} />
                 <Route path="/marketing/branding" element={<Branding />} />
                 <Route path="/marketing/project-locations" element={<ProjectLocations />} />
                 <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
@@ -444,6 +452,7 @@ const App: React.FC = () => {
 
                 {/* HR Routes */}
                 <Route path="/employee-resumes" element={<EmployeeResumeList />} />
+                <Route path="/employee-resumes/import" element={<EmployeeResumeImport />} />
                 <Route path="/employee-resumes/create" element={<EmployeeResumeForm />} />
                 <Route path="/employee-resumes/:id" element={<EmployeeResumeForm />} />
 

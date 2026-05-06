@@ -28,6 +28,7 @@ const MarketingList: React.FC = () => {
       desc: 'Events, booths & conferences',
       color: '#ec4899',
       ready: true,
+      inDev: false,
     },
     {
       name: 'Website',
@@ -44,14 +45,16 @@ const MarketingList: React.FC = () => {
       desc: 'Success stories & testimonials',
       color: '#10b981',
       ready: true,
+      inDev: false,
     },
     {
-      name: 'Case Study Templates',
-      icon: '📋',
-      path: '/case-study-templates',
-      desc: 'Layout templates for case studies',
+      name: 'Templates',
+      icon: '🗂️',
+      path: '/marketing/templates',
+      desc: 'Templates for case studies, proposals, resumes & more',
       color: '#059669',
       ready: true,
+      inDev: false,
     },
     {
       name: 'Mapping',
@@ -60,22 +63,16 @@ const MarketingList: React.FC = () => {
       desc: 'Project locations, customer comparison & custom maps',
       color: '#059669',
       ready: true,
+      inDev: false,
     },
     {
-      name: 'Sell Sheets',
+      name: 'Service Offerings',
       icon: '📑',
       path: '/sell-sheets',
       desc: 'Service line sell sheets & PDFs',
       color: '#f59e0b',
       ready: true,
-    },
-    {
-      name: 'Service Offerings',
-      icon: '🔧',
-      path: '/settings/service-offerings',
-      desc: 'Service catalog & capabilities',
-      color: '#3b82f6',
-      ready: true,
+      inDev: false,
     },
     {
       name: 'Employee Resumes',
@@ -84,14 +81,7 @@ const MarketingList: React.FC = () => {
       desc: 'Team profiles for proposals',
       color: '#8b5cf6',
       ready: true,
-    },
-    {
-      name: 'Proposal Templates',
-      icon: '📄',
-      path: '/proposal-templates',
-      desc: 'Reusable proposal templates',
-      color: '#06b6d4',
-      ready: true,
+      inDev: false,
     },
     {
       name: 'Project Org Charts',
@@ -100,6 +90,7 @@ const MarketingList: React.FC = () => {
       desc: 'Project team structures for proposals',
       color: '#7c3aed',
       ready: true,
+      inDev: false,
     },
     {
       name: 'Social Media',
@@ -214,42 +205,20 @@ const MarketingList: React.FC = () => {
             style={{ '--category-color': category.color } as React.CSSProperties}
             onClick={(e) => !category.ready && e.preventDefault()}
           >
-            {!category.ready && <span className="coming-soon-badge">Coming Soon</span>}
-            {category.ready && <span className="in-dev-badge">In Development</span>}
             <div className="category-icon-wrapper">
               <div className="category-icon">{category.icon}</div>
             </div>
             <div className="category-content">
               <h3 className="category-name">{category.name}</h3>
               <p className="category-desc">{category.desc}</p>
+              {!category.ready && <span className="coming-soon-badge">Coming Soon</span>}
+              {category.ready && (category as any).inDev !== false && (
+                <span className="in-dev-badge">In Development</span>
+              )}
             </div>
             <div className="category-arrow">→</div>
           </Link>
         ))}
-      </div>
-
-      <div className="marketing-stats">
-        <div className="stat-card card">
-          <div className="stat-icon">🎯</div>
-          <div>
-            <div className="stat-value">19</div>
-            <div className="stat-label">Active Categories</div>
-          </div>
-        </div>
-        <div className="stat-card card">
-          <div className="stat-icon">🚀</div>
-          <div>
-            <div className="stat-value">Coming Soon</div>
-            <div className="stat-label">Campaign Tracking</div>
-          </div>
-        </div>
-        <div className="stat-card card">
-          <div className="stat-icon">💡</div>
-          <div>
-            <div className="stat-value">Unlimited</div>
-            <div className="stat-label">Creative Ideas</div>
-          </div>
-        </div>
       </div>
     </div>
   );

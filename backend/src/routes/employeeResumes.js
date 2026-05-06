@@ -3,6 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const EmployeeResume = require('../models/EmployeeResume');
 const ResumeProject = require('../models/ResumeProject');
+const ResumeTemplate = require('../models/ResumeTemplate');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
@@ -29,6 +30,35 @@ const resumeUpload = createUploadMiddleware({
 });
 
 console.log('Upload middleware using local storage for uploads/resumes');
+
+/**
+ * Look up the resume's chosen template, falling back to the tenant's default,
+ * then to a hardcoded safety net so generation never breaks.
+ */
+async function resolveResumeTemplate(resume, tenantId) {
+  let template = null;
+  if (resume.template_id) {
+    template = await ResumeTemplate.findByIdAndTenant(resume.template_id, tenantId);
+  }
+  if (!template) {
+    template = await ResumeTemplate.getDefault(tenantId);
+  }
+  if (!template) {
+    template = {
+      template_key: 'classic_two_column',
+      section_limits: {
+        summary_chars: 600,
+        projects: 5,
+        certifications: 6,
+        skills: 12,
+        languages: 4,
+        hobbies: 6,
+        references: 3,
+      },
+    };
+  }
+  return template;
+}
 
 /**
  * GET /api/employee-resumes
@@ -84,6 +114,7 @@ router.post('/', resumeUpload.single('resume'), async (req, res, next) => {
       certifications: req.body.certifications ? JSON.parse(req.body.certifications) : [],
       skills: req.body.skills ? JSON.parse(req.body.skills) : [],
       education: req.body.education,
+      template_id: req.body.template_id ? parseInt(req.body.template_id) : null,
       is_active: req.body.is_active !== undefined ? req.body.is_active === 'true' : true
     };
 
@@ -138,6 +169,7 @@ router.put('/:id', resumeUpload.single('resume'), async (req, res, next) => {
       languages: req.body.languages ? JSON.parse(req.body.languages) : undefined,
       hobbies: req.body.hobbies ? JSON.parse(req.body.hobbies) : undefined,
       references: req.body.references ? JSON.parse(req.body.references) : undefined,
+      template_id: req.body.template_id ? parseInt(req.body.template_id) : undefined,
       is_active: req.body.is_active !== undefined ? req.body.is_active === 'true' : undefined
     };
 
@@ -519,7 +551,8 @@ router.get('/:id/preview-html', async (req, res, next) => {
       }
     }
 
-    const html = generateResumeHtml(resume, projects, photoBase64);
+    const template = await resolveResumeTemplate(resume, req.tenantId);
+    const html = generateResumeHtml(resume, projects, photoBase64, template);
     res.send(html);
   } catch (error) {
     next(error);
@@ -561,7 +594,8 @@ router.get('/:id/pdf', async (req, res, next) => {
     }
 
     // Generate PDF
-    const pdfBuffer = await generateResumePdfBuffer(resume, projects, photoBase64);
+    const template = await resolveResumeTemplate(resume, req.tenantId);
+    const pdfBuffer = await generateResumePdfBuffer(resume, projects, photoBase64, template);
 
     // Set response headers
     const filename = `${resume.employee_name.replace(/[^a-z0-9]/gi, '_')}_Resume.pdf`;

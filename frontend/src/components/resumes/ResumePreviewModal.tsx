@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { EmployeeResume, ResumeProject, employeeResumesApi } from '../../services/employeeResumes';
+import { ResumeTemplate } from '../../services/resumeTemplates';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ResumePreview from './ResumePreview';
 
@@ -10,6 +11,7 @@ interface ResumePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   photoPreviewUrl?: string;
+  template?: ResumeTemplate | null;
 }
 
 const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
@@ -18,6 +20,7 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
   isOpen,
   onClose,
   photoPreviewUrl,
+  template,
 }) => {
   const { toast } = useTitanFeedback();
 
@@ -492,7 +495,7 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
         </div>
 
         {/* Preview Content */}
-        <ResumePreview resume={resume} projects={projects} photoPreviewUrl={photoPreviewUrl} />
+        <ResumePreview resume={resume} projects={projects} photoPreviewUrl={photoPreviewUrl} template={template} />
       </div>
     </div>,
     document.body

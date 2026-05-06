@@ -25,6 +25,7 @@ const EmployeeResume = {
       languages,
       hobbies,
       references,
+      template_id,
       is_active = true
     } = data;
 
@@ -33,9 +34,9 @@ const EmployeeResume = {
         tenant_id, employee_id, employee_name, job_title, years_experience,
         summary, certifications, skills, education,
         resume_file_name, resume_file_path, resume_file_size, resume_file_type,
-        employee_photo_path, phone, email, address, languages, hobbies, references,
-        is_active, version_number, last_updated_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        employee_photo_path, phone, email, address, languages, hobbies, "references",
+        is_active, version_number, last_updated_by, template_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *`,
       [
         tenantId, employee_id, employee_name, job_title, years_experience,
@@ -43,7 +44,7 @@ const EmployeeResume = {
         education, resume_file_name, resume_file_path, resume_file_size,
         resume_file_type, employee_photo_path, phone, email, address,
         JSON.stringify(languages || []), hobbies || [], JSON.stringify(references || []),
-        is_active, 1, userId
+        is_active, 1, userId, template_id || null
       ]
     );
     return result.rows[0];
@@ -133,6 +134,7 @@ const EmployeeResume = {
       languages,
       hobbies,
       references,
+      template_id,
       is_active
     } = data;
 
@@ -161,10 +163,11 @@ const EmployeeResume = {
         hobbies = COALESCE($18, hobbies),
         "references" = COALESCE($19, "references"),
         is_active = COALESCE($20, is_active),
-        version_number = $21,
-        last_updated_by = $22,
+        template_id = COALESCE($21, template_id),
+        version_number = $22,
+        last_updated_by = $23,
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $23 AND tenant_id = $24
+       WHERE id = $24 AND tenant_id = $25
        RETURNING *`,
       [
         employee_id, employee_name, job_title, years_experience,
@@ -174,7 +177,8 @@ const EmployeeResume = {
         phone, email, address,
         languages ? JSON.stringify(languages) : null,
         hobbies || null, references ? JSON.stringify(references) : null,
-        is_active, newVersion, userId, id, tenantId
+        is_active, template_id ?? null,
+        newVersion, userId, id, tenantId
       ]
     );
     return result.rows[0];

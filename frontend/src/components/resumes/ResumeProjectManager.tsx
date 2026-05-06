@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ResumeProject } from '../../services/employeeResumes';
 import api from '../../services/api';
-import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import RankableSectionList from './RankableSectionList';
 import './ResumeProjectManager.css';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   employeeId?: number;
   value: ResumeProject[];
   onChange: (projects: ResumeProject[]) => void;
+  limit?: number;
 }
 
 interface Project {
@@ -151,8 +152,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({ label, value, onCha
   );
 };
 
-const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) => {
-  const { confirm } = useTitanFeedback();
+const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange, limit }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [marketFilter, setMarketFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
@@ -245,32 +245,10 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) 
     onChange([...value, newProject as ResumeProject]);
   };
 
-  const handleRemove = async (projectId: number) => {
-    const ok = await confirm({ message: 'Remove this project from resume?', danger: true });
-    if (ok) {
-      onChange(value.filter(p => p.project_id !== projectId));
-    }
-  };
-
-  const handleMoveUp = (index: number) => {
-    if (index === 0) return;
-    const newProjects = [...value];
-    [newProjects[index - 1], newProjects[index]] = [newProjects[index], newProjects[index - 1]];
-    newProjects.forEach((p, i) => p.display_order = i);
-    onChange(newProjects);
-  };
-
-  const handleMoveDown = (index: number) => {
-    if (index === value.length - 1) return;
-    const newProjects = [...value];
-    [newProjects[index], newProjects[index + 1]] = [newProjects[index + 1], newProjects[index]];
-    newProjects.forEach((p, i) => p.display_order = i);
-    onChange(newProjects);
-  };
-
-  const formatCurrency = (val?: number) => {
-    if (!val) return '';
-    const numVal = Number(val);
+  const formatCurrency = (val: unknown) => {
+    if (val == null || val === '') return '';
+    const numVal = typeof val === 'number' ? val : parseFloat(String(val));
+    if (!Number.isFinite(numVal) || numVal <= 0) return '';
     return `$${numVal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
@@ -316,6 +294,52 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) 
 
   return (
     <div className="resume-project-manager">
+      {/* Current Projects on Resume — shown above the picker */}
+      {value.length > 0 && (
+        <div className="current-projects" style={{ marginBottom: '2rem' }}>
+          <h4 style={{ margin: '0 0 0.75rem' }}>Projects on Resume ({value.length})</h4>
+          <RankableSectionList
+            items={value}
+            limit={limit}
+            onMove={(from, to) => {
+              if (to < 0 || to >= value.length) return;
+              const next = [...value];
+              const [item] = next.splice(from, 1);
+              next.splice(to, 0, item);
+              next.forEach((p, i) => (p.display_order = i));
+              onChange(next);
+            }}
+            onRemove={(index) => {
+              const next = value.filter((_, i) => i !== index);
+              next.forEach((p, i) => (p.display_order = i));
+              onChange(next);
+            }}
+            renderContent={(project) => {
+              const valueText = formatCurrency(project.project_value);
+              return (
+                <div>
+                  <div style={{ fontWeight: 600 }}>{project.project_name}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 0.6rem', fontSize: '0.8rem', color: '#6b7280', marginTop: '0.15rem' }}>
+                    {project.project_role && <span>{project.project_role}</span>}
+                    {project.customer_name && <span>• {project.customer_name}</span>}
+                    {project.location && <span>• {project.location}</span>}
+                    {valueText && (
+                      <span style={{ fontWeight: 600, color: '#1e3a5f' }}>• {valueText}</span>
+                    )}
+                    {(project.start_date || project.end_date) && (
+                      <span>
+                        • {formatDate(project.start_date)} - {project.end_date ? formatDate(project.end_date) : 'Present'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
+            emptyMessage="No projects added yet."
+          />
+        </div>
+      )}
+
       <h4>Add Projects from Database</h4>
 
       {isLoading ? (
@@ -465,63 +489,6 @@ const ResumeProjectManager: React.FC<Props> = ({ employeeId, value, onChange }) 
         </div>
       )}
 
-      {/* Current Projects on Resume */}
-      {value.length > 0 && (
-        <div className="current-projects" style={{ marginTop: '2rem' }}>
-          <h4>Projects on Resume ({value.length})</h4>
-          <div className="projects-list">
-            {value.map((project, index) => (
-              <div key={project.project_id || index} className="project-card">
-                <div className="project-header">
-                  <div>
-                    <h5>{project.project_name}</h5>
-                    <p className="project-role">{project.project_role}</p>
-                  </div>
-                  <div className="project-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => handleMoveUp(index)}
-                      disabled={index === 0}
-                      title="Move up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => handleMoveDown(index)}
-                      disabled={index === value.length - 1}
-                      title="Move down"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn delete"
-                      onClick={() => handleRemove(project.project_id!)}
-                      title="Remove"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <div className="project-details">
-                  {project.customer_name && <span>• {project.customer_name}</span>}
-                  {project.location && <span>• {project.location}</span>}
-                  {project.project_value && <span>• {formatCurrency(project.project_value)}</span>}
-                  {(project.start_date || project.end_date) && (
-                    <span>• {formatDate(project.start_date)} - {project.end_date ? formatDate(project.end_date) : 'Present'}</span>
-                  )}
-                </div>
-                {project.description && (
-                  <p className="project-description">{project.description}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

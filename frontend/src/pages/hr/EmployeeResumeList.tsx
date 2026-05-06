@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
-import { employeeResumesApi, EmployeeResume, ResumeProject } from '../../services/employeeResumes';
-import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
+import { employeeResumesApi, EmployeeResume } from '../../services/employeeResumes';
 import '../../styles/SalesPipeline.css';
-import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './EmployeeResumeList.css';
 
 const EmployeeResumeList: React.FC = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { confirm } = useTitanFeedback();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
-  const [previewResumeId, setPreviewResumeId] = useState<number | null>(null);
 
   // Fetch employee resumes
   const { data: resumes = [], isLoading } = useQuery({
@@ -31,70 +26,14 @@ const EmployeeResumeList: React.FC = () => {
     },
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => employeeResumesApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employeeResumes'] });
-    },
-  });
-
-  // Fetch full resume data for preview
-  const { data: previewResume } = useQuery({
-    queryKey: ['employeeResume', previewResumeId],
-    queryFn: async () => {
-      if (!previewResumeId) return null;
-      const response = await employeeResumesApi.getById(previewResumeId);
-      return response.data;
-    },
-    enabled: previewResumeId !== null,
-  });
-
-  // Fetch projects for preview
-  const { data: previewProjects = [] } = useQuery<ResumeProject[]>({
-    queryKey: ['resumeProjects', previewResumeId],
-    queryFn: async () => {
-      if (!previewResumeId) return [];
-      const response = await employeeResumesApi.getProjects(previewResumeId);
-      return response.data;
-    },
-    enabled: previewResumeId !== null,
-  });
-
-  // Download mutation
-  const downloadMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await employeeResumesApi.download(id);
-      const resume = resumes.find((r: EmployeeResume) => r.id === id);
-      if (resume && resume.resume_file_name) {
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', resume.resume_file_name);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }
-    },
-  });
-
-  const handleDelete = async (id: number, name: string) => {
-    const ok = await confirm({ message: `Are you sure you want to delete the resume for "${name}"?`, danger: true });
-    if (ok) {
-      deleteMutation.mutate(id);
-    }
-  };
-
-  const handleDownload = (id: number) => {
-    downloadMutation.mutate(id);
-  };
-
   if (isLoading) {
     return <div className="loading">Loading employee resumes...</div>;
   }
 
+  const filtersActive = !!searchTerm || activeFilter !== 'all';
+
   return (
-    <div className="employee-resume-list">
+    <div className="container" style={{ maxWidth: 'min(100%, 1800px)', padding: '0 1.5rem' }}>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -102,163 +41,124 @@ const EmployeeResumeList: React.FC = () => {
               &larr; Back to Marketing
             </Link>
             <h1>📄 Employee Resumes</h1>
-            <div className="sales-subtitle">Manage employee resume profiles</div>
+            <div className="sales-subtitle">
+              {resumes.length} resume{resumes.length === 1 ? '' : 's'}
+            </div>
           </div>
         </div>
         <div className="sales-header-actions">
-          <button className="btn" onClick={() => navigate('/employee-resumes/create')}>
+          <button className="btn btn-secondary" onClick={() => navigate('/employee-resumes/import')}>
+            📥 Import from Word
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/employee-resumes/create')}>
             + New Resume
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="filters">
-        <input
-          type="text"
-          className="input search-input"
-          placeholder="Search by name or title..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-
-        <select
-          className="input"
-          value={activeFilter}
-          onChange={(e) => setActiveFilter(e.target.value)}
-        >
-          <option value="all">All Statuses</option>
-          <option value="active">Active Only</option>
-          <option value="inactive">Inactive Only</option>
-        </select>
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Search</label>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="Type to search name or title…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Status</label>
+            <select
+              className="form-input"
+              value={activeFilter}
+              onChange={(e) => setActiveFilter(e.target.value)}
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+            </select>
+          </div>
+          {filtersActive && (
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setSearchTerm(''); setActiveFilter('all'); }}
+                style={{ width: '100%' }}
+              >
+                Clear Filters
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Resume Table */}
-      <div className="card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th style={{ width: '60px' }}>Photo</th>
-              <th>Employee</th>
-              <th>Job Title</th>
-              <th>Experience</th>
-              <th>Certifications</th>
-              <th>Resume File</th>
-              <th>Version</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {resumes.length === 0 ? (
-              <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
-                  No employee resumes found. Create one to get started.
-                </td>
-              </tr>
-            ) : (
-              resumes.map((resume: EmployeeResume) => (
-                <tr key={resume.id}>
-                  <td>
-                    {resume.employee_photo_path ? (
-                      <img
-                        src={`/${resume.employee_photo_path}`}
-                        alt={resume.employee_name}
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          backgroundColor: '#e5e7eb',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '18px',
-                        }}
-                      >
-                        👤
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <strong>{resume.employee_name}</strong>
-                  </td>
-                  <td>{resume.job_title}</td>
-                  <td>
-                    {resume.years_experience ? `${resume.years_experience} years` : '—'}
-                  </td>
-                  <td>
-                    {resume.certifications && resume.certifications.length > 0
-                      ? `${resume.certifications.length} cert${resume.certifications.length === 1 ? '' : 's'}`
-                      : '—'}
-                  </td>
-                  <td>
-                    {resume.resume_file_name ? (
-                      <button
-                        className="link-button"
-                        onClick={() => handleDownload(resume.id)}
-                        title="Download resume"
-                      >
-                        📄 {resume.resume_file_name}
-                      </button>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>v{resume.version_number}</td>
-                  <td>
-                    <span className={`status-badge ${resume.is_active ? 'active' : 'inactive'}`}>
-                      {resume.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-buttons">
-                      <button
-                        className="btn-icon"
-                        onClick={() => setPreviewResumeId(resume.id)}
-                        title="Preview"
-                      >
-                        👁️
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => navigate(`/employee-resumes/${resume.id}`)}
-                        title="Edit"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleDelete(resume.id, resume.employee_name)}
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
+      {/* Empty state or table */}
+      {resumes.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.5rem', color: '#1f2937' }}>
+            {filtersActive ? 'No matching resumes' : 'No employee resumes yet'}
+          </h3>
+          <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
+            {filtersActive
+              ? 'Try clearing or adjusting your filters'
+              : 'Create a resume from scratch or import existing Word documents to get started.'}
+          </p>
+          {!filtersActive && (
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => navigate('/employee-resumes/import')}>
+                📥 Import from Word
+              </button>
+              <button className="btn btn-primary" onClick={() => navigate('/employee-resumes/create')}>
+                + New Resume
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="sales-table" style={{ tableLayout: 'auto' }}>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Job Title</th>
+                  <th>Experience</th>
+                  <th style={{ textAlign: 'center' }}>Certifications</th>
+                  <th style={{ textAlign: 'center' }}>Version</th>
+                  <th>Status</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Preview Modal */}
-      {previewResume && (
-        <ResumePreviewModal
-          resume={previewResume}
-          projects={previewProjects}
-          isOpen={previewResumeId !== null}
-          onClose={() => setPreviewResumeId(null)}
-        />
+              </thead>
+              <tbody>
+                {resumes.map((resume: EmployeeResume) => (
+                  <tr
+                    key={resume.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/employee-resumes/${resume.id}`)}
+                  >
+                    <td style={{ fontWeight: 600, color: '#1f2937' }}>{resume.employee_name}</td>
+                    <td>{resume.job_title || '—'}</td>
+                    <td>{resume.years_experience ? `${resume.years_experience} years` : '—'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {resume.certifications && resume.certifications.length > 0
+                        ? resume.certifications.length
+                        : '—'}
+                    </td>
+                    <td style={{ textAlign: 'center', color: '#6b7280' }}>v{resume.version_number}</td>
+                    <td>
+                      <span className={`status-badge ${resume.is_active ? 'active' : 'inactive'}`}>
+                        {resume.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );

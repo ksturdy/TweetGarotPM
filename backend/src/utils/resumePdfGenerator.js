@@ -12,13 +12,17 @@ function formatDate(dateString) {
 }
 
 function formatCurrency(value) {
-  if (!value) return '';
-  return '$' + Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
 function formatNumber(value) {
-  if (!value) return '';
-  return Number(value).toLocaleString('en-US');
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return n.toLocaleString('en-US');
 }
 
 function escapeHtml(str) {
@@ -31,13 +35,79 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+const DEFAULT_LIMITS = {
+  summary_chars: 600,
+  projects: 5,
+  certifications: 6,
+  skills: 12,
+  languages: 4,
+  hobbies: 6,
+  references: 3,
+};
+
+const DEFAULT_LAYOUT = {
+  show_photo: true,
+  show_years_experience: true,
+  sidebar_color: '#1e3a5f',
+  sections: {
+    contact: true,
+    references: true,
+    hobbies: true,
+    summary: true,
+    projects: true,
+    education: true,
+    skills: true,
+    languages: true,
+  },
+};
+
+function resolveLimits(template) {
+  if (!template) return { ...DEFAULT_LIMITS };
+  const raw = template.section_limits;
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  return { ...DEFAULT_LIMITS, ...parsed };
+}
+
+function resolveLayout(template) {
+  if (!template) return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  const raw = template.layout_config;
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  return {
+    ...DEFAULT_LAYOUT,
+    ...parsed,
+    sections: { ...DEFAULT_LAYOUT.sections, ...(parsed.sections || {}) },
+  };
+}
+
+function takeFirst(arr, n) {
+  if (!Array.isArray(arr)) return [];
+  if (typeof n !== 'number' || n <= 0) return arr;
+  return arr.slice(0, n);
+}
+
+function truncateText(text, maxChars) {
+  if (!text) return '';
+  if (typeof maxChars !== 'number' || maxChars <= 0) return text;
+  if (text.length <= maxChars) return text;
+  // Cut at the nearest sentence/word boundary so we don't lop a word in half.
+  const slice = text.slice(0, maxChars);
+  const lastBreak = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '));
+  const cut = lastBreak > maxChars * 0.6 ? lastBreak + 1 : slice.lastIndexOf(' ');
+  return (cut > 0 ? slice.slice(0, cut) : slice).trim() + '…';
+}
+
 /**
  * Generate resume HTML
  * @param {Object} resume - Resume data
  * @param {Array} projects - Project experience array
  * @param {String} photoBase64 - Base64 encoded photo
+ * @param {Object} template - Resume template row (provides section_limits)
  */
-function generateResumeHtml(resume, projects = [], photoBase64 = '') {
+function generateResumeHtml(resume, projects = [], photoBase64 = '', template = null) {
+  const limits = resolveLimits(template);
+  const layout = resolveLayout(template);
+  const sections = layout.sections;
+
   const {
     employee_name,
     job_title,
@@ -61,40 +131,63 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '') {
   const parsedHobbies = Array.isArray(hobbies) ? hobbies : (typeof hobbies === 'string' ? JSON.parse(hobbies) : []);
   const parsedReferences = typeof references === 'string' ? JSON.parse(references) : references;
 
+  // Apply section limits so the rendered page stays inside its 8.5x11 budget.
+  const cappedProjects = takeFirst(projects, limits.projects);
+  const cappedCertifications = takeFirst(parsedCertifications, limits.certifications);
+  const cappedSkills = takeFirst(parsedSkills, limits.skills);
+  const cappedLanguages = takeFirst(parsedLanguages, limits.languages);
+  const cappedHobbies = takeFirst(parsedHobbies, limits.hobbies);
+  const cappedReferences = takeFirst(parsedReferences, limits.references);
+  const cappedSummary = truncateText(summary, limits.summary_chars);
+
   const sidebarSections = [];
   const mainSections = [];
 
-  // Generate sidebar content
-  const contactHtml = generateContactSection(phone, email, address);
-  if (contactHtml) sidebarSections.push(contactHtml);
+  // Generate sidebar content (respects per-section visibility)
+  if (sections.contact) {
+    const contactHtml = generateContactSection(phone, email, address);
+    if (contactHtml) sidebarSections.push(contactHtml);
+  }
 
-  const referencesHtml = generateReferencesSection(parsedReferences);
-  if (referencesHtml) sidebarSections.push(referencesHtml);
+  if (sections.references) {
+    const referencesHtml = generateReferencesSection(cappedReferences);
+    if (referencesHtml) sidebarSections.push(referencesHtml);
+  }
 
-  const hobbiesHtml = generateHobbiesSection(parsedHobbies);
-  if (hobbiesHtml) sidebarSections.push(hobbiesHtml);
+  if (sections.hobbies) {
+    const hobbiesHtml = generateHobbiesSection(cappedHobbies);
+    if (hobbiesHtml) sidebarSections.push(hobbiesHtml);
+  }
 
   // Generate main content
-  if (summary) {
+  if (sections.summary && cappedSummary) {
     mainSections.push(`
       <div class="section">
         <h2 class="section-title">About Me</h2>
-        <p class="summary-text">${escapeHtml(summary)}</p>
+        <p class="summary-text">${escapeHtml(cappedSummary)}</p>
       </div>
     `);
   }
 
-  const projectsHtml = generateProjectsSection(projects);
-  if (projectsHtml) mainSections.push(projectsHtml);
+  if (sections.projects) {
+    const projectsHtml = generateProjectsSection(cappedProjects);
+    if (projectsHtml) mainSections.push(projectsHtml);
+  }
 
-  const educationHtml = generateEducationSection(education, parsedCertifications);
-  if (educationHtml) mainSections.push(educationHtml);
+  if (sections.education) {
+    const educationHtml = generateEducationSection(education, cappedCertifications);
+    if (educationHtml) mainSections.push(educationHtml);
+  }
 
-  const skillsHtml = generateSkillsSection(parsedSkills);
-  if (skillsHtml) mainSections.push(skillsHtml);
+  if (sections.skills) {
+    const skillsHtml = generateSkillsSection(cappedSkills);
+    if (skillsHtml) mainSections.push(skillsHtml);
+  }
 
-  const languagesHtml = generateLanguagesSection(parsedLanguages);
-  if (languagesHtml) mainSections.push(languagesHtml);
+  if (sections.languages) {
+    const languagesHtml = generateLanguagesSection(cappedLanguages);
+    if (languagesHtml) mainSections.push(languagesHtml);
+  }
 
   return `
     <!DOCTYPE html>
@@ -102,14 +195,14 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '') {
     <head>
       <meta charset="UTF-8">
       <style>
-        ${getResumeStyles()}
+        ${getResumeStyles(layout)}
       </style>
     </head>
     <body>
       <div class="resume-container">
         <!-- Left Sidebar -->
         <div class="sidebar">
-          ${photoBase64 ? `
+          ${layout.show_photo && photoBase64 ? `
             <div class="photo-container">
               <img src="${photoBase64}" alt="${escapeHtml(employee_name)}" class="employee-photo" />
             </div>
@@ -118,7 +211,7 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '') {
           <div class="name-title">
             <h1 class="employee-name">${escapeHtml(employee_name || '')}</h1>
             <p class="job-title">${escapeHtml(job_title || '')}</p>
-            ${years_experience ? `<p class="years-experience">${years_experience} Years Experience</p>` : ''}
+            ${layout.show_years_experience && years_experience ? `<p class="years-experience">${years_experience} Years Experience</p>` : ''}
           </div>
 
           ${sidebarSections.join('\n')}
@@ -134,12 +227,15 @@ function generateResumeHtml(resume, projects = [], photoBase64 = '') {
   `;
 }
 
-function generateContactSection(phone, email, address) {
+const PHONE_SVG = `<svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/></svg>`;
+const MAIL_SVG = `<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`;
+const PIN_SVG = `<svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+
+function generateContactSection(phone, email /* address intentionally unused — field retired */) {
   const items = [];
 
-  if (phone) items.push(`<div class="contact-item"><span class="contact-icon">📞</span><span>${escapeHtml(phone)}</span></div>`);
-  if (email) items.push(`<div class="contact-item"><span class="contact-icon">✉️</span><span>${escapeHtml(email)}</span></div>`);
-  if (address) items.push(`<div class="contact-item"><span class="contact-icon">📍</span><span>${escapeHtml(address)}</span></div>`);
+  if (phone) items.push(`<div class="contact-item"><span class="contact-icon">${PHONE_SVG}</span><span class="contact-text">${escapeHtml(phone)}</span></div>`);
+  if (email) items.push(`<div class="contact-item"><span class="contact-icon">${MAIL_SVG}</span><span class="contact-text">${escapeHtml(email)}</span></div>`);
 
   if (items.length === 0) return '';
 
@@ -196,18 +292,21 @@ function generateProjectsSection(projects) {
       ? `<p class="project-dates">${formatDate(proj.start_date)} - ${proj.end_date ? formatDate(proj.end_date) : 'Present'}</p>`
       : '';
 
+    // Compact details: client + location + size only — value lives in the header line
     const details = [];
     if (proj.customer_name) details.push(`<strong>Client:</strong> ${escapeHtml(proj.customer_name)}`);
-    if (proj.location) details.push(`<strong>Location:</strong> ${escapeHtml(proj.location)}`);
-    if (proj.square_footage) details.push(`<strong>Size:</strong> ${formatNumber(proj.square_footage)} sq ft`);
+    if (proj.location) details.push(escapeHtml(proj.location));
+    if (proj.square_footage) details.push(`${formatNumber(proj.square_footage)} sq ft`);
 
+    const valueText = formatCurrency(proj.project_value);
+
+    const hasMeta = !!(valueText || dateRange);
     return `
       <div class="project-item">
         <div class="project-header">
           <h4 class="project-name">${escapeHtml(proj.project_name || '')}</h4>
-          ${proj.project_value ? `<p class="project-role">Value: ${formatCurrency(proj.project_value)}</p>` : ''}
+          ${hasMeta ? `<div class="project-meta">${valueText ? `<p class="project-role">${valueText}</p>` : ''}${dateRange}</div>` : ''}
         </div>
-        ${dateRange}
         ${details.length > 0 ? `<p class="project-details">${details.join(' • ')}</p>` : ''}
         ${proj.description ? `<p class="project-description">${escapeHtml(proj.description)}</p>` : ''}
       </div>
@@ -281,12 +380,23 @@ function generateLanguagesSection(languages) {
   `;
 }
 
-function getResumeStyles() {
+function getResumeStyles(layout = DEFAULT_LAYOUT) {
+  const sidebarColor = (layout && layout.sidebar_color) || DEFAULT_LAYOUT.sidebar_color;
   return `
+    @page {
+      size: letter portrait;
+      margin: 0.5in;
+    }
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+    }
+
+    html, body {
+      width: 7.5in;        /* 8.5in - 2 * 0.5in margin */
+      height: 10in;        /* 11in  - 2 * 0.5in margin */
     }
 
     body {
@@ -294,18 +404,21 @@ function getResumeStyles() {
       font-size: 10pt;
       line-height: 1.5;
       color: #1a1a1a;
+      overflow: hidden;    /* belt-and-suspenders single-page guard */
     }
 
     .resume-container {
       display: grid;
       grid-template-columns: 30% 70%;
       width: 100%;
-      min-height: 100vh;
+      height: 10in;
+      max-height: 10in;
+      overflow: hidden;
     }
 
     /* ===== SIDEBAR STYLES ===== */
     .sidebar {
-      background-color: #1e3a5f;
+      background-color: ${sidebarColor};
       color: white;
       padding: 2rem 1.5rem;
     }
@@ -366,17 +479,45 @@ function getResumeStyles() {
       border-bottom: 2px solid rgba(255, 255, 255, 0.3);
     }
 
+    .contact-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
     .contact-item {
       display: flex;
-      align-items: flex-start;
-      margin-bottom: 0.75rem;
-      font-size: 9pt;
-      line-height: 1.4;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 8.5pt;
+      line-height: 1.3;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .contact-icon {
-      margin-right: 0.5rem;
       flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+    }
+
+    .contact-icon svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .contact-text {
+      flex: 1;
+      min-width: 0;
     }
 
     .reference-item {
@@ -430,18 +571,18 @@ function getResumeStyles() {
     }
 
     .section {
-      margin-bottom: 2rem;
+      margin-bottom: 1.1rem;
     }
 
     .section-title {
-      font-size: 13pt;
+      font-size: 12pt;
       font-weight: bold;
-      color: #1e3a5f;
+      color: ${sidebarColor};
       text-transform: uppercase;
       letter-spacing: 1px;
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 3px solid #1e3a5f;
+      margin: 0 0 0.5rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 3px solid ${sidebarColor};
     }
 
     .summary-text {
@@ -451,8 +592,8 @@ function getResumeStyles() {
     }
 
     .project-item {
-      margin-bottom: 1.5rem;
-      padding-bottom: 1.5rem;
+      margin-bottom: 0.6rem;
+      padding-bottom: 0.6rem;
       border-bottom: 1px solid #e0e0e0;
     }
 
@@ -463,38 +604,56 @@ function getResumeStyles() {
     }
 
     .project-header {
-      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.1rem;
     }
 
     .project-name {
-      font-size: 11pt;
+      font-size: 10.5pt;
       font-weight: bold;
-      color: #1e3a5f;
-      margin-bottom: 0.25rem;
+      color: ${sidebarColor};
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .project-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .project-role {
       font-size: 10pt;
-      color: #1e3a5f;
-      font-weight: 600;
+      color: ${sidebarColor};
+      font-weight: 700;
+      margin: 0;
+      white-space: nowrap;
     }
 
     .project-dates {
-      font-size: 9pt;
+      font-size: 8.5pt;
       color: #666;
       font-style: italic;
-      margin-bottom: 0.5rem;
+      margin: 0;
+      text-align: right;
     }
 
     .project-details {
-      font-size: 9pt;
+      font-size: 8.5pt;
       color: #555;
-      margin-bottom: 0.5rem;
+      margin: 0 0 0.15rem;
     }
 
     .project-description {
-      font-size: 10pt;
-      line-height: 1.5;
+      font-size: 9pt;
+      line-height: 1.4;
+      margin: 0;
     }
 
     .education-text {
@@ -533,7 +692,7 @@ function getResumeStyles() {
       display: inline-block;
       padding: 0.4rem 0.8rem;
       background-color: #f0f0f0;
-      color: #1e3a5f;
+      color: ${sidebarColor};
       border-radius: 20px;
       font-size: 9pt;
       font-weight: 600;
@@ -557,7 +716,7 @@ function getResumeStyles() {
     .language-name {
       font-size: 10pt;
       font-weight: bold;
-      color: #1e3a5f;
+      color: ${sidebarColor};
     }
 
     .language-proficiency {

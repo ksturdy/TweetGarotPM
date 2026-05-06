@@ -1,5 +1,8 @@
 // Service Worker for Titan PM
-const CACHE_NAME = 'titan-pm-v3';
+// CACHE_NAME is rewritten at build time by scripts/version-sw.js so every
+// production deploy invalidates the cache automatically. The literal token
+// __BUILD_ID__ is the rewrite target — do not hand-edit it here.
+const CACHE_NAME = 'titan-pm-__BUILD_ID__';
 const urlsToCache = [
   '/',
   '/static/css/main.css',
@@ -46,25 +49,41 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Strategy: Network First, Cache Fallback
+// Fetch Strategy:
+//   - Navigations / HTML  → network only, fall back to cached '/' offline.
+//     We deliberately never cache HTML responses so a fresh deploy's index.html
+//     (which references the new hashed bundles) is always served when online.
+//   - Everything else (hashed JS/CSS/images) → network first, update cache,
+//     fall back to cache when offline. Hashed filenames make this safe.
 self.addEventListener('fetch', (event) => {
+  const req = event.request;
+
+  // Only handle GETs; let the browser handle POST/PUT/etc directly.
+  if (req.method !== 'GET') {
+    return;
+  }
+
+  const isNavigation =
+    req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigation) {
+    event.respondWith(
+      fetch(req).catch(() => caches.match('/'))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
+    fetch(req)
       .then((response) => {
-        // Clone the response
         const responseToCache = response.clone();
-
-        // Update cache with new response
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          cache.put(req, responseToCache);
         });
-
         return response;
       })
-      .catch(() => {
-        // If network fails, try cache
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(req))
   );
 });
 

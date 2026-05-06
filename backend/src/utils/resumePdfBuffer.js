@@ -8,8 +8,8 @@ const { generateResumeHtml } = require('./resumePdfGenerator');
  * @param {String} photoBase64 - Base64 encoded photo
  * @returns {Buffer} PDF buffer
  */
-async function generateResumePdfBuffer(resume, projects, photoBase64) {
-  const html = generateResumeHtml(resume, projects, photoBase64);
+async function generateResumePdfBuffer(resume, projects, photoBase64, template = null) {
+  const html = generateResumeHtml(resume, projects, photoBase64, template);
   let browser = null;
 
   try {
@@ -28,6 +28,7 @@ async function generateResumePdfBuffer(resume, projects, photoBase64) {
 
     const pdfBuffer = await page.pdf({
       format: 'Letter',
+      landscape: false,
       printBackground: true,
       margin: {
         top: '0.5in',
@@ -36,6 +37,8 @@ async function generateResumePdfBuffer(resume, projects, photoBase64) {
         left: '0.5in',
       },
       preferCSSPageSize: false,
+      // Hard-cap at the first page - resume template is single-page by design.
+      pageRanges: '1',
     });
 
     return Buffer.from(pdfBuffer);

@@ -7,6 +7,10 @@ interface ImageCropperProps {
   onCropComplete: (croppedBlob: Blob) => void;
   onCancel: () => void;
   aspectRatio?: number; // undefined = free-form cropping
+  circularCrop?: boolean;
+  title?: string;
+  description?: string;
+  outputType?: 'image/png' | 'image/jpeg';
 }
 
 function centerAspectCrop(
@@ -34,6 +38,10 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   onCropComplete,
   onCancel,
   aspectRatio,
+  circularCrop = false,
+  title = 'Crop Image',
+  description = 'Drag to adjust the crop area',
+  outputType = 'image/png',
 }) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -91,11 +99,11 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
             reject(new Error('Canvas is empty'));
           }
         },
-        'image/png',
-        1,
+        outputType,
+        outputType === 'image/jpeg' ? 0.92 : 1,
       );
     });
-  }, [completedCrop]);
+  }, [completedCrop, outputType]);
 
   const handleCropComplete = async () => {
     try {
@@ -112,8 +120,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     <div className="image-cropper-overlay">
       <div className="image-cropper-modal">
         <div className="image-cropper-header">
-          <h3>Crop Logo</h3>
-          <p className="text-sm text-gray-500">Drag to adjust the crop area</p>
+          <h3>{title}</h3>
+          <p className="text-sm text-gray-500">{description}</p>
         </div>
         <div className="image-cropper-content">
           <ReactCrop
@@ -121,7 +129,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
             onChange={(_, percentCrop) => setCrop(percentCrop)}
             onComplete={(c) => setCompletedCrop(c)}
             aspect={aspectRatio}
-            circularCrop={false}
+            circularCrop={circularCrop}
           >
             <img
               ref={imgRef}

@@ -1,17 +1,69 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { employeeResumesApi, Certification, Language, Reference, ResumeProject, EmployeeResume } from '../../services/employeeResumes';
+import { resumeTemplatesApi, ResumeTemplate } from '../../services/resumeTemplates';
 import ResumeProjectManager from '../../components/resumes/ResumeProjectManager';
 import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
+import ResumePreview from '../../components/resumes/ResumePreview';
+import RankableSectionList from '../../components/resumes/RankableSectionList';
+import ImageCropper from '../../components/common/ImageCropper';
+import '../../components/common/ImageCropper.css';
 import '../../styles/SalesPipeline.css';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './EmployeeResumeForm.css';
 
+const PAGE_WIDTH_PX = 816;
+const PAGE_HEIGHT_PX = 1056;
+
+const zoomBtnStyle: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid #d1d5db',
+  borderRadius: 4,
+  backgroundColor: 'white',
+  color: '#374151',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  padding: 0,
+  lineHeight: 1,
+};
+
+/**
+ * Format a US phone number as the user types: (XXX) XXX-XXXX.
+ * Strips all non-digits, keeps the leading "1" if present, and progressively
+ * adds parens / space / dash as more digits are entered.
+ */
+function formatPhoneNumber(input: string): string {
+  if (!input) return '';
+  let digits = input.replace(/\D/g, '');
+  // Drop leading country-code "1" so (XXX) XXX-XXXX is the canonical form
+  if (digits.length > 10 && digits.startsWith('1')) {
+    digits = digits.slice(1);
+  }
+  digits = digits.slice(0, 10);
+  if (digits.length === 0) return '';
+  if (digits.length < 4) return `(${digits}`;
+  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+const limitChipStyle: React.CSSProperties = {
+  padding: '0.1rem 0.45rem',
+  backgroundColor: '#f3f4f6',
+  color: '#6b7280',
+  borderRadius: '9999px',
+  fontSize: '0.7rem',
+  fontWeight: 600,
+};
+
 const EmployeeResumeForm: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { toast } = useTitanFeedback();
+  const { toast, confirm } = useTitanFeedback();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
 
@@ -23,7 +75,6 @@ const EmployeeResumeForm: React.FC = () => {
     education: '',
     phone: '',
     email: '',
-    address: '',
     is_active: true,
   });
 
@@ -39,12 +90,14 @@ const EmployeeResumeForm: React.FC = () => {
   const [newLanguage, setNewLanguage] = useState({ language: '', proficiency: 'Conversational' });
   const [newHobby, setNewHobby] = useState('');
   const [newReference, setNewReference] = useState({ name: '', title: '', company: '', phone: '' });
+  const [editingRefIndex, setEditingRefIndex] = useState<number | null>(null);
+  const [editingRefDraft, setEditingRefDraft] = useState<Reference>({ name: '', title: '', company: '', phone: '' });
 
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [templateId, setTemplateId] = useState<number | null>(null);
 
   // Fetch existing resume if editing
   const { data: existingResume, isLoading, refetch } = useQuery({
@@ -55,6 +108,15 @@ const EmployeeResumeForm: React.FC = () => {
       return response.data;
     },
     enabled: isEditing,
+  });
+
+  // Fetch resume templates (always - needed for both create and edit)
+  const { data: resumeTemplates = [] } = useQuery({
+    queryKey: ['resumeTemplates', 'active'],
+    queryFn: async () => {
+      const response = await resumeTemplatesApi.getAll({ is_active: true });
+      return response.data;
+    },
   });
 
   // Fetch projects if editing
@@ -79,17 +141,18 @@ const EmployeeResumeForm: React.FC = () => {
         years_experience: existingResume.years_experience?.toString() || '',
         summary: existingResume.summary || '',
         education: existingResume.education || '',
-        phone: existingResume.phone || '',
+        phone: formatPhoneNumber(existingResume.phone || ''),
         email: existingResume.email || '',
-        address: existingResume.address || '',
         is_active: existingResume.is_active,
       });
       setCertifications(existingResume.certifications || []);
       setSkills(existingResume.skills || []);
       setLanguages(existingResume.languages || []);
       setHobbies(existingResume.hobbies || []);
-      setReferences(existingResume.references || []);
-      setCurrentFileName(existingResume.resume_file_name || null);
+      setReferences((existingResume.references || []).map((ref: Reference) => ({
+        ...ref,
+        phone: ref.phone ? formatPhoneNumber(ref.phone) : ref.phone,
+      })));
 
       // Set photo preview if exists, clear if not
       if (existingResume.employee_photo_path) {
@@ -97,8 +160,20 @@ const EmployeeResumeForm: React.FC = () => {
       } else {
         setPhotoPreview(null);
       }
+
+      if (existingResume.template_id) {
+        setTemplateId(existingResume.template_id);
+      }
     }
   }, [existingResume]);
+
+  // For new resumes, default to the tenant's default template once templates load.
+  useEffect(() => {
+    if (!isEditing && templateId === null && resumeTemplates.length > 0) {
+      const def = resumeTemplates.find((t: ResumeTemplate) => t.is_default) || resumeTemplates[0];
+      if (def) setTemplateId(def.id);
+    }
+  }, [isEditing, templateId, resumeTemplates]);
 
   // Populate projects when editing (only on initial load)
   useEffect(() => {
@@ -107,6 +182,47 @@ const EmployeeResumeForm: React.FC = () => {
       setProjects(existingProjects);
     }
   }, [existingProjects]); // Don't include projects.length to avoid infinite loop
+
+  const selectedTemplate = useMemo<ResumeTemplate | null>(
+    () => resumeTemplates.find((t: ResumeTemplate) => t.id === templateId) || null,
+    [resumeTemplates, templateId]
+  );
+
+  // Auto-scale the full-size letter page to fit the preview pane's width AND height
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [autoZoom, setAutoZoom] = useState(0.6);
+  const [manualZoom, setManualZoom] = useState<number | null>(null);
+  const zoomScale = manualZoom != null ? manualZoom : autoZoom;
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0) {
+        const widthScale = Math.min(1, w / PAGE_WIDTH_PX);
+        const heightScale = Math.min(1, h / PAGE_HEIGHT_PX);
+        setAutoZoom(Math.min(widthScale, heightScale));
+      }
+    };
+    measure();
+    const raf = requestAnimationFrame(measure);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  const adjustZoom = (delta: number) => {
+    const next = Math.max(0.25, Math.min(2, zoomScale + delta));
+    setManualZoom(Number(next.toFixed(2)));
+  };
+  const resetZoomToFit = () => setManualZoom(null);
 
   // Create preview resume object from current form data
   const previewResume: EmployeeResume = useMemo(() => {
@@ -130,14 +246,9 @@ const EmployeeResumeForm: React.FC = () => {
       certifications,
       skills,
       education: formData.education,
-      resume_file_name: currentFileName || undefined,
-      resume_file_path: existingResume?.resume_file_path,
-      resume_file_size: existingResume?.resume_file_size,
-      resume_file_type: existingResume?.resume_file_type,
       employee_photo_path: photoPath,
       phone: formData.phone,
       email: formData.email,
-      address: formData.address,
       languages,
       hobbies,
       references,
@@ -147,7 +258,7 @@ const EmployeeResumeForm: React.FC = () => {
       created_at: existingResume?.created_at || new Date().toISOString(),
       updated_at: existingResume?.updated_at || new Date().toISOString(),
     };
-  }, [formData, certifications, skills, languages, hobbies, references, currentFileName, existingResume, id, photoPreview]);
+  }, [formData, certifications, skills, languages, hobbies, references, existingResume, id, photoPreview]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -269,6 +380,29 @@ const EmployeeResumeForm: React.FC = () => {
     },
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (resumeId: number) => employeeResumesApi.delete(resumeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employeeResumes'] });
+      navigate('/employee-resumes');
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete resume: ${error?.response?.data?.error || error.message || 'Unknown error'}`);
+    },
+  });
+
+  const handleDelete = async () => {
+    if (!id) return;
+    const ok = await confirm({
+      message: `Are you sure you want to delete the resume for "${formData.employee_name || 'this employee'}"? This action cannot be undone.`,
+      danger: true,
+    });
+    if (ok) {
+      deleteMutation.mutate(parseInt(id));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -289,18 +423,17 @@ const EmployeeResumeForm: React.FC = () => {
       if (formData.email) {
         data.append('email', formData.email);
       }
-      if (formData.address) {
-        data.append('address', formData.address);
-      }
+      // Address is intentionally never sent — the field was retired from the form.
+      // Send an empty string so any legacy address on existing rows gets cleared on next save.
+      data.append('address', '');
       data.append('certifications', JSON.stringify(certifications));
       data.append('skills', JSON.stringify(skills));
       data.append('languages', JSON.stringify(languages));
       data.append('hobbies', JSON.stringify(hobbies));
       data.append('references', JSON.stringify(references));
       data.append('is_active', formData.is_active.toString());
-
-      if (resumeFile) {
-        data.append('resume', resumeFile);
+      if (templateId) {
+        data.append('template_id', templateId.toString());
       }
 
       console.log('Form submission:', {
@@ -380,26 +513,89 @@ const EmployeeResumeForm: React.FC = () => {
 
   const removeReference = (index: number) => {
     setReferences(references.filter((_, i) => i !== index));
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setResumeFile(e.target.files[0]);
+    if (editingRefIndex === index) {
+      setEditingRefIndex(null);
     }
   };
+
+  const startEditReference = (index: number) => {
+    const ref = references[index];
+    if (!ref) return;
+    setEditingRefIndex(index);
+    setEditingRefDraft({
+      name: ref.name || '',
+      title: ref.title || '',
+      company: ref.company || '',
+      phone: ref.phone || '',
+    });
+  };
+
+  const saveEditReference = () => {
+    if (editingRefIndex == null) return;
+    const trimmedName = editingRefDraft.name.trim();
+    if (!trimmedName) return;
+    setReferences(prev => prev.map((r, i) => (i === editingRefIndex ? { ...editingRefDraft, name: trimmedName } : r)));
+    setEditingRefIndex(null);
+  };
+
+  const cancelEditReference = () => {
+    setEditingRefIndex(null);
+  };
+
+  function moveItem<T>(arr: T[], from: number, to: number): T[] {
+    if (to < 0 || to >= arr.length) return arr;
+    const next = [...arr];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
+  }
+
+  // Section limits from selected template
+  const limits = selectedTemplate?.section_limits || {};
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setPhotoFile(file);
-
-      // Create preview
+      // Don't commit yet — open the cropper with the raw image
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
+        setCropImageSrc(reader.result as string);
       };
       reader.readAsDataURL(file);
+      // Reset the input so picking the same file again still triggers change
+      e.target.value = '';
     }
+  };
+
+  const openCropperForExisting = async () => {
+    if (!photoPreview) return;
+    if (photoPreview.startsWith('data:')) {
+      // Newly uploaded — already a data URL
+      setCropImageSrc(photoPreview);
+      return;
+    }
+    // Existing server-hosted photo — fetch as blob then to data URL so canvas can read it
+    try {
+      const res = await fetch(photoPreview);
+      const blob = await res.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => setCropImageSrc(reader.result as string);
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      console.error('Failed to load existing photo for cropping', err);
+      toast.error('Could not load the existing photo for cropping. Try re-uploading.');
+    }
+  };
+
+  const handleCropComplete = (blob: Blob) => {
+    const file = new File([blob], 'employee-photo.jpg', { type: blob.type || 'image/jpeg' });
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result as string);
+      setCropImageSrc(null);
+    };
+    reader.readAsDataURL(blob);
   };
 
   const removePhoto = async () => {
@@ -426,8 +622,26 @@ const EmployeeResumeForm: React.FC = () => {
   }
 
   return (
-    <div className="employee-resume-form">
-      <div className="sales-page-header">
+    <div
+      className="employee-resume-form"
+      style={{
+        maxWidth: 'none',
+        margin: 0,
+        padding: 0,
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      <style>{`
+        @media (max-width: 1200px) {
+          .employee-resume-grid { grid-template-columns: 1fr !important; }
+          .employee-resume-preview-pane { position: static !important; max-height: none !important; }
+        }
+      `}</style>
+
+      <div className="sales-page-header" style={{ flexShrink: 0, padding: '1rem 1.5rem 0', margin: 0 }}>
         <div className="sales-page-title">
           <div>
             <Link to="/employee-resumes" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
@@ -444,7 +658,7 @@ const EmployeeResumeForm: React.FC = () => {
             onClick={() => setShowPreview(true)}
             style={{ marginRight: '0.5rem' }}
           >
-            👁️ Preview
+            👁️ Full Preview
           </button>
           <button className="btnSecondary" onClick={() => navigate('/employee-resumes')}>
             Cancel
@@ -452,7 +666,22 @@ const EmployeeResumeForm: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="form-container">
+      <div
+        className="employee-resume-grid"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          gap: '1.5rem',
+          padding: '1rem 1.5rem',
+        }}
+      >
+      <form
+        onSubmit={handleSubmit}
+        className="form-container"
+        style={{ overflowY: 'auto', overflowX: 'hidden', paddingRight: '0.5rem', minHeight: 0 }}
+      >
         <div className="card">
           <h2 className="section-title">Basic Information</h2>
 
@@ -526,29 +755,133 @@ const EmployeeResumeForm: React.FC = () => {
           </div>
         </div>
 
+        {/* Resume Template */}
+        <div className="card">
+          <h2 className="section-title">Resume Template</h2>
+          <p className="help-text" style={{ marginBottom: '1rem' }}>
+            Choose the layout for the generated PDF. All templates are constrained to a single 8.5&times;11
+            portrait page — content beyond each section's limit is omitted from the PDF (full data is preserved
+            in the database).
+          </p>
+
+          {resumeTemplates.length === 0 ? (
+            <div style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+              No active templates available.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: '0.75rem',
+              }}
+            >
+              {resumeTemplates.map((tpl: ResumeTemplate) => {
+                const isSelected = templateId === tpl.id;
+                const limits = tpl.section_limits || {};
+                return (
+                  <label
+                    key={tpl.id}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '0.75rem 0.9rem',
+                      borderRadius: '8px',
+                      border: isSelected ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                      backgroundColor: isSelected ? '#eff6ff' : '#fff',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.4rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="radio"
+                        name="template_id"
+                        checked={isSelected}
+                        onChange={() => setTemplateId(tpl.id)}
+                      />
+                      <span style={{ fontWeight: 600, color: '#1f2937', flex: 1 }}>{tpl.name}</span>
+                      {tpl.is_default && (
+                        <span
+                          style={{
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            color: '#2563eb',
+                            backgroundColor: '#dbeafe',
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Default
+                        </span>
+                      )}
+                      <Link
+                        to={`/resume-templates/${tpl.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Edit this template in a new tab"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.2rem',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          color: '#2563eb',
+                          textDecoration: 'none',
+                          padding: '0.15rem 0.45rem',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: '4px',
+                          backgroundColor: '#eff6ff',
+                        }}
+                      >
+                        ✎ Edit
+                      </Link>
+                    </div>
+                    {tpl.description && (
+                      <div style={{ color: '#6b7280', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                        {tpl.description}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.15rem' }}>
+                      {limits.projects != null && (
+                        <span style={limitChipStyle}>{limits.projects} projects</span>
+                      )}
+                      {limits.certifications != null && (
+                        <span style={limitChipStyle}>{limits.certifications} certs</span>
+                      )}
+                      {limits.skills != null && (
+                        <span style={limitChipStyle}>{limits.skills} skills</span>
+                      )}
+                      {limits.references != null && (
+                        <span style={limitChipStyle}>{limits.references} refs</span>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="card">
           <h2 className="section-title">Certifications</h2>
 
-          {certifications.length > 0 && (
-            <div className="cert-list">
-              {certifications.map((cert, index) => (
-                <div key={index} className="cert-item">
-                  <div>
-                    <strong>{cert.name}</strong>
-                    {cert.issuer && <span> - {cert.issuer}</span>}
-                    {cert.year && <span> ({cert.year})</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-remove"
-                    onClick={() => removeCertification(index)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <RankableSectionList
+            items={certifications}
+            limit={limits.certifications}
+            onMove={(from, to) => setCertifications(prev => moveItem(prev, from, to))}
+            onRemove={removeCertification}
+            renderContent={cert => (
+              <span>
+                <span style={{ fontWeight: 600 }}>{cert.name}</span>
+                {cert.issuer && <span style={{ color: '#6b7280' }}> — {cert.issuer}</span>}
+                {cert.year && <span style={{ color: '#6b7280' }}> ({cert.year})</span>}
+              </span>
+            )}
+            emptyMessage="No certifications added yet."
+          />
 
           <div className="add-cert-form">
             <input
@@ -583,22 +916,14 @@ const EmployeeResumeForm: React.FC = () => {
         <div className="card">
           <h2 className="section-title">Skills & Specializations</h2>
 
-          {skills.length > 0 && (
-            <div className="skills-list">
-              {skills.map((skill, index) => (
-                <span key={index} className="skill-tag">
-                  {skill}
-                  <button
-                    type="button"
-                    className="skill-remove"
-                    onClick={() => removeSkill(skill)}
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+          <RankableSectionList
+            items={skills}
+            limit={limits.skills}
+            onMove={(from, to) => setSkills(prev => moveItem(prev, from, to))}
+            onRemove={index => setSkills(prev => prev.filter((_, i) => i !== index))}
+            renderContent={skill => <span>{skill}</span>}
+            emptyMessage="No skills added yet."
+          />
 
           <div className="add-skill-form">
             <input
@@ -637,15 +962,22 @@ const EmployeeResumeForm: React.FC = () => {
                   border: '3px solid #1e3a5f'
                 }}
               />
-              <br />
-              <button
-                type="button"
-                className="btnSecondary"
-                onClick={removePhoto}
-                style={{ marginTop: '0.5rem' }}
-              >
-                Remove Photo
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btnSecondary"
+                  onClick={openCropperForExisting}
+                >
+                  ✂️ Crop / Edit
+                </button>
+                <button
+                  type="button"
+                  className="btnSecondary"
+                  onClick={removePhoto}
+                >
+                  Remove Photo
+                </button>
+              </div>
             </div>
           )}
 
@@ -671,8 +1003,9 @@ const EmployeeResumeForm: React.FC = () => {
                 type="tel"
                 className="input"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
                 placeholder="(555) 123-4567"
+                maxLength={14}
               />
             </div>
 
@@ -688,40 +1021,24 @@ const EmployeeResumeForm: React.FC = () => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Mailing Address</label>
-            <textarea
-              className="input"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              rows={2}
-              placeholder="Street address, city, state, zip code"
-            />
-          </div>
         </div>
 
         <div className="card">
           <h2 className="section-title">Languages</h2>
 
-          {languages.length > 0 && (
-            <div className="cert-list">
-              {languages.map((lang, index) => (
-                <div key={index} className="cert-item">
-                  <div>
-                    <strong>{lang.language}</strong>
-                    <span> - {lang.proficiency}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-remove"
-                    onClick={() => removeLanguage(index)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <RankableSectionList
+            items={languages}
+            limit={limits.languages}
+            onMove={(from, to) => setLanguages(prev => moveItem(prev, from, to))}
+            onRemove={removeLanguage}
+            renderContent={lang => (
+              <span>
+                <span style={{ fontWeight: 600 }}>{lang.language}</span>
+                <span style={{ color: '#6b7280' }}> — {lang.proficiency}</span>
+              </span>
+            )}
+            emptyMessage="No languages added yet."
+          />
 
           <div className="add-cert-form">
             <input
@@ -750,22 +1067,14 @@ const EmployeeResumeForm: React.FC = () => {
         <div className="card">
           <h2 className="section-title">Hobbies & Interests</h2>
 
-          {hobbies.length > 0 && (
-            <div className="skills-list">
-              {hobbies.map((hobby, index) => (
-                <span key={index} className="skill-tag">
-                  {hobby}
-                  <button
-                    type="button"
-                    className="skill-remove"
-                    onClick={() => removeHobby(hobby)}
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+          <RankableSectionList
+            items={hobbies}
+            limit={limits.hobbies}
+            onMove={(from, to) => setHobbies(prev => moveItem(prev, from, to))}
+            onRemove={index => setHobbies(prev => prev.filter((_, i) => i !== index))}
+            renderContent={hobby => <span>{hobby}</span>}
+            emptyMessage="No hobbies added yet."
+          />
 
           <div className="add-skill-form">
             <input
@@ -790,25 +1099,86 @@ const EmployeeResumeForm: React.FC = () => {
         <div className="card">
           <h2 className="section-title">Professional References</h2>
 
-          {references.length > 0 && (
-            <div className="cert-list">
-              {references.map((ref, index) => (
-                <div key={index} className="cert-item">
-                  <div>
-                    <strong>{ref.name}</strong>
-                    {ref.title && <span> - {ref.title}</span>}
-                    {ref.company && <div style={{ fontSize: '0.9em', color: '#666' }}>{ref.company}</div>}
-                    {ref.phone && <div style={{ fontSize: '0.9em', color: '#666' }}>{ref.phone}</div>}
+          <RankableSectionList
+            items={references}
+            limit={limits.references}
+            onMove={(from, to) => setReferences(prev => moveItem(prev, from, to))}
+            onRemove={removeReference}
+            onEdit={startEditReference}
+            renderContent={ref => (
+              <div>
+                <span style={{ fontWeight: 600 }}>{ref.name}</span>
+                {ref.title && <span style={{ color: '#6b7280' }}> — {ref.title}</span>}
+                {(ref.company || ref.phone) && (
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.1rem' }}>
+                    {ref.company}
+                    {ref.company && ref.phone ? ' • ' : ''}
+                    {ref.phone}
                   </div>
-                  <button
-                    type="button"
-                    className="btn-remove"
-                    onClick={() => removeReference(index)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
+                )}
+              </div>
+            )}
+            emptyMessage="No references added yet."
+          />
+
+          {editingRefIndex != null && (
+            <div
+              style={{
+                marginTop: '0.75rem',
+                marginBottom: '0.75rem',
+                padding: '1rem',
+                border: '1px solid #bfdbfe',
+                borderRadius: 6,
+                backgroundColor: '#eff6ff',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.6rem' }}>
+                Editing reference #{editingRefIndex + 1}
+              </div>
+              <div className="add-cert-form" style={{ marginBottom: '0.75rem' }}>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Reference name"
+                  value={editingRefDraft.name}
+                  onChange={(e) => setEditingRefDraft({ ...editingRefDraft, name: e.target.value })}
+                />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Title (optional)"
+                  value={editingRefDraft.title || ''}
+                  onChange={(e) => setEditingRefDraft({ ...editingRefDraft, title: e.target.value })}
+                />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Company (optional)"
+                  value={editingRefDraft.company || ''}
+                  onChange={(e) => setEditingRefDraft({ ...editingRefDraft, company: e.target.value })}
+                />
+                <input
+                  type="tel"
+                  className="input"
+                  placeholder="Phone (optional)"
+                  value={editingRefDraft.phone || ''}
+                  onChange={(e) => setEditingRefDraft({ ...editingRefDraft, phone: formatPhoneNumber(e.target.value) })}
+                  maxLength={14}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btnSecondary" onClick={cancelEditReference}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={saveEditReference}
+                  disabled={!editingRefDraft.name.trim()}
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           )}
 
@@ -839,7 +1209,8 @@ const EmployeeResumeForm: React.FC = () => {
               className="input"
               placeholder="Phone (optional)"
               value={newReference.phone}
-              onChange={(e) => setNewReference({ ...newReference, phone: e.target.value })}
+              onChange={(e) => setNewReference({ ...newReference, phone: formatPhoneNumber(e.target.value) })}
+              maxLength={14}
             />
             <button type="button" className="btnSecondary" onClick={addReference}>
               + Add Reference
@@ -858,31 +1229,12 @@ const EmployeeResumeForm: React.FC = () => {
             employeeId={existingResume?.employee_id}
             value={projects}
             onChange={setProjects}
+            limit={limits.projects}
           />
         </div>
 
         <div className="card">
-          <h2 className="section-title">Resume File</h2>
-
-          {currentFileName && !resumeFile && (
-            <div className="current-file">
-              <span>📄 Current file: {currentFileName}</span>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Upload Resume (PDF or Word)</label>
-            <input
-              type="file"
-              className="input"
-              accept=".pdf,.doc,.docx"
-              onChange={handleFileChange}
-            />
-            {resumeFile && (
-              <p className="file-info">Selected: {resumeFile.name}</p>
-            )}
-            <p className="help-text">Maximum file size: 20MB</p>
-          </div>
+          <h2 className="section-title">Status</h2>
 
           <div className="form-group">
             <label className="checkbox-label">
@@ -896,7 +1248,35 @@ const EmployeeResumeForm: React.FC = () => {
           </div>
         </div>
 
-        <div className="form-actions">
+        <div className="form-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {isEditing && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              style={{
+                background: 'none',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#fef2f2';
+                e.currentTarget.style.borderColor = '#fca5a5';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.borderColor = '#fecaca';
+              }}
+            >
+              🗑️ Delete Resume
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
           <button type="button" className="btnSecondary" onClick={() => navigate('/employee-resumes')}>
             Cancel
           </button>
@@ -910,14 +1290,111 @@ const EmployeeResumeForm: React.FC = () => {
         </div>
       </form>
 
-      {/* Preview Modal */}
+      <aside
+        className="employee-resume-preview-pane"
+        style={{
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          border: '1px solid #e5e7eb',
+          borderRadius: 8,
+          backgroundColor: '#f3f4f6',
+          padding: '0.75rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '0.5rem',
+            padding: '0 0.25rem',
+            gap: '0.5rem',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Live Preview
+          </span>
+          <span style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 500, flex: 1, textAlign: 'center' }}>
+            {selectedTemplate ? selectedTemplate.name : 'No template selected'}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <button type="button" onClick={() => adjustZoom(-0.1)} style={zoomBtnStyle} title="Zoom out">−</button>
+            <button
+              type="button"
+              onClick={resetZoomToFit}
+              style={{ ...zoomBtnStyle, width: 'auto', padding: '0 0.45rem', fontWeight: manualZoom == null ? 700 : 400, color: manualZoom == null ? '#2563eb' : '#374151' }}
+              title="Fit to pane"
+            >
+              Fit
+            </button>
+            <button type="button" onClick={() => adjustZoom(0.1)} style={zoomBtnStyle} title="Zoom in">+</button>
+            <span style={{ fontSize: '0.7rem', color: '#6b7280', fontVariantNumeric: 'tabular-nums', minWidth: 36, textAlign: 'right' }}>
+              {Math.round(zoomScale * 100)}%
+            </span>
+          </div>
+        </div>
+        <div
+          ref={previewContainerRef}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: manualZoom != null ? 'auto' : 'hidden',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: `${PAGE_WIDTH_PX}px`,
+              height: `${PAGE_HEIGHT_PX}px`,
+              zoom: zoomScale,
+              backgroundColor: 'white',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              border: '1px solid #d1d5db',
+              overflow: 'hidden',
+              flexShrink: 0,
+            } as React.CSSProperties}
+          >
+            <ResumePreview
+              resume={previewResume}
+              projects={projects}
+              photoPreviewUrl={photoPreview || undefined}
+              template={selectedTemplate}
+            />
+          </div>
+        </div>
+      </aside>
+      </div>
+
+      {/* Full-screen Preview Modal */}
       <ResumePreviewModal
         resume={previewResume}
         projects={projects}
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
         photoPreviewUrl={photoPreview || undefined}
+        template={selectedTemplate}
       />
+
+      {/* Photo Crop Modal */}
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          aspectRatio={1}
+          circularCrop
+          title="Crop Employee Photo"
+          description="Drag the corners to resize, drag inside to reposition. The photo is shown as a circle on the resume."
+          outputType="image/jpeg"
+          onCropComplete={handleCropComplete}
+          onCancel={() => setCropImageSrc(null)}
+        />
+      )}
     </div>
   );
 };

@@ -23,6 +23,7 @@ export interface EmployeeResume {
   hobbies?: string[];
   references?: Reference[];
   is_active: boolean;
+  template_id?: number | null;
   version_number: number;
   last_updated_by?: number;
   created_at: string;
@@ -68,6 +69,75 @@ export interface ResumeProject {
   db_project_name?: string;
   project_number?: string;
   db_customer_name?: string;
+}
+
+// --- Import types ---
+
+export interface ResumeImportProjectMatch {
+  project_id: number;
+  project_name: string;
+  project_number?: string;
+  customer_name?: string | null;
+  confidence: number;
+  match_reasons: string[];
+}
+
+export interface ResumeImportProject {
+  project_name: string;
+  location?: string | null;
+  customer_name?: string | null;
+  project_role?: string | null;
+  description?: string | null;
+  category?: string | null;
+  matches?: ResumeImportProjectMatch[];
+}
+
+export interface ResumeImportEmployeeMatch {
+  employee_id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email?: string;
+  job_title?: string | null;
+  department_name?: string | null;
+  confidence: number;
+  match_reasons: string[];
+}
+
+export interface ResumeImportParsedData {
+  employee_name: string;
+  job_title: string;
+  years_experience?: number | null;
+  summary: string;
+  education?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  certifications: Certification[];
+  skills: string[];
+  languages: Language[];
+  hobbies: string[];
+  references: Reference[];
+  projects: ResumeImportProject[];
+  employee_matches?: ResumeImportEmployeeMatch[];
+  extracted_photo?: {
+    photo_path: string;
+    file_size: number;
+    file_type: string;
+  } | null;
+  source_file?: {
+    file_name: string;
+    file_path: string;
+    file_size: number;
+    file_type: string;
+  } | null;
+}
+
+export interface ResumeImportResult {
+  filename: string;
+  status: 'success' | 'error';
+  error?: string;
+  parsed?: ResumeImportParsedData;
 }
 
 export const employeeResumesApi = {
@@ -119,4 +189,17 @@ export const employeeResumesApi = {
 
   downloadPdf: (id: number) =>
     api.get(`/employee-resumes/${id}/pdf`, { responseType: 'blob' }),
+
+  // Import from Word documents
+  importDocx: (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((f) => formData.append('files', f));
+    return api.post<{ results: ResumeImportResult[] }>('/employee-resumes/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
+    });
+  },
+
+  confirmImport: (resumes: Record<string, any>[]) =>
+    api.post<{ created: any[]; errors: any[] }>('/employee-resumes/import/confirm', { resumes }),
 };
