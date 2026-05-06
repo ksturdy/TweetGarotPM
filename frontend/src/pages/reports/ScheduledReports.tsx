@@ -9,6 +9,7 @@ import { usersApi, User } from '../../services/users';
 import { cashFlowReportApi } from '../../services/cashFlowReport';
 import { buyoutMetricReportApi } from '../../services/buyoutMetricReport';
 import { executiveReportApi } from '../../services/executiveReport';
+import { vistaDataService } from '../../services/vistaData';
 import { teamsApi, Team } from '../../services/teams';
 import { getCampaigns, Campaign } from '../../services/campaigns';
 import recurringSearchesService, { RecurringSearch } from '../../services/recurringSearches';
@@ -19,9 +20,24 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'backlog_fit', label: 'Backlog Fit Analysis' },
   { value: 'cash_flow', label: 'Cash Flow Report' },
   { value: 'buyout_metric', label: 'Buyout Metric Report' },
+  { value: 'labor_forecast', label: 'Labor Forecast' },
+  { value: 'projected_revenue', label: 'Revenue Forecast' },
   { value: 'campaign', label: 'Campaign Report' },
   { value: 'opportunity_search', label: 'Opportunity Search' },
   { value: 'weekly_sales', label: 'Weekly Sales Report' },
+];
+
+const LOCATION_GROUP_OPTIONS = [
+  { value: 'NEW', label: 'NEW (De Pere, WI)' },
+  { value: 'CW', label: 'CW (Wisconsin Rapids, WI)' },
+  { value: 'WW', label: 'WW (Altoona, WI)' },
+  { value: 'AZ', label: 'AZ (Tempe, AZ)' },
+];
+
+const TRADE_OPTIONS = [
+  { value: 'pf', label: 'PF (Pipefitting)' },
+  { value: 'sm', label: 'SM (Sheet Metal)' },
+  { value: 'pl', label: 'PL (Plumbing)' },
 ];
 
 const FREQUENCIES: { value: string; label: string }[] = [
@@ -175,6 +191,20 @@ const ScheduledReports: React.FC = () => {
     departments: [...new Set(buyoutMetricProjects.map(p => p.department_number).filter(Boolean))].sort() as string[],
     markets: [...new Set(buyoutMetricProjects.map(p => p.market).filter(Boolean))].sort() as string[],
   }), [buyoutMetricProjects]);
+
+  // Fetch Vista contracts for forecast filter dropdowns
+  const isForecastReport = form.report_type === 'labor_forecast' || form.report_type === 'projected_revenue';
+  const { data: forecastContracts = [] } = useQuery({
+    queryKey: ['vpContracts', 'scheduledReportFilters'],
+    queryFn: () => vistaDataService.getAllContracts({ status: '' }),
+    enabled: dialogOpen && isForecastReport,
+  });
+
+  const forecastFilterOptions = useMemo(() => ({
+    departments: [...new Set(forecastContracts.map((c: any) => c.department_code).filter(Boolean))].sort() as string[],
+    markets: [...new Set(forecastContracts.map((c: any) => c.primary_market).filter(Boolean))].sort() as string[],
+    pms: [...new Set(forecastContracts.map((c: any) => c.project_manager_name).filter(Boolean))].sort() as string[],
+  }), [forecastContracts]);
 
   // Fetch executive report data for snapshot date dropdown
   const { data: execReportResponse } = useQuery({
@@ -438,13 +468,17 @@ const ScheduledReports: React.FC = () => {
                         report.report_type === 'buyout_metric' ? 'rgba(245,158,11,0.1)' :
                         report.report_type === 'campaign' ? 'rgba(234,88,12,0.1)' :
                         report.report_type === 'opportunity_search' ? 'rgba(16,185,129,0.1)' :
-                        report.report_type === 'weekly_sales' ? 'rgba(6,182,212,0.1)' : 'rgba(59,130,246,0.1)',
+                        report.report_type === 'weekly_sales' ? 'rgba(6,182,212,0.1)' :
+                        report.report_type === 'labor_forecast' ? 'rgba(236,72,153,0.1)' :
+                        report.report_type === 'projected_revenue' ? 'rgba(20,184,166,0.1)' : 'rgba(59,130,246,0.1)',
                       color: report.report_type === 'executive_report' ? '#002356' :
                         report.report_type === 'backlog_fit' ? '#7c3aed' :
                         report.report_type === 'buyout_metric' ? '#d97706' :
                         report.report_type === 'campaign' ? '#ea580c' :
                         report.report_type === 'opportunity_search' ? '#059669' :
-                        report.report_type === 'weekly_sales' ? '#0891b2' : '#2563eb',
+                        report.report_type === 'weekly_sales' ? '#0891b2' :
+                        report.report_type === 'labor_forecast' ? '#db2777' :
+                        report.report_type === 'projected_revenue' ? '#0d9488' : '#2563eb',
                     }}>
                       {reportTypeLabel(report.report_type)}
                     </span>
@@ -800,6 +834,158 @@ const ScheduledReports: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Filters (for Labor Forecast & Revenue Forecast) */}
+              {(form.report_type === 'labor_forecast' || form.report_type === 'projected_revenue') && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>Filters (Optional)</label>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Status</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.status as string) || 'all'}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, status: e.target.value === 'all' ? undefined : e.target.value } }))}
+                      >
+                        <option value="all">Open + Soft-Closed</option>
+                        <option value="Open">Open Only</option>
+                        <option value="Soft-Closed">Soft-Closed Only</option>
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '180px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Project Manager</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.pm as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, pm: e.target.value || undefined } }))}
+                      >
+                        <option value="">All PMs</option>
+                        {forecastFilterOptions.pms.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Department</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.departments as string[] || [])[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, departments: e.target.value ? [e.target.value] : undefined } }))}
+                      >
+                        <option value="">All Departments</option>
+                        {forecastFilterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Market</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.market as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, market: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Markets</option>
+                        {forecastFilterOptions.markets.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '160px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Team</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.team as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, team: e.target.value || undefined } }))}
+                      >
+                        <option value="">All Teams</option>
+                        {teams.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '180px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Location Group</label>
+                      <select
+                        style={selectStyle}
+                        value={(form.filters.locationGroups as string[] || [])[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, locationGroups: e.target.value ? [e.target.value] : undefined } }))}
+                      >
+                        <option value="">All Locations</option>
+                        {LOCATION_GROUP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: '220px', flex: '1 1 220px' }}>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Search</label>
+                      <input
+                        type="text"
+                        style={inputStyle}
+                        placeholder="Contract / customer / description..."
+                        value={(form.filters.search as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, search: e.target.value || undefined } }))}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Labor-forecast-specific filters */}
+                  {form.report_type === 'labor_forecast' && (
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                      <div style={{ minWidth: '160px' }}>
+                        <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Shop / Field</label>
+                        <select
+                          style={selectStyle}
+                          value={(form.filters.locationFilter as string) || 'both'}
+                          onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, locationFilter: e.target.value === 'both' ? undefined : e.target.value } }))}
+                        >
+                          <option value="both">Both</option>
+                          <option value="shop">Shop Only</option>
+                          <option value="field">Field Only</option>
+                        </select>
+                      </div>
+                      <div style={{ minWidth: '160px' }}>
+                        <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Time Horizon</label>
+                        <select
+                          style={selectStyle}
+                          value={String((form.filters.timeHorizon as number) || 12)}
+                          onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, timeHorizon: Number(e.target.value) } }))}
+                        >
+                          <option value="6">6 months</option>
+                          <option value="12">12 months</option>
+                          <option value="18">18 months</option>
+                          <option value="24">24 months</option>
+                        </select>
+                      </div>
+                      <div style={{ minWidth: '220px' }}>
+                        <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Trades</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {TRADE_OPTIONS.map(t => {
+                            const current = (form.filters.tradeFilter as string[]) || ['pf', 'sm', 'pl'];
+                            const checked = current.includes(t.value);
+                            return (
+                              <label key={t.value} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', color: '#475569', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    const next = checked ? current.filter(x => x !== t.value) : [...current, t.value];
+                                    const isDefault = next.length === 3 && next.includes('pf') && next.includes('sm') && next.includes('pl');
+                                    setForm(f => ({ ...f, filters: { ...f.filters, tradeFilter: isDefault ? undefined : next } }));
+                                  }}
+                                />
+                                {t.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div style={{ minWidth: '160px' }}>
+                        <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Hours / Person / Mo</label>
+                        <input
+                          type="number"
+                          min="100"
+                          max="240"
+                          step="1"
+                          style={inputStyle}
+                          value={(form.filters.hoursPerPersonPerMonth as number) || 173}
+                          onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, hoursPerPersonPerMonth: Number(e.target.value) || undefined } }))}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

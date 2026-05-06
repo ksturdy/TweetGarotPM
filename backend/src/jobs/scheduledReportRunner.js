@@ -191,6 +191,58 @@ const REPORT_HANDLERS = {
     }
   },
 
+  async labor_forecast(report) {
+    const { buildLaborForecastData } = require('../utils/forecastProjections');
+    const { generateLaborForecastPdfBuffer } = require('../utils/laborForecastPdfBuffer');
+
+    const filters = report.filters || {};
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), report.tenant_id);
+      if (team) filters.teamName = team.name;
+    }
+
+    const reportData = await buildLaborForecastData(report.tenant_id, filters);
+    const pdfBuffer = await generateLaborForecastPdfBuffer(reportData, filters, report.name);
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    return {
+      pdfBuffer,
+      filename: `Labor-Forecast-${dateStr}.pdf`,
+      subject: `Labor Forecast - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Labor Forecast covering ${reportData.projections.length} project${reportData.projections.length !== 1 ? 's' : ''} over the next ${filters.timeHorizon || 12} months.`,
+    };
+  },
+
+  async projected_revenue(report) {
+    const { buildProjectedRevenueData } = require('../utils/forecastProjections');
+    const { generateProjectedRevenuePdfBuffer } = require('../utils/projectedRevenuePdfBuffer');
+
+    const filters = report.filters || {};
+    if (filters.team) {
+      const Team = require('../models/Team');
+      const team = await Team.getByIdAndTenant(Number(filters.team), report.tenant_id);
+      if (team) filters.teamName = team.name;
+    }
+
+    const reportData = await buildProjectedRevenueData(report.tenant_id, filters);
+    const pdfBuffer = await generateProjectedRevenuePdfBuffer(reportData, filters, report.name);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const totalBacklog = reportData.grandTotal;
+    const fmtBacklog = totalBacklog >= 1e6
+      ? `$${(totalBacklog / 1e6).toFixed(1)}M`
+      : totalBacklog >= 1e3
+      ? `$${(totalBacklog / 1e3).toFixed(0)}K`
+      : `$${Math.round(totalBacklog).toLocaleString()}`;
+
+    return {
+      pdfBuffer,
+      filename: `Revenue-Forecast-${dateStr}.pdf`,
+      subject: `Revenue Forecast - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Revenue Forecast covering ${reportData.projections.length} project${reportData.projections.length !== 1 ? 's' : ''} with a total backlog of ${fmtBacklog}.`,
+    };
+  },
+
   async cash_flow(report) {
     const { buildCashFlowData, buildCashFlowMetrics } = require('../routes/cashFlowReport');
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');

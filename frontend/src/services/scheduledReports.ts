@@ -17,7 +17,7 @@ export interface ScheduledReport {
   id: number;
   tenant_id: number;
   name: string;
-  report_type: 'executive_report' | 'backlog_fit' | 'cash_flow' | 'buyout_metric' | 'campaign' | 'opportunity_search' | 'weekly_sales';
+  report_type: 'executive_report' | 'backlog_fit' | 'cash_flow' | 'buyout_metric' | 'campaign' | 'opportunity_search' | 'weekly_sales' | 'labor_forecast' | 'projected_revenue';
   frequency: 'daily' | 'weekly' | 'monthly';
   day_of_week: number | null;
   day_of_month: number | null;

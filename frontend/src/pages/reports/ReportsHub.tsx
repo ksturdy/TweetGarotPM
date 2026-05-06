@@ -6,6 +6,8 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import GroupsIcon from '@mui/icons-material/Groups';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
@@ -49,6 +51,22 @@ const reports = [
     desc: 'Project buyout status by cost type',
     color: '#f59e0b',
     bg: '#fffbeb',
+  },
+  {
+    name: 'Labor Forecast',
+    Icon: GroupsIcon,
+    path: '/projects/labor-forecast',
+    desc: 'Projected labor hours and headcount across active projects',
+    color: '#ec4899',
+    bg: '#fdf2f8',
+  },
+  {
+    name: 'Revenue Forecast',
+    Icon: AttachMoneyIcon,
+    path: '/projects/projected-revenue',
+    desc: 'Projected revenue recognition across active projects',
+    color: '#14b8a6',
+    bg: '#f0fdfa',
   },
   {
     name: 'Scheduled Reports',
