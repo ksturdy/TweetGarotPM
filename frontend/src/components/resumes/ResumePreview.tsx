@@ -90,7 +90,10 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPr
   const cappedHobbies = takeFirst(resume.hobbies, limits.hobbies);
   const cappedReferences = takeFirst(resume.references, limits.references);
 
-  const photoSrc = photoPreviewUrl || (resume.employee_photo_path ? `/${resume.employee_photo_path}` : null);
+  const photoSrc =
+    photoPreviewUrl ||
+    resume.employee_photo_url ||
+    (resume.employee_photo_path ? `/${resume.employee_photo_path}` : null);
 
   const containerStyle = { '--resume-accent': sidebarColor } as React.CSSProperties;
 

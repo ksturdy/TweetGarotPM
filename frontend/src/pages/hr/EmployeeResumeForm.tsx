@@ -154,12 +154,12 @@ const EmployeeResumeForm: React.FC = () => {
         phone: ref.phone ? formatPhoneNumber(ref.phone) : ref.phone,
       })));
 
-      // Set photo preview if exists, clear if not
-      if (existingResume.employee_photo_path) {
-        setPhotoPreview(`/${existingResume.employee_photo_path}`);
-      } else {
-        setPhotoPreview(null);
-      }
+      // Set photo preview if exists, clear if not.
+      // Prefer the backend-resolved URL (presigned R2 / public URL); fall back
+      // to the relative path only when running against local storage.
+      const photoUrl = existingResume.employee_photo_url
+        || (existingResume.employee_photo_path ? `/${existingResume.employee_photo_path}` : null);
+      setPhotoPreview(photoUrl);
 
       if (existingResume.template_id) {
         setTemplateId(existingResume.template_id);

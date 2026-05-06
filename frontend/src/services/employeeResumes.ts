@@ -16,6 +16,7 @@ export interface EmployeeResume {
   resume_file_size?: number;
   resume_file_type?: string;
   employee_photo_path?: string;
+  employee_photo_url?: string | null;
   phone?: string;
   email?: string;
   address?: string;

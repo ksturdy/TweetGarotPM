@@ -7,7 +7,8 @@ const ResumeTemplate = require('../models/ResumeTemplate');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
-const { deleteFile } = require('../utils/fileStorage');
+const { deleteFile, getFileUrl, getFileStream } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 const { generateResumeHtml } = require('../utils/resumePdfGenerator');
 const { generateResumePdfBuffer } = require('../utils/resumePdfBuffer');
 
@@ -30,6 +31,52 @@ const resumeUpload = createUploadMiddleware({
 });
 
 console.log('Upload middleware using local storage for uploads/resumes');
+
+/**
+ * Resolve a relative photo path to a presigned/public URL the browser can load.
+ * Returns null when no photo is set.
+ */
+async function resolvePhotoUrl(photoPath) {
+  if (!photoPath) return null;
+  try {
+    return await getFileUrl(photoPath);
+  } catch (err) {
+    console.error('[Resume Photos] Could not resolve photo URL for', photoPath, err.message);
+    return null;
+  }
+}
+
+/**
+ * Read a photo from R2 or local disk and return a data:URL suitable for embedding
+ * inside the generated resume HTML/PDF. Returns '' on any failure.
+ */
+async function readPhotoAsDataUrl(photoPath) {
+  if (!photoPath) return '';
+  const ext = (photoPath.split('.').pop() || '').toLowerCase();
+  const mimeType =
+    ext === 'png' ? 'image/png' :
+    ext === 'webp' ? 'image/webp' :
+    ext === 'gif' ? 'image/gif' : 'image/jpeg';
+
+  try {
+    let buffer;
+    if (isR2Enabled()) {
+      const { stream } = await getFileStream(photoPath);
+      const chunks = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      buffer = Buffer.concat(chunks);
+    } else {
+      const fullPath = path.isAbsolute(photoPath)
+        ? photoPath
+        : path.join(__dirname, '../../', photoPath);
+      buffer = await fs.readFile(fullPath);
+    }
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+  } catch (err) {
+    console.error('[Resume Photos] Could not embed photo for', photoPath, err.message);
+    return '';
+  }
+}
 
 /**
  * Look up the resume's chosen template, falling back to the tenant's default,
@@ -74,7 +121,13 @@ router.get('/', async (req, res, next) => {
     if (search) filters.search = search;
 
     const resumes = await EmployeeResume.findAllByTenant(req.tenantId, filters);
-    res.json(resumes);
+    const withUrls = await Promise.all(
+      resumes.map(async (r) => ({
+        ...r,
+        employee_photo_url: await resolvePhotoUrl(r.employee_photo_path),
+      }))
+    );
+    res.json(withUrls);
   } catch (error) {
     next(error);
   }
@@ -93,7 +146,8 @@ router.get('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Employee resume not found' });
     }
 
-    res.json(resume);
+    const employee_photo_url = await resolvePhotoUrl(resume.employee_photo_path);
+    res.json({ ...resume, employee_photo_url });
   } catch (error) {
     next(error);
   }
@@ -316,10 +370,12 @@ router.post('/:id/photo', photoUpload.single('photo'), async (req, res, next) =>
       req.user.id
     );
 
+    const employee_photo_url = await resolvePhotoUrl(photoPath);
     res.json({
       message: 'Photo uploaded successfully',
       photo_path: photoPath,
-      resume: updated
+      photo_url: employee_photo_url,
+      resume: { ...updated, employee_photo_url },
     });
   } catch (error) {
     next(error);
@@ -534,22 +590,7 @@ router.get('/:id/preview-html', async (req, res, next) => {
     // Fetch projects
     const projects = await ResumeProject.findByResumeId(id, req.tenantId);
 
-    // Convert photo to base64 if exists
-    let photoBase64 = '';
-    if (resume.employee_photo_path) {
-      try {
-        // Construct full file path from relative path
-        const fullPhotoPath = path.join(__dirname, '../../', resume.employee_photo_path);
-        const photoBuffer = await fs.readFile(fullPhotoPath);
-        const base64 = photoBuffer.toString('base64');
-        const mimeType = resume.employee_photo_path.endsWith('.png') ? 'image/png' :
-                        resume.employee_photo_path.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-        photoBase64 = `data:${mimeType};base64,${base64}`;
-      } catch (err) {
-        console.error('Error reading photo file:', err);
-        // Continue without photo
-      }
-    }
+    const photoBase64 = await readPhotoAsDataUrl(resume.employee_photo_path);
 
     const template = await resolveResumeTemplate(resume, req.tenantId);
     const html = generateResumeHtml(resume, projects, photoBase64, template);
@@ -576,22 +617,7 @@ router.get('/:id/pdf', async (req, res, next) => {
     // Fetch projects
     const projects = await ResumeProject.findByResumeId(id, req.tenantId);
 
-    // Convert photo to base64 if exists
-    let photoBase64 = '';
-    if (resume.employee_photo_path) {
-      try {
-        // Construct full file path from relative path
-        const fullPhotoPath = path.join(__dirname, '../../', resume.employee_photo_path);
-        const photoBuffer = await fs.readFile(fullPhotoPath);
-        const base64 = photoBuffer.toString('base64');
-        const mimeType = resume.employee_photo_path.endsWith('.png') ? 'image/png' :
-                        resume.employee_photo_path.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-        photoBase64 = `data:${mimeType};base64,${base64}`;
-      } catch (err) {
-        console.error('Error reading photo file:', err);
-        // Continue without photo
-      }
-    }
+    const photoBase64 = await readPhotoAsDataUrl(resume.employee_photo_path);
 
     // Generate PDF
     const template = await resolveResumeTemplate(resume, req.tenantId);
