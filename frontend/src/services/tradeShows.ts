@@ -111,11 +111,13 @@ export interface TradeShowAttendee {
   trade_show_id: number;
   tenant_id: number;
 
-  user_id?: number | null;
-  user_first_name?: string | null;
-  user_last_name?: string | null;
-  user_email?: string | null;
-  user_job_title?: string | null;
+  employee_id?: number | null;
+  employee_first_name?: string | null;
+  employee_last_name?: string | null;
+  employee_email?: string | null;
+  employee_job_title?: string | null;
+  employee_department?: string | null;
+  employee_user_id?: number | null;
 
   external_name?: string | null;
   external_email?: string | null;

@@ -214,13 +214,18 @@ const TradeShow = {
   async getAttendees(tradeShowId) {
     const result = await db.query(`
       SELECT a.*,
-        u.first_name AS user_first_name,
-        u.last_name AS user_last_name,
-        u.email AS user_email,
-        e.job_title AS user_job_title
+        e.first_name AS employee_first_name,
+        e.last_name AS employee_last_name,
+        e.email AS employee_email,
+        e.job_title AS employee_job_title,
+        e.department_name AS employee_department,
+        e.user_id AS employee_user_id
       FROM trade_show_attendees a
-      LEFT JOIN users u ON a.user_id = u.id
-      LEFT JOIN employees e ON e.user_id = u.id
+      LEFT JOIN (
+        SELECT emp.*, d.name AS department_name
+        FROM employees emp
+        LEFT JOIN departments d ON emp.department_id = d.id
+      ) e ON a.employee_id = e.id
       WHERE a.trade_show_id = $1
       ORDER BY a.created_at ASC
     `, [tradeShowId]);
@@ -231,7 +236,7 @@ const TradeShow = {
     const result = await db.query(`
       INSERT INTO trade_show_attendees (
         trade_show_id, tenant_id,
-        user_id, external_name, external_email, external_company,
+        employee_id, external_name, external_email, external_company,
         role, registration_status, arrival_date, departure_date, notes
       ) VALUES (
         $1, $2,
@@ -242,7 +247,7 @@ const TradeShow = {
     `, [
       tradeShowId,
       tenantId,
-      data.user_id || null,
+      data.employee_id || null,
       data.external_name || null,
       data.external_email || null,
       data.external_company || null,
@@ -258,7 +263,7 @@ const TradeShow = {
   async updateAttendee(attendeeId, tradeShowId, data) {
     const result = await db.query(`
       UPDATE trade_show_attendees SET
-        user_id = $1,
+        employee_id = $1,
         external_name = $2,
         external_email = $3,
         external_company = $4,
@@ -271,7 +276,7 @@ const TradeShow = {
       WHERE id = $10 AND trade_show_id = $11
       RETURNING *
     `, [
-      data.user_id || null,
+      data.employee_id || null,
       data.external_name || null,
       data.external_email || null,
       data.external_company || null,

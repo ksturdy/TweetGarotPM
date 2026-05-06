@@ -1,14 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   tradeShowsApi,
   TradeShowAttendee,
+  TradeShowExpense,
+  TradeShowTodo,
   ATTENDEE_REGISTRATION_STATUS_OPTIONS,
   ATTENDEE_ROLE_OPTIONS,
   AttendeeRegistrationStatus,
+  EXPENSE_CATEGORY_OPTIONS,
+  TODO_PRIORITY_OPTIONS,
+  REMINDER_OFFSET_OPTIONS,
 } from '../../../services/tradeShows';
-import { usersApi, User } from '../../../services/users';
+import { employeesApi, Employee } from '../../../services/employees';
 import SearchableSelect from '../../../components/SearchableSelect';
 import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 import TradeShowExpensesSection from './TradeShowExpensesSection';
@@ -61,15 +68,15 @@ const statusLabel = (status: string) =>
   status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 const attendeeName = (a: TradeShowAttendee): string => {
-  if (a.user_id && (a.user_first_name || a.user_last_name)) {
-    return `${a.user_first_name || ''} ${a.user_last_name || ''}`.trim();
+  if (a.employee_id && (a.employee_first_name || a.employee_last_name)) {
+    return `${a.employee_first_name || ''} ${a.employee_last_name || ''}`.trim();
   }
   return a.external_name || '—';
 };
 
 type AttendeeFormState = {
   type: 'internal' | 'external';
-  user_id: string;
+  employee_id: string;
   external_name: string;
   external_email: string;
   external_company: string;
@@ -82,7 +89,7 @@ type AttendeeFormState = {
 
 const emptyAttendee: AttendeeFormState = {
   type: 'internal',
-  user_id: '',
+  employee_id: '',
   external_name: '',
   external_email: '',
   external_company: '',
@@ -138,22 +145,22 @@ const TradeShowDetail: React.FC = () => {
     enabled: !!id,
   });
 
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll().then(res => res.data),
+  const { data: employees } = useQuery({
+    queryKey: ['employees', 'active'],
+    queryFn: () => employeesApi.getAll({ employmentStatus: 'active' }).then(res => res.data.data),
   });
 
-  const userOptions = useMemo(() => {
-    const list = (users || []).filter((u: User) => u.is_active !== false);
-    const taken = new Set((show?.attendees || []).map(a => a.user_id).filter(Boolean));
+  const employeeOptions = useMemo(() => {
+    const list = employees || [];
+    const taken = new Set((show?.attendees || []).map(a => a.employee_id).filter(Boolean));
     return list
-      .filter((u: User) => editingAttendee?.user_id === u.id || !taken.has(u.id))
-      .map((u: User) => ({
-        value: u.id.toString(),
-        label: `${u.first_name} ${u.last_name}`,
-        searchText: `${u.first_name} ${u.last_name} ${u.email || ''}`,
+      .filter((e: Employee) => editingAttendee?.employee_id === e.id || !taken.has(e.id))
+      .map((e: Employee) => ({
+        value: e.id.toString(),
+        label: `${e.first_name} ${e.last_name}${e.job_title ? ` — ${e.job_title}` : ''}`,
+        searchText: `${e.first_name} ${e.last_name} ${e.email || ''} ${e.job_title || ''} ${e.department_name || ''}`,
       }));
-  }, [users, show, editingAttendee]);
+  }, [employees, show, editingAttendee]);
 
   const deleteShowMutation = useMutation({
     mutationFn: () => tradeShowsApi.delete(showId),
@@ -195,7 +202,7 @@ const TradeShowDetail: React.FC = () => {
     updateAttendeeMutation.mutate({
       attendeeId: attendee.id,
       data: {
-        user_id: attendee.user_id ?? null,
+        employee_id: attendee.employee_id ?? null,
         external_name: attendee.external_name ?? null,
         external_email: attendee.external_email ?? null,
         external_company: attendee.external_company ?? null,
@@ -238,8 +245,8 @@ const TradeShowDetail: React.FC = () => {
   const openEditAttendee = (a: TradeShowAttendee) => {
     setEditingAttendee(a);
     setAttendeeForm({
-      type: a.user_id ? 'internal' : 'external',
-      user_id: a.user_id ? a.user_id.toString() : '',
+      type: a.employee_id ? 'internal' : 'external',
+      employee_id: a.employee_id ? a.employee_id.toString() : '',
       external_name: a.external_name || '',
       external_email: a.external_email || '',
       external_company: a.external_company || '',
@@ -258,8 +265,8 @@ const TradeShowDetail: React.FC = () => {
     setAttendeeError(null);
 
     const isInternal = attendeeForm.type === 'internal';
-    if (isInternal && !attendeeForm.user_id) {
-      setAttendeeError('Please select an internal user');
+    if (isInternal && !attendeeForm.employee_id) {
+      setAttendeeError('Please select an employee');
       return;
     }
     if (!isInternal && !attendeeForm.external_name.trim()) {
@@ -268,7 +275,7 @@ const TradeShowDetail: React.FC = () => {
     }
 
     const data: Partial<TradeShowAttendee> = {
-      user_id: isInternal ? parseInt(attendeeForm.user_id) : null,
+      employee_id: isInternal ? parseInt(attendeeForm.employee_id) : null,
       external_name: isInternal ? null : attendeeForm.external_name.trim(),
       external_email: isInternal ? null : (attendeeForm.external_email.trim() || null),
       external_company: isInternal ? null : (attendeeForm.external_company.trim() || null),
@@ -286,10 +293,310 @@ const TradeShowDetail: React.FC = () => {
     }
   };
 
+  const exportPdf = () => {
+    if (!show) return;
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    const fmtMoneyPdf = (v: number) =>
+      '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const moneyOrDash = (v?: number | string | null) => {
+      if (v === null || v === undefined || v === '') return '—';
+      const n = typeof v === 'string' ? parseFloat(v) : v;
+      return isNaN(n) ? '—' : fmtMoneyPdf(n);
+    };
+
+    const eventDateStr = (() => {
+      const range = fmtDateRange(show.event_start_date, show.event_end_date);
+      return range === '—' ? '' : range;
+    })();
+
+    const computedBudget = (() => {
+      if (show.total_budget !== null && show.total_budget !== undefined && show.total_budget !== '') {
+        const n = typeof show.total_budget === 'string' ? parseFloat(show.total_budget) : show.total_budget;
+        if (!isNaN(n)) return n;
+      }
+      let sum = 0;
+      let any = false;
+      for (const v of [show.registration_cost, show.booth_cost, show.travel_budget]) {
+        if (v !== null && v !== undefined && v !== '') {
+          const n = typeof v === 'string' ? parseFloat(v) : v;
+          if (!isNaN(n)) { sum += n; any = true; }
+        }
+      }
+      return any ? sum : null;
+    })();
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(show.name, margin, 50);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    const subtitleParts = [statusLabel(show.status), eventDateStr, show.venue].filter(Boolean);
+    if (subtitleParts.length) doc.text(subtitleParts.join('  •  '), margin, 68);
+    doc.text(`Generated ${today}`, margin, 84);
+    doc.setTextColor(0);
+
+    let cursorY = 104;
+
+    const ensureSpace = (needed: number) => {
+      const pageHeight = doc.internal.pageSize.getHeight();
+      if (cursorY + needed > pageHeight - margin) {
+        doc.addPage();
+        cursorY = margin;
+      }
+    };
+
+    const sectionHeading = (label: string) => {
+      ensureSpace(34);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 41, 59);
+      doc.text(label.toUpperCase(), margin, cursorY);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.5);
+      doc.line(margin, cursorY + 4, pageWidth - margin, cursorY + 4);
+      doc.setTextColor(0);
+      cursorY += 18;
+    };
+
+    // ── Event Information ──
+    sectionHeading('Event Information');
+    const infoRows: [string, string][] = [
+      ['Status', statusLabel(show.status)],
+      ['Event Date', eventDateStr || '—'],
+      ['Registration Deadline', fmtDate(show.registration_deadline)],
+      ['Venue', show.venue || '—'],
+      ['Location', [show.city, show.state, show.country].filter(Boolean).join(', ') || '—'],
+      ['Booth', [show.booth_number, show.booth_size].filter(Boolean).join(' • ') || '—'],
+      ['Sales Lead', show.sales_lead_name || '—'],
+      ['Coordinator', show.coordinator_name || '—'],
+    ];
+    if (show.address) infoRows.push(['Address', show.address]);
+    if (show.website_url) infoRows.push(['Website', show.website_url]);
+    if (show.description) infoRows.push(['Description', show.description]);
+
+    autoTable(doc, {
+      startY: cursorY,
+      body: infoRows,
+      theme: 'plain',
+      styles: { fontSize: 9, cellPadding: 3, valign: 'top' },
+      columnStyles: {
+        0: { fontStyle: 'bold', textColor: [71, 85, 105], cellWidth: 130 },
+        1: { textColor: [31, 41, 55] },
+      },
+      margin: { left: margin, right: margin },
+    });
+    cursorY = (doc as any).lastAutoTable.finalY + 14;
+
+    // ── Budget ──
+    sectionHeading('Budget');
+    const budgetRows: [string, string][] = [
+      ['Registration', moneyOrDash(show.registration_cost)],
+      ['Booth', moneyOrDash(show.booth_cost)],
+      ['Travel', moneyOrDash(show.travel_budget)],
+      ['Total Budget', computedBudget === null ? '—' : fmtMoneyPdf(computedBudget)],
+    ];
+    autoTable(doc, {
+      startY: cursorY,
+      body: budgetRows,
+      theme: 'plain',
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { fontStyle: 'bold', textColor: [71, 85, 105], cellWidth: 130 },
+        1: { halign: 'right', cellWidth: 120 },
+      },
+      margin: { left: margin, right: margin },
+    });
+    cursorY = (doc as any).lastAutoTable.finalY + 14;
+
+    // ── Expenses ──
+    const expenses = show.expenses || [];
+    if (expenses.length > 0) {
+      sectionHeading('Expense Tracking');
+
+      const categoryLabel = (c: string) =>
+        EXPENSE_CATEGORY_OPTIONS.find(o => o.value === c)?.label || c;
+
+      const grouped = new Map<string, { items: TradeShowExpense[]; subtotal: number }>();
+      for (const e of expenses) {
+        const key = e.category || 'other';
+        const amt = typeof e.amount === 'string' ? parseFloat(e.amount) : (e.amount ?? 0);
+        if (!grouped.has(key)) grouped.set(key, { items: [], subtotal: 0 });
+        const bucket = grouped.get(key)!;
+        bucket.items.push(e);
+        bucket.subtotal += isNaN(amt) ? 0 : amt;
+      }
+      const orderedGroups = Array.from(grouped.entries()).sort((a, b) => {
+        const ai = EXPENSE_CATEGORY_OPTIONS.findIndex(o => o.value === a[0]);
+        const bi = EXPENSE_CATEGORY_OPTIONS.findIndex(o => o.value === b[0]);
+        return ai - bi;
+      });
+
+      const body: any[] = [];
+      let total = 0;
+      for (const [cat, { items, subtotal }] of orderedGroups) {
+        for (const e of items) {
+          const amt = typeof e.amount === 'string' ? parseFloat(e.amount) : (e.amount ?? 0);
+          body.push([
+            categoryLabel(e.category),
+            e.description || '',
+            e.vendor || '',
+            fmtDate(e.expense_date),
+            fmtMoneyPdf(isNaN(amt) ? 0 : amt),
+          ]);
+        }
+        body.push([
+          { content: `${categoryLabel(cat)} subtotal`, colSpan: 4, styles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105] } },
+          { content: fmtMoneyPdf(subtotal), styles: { fontStyle: 'bold', halign: 'right', fillColor: [248, 250, 252], textColor: [71, 85, 105] } },
+        ]);
+        total += subtotal;
+      }
+      body.push([
+        { content: 'Total Expenses', colSpan: 4, styles: { fontStyle: 'bold', fillColor: [30, 41, 59], textColor: 255 } },
+        { content: fmtMoneyPdf(total), styles: { fontStyle: 'bold', halign: 'right', fillColor: [30, 41, 59], textColor: 255 } },
+      ]);
+
+      autoTable(doc, {
+        startY: cursorY,
+        head: [['Category', 'Description', 'Vendor', 'Date', 'Amount']],
+        body,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          4: { halign: 'right', cellWidth: 70 },
+          3: { cellWidth: 65 },
+          0: { cellWidth: 90 },
+        },
+        margin: { left: margin, right: margin },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 8;
+
+      if (computedBudget !== null) {
+        const variance = computedBudget - total;
+        ensureSpace(20);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        const varianceLabel = variance >= 0 ? 'under budget' : 'over budget';
+        doc.text(
+          `Budget: ${fmtMoneyPdf(computedBudget)}    Actual: ${fmtMoneyPdf(total)}    Variance: ${variance >= 0 ? '+' : ''}${fmtMoneyPdf(variance)} (${varianceLabel})`,
+          margin,
+          cursorY,
+        );
+        doc.setTextColor(0);
+        cursorY += 16;
+      }
+      cursorY += 6;
+    }
+
+    // ── To-Dos ──
+    const todos = show.todos || [];
+    if (todos.length > 0) {
+      sectionHeading('Conference To-Dos');
+
+      const reminderLabel = (m?: number | null) => {
+        if (m === null || m === undefined) return '';
+        return REMINDER_OFFSET_OPTIONS.find(o => o.value === m)?.label || `${m} min before`;
+      };
+      const priorityLabel = (p: string) =>
+        TODO_PRIORITY_OPTIONS.find(o => o.value === p)?.label || p;
+      const dueStr = (t: TradeShowTodo) => {
+        const d = fmtDate(t.due_date);
+        if (!t.due_time) return d === '—' ? '' : d;
+        const time = t.due_time.length >= 5 ? t.due_time.slice(0, 5) : t.due_time;
+        return `${d} ${time}`;
+      };
+
+      autoTable(doc, {
+        startY: cursorY,
+        head: [['Status', 'Priority', 'Task', 'Due', 'Assigned To', 'Reminder']],
+        body: todos.map(t => [
+          t.status === 'done' ? 'Done' : t.status === 'in_progress' ? 'In Progress' : 'Open',
+          priorityLabel(t.priority),
+          t.description ? `${t.title}\n${t.description}` : t.title,
+          dueStr(t),
+          t.assigned_to_name || '',
+          reminderLabel(t.reminder_offset_minutes),
+        ]),
+        styles: { fontSize: 8, cellPadding: 3, valign: 'top' },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 60 },
+          1: { cellWidth: 55 },
+          3: { cellWidth: 75 },
+          5: { cellWidth: 75 },
+        },
+        margin: { left: margin, right: margin },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 14;
+    }
+
+    // ── Attendees ──
+    const attendees = show.attendees || [];
+    if (attendees.length > 0) {
+      sectionHeading('Attendees');
+      autoTable(doc, {
+        startY: cursorY,
+        head: [['Name', 'Type', 'Email/Company', 'Role', 'Registration', 'Arrival', 'Departure']],
+        body: attendees.map((a: TradeShowAttendee) => [
+          attendeeName(a),
+          a.employee_id ? 'Employee' : 'External',
+          a.employee_id
+            ? [a.employee_email, a.employee_job_title].filter(Boolean).join(' • ')
+            : [a.external_email, a.external_company].filter(Boolean).join(' • '),
+          a.role || '',
+          ATTENDEE_REGISTRATION_STATUS_OPTIONS.find(o => o.value === a.registration_status)?.label || a.registration_status,
+          fmtDate(a.arrival_date),
+          fmtDate(a.departure_date),
+        ]),
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        margin: { left: margin, right: margin },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 14;
+    }
+
+    // ── Notes ──
+    if (show.notes) {
+      sectionHeading('Notes');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(show.notes, pageWidth - margin * 2);
+      ensureSpace(lines.length * 12);
+      doc.text(lines, margin, cursorY);
+      cursorY += lines.length * 12 + 8;
+    }
+
+    // Page numbers
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `${show.name} • Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 20,
+        { align: 'center' },
+      );
+    }
+
+    const safeName = show.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+    doc.save(`trade-show-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   if (isLoading) return <div className="loading">Loading…</div>;
   if (error || !show) return <div className="error-message">Trade show not found</div>;
 
-  const totalCostCalc = (() => {
+  const computedBudget = (() => {
     if (show.total_budget !== null && show.total_budget !== undefined && show.total_budget !== '') {
       const n = typeof show.total_budget === 'string' ? parseFloat(show.total_budget) : show.total_budget;
       if (!isNaN(n)) return n;
@@ -328,6 +635,9 @@ const TradeShowDetail: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <button className="btn btn-secondary" onClick={exportPdf}>
+            📄 Export PDF
+          </button>
           <button className="btn btn-secondary" onClick={() => navigate(`/marketing/trade-shows/${id}/edit`)}>
             ✏️ Edit
           </button>
@@ -428,7 +738,7 @@ const TradeShowDetail: React.FC = () => {
           <div style={{ borderLeft: '2px solid #e5e7eb', paddingLeft: '1rem' }}>
             <div style={labelStyle}>Total Budget</div>
             <div style={{ ...valueStyle, fontWeight: 700, fontSize: '1.1rem' }}>
-              {totalCostCalc === null ? '—' : fmtMoney(totalCostCalc)}
+              {computedBudget === null ? '—' : fmtMoney(computedBudget)}
             </div>
           </div>
         </div>
@@ -438,7 +748,7 @@ const TradeShowDetail: React.FC = () => {
       <TradeShowExpensesSection
         tradeShowId={showId}
         expenses={show.expenses || []}
-        totalBudget={totalCostCalc}
+        totalBudget={computedBudget}
       />
 
       {/* Conference to-dos */}
@@ -479,19 +789,25 @@ const TradeShowDetail: React.FC = () => {
                   <tr key={a.id}>
                     <td style={{ fontWeight: 600 }}>
                       {attendeeName(a)}
-                      {a.user_id && a.user_email && (
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>{a.user_email}</div>
+                      {a.employee_id && a.employee_job_title && (
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>
+                          {a.employee_job_title}
+                          {a.employee_department ? ` • ${a.employee_department}` : ''}
+                        </div>
                       )}
-                      {!a.user_id && a.external_email && (
+                      {a.employee_id && a.employee_email && (
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>{a.employee_email}</div>
+                      )}
+                      {!a.employee_id && a.external_email && (
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>{a.external_email}</div>
                       )}
-                      {!a.user_id && a.external_company && (
+                      {!a.employee_id && a.external_company && (
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>{a.external_company}</div>
                       )}
                     </td>
                     <td>
-                      <span className={a.user_id ? 'badge badge-success' : 'badge badge-info'}>
-                        {a.user_id ? 'Internal' : 'External'}
+                      <span className={a.employee_id ? 'badge badge-success' : 'badge badge-info'}>
+                        {a.employee_id ? 'Employee' : 'External'}
                       </span>
                     </td>
                     <td>
@@ -600,7 +916,7 @@ const TradeShowDetail: React.FC = () => {
                     style={{ flex: 1 }}
                     onClick={() => setAttendeeForm(f => ({ ...f, type: 'internal' }))}
                   >
-                    Internal (Employee)
+                    Employee
                   </button>
                   <button
                     type="button"
@@ -617,9 +933,9 @@ const TradeShowDetail: React.FC = () => {
                 <div className="form-group">
                   <label className="form-label">Employee *</label>
                   <SearchableSelect
-                    options={userOptions}
-                    value={attendeeForm.user_id}
-                    onChange={(v) => setAttendeeForm(f => ({ ...f, user_id: v }))}
+                    options={employeeOptions}
+                    value={attendeeForm.employee_id}
+                    onChange={(v) => setAttendeeForm(f => ({ ...f, employee_id: v }))}
                     placeholder="-- Select an employee --"
                   />
                 </div>

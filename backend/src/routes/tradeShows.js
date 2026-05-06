@@ -117,9 +117,9 @@ router.post('/:id/attendees', async (req, res, next) => {
       return res.status(404).json({ error: 'Trade show not found' });
     }
 
-    const { user_id, external_name } = req.body;
-    if (!user_id && (!external_name || !external_name.trim())) {
-      return res.status(400).json({ error: 'Either an internal user or external name is required' });
+    const { employee_id, external_name } = req.body;
+    if (!employee_id && (!external_name || !external_name.trim())) {
+      return res.status(400).json({ error: 'Either an employee or external name is required' });
     }
 
     const attendee = await TradeShow.addAttendee(showId, req.tenantId, req.body);
@@ -138,9 +138,9 @@ router.put('/:id/attendees/:attendeeId', async (req, res, next) => {
       return res.status(404).json({ error: 'Trade show not found' });
     }
 
-    const { user_id, external_name } = req.body;
-    if (!user_id && (!external_name || !external_name.trim())) {
-      return res.status(400).json({ error: 'Either an internal user or external name is required' });
+    const { employee_id, external_name } = req.body;
+    if (!employee_id && (!external_name || !external_name.trim())) {
+      return res.status(400).json({ error: 'Either an employee or external name is required' });
     }
 
     const attendee = await TradeShow.updateAttendee(
