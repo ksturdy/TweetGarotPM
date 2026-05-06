@@ -76,6 +76,8 @@ const TradeShow = {
 
     const show = showResult.rows[0];
     show.attendees = await this.getAttendees(id);
+    show.expenses = await this.getExpenses(id);
+    show.todos = await this.getTodos(id);
     return show;
   },
 
@@ -290,7 +292,234 @@ const TradeShow = {
       [attendeeId, tradeShowId]
     );
     return result.rows[0];
-  }
+  },
+
+  // ── Expense CRUD ──
+
+  async getExpenses(tradeShowId) {
+    const result = await db.query(`
+      SELECT e.*,
+        cb.first_name || ' ' || cb.last_name AS created_by_name
+      FROM trade_show_expenses e
+      LEFT JOIN users cb ON e.created_by = cb.id
+      WHERE e.trade_show_id = $1
+      ORDER BY e.expense_date DESC NULLS LAST, e.created_at ASC
+    `, [tradeShowId]);
+    return result.rows;
+  },
+
+  async addExpense(tradeShowId, tenantId, data, userId) {
+    const result = await db.query(`
+      INSERT INTO trade_show_expenses (
+        trade_show_id, tenant_id,
+        category, description, vendor, amount, expense_date, notes,
+        created_by, updated_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `, [
+      tradeShowId,
+      tenantId,
+      data.category || 'other',
+      data.description || null,
+      data.vendor || null,
+      data.amount ?? 0,
+      data.expense_date || null,
+      data.notes || null,
+      userId || null,
+      userId || null,
+    ]);
+    return result.rows[0];
+  },
+
+  async updateExpense(expenseId, tradeShowId, data, userId) {
+    const result = await db.query(`
+      UPDATE trade_show_expenses SET
+        category = $1,
+        description = $2,
+        vendor = $3,
+        amount = $4,
+        expense_date = $5,
+        notes = $6,
+        updated_by = $7,
+        updated_at = NOW()
+      WHERE id = $8 AND trade_show_id = $9
+      RETURNING *
+    `, [
+      data.category || 'other',
+      data.description || null,
+      data.vendor || null,
+      data.amount ?? 0,
+      data.expense_date || null,
+      data.notes || null,
+      userId || null,
+      expenseId,
+      tradeShowId,
+    ]);
+    return result.rows[0];
+  },
+
+  async deleteExpense(expenseId, tradeShowId) {
+    const result = await db.query(
+      'DELETE FROM trade_show_expenses WHERE id = $1 AND trade_show_id = $2 RETURNING id',
+      [expenseId, tradeShowId]
+    );
+    return result.rows[0];
+  },
+
+  // ── To-Do CRUD ──
+
+  async getTodos(tradeShowId) {
+    const result = await db.query(`
+      SELECT t.*,
+        a.first_name || ' ' || a.last_name AS assigned_to_name,
+        a.email AS assigned_to_email,
+        cb.first_name || ' ' || cb.last_name AS created_by_name
+      FROM trade_show_todos t
+      LEFT JOIN users a ON t.assigned_to_user_id = a.id
+      LEFT JOIN users cb ON t.created_by = cb.id
+      WHERE t.trade_show_id = $1
+      ORDER BY
+        CASE t.status WHEN 'done' THEN 1 ELSE 0 END,
+        t.due_date ASC NULLS LAST,
+        t.due_time ASC NULLS LAST,
+        t.created_at ASC
+    `, [tradeShowId]);
+    return result.rows;
+  },
+
+  async getTodoById(todoId, tradeShowId) {
+    const result = await db.query(`
+      SELECT t.*,
+        a.first_name || ' ' || a.last_name AS assigned_to_name,
+        a.email AS assigned_to_email
+      FROM trade_show_todos t
+      LEFT JOIN users a ON t.assigned_to_user_id = a.id
+      WHERE t.id = $1 AND t.trade_show_id = $2
+    `, [todoId, tradeShowId]);
+    return result.rows[0] || null;
+  },
+
+  async addTodo(tradeShowId, tenantId, data, userId) {
+    const result = await db.query(`
+      INSERT INTO trade_show_todos (
+        trade_show_id, tenant_id,
+        title, description, status, priority,
+        due_date, due_time,
+        reminder_offset_minutes,
+        assigned_to_user_id,
+        created_by, updated_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *
+    `, [
+      tradeShowId,
+      tenantId,
+      data.title,
+      data.description || null,
+      data.status || 'open',
+      data.priority || 'normal',
+      data.due_date || null,
+      data.due_time || null,
+      data.reminder_offset_minutes ?? null,
+      data.assigned_to_user_id || null,
+      userId || null,
+      userId || null,
+    ]);
+    return result.rows[0];
+  },
+
+  async updateTodo(todoId, tradeShowId, data, userId) {
+    // Clear reminder_sent_at if due date/time or offset changed so it fires again.
+    const existing = await db.query(
+      'SELECT due_date, due_time, reminder_offset_minutes FROM trade_show_todos WHERE id = $1 AND trade_show_id = $2',
+      [todoId, tradeShowId]
+    );
+    if (existing.rows.length === 0) return null;
+    const prev = existing.rows[0];
+    const dueChanged =
+      String(prev.due_date || '') !== String(data.due_date || '') ||
+      String(prev.due_time || '') !== String(data.due_time || '') ||
+      (prev.reminder_offset_minutes ?? null) !== (data.reminder_offset_minutes ?? null);
+
+    const transitioningToDone = data.status === 'done';
+    const completedAtClause = transitioningToDone
+      ? 'COALESCE(completed_at, NOW())'
+      : 'NULL';
+    const completedByClause = transitioningToDone
+      ? `COALESCE(completed_by, $${12})`
+      : 'NULL';
+
+    const result = await db.query(`
+      UPDATE trade_show_todos SET
+        title = $1,
+        description = $2,
+        status = $3,
+        priority = $4,
+        due_date = $5,
+        due_time = $6,
+        reminder_offset_minutes = $7,
+        assigned_to_user_id = $8,
+        reminder_sent_at = CASE WHEN $9::boolean THEN NULL ELSE reminder_sent_at END,
+        completed_at = ${completedAtClause},
+        completed_by = ${completedByClause},
+        updated_by = $10,
+        updated_at = NOW()
+      WHERE id = $11 AND trade_show_id = $13
+      RETURNING *
+    `, [
+      data.title,
+      data.description || null,
+      data.status || 'open',
+      data.priority || 'normal',
+      data.due_date || null,
+      data.due_time || null,
+      data.reminder_offset_minutes ?? null,
+      data.assigned_to_user_id || null,
+      dueChanged,
+      userId || null,
+      todoId,
+      userId || null,
+      tradeShowId,
+    ]);
+    return result.rows[0];
+  },
+
+  async deleteTodo(todoId, tradeShowId) {
+    const result = await db.query(
+      'DELETE FROM trade_show_todos WHERE id = $1 AND trade_show_id = $2 RETURNING id',
+      [todoId, tradeShowId]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Find todos whose reminder window has arrived but not yet been sent.
+   * Used by the reminder cron job.
+   */
+  async findPendingReminders(now = new Date()) {
+    const result = await db.query(`
+      SELECT t.id, t.trade_show_id, t.tenant_id, t.title, t.description,
+        t.due_date, t.due_time, t.reminder_offset_minutes,
+        t.assigned_to_user_id, t.created_by, t.priority,
+        ts.name AS trade_show_name,
+        ts.coordinator_id, ts.sales_lead_id
+      FROM trade_show_todos t
+      JOIN trade_shows ts ON ts.id = t.trade_show_id
+      WHERE t.reminder_sent_at IS NULL
+        AND t.reminder_offset_minutes IS NOT NULL
+        AND t.status <> 'done'
+        AND t.due_date IS NOT NULL
+        AND ((t.due_date::timestamp + COALESCE(t.due_time, '00:00')::time)
+             - (t.reminder_offset_minutes || ' minutes')::interval) <= $1
+    `, [now]);
+    return result.rows;
+  },
+
+  async markReminderSent(todoId) {
+    await db.query(
+      'UPDATE trade_show_todos SET reminder_sent_at = NOW() WHERE id = $1',
+      [todoId]
+    );
+  },
 };
 
 module.exports = TradeShow;

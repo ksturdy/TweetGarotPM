@@ -48,6 +48,62 @@ export interface TradeShow {
 
   attendee_count?: number | string;
   attendees?: TradeShowAttendee[];
+  expenses?: TradeShowExpense[];
+  todos?: TradeShowTodo[];
+}
+
+export type TradeShowExpenseCategory =
+  | 'registration'
+  | 'booth'
+  | 'travel'
+  | 'lodging'
+  | 'meals'
+  | 'shipping'
+  | 'marketing_materials'
+  | 'entertainment'
+  | 'staffing'
+  | 'other';
+
+export interface TradeShowExpense {
+  id: number;
+  trade_show_id: number;
+  tenant_id: number;
+  category: TradeShowExpenseCategory;
+  description?: string | null;
+  vendor?: string | null;
+  amount: number | string;
+  expense_date?: string | null;
+  notes?: string | null;
+  created_by?: number | null;
+  created_by_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TradeShowTodoStatus = 'open' | 'in_progress' | 'done';
+export type TradeShowTodoPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface TradeShowTodo {
+  id: number;
+  trade_show_id: number;
+  tenant_id: number;
+  title: string;
+  description?: string | null;
+  status: TradeShowTodoStatus;
+  priority: TradeShowTodoPriority;
+  due_date?: string | null;
+  due_time?: string | null;
+  reminder_offset_minutes?: number | null;
+  reminder_sent_at?: string | null;
+  assigned_to_user_id?: number | null;
+  assigned_to_name?: string | null;
+  assigned_to_email?: string | null;
+  completed_at?: string | null;
+  completed_by?: number | null;
+  created_by?: number | null;
+  created_by_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface TradeShowAttendee {
@@ -108,6 +164,32 @@ export const tradeShowsApi = {
 
   removeAttendee: (id: number, attendeeId: number) =>
     api.delete(`/trade-shows/${id}/attendees/${attendeeId}`),
+
+  // Expenses
+  getExpenses: (id: number) =>
+    api.get<TradeShowExpense[]>(`/trade-shows/${id}/expenses`),
+
+  addExpense: (id: number, data: Partial<TradeShowExpense>) =>
+    api.post<TradeShowExpense>(`/trade-shows/${id}/expenses`, data),
+
+  updateExpense: (id: number, expenseId: number, data: Partial<TradeShowExpense>) =>
+    api.put<TradeShowExpense>(`/trade-shows/${id}/expenses/${expenseId}`, data),
+
+  removeExpense: (id: number, expenseId: number) =>
+    api.delete(`/trade-shows/${id}/expenses/${expenseId}`),
+
+  // To-Dos
+  getTodos: (id: number) =>
+    api.get<TradeShowTodo[]>(`/trade-shows/${id}/todos`),
+
+  addTodo: (id: number, data: Partial<TradeShowTodo>) =>
+    api.post<TradeShowTodo>(`/trade-shows/${id}/todos`, data),
+
+  updateTodo: (id: number, todoId: number, data: Partial<TradeShowTodo>) =>
+    api.put<TradeShowTodo>(`/trade-shows/${id}/todos/${todoId}`, data),
+
+  removeTodo: (id: number, todoId: number) =>
+    api.delete(`/trade-shows/${id}/todos/${todoId}`),
 };
 
 export const TRADE_SHOW_STATUS_OPTIONS: { value: TradeShowStatus; label: string; color: string }[] = [
@@ -134,4 +216,41 @@ export const ATTENDEE_ROLE_OPTIONS = [
   'Executive',
   'Support',
   'Other',
+];
+
+export const EXPENSE_CATEGORY_OPTIONS: { value: TradeShowExpenseCategory; label: string }[] = [
+  { value: 'registration', label: 'Registration' },
+  { value: 'booth', label: 'Booth' },
+  { value: 'travel', label: 'Travel' },
+  { value: 'lodging', label: 'Lodging' },
+  { value: 'meals', label: 'Meals' },
+  { value: 'shipping', label: 'Shipping & Freight' },
+  { value: 'marketing_materials', label: 'Marketing Materials' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'staffing', label: 'Staffing' },
+  { value: 'other', label: 'Other' },
+];
+
+export const TODO_STATUS_OPTIONS: { value: TradeShowTodoStatus; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+];
+
+export const TODO_PRIORITY_OPTIONS: { value: TradeShowTodoPriority; label: string; color: string }[] = [
+  { value: 'low', label: 'Low', color: '#6b7280' },
+  { value: 'normal', label: 'Normal', color: '#3b82f6' },
+  { value: 'high', label: 'High', color: '#f59e0b' },
+  { value: 'urgent', label: 'Urgent', color: '#dc2626' },
+];
+
+export const REMINDER_OFFSET_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: 'No reminder' },
+  { value: 0, label: 'At due time' },
+  { value: 15, label: '15 minutes before' },
+  { value: 60, label: '1 hour before' },
+  { value: 60 * 4, label: '4 hours before' },
+  { value: 60 * 24, label: '1 day before' },
+  { value: 60 * 24 * 2, label: '2 days before' },
+  { value: 60 * 24 * 7, label: '1 week before' },
 ];

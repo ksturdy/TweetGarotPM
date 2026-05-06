@@ -79,10 +79,17 @@ function generateNotificationEmailHtml({ title, entityLabel, projectName, submit
  * Core function: create in-app notification + send email.
  * Runs async (fire-and-forget) so it doesn't block the API response.
  */
-async function notify({ tenantId, projectId, entityType, entityId, eventType, title, message, link, createdBy, emailSubject, emailDetails, targetUserId }) {
+async function notify({ tenantId, projectId, entityType, entityId, eventType, title, message, link, createdBy, emailSubject, emailDetails, targetUserId, targetUserIds, contextName }) {
   try {
     let users;
-    if (targetUserId) {
+    if (Array.isArray(targetUserIds) && targetUserIds.length > 0) {
+      // Notify a specific list of users
+      const targetResult = await db.query(
+        'SELECT id as user_id, email, first_name, last_name FROM users WHERE id = ANY($1::int[]) AND is_active = true',
+        [targetUserIds]
+      );
+      users = targetResult.rows;
+    } else if (targetUserId) {
       // Notify a specific user instead of the default PM list
       const targetResult = await db.query(
         'SELECT id as user_id, email, first_name, last_name FROM users WHERE id = $1 AND is_active = true',
@@ -93,9 +100,15 @@ async function notify({ tenantId, projectId, entityType, entityId, eventType, ti
       users = await getProjectNotifyUsers(projectId, tenantId, createdBy);
     }
 
-    // Get project name and submitter name for email
-    const projectResult = await db.query('SELECT name FROM projects WHERE id = $1', [projectId]);
-    const projectName = projectResult.rows[0]?.name || 'Unknown Project';
+    // Get the context name (project, trade show, etc.) for the email header.
+    // Caller can pass `contextName` to override the project lookup — useful
+    // for entities not tied to a project (e.g., trade show todos).
+    let projectName = contextName;
+    if (!projectName && projectId) {
+      const projectResult = await db.query('SELECT name FROM projects WHERE id = $1', [projectId]);
+      projectName = projectResult.rows[0]?.name;
+    }
+    projectName = projectName || 'TITAN';
 
     const submitterResult = await db.query(
       "SELECT first_name || ' ' || last_name as full_name FROM users WHERE id = $1",

@@ -353,16 +353,29 @@ const TradeShowForm: React.FC = () => {
           </div>
         </div>
 
-        {/* Costs */}
+        {/* Budget */}
         <div className="card" style={sectionStyle}>
-          <h3 style={sectionTitle}>Costs</h3>
+          <h3 style={sectionTitle}>Budget</h3>
+          <div
+            style={{
+              fontSize: '0.8rem',
+              color: '#6b7280',
+              marginBottom: '0.75rem',
+              padding: '0.5rem 0.75rem',
+              background: '#f9fafb',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            Set planning targets here. Actual expenses are tracked as line items on the trade show detail page (with categories, vendors, and budget vs. actual variance).
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Registration Cost ($)</label>
+              <label className="form-label">Registration Budget ($)</label>
               <input className="form-input" type="number" min="0" step="0.01" value={form.registration_cost} onChange={(e) => update('registration_cost', e.target.value)} />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Booth Cost ($)</label>
+              <label className="form-label">Booth Budget ($)</label>
               <input className="form-input" type="number" min="0" step="0.01" value={form.booth_cost} onChange={(e) => update('booth_cost', e.target.value)} />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -422,6 +435,22 @@ const TradeShowForm: React.FC = () => {
             />
           </div>
         </div>
+
+        {!isEdit && (
+          <div
+            className="card"
+            style={{
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              background: '#eff6ff',
+              borderColor: '#bfdbfe',
+              color: '#1e40af',
+              fontSize: '0.85rem',
+            }}
+          >
+            💡 After saving, you'll be able to add attendees, individual expense line items, and conference to-dos (with reminders) on the trade show detail page.
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '2rem' }}>
           <button

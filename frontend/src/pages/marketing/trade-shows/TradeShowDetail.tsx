@@ -11,6 +11,8 @@ import {
 import { usersApi, User } from '../../../services/users';
 import SearchableSelect from '../../../components/SearchableSelect';
 import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
+import TradeShowExpensesSection from './TradeShowExpensesSection';
+import TradeShowTodosSection from './TradeShowTodosSection';
 import '../../../styles/SalesPipeline.css';
 
 const fmtMoney = (val?: number | string | null) => {
@@ -407,9 +409,9 @@ const TradeShowDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Costs */}
+      {/* Budget */}
       <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-        <h3 style={sectionTitle}>Costs</h3>
+        <h3 style={sectionTitle}>Budget</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
           <div>
             <div style={labelStyle}>Registration</div>
@@ -424,13 +426,26 @@ const TradeShowDetail: React.FC = () => {
             <div style={valueStyle}>{fmtMoney(show.travel_budget)}</div>
           </div>
           <div style={{ borderLeft: '2px solid #e5e7eb', paddingLeft: '1rem' }}>
-            <div style={labelStyle}>Total</div>
+            <div style={labelStyle}>Total Budget</div>
             <div style={{ ...valueStyle, fontWeight: 700, fontSize: '1.1rem' }}>
               {totalCostCalc === null ? '—' : fmtMoney(totalCostCalc)}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Expense tracking (actuals) */}
+      <TradeShowExpensesSection
+        tradeShowId={showId}
+        expenses={show.expenses || []}
+        totalBudget={totalCostCalc}
+      />
+
+      {/* Conference to-dos */}
+      <TradeShowTodosSection
+        tradeShowId={showId}
+        todos={show.todos || []}
+      />
 
       {/* Attendees */}
       <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>

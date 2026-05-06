@@ -28,6 +28,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { isR2Enabled } = require('./config/r2Client');
 const { captureAllSnapshots } = require('./jobs/weeklySnapshots');
 const { runScheduledReports } = require('./jobs/scheduledReportRunner');
+const { runTradeShowReminders } = require('./jobs/tradeShowReminders');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -398,6 +399,14 @@ server.listen(config.port, () => {
     });
   });
   console.log(`  ✅ Scheduled report delivery cron active (every 15 min)`);
+
+  // Trade show to-do reminders - check every 5 minutes
+  cron.schedule('*/5 * * * *', () => {
+    runTradeShowReminders().catch(err => {
+      console.error('[Cron] Trade show reminder job failed:', err);
+    });
+  });
+  console.log(`  ✅ Trade show reminder cron active (every 5 min)`);
 
   // Stale presence cleanup - every 2 minutes
   const Presence = require('./models/Presence');
