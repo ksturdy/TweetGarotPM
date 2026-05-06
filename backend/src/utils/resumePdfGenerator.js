@@ -288,27 +288,31 @@ function generateProjectsSection(projects) {
   if (!Array.isArray(projects) || projects.length === 0) return '';
 
   const items = projects.map(proj => {
-    const dateRange = proj.start_date || proj.end_date
-      ? `<p class="project-dates">${formatDate(proj.start_date)} - ${proj.end_date ? formatDate(proj.end_date) : 'Present'}</p>`
+    const hasDates = proj.start_date || proj.end_date;
+    const dateRange = hasDates
+      ? `${formatDate(proj.start_date)} - ${proj.end_date ? formatDate(proj.end_date) : 'Present'}`
       : '';
 
-    // Compact details: client + location + size only — value lives in the header line
-    const details = [];
-    if (proj.customer_name) details.push(`<strong>Client:</strong> ${escapeHtml(proj.customer_name)}`);
-    if (proj.location) details.push(escapeHtml(proj.location));
-    if (proj.square_footage) details.push(`${formatNumber(proj.square_footage)} sq ft`);
+    // Layout: row 1 = title left + value right; row 2 = client left + dates right.
+    // Sq ft and description are intentionally not shown.
+    const clientParts = [];
+    if (proj.customer_name) clientParts.push(escapeHtml(proj.customer_name));
+    if (proj.location) clientParts.push(escapeHtml(proj.location));
+    const clientLine = clientParts.length > 0 ? `<strong>Client:</strong> ${clientParts.join(' • ')}` : '';
 
     const valueText = formatCurrency(proj.project_value);
+    const showSubheader = !!(clientLine || dateRange);
 
-    const hasMeta = !!(valueText || dateRange);
     return `
       <div class="project-item">
         <div class="project-header">
           <h4 class="project-name">${escapeHtml(proj.project_name || '')}</h4>
-          ${hasMeta ? `<div class="project-meta">${valueText ? `<p class="project-role">${valueText}</p>` : ''}${dateRange}</div>` : ''}
+          ${valueText ? `<p class="project-role">${valueText}</p>` : ''}
         </div>
-        ${details.length > 0 ? `<p class="project-details">${details.join(' • ')}</p>` : ''}
-        ${proj.description ? `<p class="project-description">${escapeHtml(proj.description)}</p>` : ''}
+        ${showSubheader ? `<div class="project-subheader">
+          <p class="project-client">${clientLine}</p>
+          ${dateRange ? `<p class="project-dates">${dateRange}</p>` : ''}
+        </div>` : ''}
       </div>
     `;
   }).join('');
@@ -606,7 +610,7 @@ function getResumeStyles(layout = DEFAULT_LAYOUT) {
     .project-header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: baseline;
       gap: 0.75rem;
       margin-bottom: 0.1rem;
     }
@@ -620,20 +624,28 @@ function getResumeStyles(layout = DEFAULT_LAYOUT) {
       min-width: 0;
     }
 
-    .project-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-
     .project-role {
       font-size: 10pt;
       color: ${sidebarColor};
       font-weight: 700;
       margin: 0;
       white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .project-subheader {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.75rem;
+    }
+
+    .project-client {
+      font-size: 8.5pt;
+      color: #555;
+      margin: 0;
+      flex: 1;
+      min-width: 0;
     }
 
     .project-dates {
@@ -641,19 +653,9 @@ function getResumeStyles(layout = DEFAULT_LAYOUT) {
       color: #666;
       font-style: italic;
       margin: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
       text-align: right;
-    }
-
-    .project-details {
-      font-size: 8.5pt;
-      color: #555;
-      margin: 0 0 0.15rem;
-    }
-
-    .project-description {
-      font-size: 9pt;
-      line-height: 1.4;
-      margin: 0;
     }
 
     .education-text {

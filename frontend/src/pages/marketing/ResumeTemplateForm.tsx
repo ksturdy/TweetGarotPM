@@ -55,6 +55,22 @@ const COLOR_PRESETS = [
 const PAGE_WIDTH_PX = 816;
 const PAGE_HEIGHT_PX = 1056;
 
+const zoomBtnStyle: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid #d1d5db',
+  borderRadius: 4,
+  backgroundColor: 'white',
+  color: '#374151',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  padding: 0,
+  lineHeight: 1,
+};
+
 const ResumeTemplateForm: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -214,31 +230,41 @@ const ResumeTemplateForm: React.FC = () => {
     }
   };
 
-  // Auto-scale the full-size letter page to fit both width and available viewport height
+  // Auto-scale the full-size letter page to fit the preview pane's width AND height
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const [zoomScale, setZoomScale] = useState(1);
+  const [autoZoom, setAutoZoom] = useState(0.6);
+  const [manualZoom, setManualZoom] = useState<number | null>(null);
+  const zoomScale = manualZoom != null ? manualZoom : autoZoom;
+
   useEffect(() => {
     const el = previewContainerRef.current;
     if (!el) return;
-    const update = () => {
+    const measure = () => {
       const w = el.clientWidth;
-      const wrapperTop = el.getBoundingClientRect().top;
-      const availableH = Math.max(320, window.innerHeight - wrapperTop - 24);
-      const widthScale = w >= PAGE_WIDTH_PX ? 1 : w / PAGE_WIDTH_PX;
-      const heightScale = availableH >= PAGE_HEIGHT_PX ? 1 : availableH / PAGE_HEIGHT_PX;
-      setZoomScale(Math.min(widthScale, heightScale));
+      const h = el.clientHeight;
+      if (w > 0 && h > 0) {
+        const widthScale = Math.min(1, w / PAGE_WIDTH_PX);
+        const heightScale = Math.min(1, h / PAGE_HEIGHT_PX);
+        setAutoZoom(Math.min(widthScale, heightScale));
+      }
     };
-    update();
-    const ro = new ResizeObserver(update);
+    measure();
+    const raf = requestAnimationFrame(measure);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', measure);
     return () => {
+      cancelAnimationFrame(raf);
       ro.disconnect();
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', measure);
     };
   }, []);
+
+  const adjustZoom = (delta: number) => {
+    const next = Math.max(0.25, Math.min(2, zoomScale + delta));
+    setManualZoom(Number(next.toFixed(2)));
+  };
+  const resetZoomToFit = () => setManualZoom(null);
 
   if (isEditing && loadingTemplate) {
     return <div className="loading">Loading template...</div>;
@@ -247,7 +273,7 @@ const ResumeTemplateForm: React.FC = () => {
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div style={{ maxWidth: '1700px', margin: '0 auto', padding: '0 1rem' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', maxWidth: 'none', margin: 0, padding: 0 }}>
       <style>{`
         @media (max-width: 1200px) {
           .resume-template-editor-grid { grid-template-columns: 1fr !important; }
@@ -255,7 +281,7 @@ const ResumeTemplateForm: React.FC = () => {
         }
       `}</style>
 
-      <div className="sales-page-header">
+      <div className="sales-page-header" style={{ flexShrink: 0, padding: '1rem 1.5rem 0', margin: 0 }}>
         <div className="sales-page-title">
           <div>
             <Link
@@ -280,13 +306,18 @@ const ResumeTemplateForm: React.FC = () => {
       <div
         className="resume-template-editor-grid"
         style={{
+          flex: 1,
+          minHeight: 0,
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
           gap: '1.5rem',
-          alignItems: 'start',
+          padding: '1rem 1.5rem',
         }}
       >
-        <form onSubmit={handleSave}>
+        <form
+          onSubmit={handleSave}
+          style={{ overflowY: 'auto', overflowX: 'hidden', paddingRight: '0.5rem', minHeight: 0 }}
+        >
           {/* Basic Info */}
           <div className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -486,10 +517,11 @@ const ResumeTemplateForm: React.FC = () => {
         <aside
           className="resume-template-preview-pane"
           style={{
-            position: 'sticky',
-            top: '1rem',
-            maxHeight: 'calc(100vh - 2rem)',
-            overflow: 'auto',
+            height: '100%',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             border: '1px solid #e5e7eb',
             borderRadius: 8,
             backgroundColor: '#f3f4f6',
@@ -505,25 +537,52 @@ const ResumeTemplateForm: React.FC = () => {
               marginBottom: '0.5rem',
               padding: '0 0.25rem',
               gap: '0.5rem',
+              flexShrink: 0,
             }}
           >
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Live Preview
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 500 }}>
-              Letter (8.5" × 11") • Portrait
+            <span style={{ fontSize: '0.7rem', color: '#6b7280', fontWeight: 500, flex: 1, textAlign: 'center' }}>
+              Letter (8.5" × 11") • Portrait • Sample data
             </span>
-            <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Sample data</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <button type="button" onClick={() => adjustZoom(-0.1)} style={zoomBtnStyle} title="Zoom out">−</button>
+              <button
+                type="button"
+                onClick={resetZoomToFit}
+                style={{ ...zoomBtnStyle, width: 'auto', padding: '0 0.45rem', fontWeight: manualZoom == null ? 700 : 400, color: manualZoom == null ? '#2563eb' : '#374151' }}
+                title="Fit to pane"
+              >
+                Fit
+              </button>
+              <button type="button" onClick={() => adjustZoom(0.1)} style={zoomBtnStyle} title="Zoom in">+</button>
+              <span style={{ fontSize: '0.7rem', color: '#6b7280', fontVariantNumeric: 'tabular-nums', minWidth: 36, textAlign: 'right' }}>
+                {Math.round(zoomScale * 100)}%
+              </span>
+            </div>
           </div>
-          <div ref={previewContainerRef} style={{ width: '100%' }}>
+          <div
+            ref={previewContainerRef}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: manualZoom != null ? 'auto' : 'hidden',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+            }}
+          >
             <div
               style={{
                 width: `${PAGE_WIDTH_PX}px`,
-                minHeight: `${PAGE_HEIGHT_PX}px`,
+                height: `${PAGE_HEIGHT_PX}px`,
                 zoom: zoomScale,
                 backgroundColor: 'white',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 border: '1px solid #d1d5db',
+                overflow: 'hidden',
+                flexShrink: 0,
               } as React.CSSProperties}
             >
               <ResumeTemplatePreview template={previewTemplate} />

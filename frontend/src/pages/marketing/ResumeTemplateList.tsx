@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { resumeTemplatesApi, ResumeTemplate } from '../../services/resumeTemplates';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import ResumeTemplatePreview from '../../components/marketing/ResumeTemplatePreview';
 import '../../styles/SalesPipeline.css';
+
+const PAGE_WIDTH_PX = 816;
+const PAGE_HEIGHT_PX = 1056;
 
 const ResumeTemplateList: React.FC = () => {
   const queryClient = useQueryClient();
@@ -94,7 +98,6 @@ const ResumeTemplateList: React.FC = () => {
           }}
         >
           {templates.map(tpl => {
-            const accent = tpl.layout_config?.sidebar_color || '#1e3a5f';
             return (
               <div
                 key={tpl.id}
@@ -118,30 +121,9 @@ const ResumeTemplateList: React.FC = () => {
                   e.currentTarget.style.boxShadow = '';
                 }}
               >
-                {/* Preview thumbnail */}
-                <div
-                  style={{
-                    background: `linear-gradient(135deg, ${accent} 0%, ${accent} 30%, #ffffff 30%, #ffffff 100%)`,
-                    height: '180px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                  }}
-                >
-                  <div
-                    style={{
-                      background: '#fff',
-                      borderRadius: '6px',
-                      padding: '0.5rem 0.9rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: accent,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    }}
-                  >
-                    Two-column · 8.5&times;11
-                  </div>
+                {/* Preview thumbnail — actual scaled-down render of the template */}
+                <div style={{ position: 'relative' }}>
+                  <TemplateThumbnail template={tpl} />
                   {tpl.is_default && (
                     <span
                       style={{
@@ -156,6 +138,8 @@ const ResumeTemplateList: React.FC = () => {
                         borderRadius: '4px',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                        zIndex: 1,
                       }}
                     >
                       Default
@@ -175,6 +159,8 @@ const ResumeTemplateList: React.FC = () => {
                         borderRadius: '4px',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                        zIndex: 1,
                       }}
                     >
                       Inactive
@@ -259,6 +245,53 @@ const chipStyle: React.CSSProperties = {
   borderRadius: '9999px',
   fontSize: '0.7rem',
   fontWeight: 600,
+};
+
+const TemplateThumbnail: React.FC<{ template: ResumeTemplate }> = ({ template }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.35);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      if (w > 0) setScale(w / PAGE_WIDTH_PX);
+    };
+    update();
+    const raf = requestAnimationFrame(update);
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, []);
+
+  return (
+    <div
+      ref={wrapperRef}
+      style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '8.5 / 11',
+        overflow: 'hidden',
+        backgroundColor: '#ffffff',
+        borderBottom: '1px solid #e5e7eb',
+      }}
+    >
+      <div
+        style={{
+          width: `${PAGE_WIDTH_PX}px`,
+          height: `${PAGE_HEIGHT_PX}px`,
+          zoom: scale,
+          pointerEvents: 'none',
+        }}
+      >
+        <ResumeTemplatePreview template={template} />
+      </div>
+    </div>
+  );
 };
 
 export default ResumeTemplateList;

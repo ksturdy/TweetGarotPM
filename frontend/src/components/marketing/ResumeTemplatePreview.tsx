@@ -192,11 +192,11 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
   return (
     <div
       style={{
-        width: '7.5in',
-        height: '10in',
-        margin: '0.5in auto',
+        width: '100%',
+        height: '100%',
         display: 'grid',
         gridTemplateColumns: '30% 70%',
+        alignItems: 'stretch',
         fontFamily: 'Arial, Helvetica, sans-serif',
         fontSize: '10pt',
         lineHeight: 1.5,
@@ -243,9 +243,10 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
 
         {layout.sections.contact && (
           <SidebarSection title="Contact">
-            <ContactItem icon="📞" text={SAMPLE.phone} />
-            <ContactItem icon="✉️" text={SAMPLE.email} />
-            <ContactItem icon="📍" text={SAMPLE.address} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <ContactItem icon={<PhoneIcon />} text={SAMPLE.phone} />
+              <ContactItem icon={<MailIcon />} text={SAMPLE.email} />
+            </div>
           </SidebarSection>
         )}
 
@@ -302,25 +303,26 @@ const ResumeTemplatePreview: React.FC<Props> = ({ template }) => {
                   borderBottom: idx === projects.length - 1 ? 'none' : '1px solid #e0e0e0',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.1rem' }}>
+                {/* Row 1: title + value */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem', marginBottom: '0.1rem' }}>
                   <h4 style={{ fontSize: '10.5pt', fontWeight: 'bold', color: sidebarColor, margin: 0, flex: 1, minWidth: 0 }}>
                     {proj.project_name}
                   </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {proj.project_value && (
-                      <p style={{ fontSize: '10pt', color: sidebarColor, fontWeight: 700, margin: 0 }}>
-                        {formatCurrency(proj.project_value)}
-                      </p>
-                    )}
-                    <p style={{ fontSize: '8.5pt', color: '#666', fontStyle: 'italic', margin: 0, textAlign: 'right' }}>
-                      {formatDate(proj.start_date)} - {formatDate(proj.end_date)}
+                  {proj.project_value && (
+                    <p style={{ fontSize: '10pt', color: sidebarColor, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {formatCurrency(proj.project_value)}
                     </p>
-                  </div>
+                  )}
                 </div>
-                <p style={{ fontSize: '8.5pt', color: '#555', margin: '0 0 0.15rem' }}>
-                  <strong>Client:</strong> {proj.customer_name} • {proj.location} • {formatNumber(proj.square_footage)} sq ft
-                </p>
-                <p style={{ fontSize: '9pt', lineHeight: 1.4, margin: 0 }}>{proj.description}</p>
+                {/* Row 2: client + dates */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.75rem' }}>
+                  <p style={{ fontSize: '8.5pt', color: '#555', margin: 0, flex: 1, minWidth: 0 }}>
+                    <strong>Client:</strong> {proj.customer_name} • {proj.location}
+                  </p>
+                  <p style={{ fontSize: '8.5pt', color: '#666', fontStyle: 'italic', margin: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {formatDate(proj.start_date)} - {formatDate(proj.end_date)}
+                  </p>
+                </div>
               </div>
             ))}
           </MainSection>
@@ -415,11 +417,57 @@ const SidebarSection: React.FC<{ title: string; children: React.ReactNode }> = (
   </div>
 );
 
-const ContactItem: React.FC<{ icon: string; text: string }> = ({ icon, text }) => (
-  <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '0.75rem', fontSize: '9pt', lineHeight: 1.4 }}>
-    <span style={{ marginRight: '0.5rem', flexShrink: 0 }}>{icon}</span>
-    <span>{text}</span>
+const ContactItem: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, text }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      fontSize: '8.5pt',
+      lineHeight: 1.3,
+      wordBreak: 'break-word',
+      overflowWrap: 'anywhere',
+    }}
+  >
+    <span
+      aria-hidden="true"
+      style={{
+        flexShrink: 0,
+        width: 14,
+        height: 14,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#ffffff',
+      }}
+    >
+      {icon}
+    </span>
+    <span style={{ flex: 1, minWidth: 0 }}>{text}</span>
   </div>
+);
+
+const iconSvgStyle: React.CSSProperties = {
+  width: '100%',
+  height: '100%',
+  stroke: 'currentColor',
+  fill: 'none',
+  strokeWidth: 1.8,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+};
+
+const PhoneIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" style={iconSvgStyle}>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />
+  </svg>
+);
+
+const MailIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" style={iconSvgStyle}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3 7 9 6 9-6" />
+  </svg>
 );
 
 const MainSection: React.FC<{ title: string; accent: string; children: React.ReactNode }> = ({ title, accent, children }) => (

@@ -176,35 +176,25 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, projects, photoPr
             <h2 className="resume-section-title">Project Experience</h2>
             {cappedProjects.map((proj, index) => {
               const valueText = formatCurrency(proj.project_value);
-              const sizeText = formatNumber(proj.square_footage);
-              // Details line: client/location/size only — value lives in the header,
-              // dates live on their own line.
-              const details = [];
-              if (proj.customer_name) details.push(`Client: ${proj.customer_name}`);
-              if (proj.location) details.push(proj.location);
-              if (sizeText) details.push(`${sizeText} sq ft`);
-
               const hasDates = proj.start_date || proj.end_date;
+              const clientLine = [proj.customer_name, proj.location].filter(Boolean).join(' • ');
               return (
                 <div key={index} className="project-item">
+                  {/* Row 1: title left, value right */}
                   <div className="project-header">
                     <h4 className="project-name">{proj.project_name}</h4>
-                    {(valueText || hasDates) && (
-                      <div className="project-meta">
-                        {valueText && <p className="project-role">{valueText}</p>}
-                        {hasDates && (
-                          <p className="project-dates">
-                            {formatDate(proj.start_date)} - {proj.end_date ? formatDate(proj.end_date) : 'Present'}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    {valueText && <p className="project-role">{valueText}</p>}
                   </div>
-                  {details.length > 0 && (
-                    <p className="project-details">{details.join(' • ')}</p>
-                  )}
-                  {proj.description && (
-                    <p className="project-description">{proj.description}</p>
+                  {/* Row 2: client left, dates right */}
+                  {(clientLine || hasDates) && (
+                    <div className="project-subheader">
+                      <p className="project-client">{clientLine ? `Client: ${clientLine}` : ''}</p>
+                      {hasDates && (
+                        <p className="project-dates">
+                          {formatDate(proj.start_date)} - {proj.end_date ? formatDate(proj.end_date) : 'Present'}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
