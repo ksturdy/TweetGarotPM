@@ -1,6 +1,12 @@
 /**
  * HTML for Projected Revenue PDF (server-side, Puppeteer).
- * Mirrors the table view of frontend/src/pages/projects/ProjectedRevenue.tsx.
+ * Mirrors the table view of frontend/src/pages/projects/ProjectedRevenue.tsx
+ * AND its on-screen Graph view, including:
+ *   1) Projected revenue by month (next 36 months) bar chart
+ *   2) Projected revenue by year (4 vertical bars)
+ *   3) Total backlog by department (horizontal bars)
+ *   4) Total backlog by project manager — top 10 (horizontal bars)
+ *   5) Projected revenue by quarter (12 quarter cards)
  */
 
 function fmtCurrency(v) {
@@ -27,6 +33,22 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date, months) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function formatYYYYMM(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 function buildFilterLabels(filters) {
   const out = [];
   if (filters.status && filters.status !== 'all') out.push(`Status: ${filters.status}`);
@@ -38,6 +60,285 @@ function buildFilterLabels(filters) {
   if (Array.isArray(filters.projects) && filters.projects.length > 0) out.push(`Projects: ${filters.projects.length} selected`);
   return out;
 }
+
+function parseNum(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return isNaN(n) ? 0 : n;
+}
+
+// ─── Chart builders (SVG strings) ─────────────────────────────────────────
+
+/**
+ * Chart 1: 36-month bar chart of projected revenue.
+ * Mirrors the on-screen "Projected Revenue by Month (Next 36 Months)".
+ */
+function buildMonthlyChartSvg(projections, departmentFilter) {
+  const W = 940;
+  const H = 260;
+  const padL = 50;
+  const padR = 12;
+  const padT = 8;
+  const padB = 50;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const cBottom = padT + cH;
+
+  const now = startOfMonth(new Date());
+  const monthlyData = [];
+  let maxValue = 0;
+
+  // Show $115M annual budget overlay only when filter is exactly "10-30"
+  const showBudget = Array.isArray(departmentFilter)
+    && departmentFilter.length === 1
+    && departmentFilter[0] === '10-30';
+  const monthlyBudget = 115000000 / 12;
+
+  for (let i = 0; i < 36; i++) {
+    const monthDate = addMonths(now, i);
+    const key = formatYYYYMM(monthDate);
+    let total = 0;
+    projections.forEach(p => {
+      total += p.monthlyRevenue.get(key) || 0;
+    });
+    const monthAbbr = monthDate.toLocaleDateString('en-US', { month: 'short' });
+    monthlyData.push({ key, value: total, monthAbbr, isYearStart: monthDate.getMonth() === 0 });
+    if (total > maxValue) maxValue = total;
+  }
+  if (showBudget && monthlyBudget > maxValue) maxValue = monthlyBudget;
+  if (maxValue === 0) maxValue = 1;
+
+  const barCount = 36;
+  const barGap = cW / barCount;
+  const barW = barGap * 0.78;
+
+  // Y-axis labels (top, mid, zero)
+  const yLabels = `
+    <text x="${padL - 6}" y="${padT + 8}" font-size="8" fill="#64748b" text-anchor="end">${escapeHtml(fmtCurrencyShort(maxValue))}</text>
+    <text x="${padL - 6}" y="${padT + cH / 2 + 3}" font-size="8" fill="#64748b" text-anchor="end">${escapeHtml(fmtCurrencyShort(maxValue / 2))}</text>
+    <text x="${padL - 6}" y="${cBottom + 3}" font-size="8" fill="#64748b" text-anchor="end">$0</text>`;
+
+  // Grid lines
+  const grid = `
+    <line x1="${padL}" y1="${padT}" x2="${padL + cW}" y2="${padT}" stroke="#e2e8f0" stroke-dasharray="2,2"/>
+    <line x1="${padL}" y1="${padT + cH / 2}" x2="${padL + cW}" y2="${padT + cH / 2}" stroke="#e2e8f0" stroke-dasharray="2,2"/>
+    <line x1="${padL}" y1="${cBottom}" x2="${padL + cW}" y2="${cBottom}" stroke="#cbd5e1"/>`;
+
+  // Year boundaries
+  const yearBoundaries = [];
+  monthlyData.forEach((d, i) => {
+    if (d.isYearStart) yearBoundaries.push({ index: i, year: d.key.substring(0, 4) });
+  });
+  let yearLines = '';
+  yearBoundaries.forEach(yb => {
+    const xPos = padL + yb.index * barGap;
+    yearLines += `<line x1="${xPos}" y1="${padT}" x2="${xPos}" y2="${cBottom + 4}" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="3,2"/>`;
+  });
+
+  // Bars
+  let bars = '';
+  let monthLabels = '';
+  monthlyData.forEach((d, i) => {
+    const xPos = padL + i * barGap + (barGap - barW) / 2;
+    const barH = (d.value / maxValue) * cH;
+    const isOver = showBudget && d.value > monthlyBudget;
+    const isUnder = showBudget && d.value < monthlyBudget && d.value > 0;
+    const fill = isOver ? '#ef4444' : isUnder ? '#10b981' : (d.isYearStart ? '#1e40af' : '#3b82f6');
+
+    if (showBudget) {
+      const budgetH = (monthlyBudget / maxValue) * cH;
+      bars += `<rect x="${xPos}" y="${cBottom - budgetH}" width="${barW}" height="${budgetH}" fill="#fef3c7"/>`;
+    }
+    if (barH > 0.4) {
+      bars += `<rect x="${xPos}" y="${cBottom - barH}" width="${barW}" height="${barH}" fill="${fill}"/>`;
+    }
+
+    if (i % 3 === 0) {
+      monthLabels += `<text x="${xPos + barW / 2}" y="${cBottom + 14}" font-size="8" fill="#64748b" text-anchor="middle">${escapeHtml(d.monthAbbr)}</text>`;
+    }
+  });
+
+  // Year labels
+  let yearLabels = '';
+  yearBoundaries.forEach((yb, idx) => {
+    const xStart = yb.index;
+    const next = yearBoundaries[idx + 1];
+    const xEnd = next ? next.index : 36;
+    const xCenter = padL + ((xStart + xEnd) / 2) * barGap;
+    yearLabels += `<text x="${xCenter}" y="${cBottom + 32}" font-size="9" font-weight="600" fill="#1e293b" text-anchor="middle">${yb.year}</text>`;
+  });
+  if (yearBoundaries.length > 0 && yearBoundaries[0].index > 0) {
+    const xCenter = padL + (yearBoundaries[0].index / 2) * barGap;
+    yearLabels += `<text x="${xCenter}" y="${cBottom + 32}" font-size="9" font-weight="600" fill="#1e293b" text-anchor="middle">${monthlyData[0].key.substring(0, 4)}</text>`;
+  }
+
+  // Budget reference line (drawn over bars)
+  let budgetLine = '';
+  if (showBudget) {
+    const yBudget = cBottom - (monthlyBudget / maxValue) * cH;
+    budgetLine = `<line x1="${padL}" y1="${yBudget}" x2="${padL + cW}" y2="${yBudget}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3"/>`;
+  }
+
+  return `
+    <svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${yLabels}
+      ${grid}
+      ${yearLines}
+      ${bars}
+      ${budgetLine}
+      ${monthLabels}
+      ${yearLabels}
+    </svg>`;
+}
+
+/**
+ * Chart 2: 4 vertical bars — Projected Revenue by Year (current + next 3).
+ */
+function buildYearlyChartSvg(projections) {
+  const W = 940;
+  const H = 200;
+  const padT = 30;
+  const padB = 30;
+  const cH = H - padT - padB;
+
+  const now = startOfMonth(new Date());
+  const currentYear = now.getFullYear();
+  const yearTotals = [];
+  let maxVal = 0;
+
+  for (let y = 0; y < 4; y++) {
+    const year = currentYear + y;
+    let total = 0;
+    for (let m = 0; m < 12; m++) {
+      const monthDate = new Date(year, m, 1);
+      if (monthDate >= now) {
+        const key = formatYYYYMM(monthDate);
+        projections.forEach(p => {
+          total += p.monthlyRevenue.get(key) || 0;
+        });
+      }
+    }
+    yearTotals.push({ year, total });
+    if (total > maxVal) maxVal = total;
+  }
+  if (maxVal === 0) maxVal = 1;
+
+  const colors = ['#1e40af', '#3b82f6', '#60a5fa', '#93c5fd'];
+  const barCount = yearTotals.length;
+  const slotW = W / barCount;
+  const barW = slotW * 0.5;
+
+  let bars = '';
+  yearTotals.forEach((yt, i) => {
+    const xCenter = i * slotW + slotW / 2;
+    const xLeft = xCenter - barW / 2;
+    const barH = (yt.total / maxVal) * cH;
+    const yTop = padT + cH - barH;
+    bars += `<text x="${xCenter}" y="${yTop - 4}" font-size="10" font-weight="600" fill="#1e293b" text-anchor="middle">${escapeHtml(fmtCurrencyShort(yt.total))}</text>`;
+    bars += `<rect x="${xLeft}" y="${yTop}" width="${barW}" height="${Math.max(barH, 1)}" fill="${colors[i]}" rx="3"/>`;
+    bars += `<text x="${xCenter}" y="${padT + cH + 18}" font-size="10" font-weight="500" fill="#475569" text-anchor="middle">${yt.year}</text>`;
+  });
+
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
+}
+
+/**
+ * Chart 3: Horizontal bars — Total Backlog by Department.
+ */
+function buildDepartmentChartSvg(projections) {
+  const deptTotals = {};
+  projections.forEach(p => {
+    const dept = p.contract.department_code || 'Unknown';
+    deptTotals[dept] = (deptTotals[dept] || 0) + parseNum(p.contract.backlog);
+  });
+
+  const sorted = Object.entries(deptTotals).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return '<div style="font-size: 8pt; color: #94a3b8;">No data</div>';
+
+  const maxVal = sorted[0][1] || 1;
+
+  // Render as a 2-column grid of small horizontal bars
+  const items = sorted.map(([dept, total]) => {
+    const pct = (total / maxVal) * 100;
+    return `
+      <div style="flex: 1 1 calc(33% - 8px); min-width: 220px; max-width: 320px;">
+        <div style="display: flex; justify-content: space-between; font-size: 8pt; margin-bottom: 3px;">
+          <span style="font-weight: 600; color: #1e293b;">${escapeHtml(dept)}</span>
+          <span style="color: #64748b;">${escapeHtml(fmtCurrencyShort(total))}</span>
+        </div>
+        <div style="background: #e2e8f0; border-radius: 3px; height: 9px; overflow: hidden;">
+          <div style="width: ${pct}%; background: #3b82f6; height: 100%; border-radius: 3px;"></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div style="display: flex; flex-wrap: wrap; gap: 12px;">${items}</div>`;
+}
+
+/**
+ * Chart 4: Horizontal bars — Total Backlog by Project Manager (top 10).
+ */
+function buildPmChartSvg(projections) {
+  const pmTotals = {};
+  projections.forEach(p => {
+    const pm = p.contract.project_manager_name || 'Unassigned';
+    pmTotals[pm] = (pmTotals[pm] || 0) + parseNum(p.contract.backlog);
+  });
+
+  const sorted = Object.entries(pmTotals).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  if (sorted.length === 0) return '<div style="font-size: 8pt; color: #94a3b8;">No data</div>';
+
+  const maxVal = sorted[0][1] || 1;
+
+  const rows = sorted.map(([pm, total]) => {
+    const pct = (total / maxVal) * 100;
+    return `
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+        <div style="width: 130px; font-size: 7.5pt; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(pm)}</div>
+        <div style="flex: 1; background: #e2e8f0; border-radius: 3px; height: 14px; overflow: hidden; position: relative;">
+          <div style="width: ${pct}%; background: #10b981; height: 100%; border-radius: 3px; display: flex; align-items: center; padding-left: 6px; box-sizing: border-box;">
+            <span style="font-size: 7pt; color: #fff; font-weight: 600;">${escapeHtml(fmtCurrencyShort(total))}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div>${rows}</div>`;
+}
+
+/**
+ * Chart 5: 12 quarterly cards — Projected Revenue by Quarter.
+ */
+function buildQuarterlyCards(projections) {
+  const now = startOfMonth(new Date());
+  const quarters = [];
+  for (let q = 0; q < 12; q++) {
+    const startMonth = q * 3;
+    let total = 0;
+    for (let m = 0; m < 3; m++) {
+      const monthDate = addMonths(now, startMonth + m);
+      const key = formatYYYYMM(monthDate);
+      projections.forEach(p => {
+        total += p.monthlyRevenue.get(key) || 0;
+      });
+    }
+    const qStart = addMonths(now, startMonth);
+    const year = qStart.getFullYear();
+    const qNum = Math.floor(qStart.getMonth() / 3) + 1;
+    quarters.push({ label: `Q${qNum} ${year}`, total });
+  }
+
+  const cards = quarters.map(q => `
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 4px; text-align: center;">
+      <div style="font-size: 7pt; color: #64748b;">${escapeHtml(q.label)}</div>
+      <div style="font-size: 10pt; font-weight: 700; color: #1e293b; margin-top: 2px;">${escapeHtml(fmtCurrencyShort(q.total))}</div>
+    </div>
+  `).join('');
+
+  return `<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">${cards}</div>`;
+}
+
+// ─── Main HTML builder ─────────────────────────────────────────
 
 function generateProjectedRevenuePdfHtml(reportData, filters, scheduleName) {
   const { projections, columns, columnTotals, grandTotal } = reportData;
@@ -97,6 +398,17 @@ function generateProjectedRevenuePdfHtml(reportData, filters, scheduleName) {
   }, 0);
   const totalEarned = projections.reduce((s, p) => s + (Number(p.contract.earned_revenue) || 0), 0);
 
+  // Charts
+  const monthlyChart = buildMonthlyChartSvg(projections, filters.departments);
+  const yearlyChart = buildYearlyChartSvg(projections);
+  const deptChart = buildDepartmentChartSvg(projections);
+  const pmChart = buildPmChartSvg(projections);
+  const quarterCards = buildQuarterlyCards(projections);
+
+  const showBudget = Array.isArray(filters.departments)
+    && filters.departments.length === 1
+    && filters.departments[0] === '10-30';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -107,6 +419,12 @@ function generateProjectedRevenuePdfHtml(reportData, filters, scheduleName) {
     table { width: 100%; border-collapse: collapse; }
     th { background: #002356; color: white; font-size: 7pt; font-weight: 600; padding: 6px; text-align: left; text-transform: uppercase; letter-spacing: 0.04em; }
     th.right { text-align: right; }
+    .chart-section { margin-bottom: 14px; }
+    .chart-title { font-size: 10pt; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+    .chart-subtitle { font-size: 7.5pt; font-weight: 400; color: #64748b; margin-left: 8px; }
+    .page-break { page-break-before: always; }
+    .two-col { display: flex; gap: 16px; }
+    .two-col > div { flex: 1; min-width: 0; }
   </style>
 </head>
 <body>
@@ -129,6 +447,51 @@ function generateProjectedRevenuePdfHtml(reportData, filters, scheduleName) {
     ${kpiCard('Contract Value', fmtCurrencyShort(totalContractValue), '#fffbeb', '#fde68a', '#92400e', '#d97706')}
     ${kpiCard('Earned Revenue', fmtCurrencyShort(totalEarned), '#f0fdf4', '#bbf7d0', '#166534', '#059669')}
     ${kpiCard('PMs', String(uniquePMs.size), '#ecfeff', '#a5f3fc', '#155e75', '#0891b2')}
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-title">
+      Projected Revenue by Month (Next 36 Months)
+      ${showBudget ? '<span class="chart-subtitle">vs. $115M Annual Budget</span>' : ''}
+    </div>
+    ${monthlyChart}
+    ${showBudget ? `
+      <div style="display: flex; gap: 14px; font-size: 7pt; color: #64748b; margin-top: 4px; flex-wrap: wrap;">
+        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 2px;"></span>Budget ($9.58M/mo)</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; background: #10b981; border-radius: 2px;"></span>Under Budget</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; background: #ef4444; border-radius: 2px;"></span>Over Budget</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 14px; height: 2px; background: #f59e0b;"></span>Budget Line</span>
+      </div>` : ''}
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="chart-section">
+    <div class="chart-title">Projected Revenue by Year</div>
+    ${yearlyChart}
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-title">Projected Revenue by Quarter</div>
+    ${quarterCards}
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="chart-section">
+    <div class="chart-title">Total Backlog by Department</div>
+    ${deptChart}
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-title">Total Backlog by Project Manager (Top 10)</div>
+    ${pmChart}
+  </div>
+
+  <div class="page-break"></div>
+
+  <div style="margin-bottom: 8px;">
+    <div style="font-size: 11pt; font-weight: 700; color: #1e293b;">Project Detail</div>
   </div>
 
   <table>
