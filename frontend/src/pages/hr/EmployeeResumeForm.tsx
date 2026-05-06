@@ -574,10 +574,18 @@ const EmployeeResumeForm: React.FC = () => {
       setCropImageSrc(photoPreview);
       return;
     }
-    // Existing server-hosted photo — fetch as blob then to data URL so canvas can read it
+    // Existing server-hosted photo. Going through the API streams the bytes
+    // same-origin (works for both local and R2-backed deployments) and avoids
+    // R2's cross-origin CORS rules that block fetch().blob() on presigned URLs.
     try {
-      const res = await fetch(photoPreview);
-      const blob = await res.blob();
+      let blob: Blob;
+      if (isEditing && id) {
+        const response = await employeeResumesApi.getPhoto(parseInt(id));
+        blob = response.data as Blob;
+      } else {
+        const res = await fetch(photoPreview);
+        blob = await res.blob();
+      }
       const reader = new FileReader();
       reader.onloadend = () => setCropImageSrc(reader.result as string);
       reader.readAsDataURL(blob);

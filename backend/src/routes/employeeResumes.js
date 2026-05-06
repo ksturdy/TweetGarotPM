@@ -293,6 +293,50 @@ router.delete('/:id', async (req, res, next) => {
 });
 
 /**
+ * GET /api/employee-resumes/:id/photo
+ * Stream the employee photo bytes through the API (same origin) so the
+ * cropper can read them as a blob without hitting R2's CORS rules directly.
+ */
+router.get('/:id/photo', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const resume = await EmployeeResume.findByIdAndTenant(id, req.tenantId);
+    if (!resume) return res.status(404).json({ error: 'Employee resume not found' });
+    if (!resume.employee_photo_path) return res.status(404).json({ error: 'No photo attached' });
+
+    const photoPath = resume.employee_photo_path;
+    const ext = (photoPath.split('.').pop() || '').toLowerCase();
+    const mimeType =
+      ext === 'png' ? 'image/png' :
+      ext === 'webp' ? 'image/webp' :
+      ext === 'gif' ? 'image/gif' : 'image/jpeg';
+
+    if (isR2Enabled()) {
+      const { stream, contentLength } = await getFileStream(photoPath);
+      res.setHeader('Content-Type', mimeType);
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      stream.pipe(res);
+    } else {
+      const fullPath = path.isAbsolute(photoPath)
+        ? photoPath
+        : path.join(__dirname, '../../', photoPath);
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      const fileStream = require('fs').createReadStream(fullPath);
+      fileStream.on('error', (err) => {
+        console.error('[Resume Photo] local read failed:', err.message);
+        if (!res.headersSent) res.status(404).json({ error: 'Photo file missing' });
+      });
+      fileStream.pipe(res);
+    }
+  } catch (err) {
+    console.error('[Resume Photo] stream error:', err.message);
+    if (!res.headersSent) next(err);
+  }
+});
+
+/**
  * GET /api/employee-resumes/:id/download
  * Download resume file
  */

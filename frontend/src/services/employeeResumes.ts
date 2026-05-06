@@ -162,6 +162,10 @@ export const employeeResumesApi = {
   download: (id: number) =>
     api.get(`/employee-resumes/${id}/download`, { responseType: 'blob' }),
 
+  // Same-origin photo stream - use this from the cropper to avoid R2 CORS.
+  getPhoto: (id: number) =>
+    api.get(`/employee-resumes/${id}/photo`, { responseType: 'blob' }),
+
   // Photo management
   uploadPhoto: (id: number, formData: FormData) =>
     api.post(`/employee-resumes/${id}/photo`, formData, {
