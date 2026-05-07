@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
@@ -163,26 +164,43 @@ const CTFilterDropdown: React.FC<{
   style?: React.CSSProperties;
 }> = ({ selected, onToggle, onClear, style }) => {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    const updatePos = () => {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 2, left: r.left + r.width / 2 });
+    };
+    updatePos();
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', esc); };
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
   }, [open]);
 
   const active = selected.size > 0;
   const label = active
     ? [...selected].sort().map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('')
-    : 'CT';
+    : 'CT ▾';
 
   return (
-    <div ref={ref} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
+    <div ref={triggerRef} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
       <div onClick={() => setOpen(prev => !prev)}
         style={{
           width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -191,9 +209,9 @@ const CTFilterDropdown: React.FC<{
         }}>
         {label}
       </div>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+      {open && menuPos && createPortal(
+        <div ref={menuRef} style={{
+          position: 'fixed', top: menuPos.top, left: menuPos.left, transform: 'translateX(-50%)',
           zIndex: 9999, background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '160px', padding: '4px 0', fontSize: '0.75rem', whiteSpace: 'nowrap'
         }}>
@@ -218,7 +236,8 @@ const CTFilterDropdown: React.FC<{
               <span style={{ color: '#1e293b' }}>{COST_TYPE_NAMES[ct]}</span>
             </label>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
