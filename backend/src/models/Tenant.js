@@ -5,6 +5,31 @@
 
 const db = require('../config/database');
 
+/**
+ * Recursively merge two plain objects. Arrays and primitives in `source`
+ * replace those in `target`; nested objects are merged key-by-key.
+ */
+function deepMerge(target, source) {
+  if (source == null) return target;
+  if (target == null || typeof target !== 'object' || Array.isArray(target)) {
+    return source;
+  }
+  const out = { ...target };
+  for (const key of Object.keys(source)) {
+    const srcVal = source[key];
+    const tgtVal = target[key];
+    if (
+      srcVal && typeof srcVal === 'object' && !Array.isArray(srcVal) &&
+      tgtVal && typeof tgtVal === 'object' && !Array.isArray(tgtVal)
+    ) {
+      out[key] = deepMerge(tgtVal, srcVal);
+    } else {
+      out[key] = srcVal;
+    }
+  }
+  return out;
+}
+
 const Tenant = {
   /**
    * Find tenant by ID
@@ -103,16 +128,22 @@ const Tenant = {
   },
 
   /**
-   * Update tenant settings (partial update)
+   * Update tenant settings (partial update, deep-merged so nested keys
+   * like settings.branding.logo_url are preserved when only some branding
+   * fields are saved).
    */
   async updateSettings(id, settingsUpdate) {
+    const current = await db.query('SELECT settings FROM tenants WHERE id = $1', [id]);
+    const existing = (current.rows[0] && current.rows[0].settings) || {};
+    const merged = deepMerge(existing, settingsUpdate);
+
     const result = await db.query(
       `UPDATE tenants
-       SET settings = settings || $1::jsonb,
+       SET settings = $1::jsonb,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $2
        RETURNING *`,
-      [JSON.stringify(settingsUpdate), id]
+      [JSON.stringify(merged), id]
     );
     return result.rows[0];
   },

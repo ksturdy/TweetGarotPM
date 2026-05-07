@@ -185,11 +185,11 @@ class Proposal {
       const proposalResult = await client.query(
         `INSERT INTO proposals (
           tenant_id, proposal_number, customer_id, opportunity_id, template_id,
-          title, project_name, project_location,
+          title, project_name, project_location, market, construction_type,
           executive_summary, company_overview, scope_of_work, approach_and_methodology,
           total_amount, payment_terms, terms_and_conditions,
           status, valid_until, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         RETURNING *`,
         [
           tenantId,
@@ -200,6 +200,8 @@ class Proposal {
           data.title,
           data.project_name || null,
           data.project_location || null,
+          data.market || null,
+          data.construction_type || null,
           data.executive_summary || null,
           data.company_overview || null,
           data.scope_of_work || null,
@@ -293,6 +295,8 @@ class Proposal {
           title: data.title,
           project_name: data.project_name,
           project_location: data.project_location,
+          market: data.market,
+          construction_type: data.construction_type,
           total_amount: data.total_amount,
           valid_until: data.valid_until,
           payment_terms: data.payment_terms,
@@ -311,10 +315,10 @@ class Proposal {
       const proposalResult = await client.query(
         `INSERT INTO proposals (
           tenant_id, proposal_number, customer_id, opportunity_id, template_id,
-          title, project_name, project_location,
+          title, project_name, project_location, market, construction_type,
           executive_summary, company_overview, terms_and_conditions,
           status, valid_until, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *`,
         [
           tenantId,
@@ -325,6 +329,8 @@ class Proposal {
           data.title,
           data.project_name || null,
           data.project_location || null,
+          data.market || null,
+          data.construction_type || null,
           executiveSummary || null,
           companyOverview || null,
           termsAndConditions || null,
@@ -384,6 +390,8 @@ class Proposal {
       'title',
       'project_name',
       'project_location',
+      'market',
+      'construction_type',
       'executive_summary',
       'company_overview',
       'scope_of_work',

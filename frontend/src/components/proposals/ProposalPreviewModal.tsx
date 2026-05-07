@@ -184,7 +184,6 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
   };
 
   const sections = proposal.sections || [];
-  const serviceOfferings = proposal.service_offerings || [];
   const resumes = (proposal.resumes || []) as any[];
 
   const primaryColor = '#1e3a5f';
@@ -352,26 +351,6 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
               <div key={i}>{renderPreviewSection(s.title, s.content, sectionHeadingStyle)}</div>
             ))}
 
-          {/* Service Offerings */}
-          {serviceOfferings.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <h2 style={sectionHeadingStyle}>Service Offerings</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                {serviceOfferings
-                  .sort((a, b) => a.display_order - b.display_order)
-                  .map((so) => (
-                    <div key={so.id} style={{ padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}>
-                      <div style={{ fontSize: '11pt', fontWeight: 600, color: '#1e40af' }}>{so.name}</div>
-                      {so.category && <div style={{ fontSize: '9pt', color: '#6b7280' }}>{so.category}</div>}
-                      {(so.custom_description || so.description) && (
-                        <div style={{ fontSize: '9pt', color: '#4b5563', marginTop: '4px' }}>{so.custom_description || so.description}</div>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
           {/* Team Resumes */}
           {resumes.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
@@ -412,7 +391,7 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
           </div>
         )}
 
-        {/* Attached Sell Sheet Pages */}
+        {/* Attached Service Offering Pages */}
         {fullSellSheets.map((sellSheet) => (
           <div key={sellSheet.id} style={{ borderTop: '4px solid #e5e7eb' }}>
             <SellSheetPreview sellSheet={sellSheet} />
@@ -420,7 +399,7 @@ const ProposalPreviewModal: React.FC<ProposalPreviewModalProps> = ({
         ))}
         {loadingSs && (
           <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-            Loading sell sheets...
+            Loading service offerings...
           </div>
         )}
       </div>

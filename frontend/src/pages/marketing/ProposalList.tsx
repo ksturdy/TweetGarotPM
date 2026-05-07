@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { proposalsApi, Proposal } from '../../services/proposals';
-import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalList.css';
 import '../../styles/SalesPipeline.css';
 
 const ProposalList: React.FC = () => {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { confirm } = useTitanFeedback();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Fetch proposals
   const { data: proposals = [], isLoading } = useQuery({
     queryKey: ['proposals', statusFilter],
     queryFn: async () => {
@@ -25,39 +21,21 @@ const ProposalList: React.FC = () => {
     },
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => proposalsApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
-    },
-  });
-
-  const handleDelete = async (id: number, proposalNumber: string) => {
-    const ok = await confirm({ message: `Are you sure you want to delete proposal "${proposalNumber}"?`, danger: true });
-    if (ok) {
-      deleteMutation.mutate(id);
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'draft': return 'lead';
+      case 'pending_review': return 'submitted';
+      case 'approved': return 'awarded';
+      case 'sent': return 'proposal';
+      case 'accepted': return 'won';
+      case 'rejected': return 'lost';
+      case 'expired': return 'closed';
+      default: return 'lead';
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<
-      string,
-      { label: string; className: string }
-    > = {
-      draft: { label: 'Draft', className: 'status-draft' },
-      pending_review: { label: 'Pending Review', className: 'status-pending' },
-      approved: { label: 'Approved', className: 'status-approved' },
-      sent: { label: 'Sent', className: 'status-sent' },
-      accepted: { label: 'Accepted', className: 'status-accepted' },
-      rejected: { label: 'Rejected', className: 'status-rejected' },
-      expired: { label: 'Expired', className: 'status-expired' },
-    };
-
-    const config = statusConfig[status] || { label: status, className: '' };
-
-    return <span className={`status-badge ${config.className}`}>{config.label}</span>;
-  };
+  const formatStatus = (status: string) =>
+    status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   const formatCurrency = (amount: number | undefined) => {
     if (!amount) return '—';
@@ -79,17 +57,22 @@ const ProposalList: React.FC = () => {
     });
   };
 
-  // Calculate summary stats
   const totalValue = proposals.reduce((sum: number, p: Proposal) => sum + (p.total_amount || 0), 0);
   const acceptedCount = proposals.filter((p: Proposal) => p.status === 'accepted').length;
   const sentCount = proposals.filter((p: Proposal) => p.status === 'sent').length;
 
   if (isLoading) {
-    return <div className="loading">Loading proposals...</div>;
+    return (
+      <div className="sales-container">
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '64vh' }}>
+          Loading proposals...
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="proposal-list">
+    <div className="sales-container">
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -107,81 +90,75 @@ const ProposalList: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="summary-cards">
-        <div className="card summary-card">
-          <div className="summary-icon">💰</div>
-          <div>
-            <div className="summary-value">{formatCurrency(totalValue)}</div>
-            <div className="summary-label">Total Value</div>
-          </div>
+      {/* KPI Cards */}
+      <div className="sales-kpi-grid">
+        <div className="sales-kpi-card blue">
+          <div className="sales-kpi-label">Total Value</div>
+          <div className="sales-kpi-value">{formatCurrency(totalValue)}</div>
         </div>
-        <div className="card summary-card">
-          <div className="summary-icon">✅</div>
-          <div>
-            <div className="summary-value">{acceptedCount}</div>
-            <div className="summary-label">Accepted</div>
-          </div>
+        <div className="sales-kpi-card green">
+          <div className="sales-kpi-label">Accepted</div>
+          <div className="sales-kpi-value">{acceptedCount}</div>
         </div>
-        <div className="card summary-card">
-          <div className="summary-icon">📨</div>
-          <div>
-            <div className="summary-value">{sentCount}</div>
-            <div className="summary-label">Sent</div>
-          </div>
+        <div className="sales-kpi-card amber">
+          <div className="sales-kpi-label">Sent</div>
+          <div className="sales-kpi-value">{sentCount}</div>
         </div>
-        <div className="card summary-card">
-          <div className="summary-icon">📊</div>
-          <div>
-            <div className="summary-value">{proposals.length}</div>
-            <div className="summary-label">Total Proposals</div>
-          </div>
+        <div className="sales-kpi-card purple">
+          <div className="sales-kpi-label">Total Proposals</div>
+          <div className="sales-kpi-value">{proposals.length}</div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="filters">
-        <select
-          className="input"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="pending_review">Pending Review</option>
-          <option value="approved">Approved</option>
-          <option value="sent">Sent</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected">Rejected</option>
-          <option value="expired">Expired</option>
-        </select>
-      </div>
+      {/* Table Section */}
+      <div className="sales-table-section">
+        <div className="sales-table-header">
+          <div className="sales-table-title">All Proposals</div>
+          <div className="sales-table-controls">
+            <select
+              className="sales-filter-btn"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="pending_review">Pending Review</option>
+              <option value="approved">Approved</option>
+              <option value="sent">Sent</option>
+              <option value="accepted">Accepted</option>
+              <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+        </div>
 
-      {/* Proposals Table */}
-      <div className="card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Proposal #</th>
-              <th>Title</th>
-              <th>Customer</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Valid Until</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {proposals.length === 0 ? (
+        {proposals.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>📝</div>
+            <div style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>No proposals found</div>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Create one to get started</p>
+          </div>
+        ) : (
+          <table className="sales-table">
+            <thead>
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
-                  No proposals found. Create one to get started.
-                </td>
+                <th>Proposal #</th>
+                <th>Title</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Valid Until</th>
+                <th>Created</th>
               </tr>
-            ) : (
-              proposals.map((proposal: Proposal) => (
-                <tr key={proposal.id}>
+            </thead>
+            <tbody>
+              {proposals.map((proposal: Proposal) => (
+                <tr
+                  key={proposal.id}
+                  onClick={() => navigate(`/proposals/${proposal.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td>
                     <strong>{proposal.proposal_number}</strong>
                     {proposal.version_number > 1 && (
@@ -191,41 +168,19 @@ const ProposalList: React.FC = () => {
                   <td>{proposal.title}</td>
                   <td>{proposal.customer_name || '—'}</td>
                   <td>{formatCurrency(proposal.total_amount)}</td>
-                  <td>{getStatusBadge(proposal.status)}</td>
+                  <td>
+                    <span className={`sales-stage-badge ${getStatusBadgeClass(proposal.status)}`}>
+                      <span className="sales-stage-dot"></span>
+                      {formatStatus(proposal.status)}
+                    </span>
+                  </td>
                   <td>{formatDate(proposal.valid_until)}</td>
                   <td>{formatDate(proposal.created_at)}</td>
-                  <td>
-                    <div className="action-buttons">
-                      <button
-                        className="btn-icon"
-                        onClick={() => navigate(`/proposals/${proposal.id}`)}
-                        title="View"
-                      >
-                        👁️
-                      </button>
-                      {proposal.status === 'draft' && (
-                        <button
-                          className="btn-icon"
-                          onClick={() => navigate(`/proposals/${proposal.id}?edit=true`)}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                      )}
-                      <button
-                        className="btn-icon"
-                        onClick={() => handleDelete(proposal.id, proposal.proposal_number)}
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

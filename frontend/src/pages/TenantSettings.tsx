@@ -23,12 +23,24 @@ const TenantSettings: React.FC = () => {
     state: '',
     zipCode: '',
     website: '',
+    year_established: '' as string,
   });
 
   const [brandingForm, setBrandingForm] = useState({
     company_name: '',
     primary_color: '#1976d2',
   });
+
+  // Format a phone-number string as (XXX) XXX-XXXX (US-style). Returns
+  // input unchanged once it exceeds 10 digits so international numbers work.
+  const formatPhone = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 0) return '';
+    if (digits.length > 10) return raw;
+    if (digits.length < 4) return digits;
+    if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  };
 
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -46,12 +58,15 @@ const TenantSettings: React.FC = () => {
       setInfoForm({
         name: tenant.name || '',
         email: tenant.email || '',
-        phone: tenant.phone || '',
+        phone: formatPhone(tenant.phone || ''),
         address: tenant.address || '',
         city: tenant.city || '',
         state: tenant.state || '',
         zipCode: tenant.zip_code || '',
         website: tenant.website || '',
+        year_established: tenant.settings?.company_profile?.year_established
+          ? String(tenant.settings.company_profile.year_established)
+          : '',
       });
       setBrandingForm({
         company_name: tenant.settings?.branding?.company_name || '',
@@ -117,9 +132,23 @@ const TenantSettings: React.FC = () => {
     setTimeout(() => setErrorMessage(''), 5000);
   };
 
-  const handleInfoSubmit = (e: React.FormEvent) => {
+  const handleInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateInfoMutation.mutate(infoForm);
+    const { year_established, ...rest } = infoForm;
+    const yearNum = year_established ? parseInt(year_established, 10) : null;
+    try {
+      await Promise.all([
+        updateInfoMutation.mutateAsync(rest),
+        updateTenantSettings({
+          company_profile: {
+            year_established: yearNum && !Number.isNaN(yearNum) ? yearNum : null,
+          },
+        }),
+      ]);
+      queryClient.invalidateQueries({ queryKey: ['tenant'] });
+    } catch {
+      // Errors surfaced by the individual mutations / showError above
+    }
   };
 
   const handleBrandingSubmit = (e: React.FormEvent) => {
@@ -379,79 +408,106 @@ const TenantSettings: React.FC = () => {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  Email
+                  Email *
                 </label>
                 <input
                   type="email"
                   value={infoForm.email}
                   onChange={(e) => setInfoForm({ ...infoForm, email: e.target.value })}
+                  required
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                 />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  Phone
+                  Phone *
                 </label>
                 <input
                   type="tel"
                   value={infoForm.phone}
-                  onChange={(e) => setInfoForm({ ...infoForm, phone: e.target.value })}
+                  onChange={(e) => setInfoForm({ ...infoForm, phone: formatPhone(e.target.value) })}
+                  required
+                  placeholder="(555) 123-4567"
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                 />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  Website
+                  Website *
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   value={infoForm.website}
                   onChange={(e) => setInfoForm({ ...infoForm, website: e.target.value })}
+                  required
+                  placeholder="e.g., tweetgarot.com"
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                 />
               </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  Year Established *
+                </label>
+                <input
+                  type="number"
+                  value={infoForm.year_established}
+                  onChange={(e) => setInfoForm({ ...infoForm, year_established: e.target.value })}
+                  required
+                  placeholder="e.g., 1957"
+                  min="1800"
+                  max={new Date().getFullYear()}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
+                />
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Used in proposals as <code>{'{{founding_year}}'}</code> and <code>{'{{years_experience}}'}</code>.
+                </p>
+              </div>
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  Address
+                  Address *
                 </label>
                 <input
                   type="text"
                   value={infoForm.address}
                   onChange={(e) => setInfoForm({ ...infoForm, address: e.target.value })}
+                  required
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                 />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                  City
+                  City *
                 </label>
                 <input
                   type="text"
                   value={infoForm.city}
                   onChange={(e) => setInfoForm({ ...infoForm, city: e.target.value })}
+                  required
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                 />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    State
+                    State *
                   </label>
                   <input
                     type="text"
                     value={infoForm.state}
                     onChange={(e) => setInfoForm({ ...infoForm, state: e.target.value })}
+                    required
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                   />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                    ZIP Code
+                    ZIP Code *
                   </label>
                   <input
                     type="text"
                     value={infoForm.zipCode}
                     onChange={(e) => setInfoForm({ ...infoForm, zipCode: e.target.value })}
+                    required
                     style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '14px', background: 'var(--bg-dark)' }}
                   />
                 </div>
@@ -486,11 +542,19 @@ const TenantSettings: React.FC = () => {
             </div>
             <div>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Phone</span>
-              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.phone || '-'}</p>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>
+                {tenant?.phone ? formatPhone(tenant.phone) : '-'}
+              </p>
             </div>
             <div>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Website</span>
               <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>{tenant?.website || '-'}</p>
+            </div>
+            <div>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Year Established</span>
+              <p style={{ fontWeight: 500, margin: '4px 0 0 0' }}>
+                {tenant?.settings?.company_profile?.year_established || '-'}
+              </p>
             </div>
             <div style={{ gridColumn: 'span 2' }}>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Address</span>

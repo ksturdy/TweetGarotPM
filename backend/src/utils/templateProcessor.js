@@ -53,6 +53,13 @@ function buildProposalVariables(data) {
     })}` : '$0.00';
   };
 
+  // Pull profile data from tenant.settings.company_profile (set in Company Settings)
+  const profile = (tenant.settings && tenant.settings.company_profile) || {};
+  const foundingYear = profile.year_established || '';
+  const yearsExperience = foundingYear
+    ? Math.max(0, currentDate.getFullYear() - parseInt(foundingYear, 10)).toString()
+    : '';
+
   return {
     // Customer variables
     'customer_name': customer.customer_facility || customer.name || '',
@@ -69,19 +76,24 @@ function buildProposalVariables(data) {
     'proposal_title': proposal.title || '',
     'project_name': proposal.project_name || '',
     'project_location': proposal.project_location || '',
+    'market': proposal.market || '',
+    'construction_type': proposal.construction_type || '',
     'total_amount': formatCurrency(proposal.total_amount),
     'valid_until': formatDate(proposal.valid_until),
+    'proposal_date': formatDate(currentDate),
     'payment_terms': proposal.payment_terms || '',
 
     // Company/Tenant variables
-    'company_name': tenant.company_name || '',
+    'company_name': (tenant.settings && tenant.settings.branding && tenant.settings.branding.company_name) || tenant.company_name || tenant.name || '',
     'company_address': tenant.address || '',
     'company_city': tenant.city || '',
     'company_state': tenant.state || '',
-    'company_zip': tenant.zip || '',
+    'company_zip': tenant.zip || tenant.zip_code || '',
     'company_phone': tenant.phone || '',
     'company_email': tenant.email || '',
     'company_website': tenant.website || '',
+    'founding_year': foundingYear ? String(foundingYear) : '',
+    'years_experience': yearsExperience,
 
     // Date variables
     'current_date': formatDate(currentDate),
@@ -114,8 +126,11 @@ function getAvailableVariables() {
     { name: 'proposal_title', description: 'Proposal title' },
     { name: 'project_name', description: 'Project name' },
     { name: 'project_location', description: 'Project location' },
+    { name: 'market', description: 'Primary market/sector for the proposal' },
+    { name: 'construction_type', description: 'Type of construction (new, renovation, addition, etc.)' },
     { name: 'total_amount', description: 'Total proposal amount (formatted currency)' },
     { name: 'valid_until', description: 'Proposal expiration date (formatted)' },
+    { name: 'proposal_date', description: "Today's date (formatted)" },
     { name: 'payment_terms', description: 'Payment terms' },
 
     { name: 'company_name', description: 'Your company name' },
@@ -126,6 +141,8 @@ function getAvailableVariables() {
     { name: 'company_phone', description: 'Your company phone number' },
     { name: 'company_email', description: 'Your company email' },
     { name: 'company_website', description: 'Your company website' },
+    { name: 'founding_year', description: 'Year your company was founded (Company Settings)' },
+    { name: 'years_experience', description: 'Years since founding (auto-calculated from founding year)' },
 
     { name: 'current_date', description: 'Today\'s date (formatted)' },
     { name: 'current_year', description: 'Current year' },

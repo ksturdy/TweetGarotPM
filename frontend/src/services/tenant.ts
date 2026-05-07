@@ -18,6 +18,9 @@ export interface TenantSettings {
     primary_color?: string;
     company_name?: string;
   };
+  company_profile?: {
+    year_established?: number | string | null;
+  };
   notifications?: {
     email_enabled?: boolean;
     daily_digest?: boolean;

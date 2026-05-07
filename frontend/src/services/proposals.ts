@@ -12,6 +12,8 @@ export interface Proposal {
   title: string;
   project_name?: string;
   project_location?: string;
+  market?: string;
+  construction_type?: string;
   executive_summary?: string;
   company_overview?: string;
   scope_of_work?: string;

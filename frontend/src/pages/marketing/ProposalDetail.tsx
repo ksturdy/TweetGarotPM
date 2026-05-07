@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { proposalsApi } from '../../services/proposals';
 import { caseStudiesApi } from '../../services/caseStudies';
-import { serviceOfferingsApi } from '../../services/serviceOfferings';
 import { employeeResumesApi } from '../../services/employeeResumes';
 import { sellSheetsApi } from '../../services/sellSheets';
 import { orgChartsApi } from '../../services/orgCharts';
+import { customersApi } from '../../services/customers';
+import CompanyPicker from '../../components/CompanyPicker';
+import { MARKETS } from '../../constants/markets';
+import { CONSTRUCTION_TYPES } from '../../constants/constructionTypes';
 import ProposalPreviewModal from '../../components/proposals/ProposalPreviewModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './ProposalDetail.css';
@@ -17,14 +20,35 @@ const ProposalDetail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { confirm } = useTitanFeedback();
+  const { confirm, toast } = useTitanFeedback();
   const [isEditing, setIsEditing] = useState(searchParams.get('edit') === 'true');
   const [showPreview, setShowPreview] = useState(false);
   const [csSearch, setCsSearch] = useState('');
   const [ssSearch, setSsSearch] = useState('');
-  const [soSearch, setSoSearch] = useState('');
   const [resumeSearch, setResumeSearch] = useState('');
   const [ocSearch, setOcSearch] = useState('');
+  const [scopeDraft, setScopeDraft] = useState('');
+  const [detailsDraft, setDetailsDraft] = useState({
+    customer_id: '' as string | number,
+    customer_name: '',
+    project_name: '',
+    project_location: '',
+    market: '',
+    construction_type: '',
+    total_amount: '',
+    valid_until: '',
+    payment_terms: '',
+  });
+
+  // Customers for the picker (only when editing)
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const response = await customersApi.getAll();
+      return response;
+    },
+    enabled: isEditing,
+  });
 
   // Fetch proposal
   const { data: proposal, isLoading } = useQuery({
@@ -45,6 +69,81 @@ const ProposalDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
     },
   });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: () => proposalsApi.delete(parseInt(id!)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      navigate('/proposals');
+    },
+  });
+
+  const handleDelete = async () => {
+    if (!proposal) return;
+    const ok = await confirm({
+      message: `Are you sure you want to delete proposal "${proposal.proposal_number}"? This cannot be undone.`,
+      danger: true,
+    });
+    if (ok) {
+      deleteMutation.mutate();
+    }
+  };
+
+  // Update proposal fields (Scope of Work, etc.)
+  const updateProposalMutation = useMutation({
+    mutationFn: (data: any) => proposalsApi.update(parseInt(id!), data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      toast.success('Saved');
+    },
+    onError: () => {
+      toast.error('Failed to save changes');
+    },
+  });
+
+  // Sync local edit drafts when proposal loads or edit mode toggles
+  useEffect(() => {
+    if (proposal) {
+      setScopeDraft(proposal.scope_of_work || '');
+      setDetailsDraft({
+        customer_id: proposal.customer_id || '',
+        customer_name: proposal.customer_name || '',
+        project_name: proposal.project_name || '',
+        project_location: proposal.project_location || '',
+        market: proposal.market || '',
+        construction_type: proposal.construction_type || '',
+        total_amount: proposal.total_amount != null ? String(proposal.total_amount) : '',
+        valid_until: proposal.valid_until ? proposal.valid_until.slice(0, 10) : '',
+        payment_terms: proposal.payment_terms || '',
+      });
+    }
+  }, [proposal?.id, isEditing]);
+
+  const detailsDirty = !!proposal && (
+    String(detailsDraft.customer_id || '') !== String(proposal.customer_id || '') ||
+    detailsDraft.project_name !== (proposal.project_name || '') ||
+    detailsDraft.project_location !== (proposal.project_location || '') ||
+    detailsDraft.market !== (proposal.market || '') ||
+    detailsDraft.construction_type !== (proposal.construction_type || '') ||
+    detailsDraft.total_amount !== (proposal.total_amount != null ? String(proposal.total_amount) : '') ||
+    detailsDraft.valid_until !== (proposal.valid_until ? proposal.valid_until.slice(0, 10) : '') ||
+    detailsDraft.payment_terms !== (proposal.payment_terms || '')
+  );
+
+  const handleSaveDetails = () => {
+    updateProposalMutation.mutate({
+      customer_id: detailsDraft.customer_id ? Number(detailsDraft.customer_id) : null,
+      project_name: detailsDraft.project_name || null,
+      project_location: detailsDraft.project_location || null,
+      market: detailsDraft.market || null,
+      construction_type: detailsDraft.construction_type || null,
+      total_amount: detailsDraft.total_amount ? parseFloat(detailsDraft.total_amount) : null,
+      valid_until: detailsDraft.valid_until || null,
+      payment_terms: detailsDraft.payment_terms || null,
+    });
+  };
 
   // Create revision mutation
   const createRevisionMutation = useMutation({
@@ -72,16 +171,6 @@ const ProposalDetail: React.FC = () => {
 
   const removeSellSheetMutation = useMutation({
     mutationFn: (sellSheetId: number) => proposalsApi.removeSellSheet(parseInt(id!), sellSheetId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
-  });
-
-  const addServiceOfferingMutation = useMutation({
-    mutationFn: (serviceOfferingId: number) => proposalsApi.addServiceOffering(parseInt(id!), serviceOfferingId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
-  });
-
-  const removeServiceOfferingMutation = useMutation({
-    mutationFn: (serviceOfferingId: number) => proposalsApi.removeServiceOffering(parseInt(id!), serviceOfferingId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
   });
 
@@ -119,15 +208,6 @@ const ProposalDetail: React.FC = () => {
     queryKey: ['sellSheets', { status: 'published' }],
     queryFn: async () => {
       const response = await sellSheetsApi.getAll({ status: 'published' });
-      return response.data;
-    },
-    enabled: isEditing,
-  });
-
-  const { data: availableServiceOfferings = [] } = useQuery({
-    queryKey: ['serviceOfferings', { is_active: true }],
-    queryFn: async () => {
-      const response = await serviceOfferingsApi.getAll({ is_active: true });
       return response.data;
     },
     enabled: isEditing,
@@ -189,7 +269,7 @@ const ProposalDetail: React.FC = () => {
 
     if (proposal.status === 'draft') {
       actions.push({
-        label: 'Submit for Review',
+        label: 'Publish',
         status: 'pending_review',
         className: 'btn',
       });
@@ -258,6 +338,15 @@ const ProposalDetail: React.FC = () => {
           <button className="btnSecondary" onClick={handleCreateRevision}>
             Create Revision
           </button>
+          {isEditing && (
+            <button
+              className="btn-danger"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete Proposal'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -276,25 +365,161 @@ const ProposalDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Info Cards */}
-      <div className="info-grid">
-        <div className="card info-card">
-          <div className="info-label">Customer</div>
-          <div className="info-value">{proposal.customer_name || 'Not specified'}</div>
+      {/* Info Cards / Editable Project Details */}
+      {!isEditing ? (
+        <div className="info-grid">
+          <div className="card info-card">
+            <div className="info-label">Customer</div>
+            <div className="info-value">{proposal.customer_name || 'Not specified'}</div>
+          </div>
+          <div className="card info-card">
+            <div className="info-label">Project Name</div>
+            <div className="info-value">{proposal.project_name || 'Not specified'}</div>
+          </div>
+          <div className="card info-card">
+            <div className="info-label">Market</div>
+            <div className="info-value">{proposal.market || 'Not specified'}</div>
+          </div>
+          <div className="card info-card">
+            <div className="info-label">Construction Type</div>
+            <div className="info-value">{proposal.construction_type || 'Not specified'}</div>
+          </div>
+          <div className="card info-card">
+            <div className="info-label">Total Amount</div>
+            <div className="info-value">{formatCurrency(proposal.total_amount)}</div>
+          </div>
+          <div className="card info-card">
+            <div className="info-label">Valid Until</div>
+            <div className="info-value">{formatDate(proposal.valid_until)}</div>
+          </div>
         </div>
-        <div className="card info-card">
-          <div className="info-label">Project Name</div>
-          <div className="info-value">{proposal.project_name || 'Not specified'}</div>
+      ) : (
+        <div className="card">
+          <h2 className="section-title">Project Details</h2>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Customer</label>
+              <CompanyPicker
+                companies={customers.map((c: any) => ({
+                  id: c.id,
+                  name: c.name || c.customer_facility || c.customer_owner || '',
+                  customer_type: c.customer_type,
+                }))}
+                selectedId={detailsDraft.customer_id}
+                textValue={detailsDraft.customer_name}
+                onSelectCompany={(cid, name) =>
+                  setDetailsDraft((prev) => ({ ...prev, customer_id: cid, customer_name: name }))
+                }
+                onManualEntry={(name) =>
+                  setDetailsDraft((prev) => ({ ...prev, customer_id: '', customer_name: name }))
+                }
+                onClear={() =>
+                  setDetailsDraft((prev) => ({ ...prev, customer_id: '', customer_name: '' }))
+                }
+                onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
+                placeholder="Search customers..."
+              />
+            </div>
+            <div className="form-group">
+              <label>Market</label>
+              <select
+                className="input"
+                value={detailsDraft.market}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, market: e.target.value })}
+              >
+                <option value="">Select market…</option>
+                {MARKETS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.icon} {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Construction Type</label>
+              <select
+                className="input"
+                value={detailsDraft.construction_type}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, construction_type: e.target.value })}
+              >
+                <option value="">Select construction type…</option>
+                {CONSTRUCTION_TYPES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Project Name</label>
+              <input
+                type="text"
+                className="input"
+                value={detailsDraft.project_name}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, project_name: e.target.value })}
+                placeholder="e.g., Main Building HVAC Retrofit"
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group full-width">
+              <label>Project Location</label>
+              <input
+                type="text"
+                className="input"
+                value={detailsDraft.project_location}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, project_location: e.target.value })}
+                placeholder="e.g., 123 Main St, Phoenix, AZ"
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Total Amount</label>
+              <input
+                type="number"
+                className="input"
+                value={detailsDraft.total_amount}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, total_amount: e.target.value })}
+                placeholder="0.00"
+                step="0.01"
+                min="0"
+              />
+            </div>
+            <div className="form-group">
+              <label>Valid Until</label>
+              <input
+                type="date"
+                className="input"
+                value={detailsDraft.valid_until}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, valid_until: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group full-width">
+              <label>Payment Terms</label>
+              <input
+                type="text"
+                className="input"
+                value={detailsDraft.payment_terms}
+                onChange={(e) => setDetailsDraft({ ...detailsDraft, payment_terms: e.target.value })}
+                placeholder="e.g., Net 30, 50% upfront"
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={handleSaveDetails}
+              disabled={updateProposalMutation.isPending || !detailsDirty}
+            >
+              {updateProposalMutation.isPending ? 'Saving…' : 'Save Project Details'}
+            </button>
+          </div>
         </div>
-        <div className="card info-card">
-          <div className="info-label">Total Amount</div>
-          <div className="info-value">{formatCurrency(proposal.total_amount)}</div>
-        </div>
-        <div className="card info-card">
-          <div className="info-label">Valid Until</div>
-          <div className="info-value">{formatDate(proposal.valid_until)}</div>
-        </div>
-      </div>
+      )}
 
       {/* Content Sections */}
       <div className="card">
@@ -313,9 +538,40 @@ const ProposalDetail: React.FC = () => {
 
       <div className="card">
         <h2 className="section-title">Scope of Work</h2>
-        <div className="content-display">
-          {proposal.scope_of_work || 'No scope of work provided'}
-        </div>
+        {isEditing ? (
+          <>
+            <textarea
+              className="input"
+              rows={10}
+              placeholder="Describe the scope of work for this proposal..."
+              value={scopeDraft}
+              onChange={(e) => setScopeDraft(e.target.value)}
+              style={{ width: '100%', fontFamily: 'inherit', resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <button
+                type="button"
+                className="btnSecondary"
+                onClick={() => setScopeDraft(proposal.scope_of_work || '')}
+                disabled={updateProposalMutation.isPending || scopeDraft === (proposal.scope_of_work || '')}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => updateProposalMutation.mutate({ scope_of_work: scopeDraft })}
+                disabled={updateProposalMutation.isPending || scopeDraft === (proposal.scope_of_work || '')}
+              >
+                {updateProposalMutation.isPending ? 'Saving…' : 'Save Scope of Work'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="content-display">
+            {proposal.scope_of_work || 'No scope of work provided'}
+          </div>
+        )}
       </div>
 
       {proposal.approach_and_methodology && (
@@ -401,10 +657,10 @@ const ProposalDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Attached Sell Sheets */}
+      {/* Attached Service Offerings (formerly Sell Sheets) */}
       {((proposal.sell_sheets && proposal.sell_sheets.length > 0) || isEditing) && (
         <div className="card">
-          <h2 className="section-title">Sell Sheets ({proposal.sell_sheets?.length || 0})</h2>
+          <h2 className="section-title">Service Offerings ({proposal.sell_sheets?.length || 0})</h2>
           {!isEditing ? (
             <div className="attachment-list">
               {proposal.sell_sheets?.map((ss: any) => (
@@ -422,7 +678,7 @@ const ProposalDetail: React.FC = () => {
               <input
                 type="text"
                 className="input search-input"
-                placeholder="Search sell sheets..."
+                placeholder="Search service offerings..."
                 value={ssSearch}
                 onChange={(e) => setSsSearch(e.target.value)}
               />
@@ -454,66 +710,8 @@ const ProposalDetail: React.FC = () => {
                   );
                 })}
                 {availableSellSheets.length === 0 && (
-                  <p className="empty-text">No published sell sheets available</p>
+                  <p className="empty-text">No published service offerings available</p>
                 )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Attached Service Offerings */}
-      {((proposal.service_offerings && proposal.service_offerings.length > 0) || isEditing) && (
-        <div className="card">
-          <h2 className="section-title">Service Offerings ({proposal.service_offerings?.length || 0})</h2>
-          {!isEditing ? (
-            <div className="attachment-list">
-              {proposal.service_offerings?.map((so: any) => (
-                <div key={so.id} className="attachment-display-item">
-                  <div className="attachment-name">{so.name}</div>
-                  <div className="attachment-meta">{so.category || 'General'}</div>
-                  {so.custom_description && <div className="attachment-notes">{so.custom_description}</div>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              <input
-                type="text"
-                className="input search-input"
-                placeholder="Search service offerings..."
-                value={soSearch}
-                onChange={(e) => setSoSearch(e.target.value)}
-              />
-              <div className="attachment-checklist">
-                {availableServiceOfferings
-                  .filter((so: any) =>
-                    !soSearch || so.name?.toLowerCase().includes(soSearch.toLowerCase()) ||
-                    so.category?.toLowerCase().includes(soSearch.toLowerCase()) ||
-                    so.description?.toLowerCase().includes(soSearch.toLowerCase())
-                  )
-                  .map((so: any) => {
-                  const isAttached = proposal.service_offerings?.some((a: any) => a.id === so.id);
-                  return (
-                    <label key={so.id} className={`attachment-item ${isAttached ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={isAttached}
-                        onChange={() => isAttached
-                          ? removeServiceOfferingMutation.mutate(so.id)
-                          : addServiceOfferingMutation.mutate(so.id)
-                        }
-                    />
-                    <div className="attachment-info">
-                      <div className="attachment-name">{so.name}</div>
-                      <div className="attachment-meta">{so.category || 'General'}</div>
-                    </div>
-                  </label>
-                );
-              })}
-              {availableServiceOfferings.length === 0 && (
-                <p className="empty-text">No active service offerings available</p>
-              )}
               </div>
             </>
           )}
