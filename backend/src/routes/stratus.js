@@ -88,6 +88,21 @@ async function resolveImportId(req) {
   return { projectId, importId: latest ? latest.id : null };
 }
 
+function readFiltersFromQuery(q) {
+  return {
+    status: q.status,
+    phase_code: q.phase_code,
+    service: q.service,
+    area: q.area,
+    size: q.size,
+    division: q.division,
+    package_category: q.package_category,
+    service_type: q.service_type,
+    material_type: q.material_type,
+    search: q.search,
+  };
+}
+
 router.get('/project/:projectId/parts', async (req, res) => {
   try {
     const { projectId, importId } = await resolveImportId(req);
@@ -96,18 +111,7 @@ router.get('/project/:projectId/parts', async (req, res) => {
     const offset = parseInt(req.query.offset, 10) || 0;
     // Each filter accepts either a comma-separated string or repeated query params
     // (e.g. ?status=Shipped,Field Installed or ?status=Shipped&status=Field+Installed).
-    const filters = {
-      status: req.query.status,
-      phase_code: req.query.phase_code,
-      service: req.query.service,
-      area: req.query.area,
-      size: req.query.size,
-      division: req.query.division,
-      package_category: req.query.package_category,
-      service_type: req.query.service_type,
-      material_type: req.query.material_type,
-      search: req.query.search,
-    };
+    const filters = readFiltersFromQuery(req.query);
     const result = await StratusPart.listParts({
       projectId, tenantId: req.tenantId, importId, filters, limit, offset,
     });
@@ -125,8 +129,9 @@ router.get('/project/:projectId/pipe-length', async (req, res) => {
     const installedStatuses = req.query.installed_statuses
       ? String(req.query.installed_statuses).split(',').map((s) => s.trim()).filter(Boolean)
       : ['Field Installed'];
+    const filters = readFiltersFromQuery(req.query);
     const rows = await StratusPart.getPipeLengthSummary({
-      projectId, tenantId: req.tenantId, importId, installedStatuses,
+      projectId, tenantId: req.tenantId, importId, filters, installedStatuses,
     });
     res.json({ import_id: importId, installed_statuses: installedStatuses, rows });
   } catch (err) {
@@ -153,8 +158,9 @@ router.get('/project/:projectId/summary', async (req, res) => {
   try {
     const { projectId, importId } = await resolveImportId(req);
     if (!importId) return res.json({ import_id: null, rows: [] });
+    const filters = readFiltersFromQuery(req.query);
     const rows = await StratusPart.getStatusByPhaseSummary({
-      projectId, tenantId: req.tenantId, importId,
+      projectId, tenantId: req.tenantId, importId, filters,
     });
     res.json({ import_id: importId, rows });
   } catch (err) {

@@ -108,6 +108,16 @@ export interface StratusPartFilters {
   search?: string;
 }
 
+function appendFilters(params: Record<string, string | number>, filters: StratusPartFilters) {
+  Object.entries(filters).forEach(([k, v]) => {
+    if (Array.isArray(v)) {
+      if (v.length > 0) params[k] = v.join(',');
+    } else if (v) {
+      params[k] = v as string;
+    }
+  });
+}
+
 const stratusService = {
   async uploadImport(projectId: number, file: File): Promise<{ import: StratusImport; sourceProjectName: string | null; rowCount: number }> {
     const form = new FormData();
@@ -140,28 +150,21 @@ const stratusService = {
     if (opts.importId) params.import_id = opts.importId;
     if (opts.limit) params.limit = opts.limit;
     if (opts.offset) params.offset = opts.offset;
-    if (opts.filters) {
-      Object.entries(opts.filters).forEach(([k, v]) => {
-        if (Array.isArray(v)) {
-          if (v.length > 0) params[k] = v.join(',');
-        } else if (v) {
-          params[k] = v as string;
-        }
-      });
-    }
+    if (opts.filters) appendFilters(params, opts.filters);
     const res = await api.get(`/stratus/project/${projectId}/parts`, { params });
     return res.data;
   },
 
   async getPipeLengthSummary(
     projectId: number,
-    opts: { importId?: number; installedStatuses?: string[] } = {}
+    opts: { importId?: number; installedStatuses?: string[]; filters?: StratusPartFilters } = {}
   ): Promise<{ import_id: number | null; installed_statuses: string[]; rows: PipeLengthRow[] }> {
     const params: Record<string, string | number> = {};
     if (opts.importId) params.import_id = opts.importId;
     if (opts.installedStatuses && opts.installedStatuses.length > 0) {
       params.installed_statuses = opts.installedStatuses.join(',');
     }
+    if (opts.filters) appendFilters(params, opts.filters);
     const res = await api.get(`/stratus/project/${projectId}/pipe-length`, { params });
     return res.data;
   },
@@ -171,9 +174,13 @@ const stratusService = {
     return res.data;
   },
 
-  async getSummary(projectId: number, importId?: number): Promise<{ import_id: number | null; rows: StratusSummaryRow[] }> {
-    const params: Record<string, number> = {};
-    if (importId) params.import_id = importId;
+  async getSummary(
+    projectId: number,
+    opts: { importId?: number; filters?: StratusPartFilters } = {}
+  ): Promise<{ import_id: number | null; rows: StratusSummaryRow[] }> {
+    const params: Record<string, string | number> = {};
+    if (opts.importId) params.import_id = opts.importId;
+    if (opts.filters) appendFilters(params, opts.filters);
     const res = await api.get(`/stratus/project/${projectId}/summary`, { params });
     return res.data;
   },

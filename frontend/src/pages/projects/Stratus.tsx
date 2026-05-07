@@ -105,8 +105,8 @@ const Stratus: React.FC = () => {
   });
 
   const { data: summary } = useQuery({
-    queryKey: ['stratus-summary', projectId, latest?.id],
-    queryFn: () => stratusService.getSummary(projectId, latest?.id),
+    queryKey: ['stratus-summary', projectId, latest?.id, filters],
+    queryFn: () => stratusService.getSummary(projectId, { importId: latest?.id, filters }),
     enabled: !!projectId && !!latest?.id,
   });
 
@@ -117,8 +117,8 @@ const Stratus: React.FC = () => {
   });
 
   const { data: pipeSummary } = useQuery({
-    queryKey: ['stratus-pipe-length', projectId, latest?.id],
-    queryFn: () => stratusService.getPipeLengthSummary(projectId, { importId: latest?.id }),
+    queryKey: ['stratus-pipe-length', projectId, latest?.id, filters],
+    queryFn: () => stratusService.getPipeLengthSummary(projectId, { importId: latest?.id, filters }),
     enabled: !!projectId && !!latest?.id,
   });
 
@@ -288,6 +288,49 @@ const Stratus: React.FC = () => {
             </details>
           </div>
 
+          {/* Global filter bar — drives everything below: pipe progress, pivot, parts table */}
+          <div style={{ ...cardStyle, marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 16 }}>Filters</h2>
+              <span style={{ color: '#6b7280', fontSize: 12 }}>
+                Applies to Installation Progress, Status by Phase Code, and the parts table below.
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <MultiSelect label="Material Type" values={filters.material_type || []} options={opt(filterOpts?.material_types)}
+                renderOption={(v) => MATERIAL_LABELS[v as MaterialType] || v}
+                onChange={(v) => setMulti('material_type', v)} />
+              <MultiSelect label="Status" values={filters.status || []} options={opt(filterOpts?.statuses)}
+                onChange={(v) => setMulti('status', v)} />
+              <MultiSelect label="Phase Code" values={filters.phase_code || []} options={opt(filterOpts?.phase_codes)}
+                onChange={(v) => setMulti('phase_code', v)} />
+              <MultiSelect label="Service Type" values={filters.service_type || []} options={opt(filterOpts?.service_types)}
+                onChange={(v) => setMulti('service_type', v)} />
+              <MultiSelect label="Service" values={filters.service || []} options={opt(filterOpts?.services)}
+                onChange={(v) => setMulti('service', v)} />
+              <MultiSelect label="Area" values={filters.area || []} options={opt(filterOpts?.areas)}
+                onChange={(v) => setMulti('area', v)} />
+              <MultiSelect label="Size" values={filters.size || []} options={opt(filterOpts?.sizes)}
+                onChange={(v) => setMulti('size', v)} />
+              <MultiSelect label="Division" values={filters.division || []} options={opt(filterOpts?.divisions)}
+                onChange={(v) => setMulti('division', v)} />
+              <MultiSelect label="Package" values={filters.package_category || []} options={opt(filterOpts?.package_categories)}
+                onChange={(v) => setMulti('package_category', v)} />
+              <input
+                type="text"
+                placeholder="Search description / CAD ID…"
+                value={filters.search || ''}
+                onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value || undefined })); setPage(0); }}
+                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4, minWidth: 220 }}
+              />
+              {hasAnyFilter(filters) && (
+                <button onClick={() => { setFilters({}); setPage(0); }} style={{ ...btnToggle, color: '#ef4444' }}>
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Pipe LF summary */}
           <PipeLengthCard rows={pipeSummary?.rows || []} />
 
@@ -357,46 +400,12 @@ const Stratus: React.FC = () => {
             <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Tip: click phase-code rows to add/remove them from the parts filter below.</div>
           </div>
 
-          {/* Filters + Parts table */}
+          {/* Parts table */}
           <div style={{ ...cardStyle, marginTop: 16 }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>
               Parts {partsResult ? `(${partsResult.total.toLocaleString()})` : ''}
             </h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <MultiSelect label="Material Type" values={filters.material_type || []} options={opt(filterOpts?.material_types)}
-                renderOption={(v) => MATERIAL_LABELS[v as MaterialType] || v}
-                onChange={(v) => setMulti('material_type', v)} />
-              <MultiSelect label="Status" values={filters.status || []} options={opt(filterOpts?.statuses)}
-                onChange={(v) => setMulti('status', v)} />
-              <MultiSelect label="Phase Code" values={filters.phase_code || []} options={opt(filterOpts?.phase_codes)}
-                onChange={(v) => setMulti('phase_code', v)} />
-              <MultiSelect label="Service Type" values={filters.service_type || []} options={opt(filterOpts?.service_types)}
-                onChange={(v) => setMulti('service_type', v)} />
-              <MultiSelect label="Service" values={filters.service || []} options={opt(filterOpts?.services)}
-                onChange={(v) => setMulti('service', v)} />
-              <MultiSelect label="Area" values={filters.area || []} options={opt(filterOpts?.areas)}
-                onChange={(v) => setMulti('area', v)} />
-              <MultiSelect label="Size" values={filters.size || []} options={opt(filterOpts?.sizes)}
-                onChange={(v) => setMulti('size', v)} />
-              <MultiSelect label="Division" values={filters.division || []} options={opt(filterOpts?.divisions)}
-                onChange={(v) => setMulti('division', v)} />
-              <MultiSelect label="Package" values={filters.package_category || []} options={opt(filterOpts?.package_categories)}
-                onChange={(v) => setMulti('package_category', v)} />
-              <input
-                type="text"
-                placeholder="Search description / CAD ID…"
-                value={filters.search || ''}
-                onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value || undefined })); setPage(0); }}
-                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4, minWidth: 220 }}
-              />
-              {hasAnyFilter(filters) && (
-                <button onClick={() => { setFilters({}); setPage(0); }} style={{ ...btnToggle, color: '#ef4444' }}>
-                  Clear all filters
-                </button>
-              )}
-            </div>
-
-            <div style={{ overflowX: 'auto', marginTop: 12 }}>
+            <div style={{ overflowX: 'auto' }}>
               <table style={tableStyle}>
                 <thead>
                   <tr>

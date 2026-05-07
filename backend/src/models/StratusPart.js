@@ -24,6 +24,39 @@ const toArray = (val) => {
   return cleaned.length ? cleaned : null;
 };
 
+// Build the WHERE conditions / params for a filtered Stratus query. Used by
+// listParts, getStatusByPhaseSummary, and getPipeLengthSummary so all three
+// stay in sync. `excludeKeys` lets a caller (e.g. the pipe summary) ignore a
+// filter that conflicts with its hard-coded constraint.
+function buildFilterClauses(filters = {}, excludeKeys = []) {
+  const skip = new Set(excludeKeys);
+  const conditions = [];
+  const params = [];
+  let p = 1;
+  const addAny = (col, key) => {
+    if (skip.has(key)) return;
+    const arr = toArray(filters[key]);
+    if (!arr) return;
+    conditions.push(`${col} = ANY($${p++}::text[])`);
+    params.push(arr);
+  };
+  addAny('part_tracking_status', 'status');
+  addAny('part_field_phase_code', 'phase_code');
+  addAny('service_name', 'service');
+  addAny('area', 'area');
+  addAny('size', 'size');
+  addAny('part_division', 'division');
+  addAny('package_category', 'package_category');
+  addAny('service_type', 'service_type');
+  addAny('COALESCE(material_type_override, material_type)', 'material_type');
+  if (!skip.has('search') && filters.search) {
+    conditions.push(`(item_description ILIKE $${p} OR service_name ILIKE $${p} OR cad_id ILIKE $${p})`);
+    params.push(`%${filters.search}%`);
+    p++;
+  }
+  return { conditions, params, nextParam: p };
+}
+
 const StratusPart = {
   async createImport({ tenantId, projectId, filename, sourceProjectName, rowCount, importedBy, snapshotAt }) {
     const result = await db.query(
@@ -100,29 +133,14 @@ const StratusPart = {
   },
 
   async listParts({ projectId, tenantId, importId, filters = {}, limit = 100, offset = 0 }) {
-    const conditions = ['tenant_id = $1', 'project_id = $2', 'import_id = $3'];
-    const params = [tenantId, projectId, importId];
-    let p = 4;
-    const addAny = (col, val) => {
-      const arr = toArray(val);
-      if (!arr) return;
-      conditions.push(`${col} = ANY($${p++}::text[])`);
-      params.push(arr);
-    };
-    addAny('part_tracking_status', filters.status);
-    addAny('part_field_phase_code', filters.phase_code);
-    addAny('service_name', filters.service);
-    addAny('area', filters.area);
-    addAny('size', filters.size);
-    addAny('part_division', filters.division);
-    addAny('package_category', filters.package_category);
-    addAny('service_type', filters.service_type);
-    addAny('COALESCE(material_type_override, material_type)', filters.material_type);
-    if (filters.search) {
-      conditions.push(`(item_description ILIKE $${p} OR service_name ILIKE $${p} OR cad_id ILIKE $${p})`);
-      params.push(`%${filters.search}%`);
-      p++;
-    }
+    const base = ['tenant_id = $1', 'project_id = $2', 'import_id = $3'];
+    const baseParams = [tenantId, projectId, importId];
+    const f = buildFilterClauses(filters);
+    // Shift filter param indices since we already used $1..$3 for the base.
+    const shiftedConditions = f.conditions.map((c) => c.replace(/\$(\d+)/g, (_m, n) => `$${parseInt(n, 10) + 3}`));
+    const conditions = [...base, ...shiftedConditions];
+    const params = [...baseParams, ...f.params];
+    let p = baseParams.length + f.params.length + 1;
     const where = conditions.join(' AND ');
 
     const countResult = await db.query(
@@ -149,7 +167,12 @@ const StratusPart = {
     return { total: countResult.rows[0].total, rows: dataResult.rows };
   },
 
-  async getStatusByPhaseSummary({ projectId, tenantId, importId }) {
+  async getStatusByPhaseSummary({ projectId, tenantId, importId, filters = {} }) {
+    const base = ['tenant_id = $1', 'project_id = $2', 'import_id = $3'];
+    const baseParams = [tenantId, projectId, importId];
+    const f = buildFilterClauses(filters);
+    const shifted = f.conditions.map((c) => c.replace(/\$(\d+)/g, (_m, n) => `$${parseInt(n, 10) + 3}`));
+    const where = [...base, ...shifted].join(' AND ');
     const result = await db.query(
       `SELECT
          part_field_phase_code,
@@ -160,10 +183,10 @@ const StratusPart = {
          COALESCE(SUM(length), 0)::numeric AS total_length,
          COALESCE(SUM(total_cost), 0)::numeric AS total_cost
        FROM stratus_parts
-       WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
+       WHERE ${where}
        GROUP BY part_field_phase_code, part_tracking_status
        ORDER BY part_field_phase_code NULLS LAST, part_tracking_status`,
-      [tenantId, projectId, importId]
+      [...baseParams, ...f.params]
     );
     return result.rows;
   },
@@ -204,23 +227,34 @@ const StratusPart = {
     return result.rows[0];
   },
 
-  async getPipeLengthSummary({ projectId, tenantId, importId, installedStatuses = ['Field Installed'] }) {
+  async getPipeLengthSummary({ projectId, tenantId, importId, filters = {}, installedStatuses = ['Field Installed'] }) {
+    // The card always tracks pipe parts. We ignore the user's material_type
+    // filter so flipping that filter elsewhere on the page doesn't empty the
+    // card; every other filter still narrows the pipe scope.
+    const base = [
+      'tenant_id = $1', 'project_id = $2', 'import_id = $3',
+      `COALESCE(material_type_override, material_type) = 'pipe'`,
+    ];
+    const baseParams = [tenantId, projectId, importId];
+    const f = buildFilterClauses(filters, ['material_type']);
+    const shifted = f.conditions.map((c) => c.replace(/\$(\d+)/g, (_m, n) => `$${parseInt(n, 10) + 3}`));
+    const installedParam = `$${baseParams.length + f.params.length + 1}`;
+    const where = [...base, ...shifted].join(' AND ');
     const result = await db.query(
       `SELECT
          part_field_phase_code,
          COUNT(*)::int AS pipe_count,
          COALESCE(SUM(length), 0)::numeric AS total_length,
-         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN length ELSE 0 END), 0)::numeric AS installed_length,
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY(${installedParam}::text[]) THEN length ELSE 0 END), 0)::numeric AS installed_length,
          COALESCE(SUM(install_hours), 0)::numeric AS total_hours,
-         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN install_hours ELSE 0 END), 0)::numeric AS installed_hours,
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY(${installedParam}::text[]) THEN install_hours ELSE 0 END), 0)::numeric AS installed_hours,
          COALESCE(SUM(total_cost), 0)::numeric AS total_cost,
-         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN total_cost ELSE 0 END), 0)::numeric AS installed_cost
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY(${installedParam}::text[]) THEN total_cost ELSE 0 END), 0)::numeric AS installed_cost
        FROM stratus_parts
-       WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
-         AND COALESCE(material_type_override, material_type) = 'pipe'
+       WHERE ${where}
        GROUP BY part_field_phase_code
        ORDER BY part_field_phase_code NULLS LAST`,
-      [tenantId, projectId, importId, installedStatuses]
+      [...baseParams, ...f.params, installedStatuses]
     );
     return result.rows;
   },
