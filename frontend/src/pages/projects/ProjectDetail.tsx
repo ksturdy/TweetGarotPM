@@ -26,6 +26,7 @@ const MODULE_ICONS: Record<string, string> = {
   'daily-reports': '📅',
   schedule: '📆',
   'phase-schedule': '📊',
+  stratus: '☁️',
   'weekly-goals': '🎯',
   issues: '⚠️',
   'cost-model': '🔧',
@@ -43,6 +44,7 @@ const MODULES = [
   { path: 'issues', label: 'Field Issues', description: 'Issues reported from the field' },
   { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
   { path: 'phase-schedule', label: 'Phase Schedule', description: 'Schedule phase codes with work contours' },
+  { path: 'stratus', label: 'Stratus', description: 'Model content and part-level statuses' },
   { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
   { path: 'cost-model', label: 'Cost Model', description: 'Equipment counts and cost data' },
 ];
