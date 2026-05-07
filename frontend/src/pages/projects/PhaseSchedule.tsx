@@ -2880,10 +2880,13 @@ const PhaseSchedule: React.FC = () => {
     const ok = await confirm({
       title: 'Sync quantities from Stratus?',
       message:
-        'This pulls the latest Stratus import and overwrites quantity / quantity-installed on every schedule item with UOM = LF or EA where matching parts are found:\n\n' +
-        '• LF rows → SUM(length)\n' +
-        '• EA rows → COUNT of parts\n\n' +
-        'Hours and costs are not touched. Items with no matching Stratus parts are left alone. Manually entered LF/EA values for matched rows will be replaced.',
+        'For each schedule item whose phase code matches Stratus parts, this overwrites the LF / EA quantity and installed-quantity from the latest Stratus import:\n\n' +
+        '• LF rows → SUM(length) of pipe-classified parts\n' +
+        '• EA rows → COUNT of parts\n' +
+        '• Items with no UOM yet are auto-tagged: LF if pipe parts exist for the phase, otherwise EA\n' +
+        '• Items tagged LS (or anything other than LF/EA) are skipped\n' +
+        '• Items with no matching Stratus parts are left alone\n\n' +
+        'Hours and costs are not touched. Manually entered LF/EA values for matched rows will be replaced.',
       confirmText: 'Sync',
     });
     if (!ok) return;
@@ -2897,9 +2900,11 @@ const PhaseSchedule: React.FC = () => {
       }
       queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
       if (updated.length === 0) {
-        toast.warning(`No quantities updated. ${skipped.length} item(s) skipped (no LF/EA UOM, no linked phase codes, or no matching Stratus parts).`);
+        toast.warning(`No quantities updated. ${skipped.length} item(s) skipped (no linked phase codes match Stratus, or item is tagged LS).`);
       } else {
-        toast.success(`Synced ${updated.length} item${updated.length === 1 ? '' : 's'} from Stratus.${skipped.length ? ` ${skipped.length} skipped.` : ''}`);
+        const inferred = updated.filter((u) => u.uom_inferred).length;
+        const inferredNote = inferred > 0 ? ` (UOM auto-set on ${inferred})` : '';
+        toast.success(`Synced ${updated.length} item${updated.length === 1 ? '' : 's'} from Stratus${inferredNote}.${skipped.length ? ` ${skipped.length} skipped.` : ''}`);
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.message || 'Stratus sync failed.');

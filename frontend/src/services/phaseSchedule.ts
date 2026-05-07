@@ -89,6 +89,7 @@ export interface StratusSyncRowChange {
   id: number;
   name: string;
   quantity_uom: string;
+  uom_inferred: boolean;
   old_quantity: number;
   new_quantity: number;
   old_installed: number;

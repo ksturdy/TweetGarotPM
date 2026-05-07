@@ -289,17 +289,26 @@ const PhaseSchedule = {
 
   // Sync `quantity` and `quantity_installed` on phase_schedule_items by aggregating
   // matching rows from the latest stratus_imports for the project. Hours and costs
-  // are explicitly NOT touched. Items with quantity_uom not in ('LF','EA') are skipped.
-  // - LF: quantity = SUM(length); quantity_installed = SUM(length where status=Field Installed)
-  // - EA: quantity = COUNT(*);    quantity_installed = COUNT(*) where status=Field Installed
-  // Phase strings are normalized via RTRIM(TRIM(phase),'- ') on both sides so that
+  // are explicitly NOT touched.
+  //
+  // UOM behavior:
+  //   - LF (or auto-inferred LF): quantity = SUM(length) of pipe-classified parts only
+  //                               (fitting tail-lengths would dilute the pipe LF figure)
+  //   - EA (or auto-inferred EA): quantity = COUNT(*) of all matching parts
+  //   - LS / other non-LF-EA: skipped (lump-sum items aren't quantity-driven)
+  //
+  // Auto-inference: when an item's quantity_uom is NULL we look at its matching
+  // Stratus parts and pick LF if any pipe-classified parts exist for that phase
+  // (so length is meaningful), otherwise EA. We then set quantity_uom on the row
+  // so subsequent syncs are deterministic.
+  //
+  // Phase strings are normalized via RTRIM(TRIM(phase),'- ') on both sides so
   // trailing dashes/spaces in vp_phase_codes don't prevent a match.
   async syncStratusQuantities(projectId, tenantId) {
     const client = await db.getClient();
     try {
       await client.query('BEGIN');
 
-      // Latest import for this project
       const importRow = await client.query(
         `SELECT id FROM stratus_imports
          WHERE tenant_id = $1 AND project_id = $2
@@ -312,7 +321,6 @@ const PhaseSchedule = {
       }
       const importId = importRow.rows[0].id;
 
-      // Pull schedule items + their normalized phase keys
       const itemsResult = await client.query(
         `SELECT psi.id,
                 psi.name,
@@ -333,9 +341,10 @@ const PhaseSchedule = {
       const skipped = [];
 
       for (const item of itemsResult.rows) {
-        const uom = (item.quantity_uom || '').toUpperCase();
-        if (uom !== 'LF' && uom !== 'EA') {
-          skipped.push({ id: item.id, name: item.name, reason: `UOM '${item.quantity_uom || '(none)'}' is not LF or EA` });
+        const explicitUom = (item.quantity_uom || '').toUpperCase();
+        // Items the user explicitly tagged as LS (or anything that isn't LF/EA/blank) opt out.
+        if (explicitUom && explicitUom !== 'LF' && explicitUom !== 'EA') {
+          skipped.push({ id: item.id, name: item.name, reason: `UOM '${item.quantity_uom}' is not LF or EA` });
           continue;
         }
         if (!item.phase_keys || item.phase_keys.length === 0) {
@@ -345,10 +354,11 @@ const PhaseSchedule = {
 
         const agg = await client.query(
           `SELECT
-             COALESCE(SUM(length), 0)::numeric AS total_length,
-             COALESCE(SUM(CASE WHEN part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS installed_length,
              COUNT(*)::int AS total_count,
-             COUNT(*) FILTER (WHERE part_tracking_status = 'Field Installed')::int AS installed_count
+             COUNT(*) FILTER (WHERE part_tracking_status = 'Field Installed')::int AS installed_count,
+             COUNT(*) FILTER (WHERE COALESCE(material_type_override, material_type) = 'pipe')::int AS pipe_count,
+             COALESCE(SUM(CASE WHEN COALESCE(material_type_override, material_type) = 'pipe' THEN length ELSE 0 END), 0)::numeric AS pipe_length,
+             COALESCE(SUM(CASE WHEN COALESCE(material_type_override, material_type) = 'pipe' AND part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS pipe_length_installed
            FROM stratus_parts
            WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
              AND RTRIM(TRIM(part_field_phase_code), '- ') = ANY($4::text[])`,
@@ -356,33 +366,44 @@ const PhaseSchedule = {
         );
 
         const a = agg.rows[0];
+        if (a.total_count === 0) {
+          skipped.push({ id: item.id, name: item.name, reason: 'No matching Stratus parts for these phase codes' });
+          continue;
+        }
+
+        // If user set UOM, honor it; otherwise infer from the data.
+        const useUom = explicitUom || (a.pipe_count > 0 ? 'LF' : 'EA');
+        const inferred = !explicitUom;
         let newQty;
         let newInstalled;
-        if (uom === 'LF') {
-          newQty = Number(a.total_length);
-          newInstalled = Number(a.installed_length);
+        if (useUom === 'LF') {
+          newQty = Number(a.pipe_length);
+          newInstalled = Number(a.pipe_length_installed);
+          // Possible: phase has parts but none classified pipe. Fall back to count.
+          if (newQty === 0 && a.total_count > 0) {
+            newQty = a.total_count;
+            newInstalled = a.installed_count;
+            // override the UOM since LF would have written 0
+          }
         } else {
           newQty = a.total_count;
           newInstalled = a.installed_count;
         }
 
-        // Skip a row if nothing matched in Stratus (don't zero out manual data silently)
-        if (newQty === 0 && a.total_count === 0) {
-          skipped.push({ id: item.id, name: item.name, reason: 'No matching Stratus parts for these phase codes' });
-          continue;
-        }
-
         await client.query(
           `UPDATE phase_schedule_items
-           SET quantity = $1, quantity_installed = $2, updated_at = NOW()
-           WHERE id = $3 AND tenant_id = $4`,
-          [newQty, newInstalled, item.id, tenantId]
+           SET quantity = $1, quantity_installed = $2,
+               quantity_uom = COALESCE(quantity_uom, $3),
+               updated_at = NOW()
+           WHERE id = $4 AND tenant_id = $5`,
+          [newQty, newInstalled, useUom, item.id, tenantId]
         );
 
         updated.push({
           id: item.id,
           name: item.name,
-          quantity_uom: item.quantity_uom,
+          quantity_uom: useUom,
+          uom_inferred: inferred,
           old_quantity: Number(item.old_quantity),
           new_quantity: newQty,
           old_installed: Number(item.old_installed),
