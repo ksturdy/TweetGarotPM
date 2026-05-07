@@ -13,6 +13,10 @@ export interface StratusImport {
   imported_at: string;
 }
 
+export type MaterialType =
+  | 'pipe' | 'pipe_fitting' | 'weld' | 'valve' | 'coupling' | 'hanger'
+  | 'equipment' | 'duct' | 'duct_accessory' | 'other';
+
 export interface StratusPart {
   id: number;
   stratus_part_id: string | null;
@@ -26,6 +30,12 @@ export interface StratusPart {
   part_division: string | null;
   package_category: string | null;
   category: string | null;
+  service_type: string | null;
+  cut_type: string | null;
+  service_group: string | null;
+  material_type: MaterialType | null;
+  material_type_auto: MaterialType | null;
+  material_type_override: MaterialType | null;
   length: string | number | null;
   item_weight: string | number | null;
   install_hours: string | number | null;
@@ -41,6 +51,17 @@ export interface StratusPart {
   fab_complete_date: string | null;
   qaqc_complete_date: string | null;
   assembly_name: string | null;
+}
+
+export interface PipeLengthRow {
+  part_field_phase_code: string | null;
+  pipe_count: number;
+  total_length: string | number;
+  installed_length: string | number;
+  total_hours: string | number;
+  installed_hours: string | number;
+  total_cost: string | number;
+  installed_cost: string | number;
 }
 
 export interface StratusSummaryRow {
@@ -61,6 +82,8 @@ export interface StratusFilterOptions {
   sizes: string[];
   divisions: string[];
   package_categories: string[];
+  service_types: string[];
+  material_types: string[];
 }
 
 export interface StratusPartsResult {
@@ -71,14 +94,17 @@ export interface StratusPartsResult {
   offset: number;
 }
 
+// Each filter is a list — empty array means "no constraint". `search` is a free-text contains match.
 export interface StratusPartFilters {
-  status?: string;
-  phase_code?: string;
-  service?: string;
-  area?: string;
-  size?: string;
-  division?: string;
-  package_category?: string;
+  status?: string[];
+  phase_code?: string[];
+  service?: string[];
+  area?: string[];
+  size?: string[];
+  division?: string[];
+  package_category?: string[];
+  service_type?: string[];
+  material_type?: string[];
   search?: string;
 }
 
@@ -116,10 +142,32 @@ const stratusService = {
     if (opts.offset) params.offset = opts.offset;
     if (opts.filters) {
       Object.entries(opts.filters).forEach(([k, v]) => {
-        if (v) params[k] = v;
+        if (Array.isArray(v)) {
+          if (v.length > 0) params[k] = v.join(',');
+        } else if (v) {
+          params[k] = v as string;
+        }
       });
     }
     const res = await api.get(`/stratus/project/${projectId}/parts`, { params });
+    return res.data;
+  },
+
+  async getPipeLengthSummary(
+    projectId: number,
+    opts: { importId?: number; installedStatuses?: string[] } = {}
+  ): Promise<{ import_id: number | null; installed_statuses: string[]; rows: PipeLengthRow[] }> {
+    const params: Record<string, string | number> = {};
+    if (opts.importId) params.import_id = opts.importId;
+    if (opts.installedStatuses && opts.installedStatuses.length > 0) {
+      params.installed_statuses = opts.installedStatuses.join(',');
+    }
+    const res = await api.get(`/stratus/project/${projectId}/pipe-length`, { params });
+    return res.data;
+  },
+
+  async setMaterialTypeOverride(partId: number, materialType: MaterialType | null): Promise<StratusPart> {
+    const res = await api.put(`/stratus/parts/${partId}/material-type-override`, { material_type: materialType });
     return res.data;
   },
 

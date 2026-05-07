@@ -34,6 +34,40 @@ const uuid = (v) => {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s) ? s : null;
 };
 
+const PIPE_DESC_RE = /\b(pipe|tube)\b/i;
+const FITTING_DESC_RE = /\b(elbow|tee|reducer|flange|coupling|gasket|gskt|sockolet|stub|nipple|cap|adapter|union|olet|ell|cplg|fitting)\b/i;
+
+// Mirror of the SQL CASE in migration 211 — keep them in sync. Anything classified
+// here is also classified the same way by the migration's backfill.
+function classifyMaterialType(serviceType, description, length) {
+  const desc = description || '';
+  const len = Number.isFinite(length) ? length : 0;
+  const fitting = FITTING_DESC_RE.test(desc);
+
+  if (serviceType === 'Pipework') {
+    if (!fitting && PIPE_DESC_RE.test(desc) && len > 1) return 'pipe';
+    if (!fitting && len > 5) return 'pipe';
+    return 'pipe_fitting';
+  }
+  switch (serviceType) {
+    case 'Weld': return 'weld';
+    case 'Valve': return 'valve';
+    case 'Hanger': return 'hanger';
+    case 'Coupling': return 'coupling';
+    case 'Equipment':
+    case 'Mechanical Equipment': return 'equipment';
+    case 'Round Duct':
+    case 'Rectangular Duct': return 'duct';
+    case 'Duct Fittings':
+    case 'Duct Accessory':
+    case 'Duct Accessories':
+    case 'Air Terminals':
+    case 'Flex Ducts':
+    case 'Ducts': return 'duct_accessory';
+    default: return 'other';
+  }
+}
+
 function parseStratusWorkbook(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const sheetName = PARTS_SHEET_CANDIDATES.find((n) => wb.SheetNames.includes(n));
@@ -47,7 +81,12 @@ function parseStratusWorkbook(buffer) {
 
   const sourceProjectName = str(rows[0].ProjectName);
 
-  const parts = rows.map((r) => ({
+  const parts = rows.map((r) => {
+    const serviceType = str(r.ServiceType);
+    const desc = str(r.ItemDescription);
+    const length = num(r.Length);
+    const materialType = classifyMaterialType(serviceType, desc, length);
+    return {
     stratus_part_id: uuid(r.Id),
     cad_id: str(r.CadId),
     model_id: uuid(r.ModelId),
@@ -58,7 +97,7 @@ function parseStratusWorkbook(buffer) {
     service_name: str(r.ServiceName),
     service_abbreviation: str(r.ServiceAbbreviation),
     fabrication_service: str(r.FabricationService),
-    item_description: str(r.ItemDescription),
+    item_description: desc,
     area: str(r.Area),
     size: str(r.Size),
     part_division: str(r.PartDivision),
@@ -66,7 +105,12 @@ function parseStratusWorkbook(buffer) {
     category: str(r.Category),
     cost_category: str(r.CostCategory),
 
-    length: num(r.Length),
+    service_type: serviceType,
+    cut_type: str(r.CutType),
+    service_group: str(r.ServiceGroup),
+    material_type: materialType,
+
+    length,
     item_weight: num(r.ItemWeight),
     install_hours: num(r.InstallHours),
 
@@ -90,9 +134,10 @@ function parseStratusWorkbook(buffer) {
     qaqc_complete_date: dt(r.QAQCCompleteDate),
 
     raw: r,
-  }));
+    };
+  });
 
   return { sourceProjectName, rowCount: parts.length, parts };
 }
 
-module.exports = { parseStratusWorkbook };
+module.exports = { parseStratusWorkbook, classifyMaterialType };

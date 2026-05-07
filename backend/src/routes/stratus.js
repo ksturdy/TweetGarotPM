@@ -94,6 +94,8 @@ router.get('/project/:projectId/parts', async (req, res) => {
     if (!importId) return res.json({ total: 0, rows: [] });
     const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000);
     const offset = parseInt(req.query.offset, 10) || 0;
+    // Each filter accepts either a comma-separated string or repeated query params
+    // (e.g. ?status=Shipped,Field Installed or ?status=Shipped&status=Field+Installed).
     const filters = {
       status: req.query.status,
       phase_code: req.query.phase_code,
@@ -102,6 +104,8 @@ router.get('/project/:projectId/parts', async (req, res) => {
       size: req.query.size,
       division: req.query.division,
       package_category: req.query.package_category,
+      service_type: req.query.service_type,
+      material_type: req.query.material_type,
       search: req.query.search,
     };
     const result = await StratusPart.listParts({
@@ -111,6 +115,37 @@ router.get('/project/:projectId/parts', async (req, res) => {
   } catch (err) {
     console.error('Stratus list parts error:', err);
     res.status(500).json({ message: 'Failed to list parts.' });
+  }
+});
+
+router.get('/project/:projectId/pipe-length', async (req, res) => {
+  try {
+    const { projectId, importId } = await resolveImportId(req);
+    if (!importId) return res.json({ import_id: null, rows: [] });
+    const installedStatuses = req.query.installed_statuses
+      ? String(req.query.installed_statuses).split(',').map((s) => s.trim()).filter(Boolean)
+      : ['Field Installed'];
+    const rows = await StratusPart.getPipeLengthSummary({
+      projectId, tenantId: req.tenantId, importId, installedStatuses,
+    });
+    res.json({ import_id: importId, installed_statuses: installedStatuses, rows });
+  } catch (err) {
+    console.error('Stratus pipe-length error:', err);
+    res.status(500).json({ message: 'Failed to load pipe-length summary.' });
+  }
+});
+
+router.put('/parts/:partId/material-type-override', async (req, res) => {
+  try {
+    const partId = parseInt(req.params.partId, 10);
+    const updated = await StratusPart.setMaterialTypeOverride({
+      partId, tenantId: req.tenantId, materialType: req.body && req.body.material_type,
+    });
+    if (!updated) return res.status(404).json({ message: 'Part not found.' });
+    res.json(updated);
+  } catch (err) {
+    console.error('Stratus override error:', err);
+    res.status(500).json({ message: 'Failed to update material type override.' });
   }
 });
 

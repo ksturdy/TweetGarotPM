@@ -4,6 +4,7 @@ const PART_COLUMNS = [
   'stratus_part_id', 'cad_id', 'model_id', 'assembly_id', 'assembly_name', 'part_number',
   'service_name', 'service_abbreviation', 'fabrication_service', 'item_description',
   'area', 'size', 'part_division', 'package_category', 'category', 'cost_category',
+  'service_type', 'cut_type', 'service_group', 'material_type',
   'length', 'item_weight', 'install_hours',
   'material_cost', 'install_cost', 'fabrication_cost', 'total_cost',
   'part_tracking_status', 'part_field_phase_code', 'part_shop_phase_code',
@@ -12,6 +13,16 @@ const PART_COLUMNS = [
   'fab_complete_date', 'qaqc_complete_date',
   'raw',
 ];
+
+const toArray = (val) => {
+  if (val === undefined || val === null || val === '') return null;
+  if (Array.isArray(val)) {
+    const cleaned = val.map((v) => String(v).trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
+  }
+  const cleaned = String(val).split(',').map((v) => v.trim()).filter(Boolean);
+  return cleaned.length ? cleaned : null;
+};
 
 const StratusPart = {
   async createImport({ tenantId, projectId, filename, sourceProjectName, rowCount, importedBy, snapshotAt }) {
@@ -92,19 +103,21 @@ const StratusPart = {
     const conditions = ['tenant_id = $1', 'project_id = $2', 'import_id = $3'];
     const params = [tenantId, projectId, importId];
     let p = 4;
-    const addEq = (col, val) => {
-      if (val !== undefined && val !== null && val !== '') {
-        conditions.push(`${col} = $${p++}`);
-        params.push(val);
-      }
+    const addAny = (col, val) => {
+      const arr = toArray(val);
+      if (!arr) return;
+      conditions.push(`${col} = ANY($${p++}::text[])`);
+      params.push(arr);
     };
-    addEq('part_tracking_status', filters.status);
-    addEq('part_field_phase_code', filters.phase_code);
-    addEq('service_name', filters.service);
-    addEq('area', filters.area);
-    addEq('size', filters.size);
-    addEq('part_division', filters.division);
-    addEq('package_category', filters.package_category);
+    addAny('part_tracking_status', filters.status);
+    addAny('part_field_phase_code', filters.phase_code);
+    addAny('service_name', filters.service);
+    addAny('area', filters.area);
+    addAny('size', filters.size);
+    addAny('part_division', filters.division);
+    addAny('package_category', filters.package_category);
+    addAny('service_type', filters.service_type);
+    addAny('COALESCE(material_type_override, material_type)', filters.material_type);
     if (filters.search) {
       conditions.push(`(item_description ILIKE $${p} OR service_name ILIKE $${p} OR cad_id ILIKE $${p})`);
       params.push(`%${filters.search}%`);
@@ -120,6 +133,9 @@ const StratusPart = {
     const dataResult = await db.query(
       `SELECT id, stratus_part_id, cad_id, part_number, service_name, service_abbreviation,
               item_description, area, size, part_division, package_category, category,
+              service_type, cut_type, service_group,
+              COALESCE(material_type_override, material_type) AS material_type,
+              material_type AS material_type_auto, material_type_override,
               length, item_weight, install_hours, material_cost, install_cost, total_cost,
               part_tracking_status, part_field_phase_code, part_shop_phase_code,
               part_issue_to_shop_dt, part_shipped_dt, part_field_installed_dt,
@@ -175,10 +191,49 @@ const StratusPart = {
                ORDER BY part_division) AS divisions,
          ARRAY(SELECT DISTINCT package_category FROM stratus_parts
                WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND package_category IS NOT NULL
-               ORDER BY package_category) AS package_categories`,
+               ORDER BY package_category) AS package_categories,
+         ARRAY(SELECT DISTINCT service_type FROM stratus_parts
+               WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND service_type IS NOT NULL
+               ORDER BY service_type) AS service_types,
+         ARRAY(SELECT DISTINCT COALESCE(material_type_override, material_type) FROM stratus_parts
+               WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
+                 AND COALESCE(material_type_override, material_type) IS NOT NULL
+               ORDER BY 1) AS material_types`,
       [tenantId, projectId, importId]
     );
     return result.rows[0];
+  },
+
+  async getPipeLengthSummary({ projectId, tenantId, importId, installedStatuses = ['Field Installed'] }) {
+    const result = await db.query(
+      `SELECT
+         part_field_phase_code,
+         COUNT(*)::int AS pipe_count,
+         COALESCE(SUM(length), 0)::numeric AS total_length,
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN length ELSE 0 END), 0)::numeric AS installed_length,
+         COALESCE(SUM(install_hours), 0)::numeric AS total_hours,
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN install_hours ELSE 0 END), 0)::numeric AS installed_hours,
+         COALESCE(SUM(total_cost), 0)::numeric AS total_cost,
+         COALESCE(SUM(CASE WHEN part_tracking_status = ANY($4::text[]) THEN total_cost ELSE 0 END), 0)::numeric AS installed_cost
+       FROM stratus_parts
+       WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
+         AND COALESCE(material_type_override, material_type) = 'pipe'
+       GROUP BY part_field_phase_code
+       ORDER BY part_field_phase_code NULLS LAST`,
+      [tenantId, projectId, importId, installedStatuses]
+    );
+    return result.rows;
+  },
+
+  async setMaterialTypeOverride({ partId, tenantId, materialType }) {
+    const result = await db.query(
+      `UPDATE stratus_parts
+       SET material_type_override = $3
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING id, material_type, material_type_override`,
+      [partId, tenantId, materialType || null]
+    );
+    return result.rows[0] || null;
   },
 };
 

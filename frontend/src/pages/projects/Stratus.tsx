@@ -1,12 +1,14 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import stratusService, {
+  MaterialType,
+  PipeLengthRow,
   StratusFilterOptions,
   StratusImport,
   StratusPart,
   StratusPartFilters,
-  StratusPartsResult,
   StratusSummaryRow,
 } from '../../services/stratus';
 import { projectsApi } from '../../services/projects';
@@ -38,6 +40,19 @@ const STATUS_COLORS: Record<string, string> = {
   'Field Installed': '#10b981',
 };
 
+const MATERIAL_LABELS: Record<MaterialType, string> = {
+  pipe: 'Pipe',
+  pipe_fitting: 'Pipe Fitting',
+  weld: 'Weld',
+  valve: 'Valve',
+  coupling: 'Coupling',
+  hanger: 'Hanger',
+  equipment: 'Equipment',
+  duct: 'Duct',
+  duct_accessory: 'Duct Accessory',
+  other: 'Other',
+};
+
 const fmt = (n: number, decimals = 1): string => {
   if (!Number.isFinite(n) || n === 0) return '-';
   return n.toLocaleString('en-US', { maximumFractionDigits: decimals });
@@ -47,6 +62,8 @@ const fmtMoney = (n: number): string => {
   if (!Number.isFinite(n) || n === 0) return '-';
   return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 };
+
+const fmtPct = (n: number): string => `${(n * 100).toFixed(1)}%`;
 
 const fmtDate = (s: string | null): string => {
   if (!s) return '-';
@@ -99,6 +116,12 @@ const Stratus: React.FC = () => {
     enabled: !!projectId && !!latest?.id,
   });
 
+  const { data: pipeSummary } = useQuery({
+    queryKey: ['stratus-pipe-length', projectId, latest?.id],
+    queryFn: () => stratusService.getPipeLengthSummary(projectId, { importId: latest?.id }),
+    enabled: !!projectId && !!latest?.id,
+  });
+
   const { data: partsResult } = useQuery({
     queryKey: ['stratus-parts', projectId, latest?.id, filters, page],
     queryFn: () =>
@@ -125,6 +148,7 @@ const Stratus: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['stratus-parts', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-imports', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-filter-opts', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['stratus-pipe-length', projectId] });
     },
   });
 
@@ -136,6 +160,7 @@ const Stratus: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['stratus-parts', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-imports', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-filter-opts', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['stratus-pipe-length', projectId] });
     },
   });
 
@@ -176,10 +201,18 @@ const Stratus: React.FC = () => {
 
   const pivot = useMemo(() => buildPivot(summary?.rows || [], metric), [summary, metric]);
 
-  const onFilterChange = (key: keyof StratusPartFilters, value: string) => {
-    setFilters((f) => ({ ...f, [key]: value || undefined }));
+  const setMulti = (key: keyof StratusPartFilters, values: string[]) => {
+    setFilters((f) => ({ ...f, [key]: values.length ? values : undefined }));
     setPage(0);
   };
+
+  const toggleFilterValue = (key: keyof StratusPartFilters, value: string) => {
+    const cur = (filters[key] as string[] | undefined) || [];
+    const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+    setMulti(key, next);
+  };
+
+  const opt = (arr?: string[]) => (arr || []).filter(Boolean);
 
   return (
     <div style={{ padding: '24px', maxWidth: 1600, margin: '0 auto' }}>
@@ -204,17 +237,12 @@ const Stratus: React.FC = () => {
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
             style={{ display: 'none' }}
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            style={btnPrimary}
-          >
+          <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={btnPrimary}>
             {uploading ? 'Uploading…' : 'Upload Stratus Export'}
           </button>
         </div>
       </div>
 
-      {/* Latest import banner */}
       {loadingLatest ? (
         <div style={cardStyle}>Loading…</div>
       ) : !latest ? (
@@ -224,9 +252,7 @@ const Stratus: React.FC = () => {
             Upload a Stratus Tracking export (.xlsx) to populate this module. Parts data will be loaded
             from the "Parts" sheet of the workbook.
           </div>
-          <button onClick={() => fileInputRef.current?.click()} style={btnPrimary}>
-            Upload Stratus Export
-          </button>
+          <button onClick={() => fileInputRef.current?.click()} style={btnPrimary}>Upload Stratus Export</button>
         </div>
       ) : (
         <>
@@ -253,10 +279,7 @@ const Stratus: React.FC = () => {
                       {fmtDate(imp.imported_at)} • {imp.row_count.toLocaleString()} parts
                       {imp.id === latest.id && <span style={{ marginLeft: 6, color: '#10b981', fontWeight: 600 }}>(current)</span>}
                     </span>
-                    <button
-                      onClick={() => handleDeleteImport(imp)}
-                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
-                    >
+                    <button onClick={() => handleDeleteImport(imp)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}>
                       Delete
                     </button>
                   </div>
@@ -265,17 +288,16 @@ const Stratus: React.FC = () => {
             </details>
           </div>
 
+          {/* Pipe LF summary */}
+          <PipeLengthCard rows={pipeSummary?.rows || []} />
+
           {/* Pivot */}
-          <div style={cardStyle}>
+          <div style={{ ...cardStyle, marginTop: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 18 }}>Status by Phase Code</h2>
               <div style={{ display: 'flex', gap: 4 }}>
                 {(['hours', 'count', 'weight', 'length', 'cost'] as Metric[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMetric(m)}
-                    style={metric === m ? btnToggleActive : btnToggle}
-                  >
+                  <button key={m} onClick={() => setMetric(m)} style={metric === m ? btnToggleActive : btnToggle}>
                     {METRIC_LABEL[m]}
                   </button>
                 ))}
@@ -295,22 +317,29 @@ const Stratus: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pivot.phaseCodes.map((pc) => (
-                    <tr key={pc} style={{ cursor: 'pointer' }} onClick={() => onFilterChange('phase_code', pc === '(blank)' ? '' : pc)}>
-                      <td style={tdStyle}>{pc}</td>
-                      {pivot.statuses.map((s) => {
-                        const v = pivot.cells[pc]?.[s] || 0;
-                        return (
-                          <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
-                            {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' ? 0 : 1)}
-                          </td>
-                        );
-                      })}
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
-                        {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' ? 0 : 1)}
-                      </td>
-                    </tr>
-                  ))}
+                  {pivot.phaseCodes.map((pc) => {
+                    const isSelected = (filters.phase_code || []).includes(pc);
+                    return (
+                      <tr
+                        key={pc}
+                        style={{ cursor: 'pointer', background: isSelected ? '#eff6ff' : undefined }}
+                        onClick={() => pc !== '(blank)' && toggleFilterValue('phase_code', pc)}
+                      >
+                        <td style={tdStyle}>{pc}{isSelected && <span style={{ marginLeft: 6, color: '#3b82f6' }}>✓</span>}</td>
+                        {pivot.statuses.map((s) => {
+                          const v = pivot.cells[pc]?.[s] || 0;
+                          return (
+                            <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
+                              {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' ? 0 : 1)}
+                            </td>
+                          );
+                        })}
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
+                          {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' ? 0 : 1)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                   <tr style={{ background: '#f9fafb', fontWeight: 700 }}>
                     <td style={tdStyle}>Total</td>
                     {pivot.statuses.map((s) => (
@@ -325,7 +354,7 @@ const Stratus: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Tip: click a phase code row to filter the parts table below.</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Tip: click phase-code rows to add/remove them from the parts filter below.</div>
           </div>
 
           {/* Filters + Parts table */}
@@ -333,12 +362,46 @@ const Stratus: React.FC = () => {
             <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>
               Parts {partsResult ? `(${partsResult.total.toLocaleString()})` : ''}
             </h2>
-            <PartsFilters filters={filters} options={filterOpts} onChange={onFilterChange} onClear={() => { setFilters({}); setPage(0); }} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <MultiSelect label="Material Type" values={filters.material_type || []} options={opt(filterOpts?.material_types)}
+                renderOption={(v) => MATERIAL_LABELS[v as MaterialType] || v}
+                onChange={(v) => setMulti('material_type', v)} />
+              <MultiSelect label="Status" values={filters.status || []} options={opt(filterOpts?.statuses)}
+                onChange={(v) => setMulti('status', v)} />
+              <MultiSelect label="Phase Code" values={filters.phase_code || []} options={opt(filterOpts?.phase_codes)}
+                onChange={(v) => setMulti('phase_code', v)} />
+              <MultiSelect label="Service Type" values={filters.service_type || []} options={opt(filterOpts?.service_types)}
+                onChange={(v) => setMulti('service_type', v)} />
+              <MultiSelect label="Service" values={filters.service || []} options={opt(filterOpts?.services)}
+                onChange={(v) => setMulti('service', v)} />
+              <MultiSelect label="Area" values={filters.area || []} options={opt(filterOpts?.areas)}
+                onChange={(v) => setMulti('area', v)} />
+              <MultiSelect label="Size" values={filters.size || []} options={opt(filterOpts?.sizes)}
+                onChange={(v) => setMulti('size', v)} />
+              <MultiSelect label="Division" values={filters.division || []} options={opt(filterOpts?.divisions)}
+                onChange={(v) => setMulti('division', v)} />
+              <MultiSelect label="Package" values={filters.package_category || []} options={opt(filterOpts?.package_categories)}
+                onChange={(v) => setMulti('package_category', v)} />
+              <input
+                type="text"
+                placeholder="Search description / CAD ID…"
+                value={filters.search || ''}
+                onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value || undefined })); setPage(0); }}
+                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4, minWidth: 220 }}
+              />
+              {hasAnyFilter(filters) && (
+                <button onClick={() => { setFilters({}); setPage(0); }} style={{ ...btnToggle, color: '#ef4444' }}>
+                  Clear all filters
+                </button>
+              )}
+            </div>
+
             <div style={{ overflowX: 'auto', marginTop: 12 }}>
               <table style={tableStyle}>
                 <thead>
                   <tr>
                     <th style={thStyle}>Phase Code</th>
+                    <th style={thStyle}>Material</th>
                     <th style={thStyle}>Status</th>
                     <th style={thStyle}>Service</th>
                     <th style={thStyle}>Description</th>
@@ -358,12 +421,18 @@ const Stratus: React.FC = () => {
                       <td style={tdStyle}>{p.part_field_phase_code || '-'}</td>
                       <td style={tdStyle}>
                         <span style={{
+                          background: '#f3f4f6', color: '#374151', padding: '2px 8px',
+                          borderRadius: 4, fontSize: 11, whiteSpace: 'nowrap',
+                          fontWeight: p.material_type === 'pipe' ? 700 : 400,
+                        }}>
+                          {p.material_type ? (MATERIAL_LABELS[p.material_type] || p.material_type) : '—'}
+                          {p.material_type_override && <span title="Manual override" style={{ marginLeft: 4 }}>*</span>}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
                           background: STATUS_COLORS[p.part_tracking_status || ''] || '#9ca3af',
-                          color: 'white',
-                          padding: '2px 8px',
-                          borderRadius: 12,
-                          fontSize: 12,
-                          whiteSpace: 'nowrap',
+                          color: 'white', padding: '2px 8px', borderRadius: 12, fontSize: 12, whiteSpace: 'nowrap',
                         }}>
                           {p.part_tracking_status || '—'}
                         </span>
@@ -383,7 +452,7 @@ const Stratus: React.FC = () => {
                     </tr>
                   ))}
                   {partsResult && partsResult.rows.length === 0 && (
-                    <tr><td colSpan={12} style={{ ...tdStyle, textAlign: 'center', padding: 24, color: '#6b7280' }}>No parts match these filters.</td></tr>
+                    <tr><td colSpan={13} style={{ ...tdStyle, textAlign: 'center', padding: 24, color: '#6b7280' }}>No parts match these filters.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -398,54 +467,225 @@ const Stratus: React.FC = () => {
   );
 };
 
-const PartsFilters: React.FC<{
-  filters: StratusPartFilters;
-  options: StratusFilterOptions | undefined;
-  onChange: (key: keyof StratusPartFilters, value: string) => void;
-  onClear: () => void;
-}> = ({ filters, options, onChange, onClear }) => {
-  const opt = (arr?: string[]) => (arr || []).filter(Boolean);
+const hasAnyFilter = (f: StratusPartFilters): boolean => {
+  if (f.search) return true;
+  return (Object.keys(f) as Array<keyof StratusPartFilters>).some((k) => k !== 'search' && Array.isArray(f[k]) && (f[k] as string[]).length > 0);
+};
+
+// ── Pipe LF Summary ──
+const PipeLengthCard: React.FC<{ rows: PipeLengthRow[] }> = ({ rows }) => {
+  if (rows.length === 0) {
+    return (
+      <div style={{ ...cardStyle, marginTop: 16 }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Pipe Length — Earned Value</h2>
+        <div style={{ color: '#6b7280', fontSize: 13 }}>No parts classified as "pipe" in this import. Pipe is auto-detected by description, length, and ServiceType.</div>
+      </div>
+    );
+  }
+  const totalLen = rows.reduce((s, r) => s + num(r.total_length), 0);
+  const installedLen = rows.reduce((s, r) => s + num(r.installed_length), 0);
+  const totalCost = rows.reduce((s, r) => s + num(r.total_cost), 0);
+  const installedCost = rows.reduce((s, r) => s + num(r.installed_cost), 0);
+  const pct = totalLen > 0 ? installedLen / totalLen : 0;
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <Select label="Status" value={filters.status} options={opt(options?.statuses)} onChange={(v) => onChange('status', v)} />
-      <Select label="Phase Code" value={filters.phase_code} options={opt(options?.phase_codes)} onChange={(v) => onChange('phase_code', v)} />
-      <Select label="Service" value={filters.service} options={opt(options?.services)} onChange={(v) => onChange('service', v)} />
-      <Select label="Area" value={filters.area} options={opt(options?.areas)} onChange={(v) => onChange('area', v)} />
-      <Select label="Size" value={filters.size} options={opt(options?.sizes)} onChange={(v) => onChange('size', v)} />
-      <Select label="Division" value={filters.division} options={opt(options?.divisions)} onChange={(v) => onChange('division', v)} />
-      <Select label="Package" value={filters.package_category} options={opt(options?.package_categories)} onChange={(v) => onChange('package_category', v)} />
-      <input
-        type="text"
-        placeholder="Search description / CAD ID…"
-        value={filters.search || ''}
-        onChange={(e) => onChange('search', e.target.value)}
-        style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4, minWidth: 220 }}
-      />
-      {Object.values(filters).some(Boolean) && (
-        <button onClick={onClear} style={{ ...btnToggle, color: '#ef4444' }}>Clear filters</button>
-      )}
+    <div style={{ ...cardStyle, marginTop: 16 }}>
+      <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>Pipe Length — Earned Value</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <Stat label="Estimated LF" value={fmt(totalLen, 1)} />
+        <Stat label="Installed LF" value={fmt(installedLen, 1)} />
+        <Stat label="% LF Installed" value={fmtPct(pct)} accent />
+        <Stat label="Earned $" value={fmtMoney(installedCost)} />
+        <Stat label="Total Pipe $" value={fmtMoney(totalCost)} />
+      </div>
+      <details>
+        <summary style={{ cursor: 'pointer', color: '#3b82f6', fontSize: 13 }}>Breakdown by phase code ({rows.length})</summary>
+        <div style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Phase Code</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Pipe Count</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Estimated LF</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Installed LF</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>% Installed</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Earned $</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Total $</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const tl = num(r.total_length); const il = num(r.installed_length);
+                const p = tl > 0 ? il / tl : 0;
+                return (
+                  <tr key={r.part_field_phase_code || '(blank)'}>
+                    <td style={tdStyle}>{r.part_field_phase_code || '(blank)'}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{r.pipe_count}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(tl, 1)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(il, 1)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: p >= 0.5 ? '#10b981' : '#6b7280' }}>{fmtPct(p)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmtMoney(num(r.installed_cost))}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmtMoney(num(r.total_cost))}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 };
 
-const Select: React.FC<{ label: string; value?: string; options: string[]; onChange: (v: string) => void }> = ({ label, value, options, onChange }) => (
-  <select
-    value={value || ''}
-    onChange={(e) => onChange(e.target.value)}
-    style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4, minWidth: 130 }}
-  >
-    <option value="">{label}: All</option>
-    {options.map((o) => <option key={o} value={o}>{o}</option>)}
-  </select>
+const Stat: React.FC<{ label: string; value: string; accent?: boolean }> = ({ label, value, accent }) => (
+  <div style={{ background: accent ? '#eff6ff' : '#f9fafb', padding: 12, borderRadius: 6 }}>
+    <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#6b7280', letterSpacing: 0.5 }}>{label}</div>
+    <div style={{ fontSize: 22, fontWeight: 700, color: accent ? '#2563eb' : '#111827', marginTop: 4 }}>{value}</div>
+  </div>
 );
+
+// ── Searchable MultiSelect (portal-positioned dropdown) ──
+const MultiSelect: React.FC<{
+  label: string;
+  values: string[];
+  options: string[];
+  renderOption?: (v: string) => string;
+  onChange: (next: string[]) => void;
+}> = ({ label, values, options, renderOption, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) });
+    };
+    updatePos();
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => {
+      const display = renderOption ? renderOption(o) : o;
+      return o.toLowerCase().includes(q) || display.toLowerCase().includes(q);
+    });
+  }, [options, search, renderOption]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((o) => values.includes(o));
+
+  const toggle = (o: string) => {
+    onChange(values.includes(o) ? values.filter((v) => v !== o) : [...values, o]);
+  };
+  const handleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      onChange(values.filter((v) => !filtered.includes(v)));
+    } else {
+      const set = new Set([...values, ...filtered]);
+      onChange(Array.from(set));
+    }
+  };
+
+  const active = values.length > 0;
+  const labelText = active
+    ? `${label}: ${values.length === 1 ? (renderOption ? renderOption(values[0]) : values[0]) : `${values.length} selected`}`
+    : `${label}: All`;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          padding: '6px 10px',
+          border: `1px solid ${active ? '#3b82f6' : '#d1d5db'}`,
+          background: active ? '#eff6ff' : 'white',
+          color: active ? '#1d4ed8' : '#374151',
+          borderRadius: 4, fontSize: 13, cursor: 'pointer', minWidth: 130, textAlign: 'left',
+          fontWeight: active ? 600 : 400,
+        }}
+      >
+        {labelText} ▾
+      </button>
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{
+          position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999,
+          background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: 360, display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{ padding: 8, borderBottom: '1px solid #f3f4f6' }}>
+            <input
+              autoFocus
+              type="text"
+              placeholder={`Search ${label.toLowerCase()}…`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13, boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ padding: '4px 0', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', fontSize: 12 }}>
+            <button type="button" onClick={handleSelectAllFiltered} style={{ background: 'none', border: 'none', padding: '4px 10px', color: '#3b82f6', cursor: 'pointer' }}>
+              {allFilteredSelected ? 'Unselect all' : `Select all${search ? ' (filtered)' : ''}`}
+            </button>
+            {active && (
+              <button type="button" onClick={() => onChange([])} style={{ background: 'none', border: 'none', padding: '4px 10px', color: '#ef4444', cursor: 'pointer' }}>
+                Clear
+              </button>
+            )}
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: 12, color: '#9ca3af', fontSize: 13, textAlign: 'center' }}>No matches</div>
+            ) : (
+              filtered.map((o) => {
+                const checked = values.includes(o);
+                return (
+                  <label
+                    key={o}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 13 }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#f9fafb'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}
+                  >
+                    <input type="checkbox" checked={checked} onChange={() => toggle(o)} />
+                    <span>{renderOption ? renderOption(o) : o}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
 const Pagination: React.FC<{ total: number; page: number; pageSize: number; onPage: (n: number) => void }> = ({ total, page, pageSize, onPage }) => {
   const lastPage = Math.max(0, Math.ceil(total / pageSize) - 1);
   return (
     <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13 }}>
-      <span>
-        Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total.toLocaleString()}
-      </span>
+      <span>Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total.toLocaleString()}</span>
       <div style={{ display: 'flex', gap: 4 }}>
         <button onClick={() => onPage(0)} disabled={page === 0} style={btnToggle}>« First</button>
         <button onClick={() => onPage(Math.max(0, page - 1))} disabled={page === 0} style={btnToggle}>‹ Prev</button>
@@ -508,30 +748,12 @@ function buildPivot(rows: StratusSummaryRow[], metric: Metric) {
 }
 
 // styles
-const cardStyle: React.CSSProperties = {
-  background: 'white',
-  border: '1px solid #e5e7eb',
-  borderRadius: 8,
-  padding: 16,
-};
+const cardStyle: React.CSSProperties = { background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 };
 const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 };
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 10px',
-  borderBottom: '2px solid #e5e7eb',
-  fontWeight: 600,
-  color: '#374151',
-  whiteSpace: 'nowrap',
-};
+const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #e5e7eb', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '6px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' };
-const btnPrimary: React.CSSProperties = {
-  background: '#3b82f6', color: 'white', border: 'none', padding: '8px 16px',
-  borderRadius: 4, fontWeight: 500, cursor: 'pointer',
-};
-const btnToggle: React.CSSProperties = {
-  background: 'white', border: '1px solid #d1d5db', padding: '6px 10px',
-  borderRadius: 4, fontSize: 12, cursor: 'pointer', color: '#374151',
-};
+const btnPrimary: React.CSSProperties = { background: '#3b82f6', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 500, cursor: 'pointer' };
+const btnToggle: React.CSSProperties = { background: 'white', border: '1px solid #d1d5db', padding: '6px 10px', borderRadius: 4, fontSize: 12, cursor: 'pointer', color: '#374151' };
 const btnToggleActive: React.CSSProperties = { ...btnToggle, background: '#3b82f6', color: 'white', borderColor: '#3b82f6' };
 
 export default Stratus;
