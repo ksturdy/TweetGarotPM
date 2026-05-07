@@ -80,4 +80,30 @@ export const phaseScheduleApi = {
       responseType: 'blob',
     });
   },
+
+  syncStratusQuantities: (projectId: number) =>
+    api.post<StratusSyncResult>(`/phase-schedule/project/${projectId}/sync-stratus-quantities`),
 };
+
+export interface StratusSyncRowChange {
+  id: number;
+  name: string;
+  quantity_uom: string;
+  old_quantity: number;
+  new_quantity: number;
+  old_installed: number;
+  new_installed: number;
+}
+
+export interface StratusSyncSkip {
+  id: number;
+  name: string;
+  reason: string;
+}
+
+export interface StratusSyncResult {
+  import_id: number | null;
+  updated: StratusSyncRowChange[];
+  skipped: StratusSyncSkip[];
+  message?: string;
+}

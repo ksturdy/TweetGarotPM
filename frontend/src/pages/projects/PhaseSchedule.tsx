@@ -2465,10 +2465,12 @@ const BulkEditBar: React.FC<{
 const PhaseSchedule: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
+  const { confirm, toast } = useTitanFeedback();
   const [viewMode, setViewMode] = useState<'gantt' | 'grid'>('grid');
   const [gridMode, setGridMode] = useState<'cost' | 'qty'>('cost');
   const [showAddModal, setShowAddModal] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [stratusSyncing, setStratusSyncing] = useState(false);
   const [editingItem, setEditingItem] = useState<PhaseScheduleItem | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
@@ -2874,6 +2876,38 @@ const PhaseSchedule: React.FC = () => {
     }
   };
 
+  const handleStratusSync = async () => {
+    const ok = await confirm({
+      title: 'Sync quantities from Stratus?',
+      message:
+        'This pulls the latest Stratus import and overwrites quantity / quantity-installed on every schedule item with UOM = LF or EA where matching parts are found:\n\n' +
+        '• LF rows → SUM(length)\n' +
+        '• EA rows → COUNT of parts\n\n' +
+        'Hours and costs are not touched. Items with no matching Stratus parts are left alone. Manually entered LF/EA values for matched rows will be replaced.',
+      confirmText: 'Sync',
+    });
+    if (!ok) return;
+    setStratusSyncing(true);
+    try {
+      const res = await phaseScheduleApi.syncStratusQuantities(Number(projectId));
+      const { updated, skipped, import_id, message } = res.data;
+      if (!import_id) {
+        toast.warning(message || 'No Stratus import found for this project. Upload one on the Stratus module first.');
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
+      if (updated.length === 0) {
+        toast.warning(`No quantities updated. ${skipped.length} item(s) skipped (no LF/EA UOM, no linked phase codes, or no matching Stratus parts).`);
+      } else {
+        toast.success(`Synced ${updated.length} item${updated.length === 1 ? '' : 's'} from Stratus.${skipped.length ? ` ${skipped.length} skipped.` : ''}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Stratus sync failed.');
+    } finally {
+      setStratusSyncing(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     setPdfLoading(true);
     try {
@@ -2940,6 +2974,21 @@ const PhaseSchedule: React.FC = () => {
               </div>
             )}
             <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
+            <button
+              onClick={handleStratusSync}
+              disabled={stratusSyncing || scheduleItems.length === 0}
+              title="Sync LF / EA quantities from the latest Stratus import"
+              style={{
+                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+                border: '1px solid #e2e8f0', borderRadius: '6px',
+                backgroundColor: stratusSyncing ? '#f1f5f9' : 'white',
+                color: stratusSyncing ? '#94a3b8' : '#1e293b',
+                cursor: stratusSyncing || scheduleItems.length === 0 ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.3rem'
+              }}
+            >
+              {stratusSyncing ? 'Syncing...' : '☁ Sync Qty from Stratus'}
+            </button>
             <button
               onClick={handleExportPdf}
               disabled={pdfLoading || scheduleItems.length === 0}

@@ -181,4 +181,15 @@ router.put('/project/:projectId/reorder', verifyProjectOwnership, async (req, re
   }
 });
 
+// Sync schedule item quantity / quantity_installed with the latest Stratus import
+// for the project (LF -> SUM(length), EA -> COUNT). Hours and costs are not touched.
+router.post('/project/:projectId/sync-stratus-quantities', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const result = await PhaseSchedule.syncStratusQuantities(req.params.projectId, req.tenantId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

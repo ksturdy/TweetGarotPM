@@ -285,7 +285,120 @@ const PhaseSchedule = {
       );
     }
     return true;
-  }
+  },
+
+  // Sync `quantity` and `quantity_installed` on phase_schedule_items by aggregating
+  // matching rows from the latest stratus_imports for the project. Hours and costs
+  // are explicitly NOT touched. Items with quantity_uom not in ('LF','EA') are skipped.
+  // - LF: quantity = SUM(length); quantity_installed = SUM(length where status=Field Installed)
+  // - EA: quantity = COUNT(*);    quantity_installed = COUNT(*) where status=Field Installed
+  // Phase strings are normalized via RTRIM(TRIM(phase),'- ') on both sides so that
+  // trailing dashes/spaces in vp_phase_codes don't prevent a match.
+  async syncStratusQuantities(projectId, tenantId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Latest import for this project
+      const importRow = await client.query(
+        `SELECT id FROM stratus_imports
+         WHERE tenant_id = $1 AND project_id = $2
+         ORDER BY imported_at DESC LIMIT 1`,
+        [tenantId, projectId]
+      );
+      if (importRow.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return { import_id: null, updated: [], skipped: [], message: 'No Stratus import found for this project.' };
+      }
+      const importId = importRow.rows[0].id;
+
+      // Pull schedule items + their normalized phase keys
+      const itemsResult = await client.query(
+        `SELECT psi.id,
+                psi.name,
+                psi.quantity_uom,
+                psi.quantity AS old_quantity,
+                psi.quantity_installed AS old_installed,
+                ARRAY(
+                  SELECT DISTINCT RTRIM(TRIM(pc.phase), '- ')
+                  FROM vp_phase_codes pc
+                  WHERE pc.id = ANY(psi.phase_code_ids) AND pc.tenant_id = $2
+                ) AS phase_keys
+         FROM phase_schedule_items psi
+         WHERE psi.project_id = $1 AND psi.tenant_id = $2`,
+        [projectId, tenantId]
+      );
+
+      const updated = [];
+      const skipped = [];
+
+      for (const item of itemsResult.rows) {
+        const uom = (item.quantity_uom || '').toUpperCase();
+        if (uom !== 'LF' && uom !== 'EA') {
+          skipped.push({ id: item.id, name: item.name, reason: `UOM '${item.quantity_uom || '(none)'}' is not LF or EA` });
+          continue;
+        }
+        if (!item.phase_keys || item.phase_keys.length === 0) {
+          skipped.push({ id: item.id, name: item.name, reason: 'No phase codes linked' });
+          continue;
+        }
+
+        const agg = await client.query(
+          `SELECT
+             COALESCE(SUM(length), 0)::numeric AS total_length,
+             COALESCE(SUM(CASE WHEN part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS installed_length,
+             COUNT(*)::int AS total_count,
+             COUNT(*) FILTER (WHERE part_tracking_status = 'Field Installed')::int AS installed_count
+           FROM stratus_parts
+           WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
+             AND RTRIM(TRIM(part_field_phase_code), '- ') = ANY($4::text[])`,
+          [tenantId, projectId, importId, item.phase_keys]
+        );
+
+        const a = agg.rows[0];
+        let newQty;
+        let newInstalled;
+        if (uom === 'LF') {
+          newQty = Number(a.total_length);
+          newInstalled = Number(a.installed_length);
+        } else {
+          newQty = a.total_count;
+          newInstalled = a.installed_count;
+        }
+
+        // Skip a row if nothing matched in Stratus (don't zero out manual data silently)
+        if (newQty === 0 && a.total_count === 0) {
+          skipped.push({ id: item.id, name: item.name, reason: 'No matching Stratus parts for these phase codes' });
+          continue;
+        }
+
+        await client.query(
+          `UPDATE phase_schedule_items
+           SET quantity = $1, quantity_installed = $2, updated_at = NOW()
+           WHERE id = $3 AND tenant_id = $4`,
+          [newQty, newInstalled, item.id, tenantId]
+        );
+
+        updated.push({
+          id: item.id,
+          name: item.name,
+          quantity_uom: item.quantity_uom,
+          old_quantity: Number(item.old_quantity),
+          new_quantity: newQty,
+          old_installed: Number(item.old_installed),
+          new_installed: newInstalled,
+        });
+      }
+
+      await client.query('COMMIT');
+      return { import_id: importId, updated, skipped };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
 };
 
 module.exports = PhaseSchedule;
