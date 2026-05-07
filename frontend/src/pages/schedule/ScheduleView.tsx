@@ -41,6 +41,9 @@ const ScheduleView: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <Link to={`/projects/${projectId}/gc-schedule`} className="btn btn-secondary">
+            GC Schedule
+          </Link>
           <button className="btn btn-primary">Add Task</button>
         </div>
       </div>

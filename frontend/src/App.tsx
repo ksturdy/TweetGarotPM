@@ -24,6 +24,7 @@ import ChangeOrderDetail from './pages/changeOrders/ChangeOrderDetail';
 import DailyReportList from './pages/dailyReports/DailyReportList';
 import DailyReportDetail from './pages/dailyReports/DailyReportDetail';
 import ScheduleView from './pages/schedule/ScheduleView';
+import GCScheduleView from './pages/schedule/GCScheduleView';
 import ProjectWeeklyGoals from './pages/projects/ProjectWeeklyGoals';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
 import MarketingList from './pages/marketing/MarketingList';
@@ -494,6 +495,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/issues" element={<ProjectIssueList />} />
                 <Route path="/projects/:projectId/issues/:id" element={<ProjectIssueDetail />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:projectId/gc-schedule" element={<GCScheduleView />} />
                 <Route path="/projects/:projectId/phase-schedule" element={<PhaseSchedule />} />
                 <Route path="/projects/:projectId/stratus" element={<Stratus />} />
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
