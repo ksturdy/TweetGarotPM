@@ -243,6 +243,115 @@ const CTFilterDropdown: React.FC<{
   );
 };
 
+// Phase prefix multi-select filter dropdown (first chunk before "-", e.g. "30")
+const PrefixFilterDropdown: React.FC<{
+  available: string[];
+  selected: Set<string>;
+  onToggle: (prefix: string) => void;
+  onClear: () => void;
+}> = ({ available, selected, onToggle, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      if (!triggerRef.current) return;
+      const r = triggerRef.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 2, left: r.left });
+    };
+    updatePos();
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
+
+  const active = selected.size > 0;
+  const allSelected = available.length > 0 && available.every(p => selected.has(p));
+  const handleSelectAll = () => {
+    if (allSelected) {
+      onClear();
+    } else {
+      // Toggle on any prefix not already in the set
+      available.forEach(p => { if (!selected.has(p)) onToggle(p); });
+    }
+  };
+  return (
+    <>
+      <button ref={triggerRef} onClick={() => setOpen(prev => !prev)}
+        title="Filter by phase prefix"
+        style={{
+          background: active ? '#dbeafe' : 'none', border: active ? '1px solid #3b82f6' : 'none',
+          cursor: 'pointer', padding: '0 3px', fontSize: '0.65rem',
+          color: active ? '#3b82f6' : '#94a3b8', lineHeight: 1, flexShrink: 0,
+          fontWeight: active ? 700 : 400, borderRadius: '3px'
+        }}>
+        {active ? `${selected.size}▾` : '⌕▾'}
+      </button>
+      {open && menuPos && createPortal(
+        <div ref={menuRef} style={{
+          position: 'fixed', top: menuPos.top, left: menuPos.left,
+          zIndex: 9999, background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '140px', maxHeight: '320px', overflow: 'auto',
+          padding: '4px 0', fontSize: '0.75rem'
+        }}>
+          {available.length > 0 && (
+            <>
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+                <input type="checkbox" checked={allSelected} onChange={handleSelectAll} style={{ cursor: 'pointer' }} />
+                <span style={{ color: '#1e293b' }}>Select all</span>
+              </label>
+              <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
+            </>
+          )}
+          {active && (
+            <>
+              <div onClick={() => { onClear(); setOpen(false); }}
+                style={{ padding: '4px 10px', cursor: 'pointer', color: '#ef4444', fontSize: '0.7rem' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+                Clear filter
+              </div>
+              <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
+            </>
+          )}
+          {available.length === 0 && (
+            <div style={{ padding: '6px 10px', color: '#94a3b8', fontStyle: 'italic' }}>No phases</div>
+          )}
+          {available.map(prefix => (
+            <label key={prefix}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
+              <input type="checkbox" checked={selected.has(prefix)} onChange={() => onToggle(prefix)} style={{ cursor: 'pointer' }} />
+              <span style={{ color: '#1e293b', fontFamily: 'monospace' }}>{prefix}</span>
+            </label>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
+
 // Cost type group for summary rows
 interface CostTypeGroup {
   costType: number;
@@ -678,7 +787,11 @@ const GanttView: React.FC<{
   ctFilter: Set<number>;
   onCtFilterToggle: (ct: number) => void;
   onCtFilterClear: () => void;
-}> = ({ items, allItems, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear }) => {
+  availablePrefixes: string[];
+  prefixFilter: Set<string>;
+  onPrefixFilterToggle: (prefix: string) => void;
+  onPrefixFilterClear: () => void;
+}> = ({ items, allItems, months, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
   const ganttRef = useRef<HTMLDivElement>(null);
   const colWidth = 80;
   const rowHeight = 28;
@@ -963,6 +1076,8 @@ const GanttView: React.FC<{
                   fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1
                 }}>&times;</button>
               )}
+              <PrefixFilterDropdown available={availablePrefixes} selected={prefixFilter}
+                onToggle={onPrefixFilterToggle} onClear={onPrefixFilterClear} />
               <button onClick={onSortChange} title={sortDir === 'none' ? 'Sort A-Z' : sortDir === 'asc' ? 'Sort Z-A' : 'Clear sort'}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
@@ -1392,7 +1507,11 @@ const GridView: React.FC<{
   ctFilter: Set<number>;
   onCtFilterToggle: (ct: number) => void;
   onCtFilterClear: () => void;
-}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear }) => {
+  availablePrefixes: string[];
+  prefixFilter: Set<string>;
+  onPrefixFilterToggle: (prefix: string) => void;
+  onPrefixFilterClear: () => void;
+}> = ({ items, allItems, months, mode, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
   // Grid column widths (persisted to localStorage)
   const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
     try { const saved = localStorage.getItem('phaseSchedule_gridCols'); return saved ? { ...GRID_COL_DEFAULTS, ...JSON.parse(saved) } : GRID_COL_DEFAULTS; }
@@ -1670,6 +1789,8 @@ const GridView: React.FC<{
                     fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1
                   }}>&times;</button>
                 )}
+                <PrefixFilterDropdown available={availablePrefixes} selected={prefixFilter}
+                  onToggle={onPrefixFilterToggle} onClear={onPrefixFilterClear} />
                 <button onClick={onSortChange} title={sortDir === 'none' ? 'Sort A-Z' : sortDir === 'asc' ? 'Sort Z-A' : 'Clear sort'}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
@@ -2356,6 +2477,7 @@ const PhaseSchedule: React.FC = () => {
   const [filterText, setFilterText] = useState('');
   const [sortDir, setSortDir] = useState<'none' | 'asc' | 'desc'>('none');
   const [costTypeFilter, setCostTypeFilter] = useState<Set<number>>(new Set());
+  const [prefixFilter, setPrefixFilter] = useState<Set<string>>(new Set());
 
   const toggleCostTypeFilter = useCallback((ct: number) => {
     setCostTypeFilter(prev => {
@@ -2367,6 +2489,18 @@ const PhaseSchedule: React.FC = () => {
 
   const clearCostTypeFilter = useCallback(() => {
     setCostTypeFilter(new Set());
+  }, []);
+
+  const togglePrefixFilter = useCallback((prefix: string) => {
+    setPrefixFilter(prev => {
+      const next = new Set(prev);
+      next.has(prefix) ? next.delete(prefix) : next.add(prefix);
+      return next;
+    });
+  }, []);
+
+  const clearPrefixFilter = useCallback(() => {
+    setPrefixFilter(new Set());
   }, []);
 
   const toggleGroup = useCallback((costType: number) => {
@@ -2465,10 +2599,26 @@ const PhaseSchedule: React.FC = () => {
   const totalEstCost = useMemo(() => scheduleItems.reduce((s, i) => s + parseNum(i.total_est_cost), 0), [scheduleItems]);
   const totalJtdCost = useMemo(() => scheduleItems.reduce((s, i) => s + parseNum(i.total_jtd_cost), 0), [scheduleItems]);
 
+  const availablePrefixes = useMemo(() => {
+    const set = new Set<string>();
+    scheduleItems.forEach(i => {
+      const display = i.phase_code_display || '';
+      const prefix = display.split('-')[0]?.trim();
+      if (prefix) set.add(prefix);
+    });
+    return Array.from(set).sort();
+  }, [scheduleItems]);
+
   const filteredItems = useMemo(() => {
     let result = scheduleItems;
     if (costTypeFilter.size > 0) {
       result = result.filter(i => i.cost_types?.some(ct => costTypeFilter.has(ct)));
+    }
+    if (prefixFilter.size > 0) {
+      result = result.filter(i => {
+        const prefix = (i.phase_code_display || '').split('-')[0]?.trim();
+        return prefix ? prefixFilter.has(prefix) : false;
+      });
     }
     if (filterText.trim()) {
       const raw = filterText.trim().toLowerCase();
@@ -2495,7 +2645,7 @@ const PhaseSchedule: React.FC = () => {
       });
     }
     return result;
-  }, [scheduleItems, filterText, sortDir, costTypeFilter]);
+  }, [scheduleItems, filterText, sortDir, costTypeFilter, prefixFilter]);
 
   const costTypeGroups = useMemo((): CostTypeGroup[] => {
     const groupMap = new Map<number, PhaseScheduleItem[]>();
@@ -2900,12 +3050,14 @@ const PhaseSchedule: React.FC = () => {
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
-              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter} />
+              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
+              availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
           : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
-              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter} />
+              ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
+              availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
       )}
 
       {/* Add Phase Codes Modal */}
