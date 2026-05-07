@@ -27,8 +27,11 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    const printRoot = document.querySelector('.print-root');
-    if (!printRoot) return;
+    const printSource = document.querySelector('.print-root .resume-container');
+    if (!printSource) return;
+
+    const sidebarColor =
+      (template?.layout_config?.sidebar_color as string | undefined) || '#1e3a5f';
 
     const iframe = document.createElement('iframe');
     iframe.style.position = 'absolute';
@@ -40,293 +43,91 @@ const ResumePreviewModal: React.FC<ResumePreviewModalProps> = ({
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
 
+    // Single-page styles that mirror the backend resumePdfGenerator + ResumePreview
+    // exactly. Keep these in lockstep with Resume.css so all three outputs match.
+    const PRINT_STYLES = `
+      @page { size: letter portrait; margin: 0.5in; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 7.5in;
+        height: 10in;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 10pt;
+        line-height: 1.5;
+        color: #1a1a1a;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        overflow: hidden;
+      }
+      .resume-container {
+        display: grid;
+        grid-template-columns: 30% 70%;
+        width: 100%;
+        height: 10in;
+        max-height: 10in;
+        overflow: hidden;
+        page-break-inside: avoid;
+      }
+
+      .resume-sidebar { background-color: ${sidebarColor}; color: white; padding: 2rem 1.5rem; }
+      .photo-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+      .employee-photo { width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid white; }
+      .name-title { text-align: center; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid rgba(255,255,255,0.3); }
+      .employee-name { font-size: 18pt; font-weight: bold; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px; }
+      .job-title { font-size: 11pt; color: #e0e0e0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
+      .years-experience { font-size: 9pt; color: #b0b0b0; }
+      .resume-sidebar-section { margin-bottom: 1.5rem; }
+      .resume-sidebar-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.3); }
+
+      .contact-list { display: flex; flex-direction: column; gap: 0.35rem; }
+      .contact-item { display: flex; align-items: center; gap: 0.5rem; font-size: 8.5pt; line-height: 1.3; word-break: break-word; overflow-wrap: anywhere; }
+      .contact-icon { flex-shrink: 0; width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+      .contact-icon svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .contact-text { flex: 1; min-width: 0; }
+
+      .reference-item { margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); page-break-inside: avoid; }
+      .reference-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+      .reference-name { font-weight: bold; font-size: 10pt; margin-bottom: 0.25rem; }
+      .reference-title, .reference-company, .reference-phone { font-size: 9pt; color: #e0e0e0; margin-bottom: 0.1rem; }
+
+      .hobbies-list { list-style: none; font-size: 9pt; padding: 0; }
+      .hobbies-list li { padding-left: 1rem; margin-bottom: 0.5rem; position: relative; }
+      .hobbies-list li:before { content: "•"; position: absolute; left: 0; color: #10b981; }
+
+      .resume-main-content { background-color: white; padding: 2rem; }
+      .resume-section { margin-bottom: 1.1rem; }
+      .resume-section-title { font-size: 12pt; font-weight: bold; color: ${sidebarColor}; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 0.5rem; padding-bottom: 0.3rem; border-bottom: 3px solid ${sidebarColor}; }
+      .summary-text { font-size: 10pt; line-height: 1.6; text-align: justify; }
+
+      .project-item { margin-bottom: 0.6rem; padding-bottom: 0.6rem; border-bottom: 1px solid #e0e0e0; page-break-inside: avoid; }
+      .project-item:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+      .project-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 0.1rem; }
+      .project-name { font-size: 10.5pt; font-weight: bold; color: ${sidebarColor}; margin: 0; flex: 1; min-width: 0; }
+      .project-role { font-size: 10pt; color: ${sidebarColor}; font-weight: 700; margin: 0; white-space: nowrap; flex-shrink: 0; }
+      .project-subheader { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
+      .project-client { font-size: 8.5pt; color: #555; margin: 0; flex: 1; min-width: 0; }
+      .project-dates { font-size: 8.5pt; color: #666; font-style: italic; margin: 0; white-space: nowrap; flex-shrink: 0; text-align: right; }
+
+      .education-text { font-size: 10pt; line-height: 1.6; margin-bottom: 1rem; white-space: pre-line; }
+      .certifications-list { list-style: none; font-size: 10pt; padding: 0; }
+      .certifications-list li { padding-left: 1.5rem; margin-bottom: 0.5rem; position: relative; }
+      .certifications-list li:before { content: "✓"; position: absolute; left: 0; color: #10b981; font-weight: bold; }
+
+      .skills-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .skill-pill { display: inline-block; padding: 0.4rem 0.8rem; background-color: #f0f0f0; color: ${sidebarColor}; border-radius: 20px; font-size: 9pt; font-weight: 600; }
+
+      .languages-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .language-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background-color: #f8f8f8; border-radius: 4px; }
+      .language-name { font-size: 10pt; font-weight: bold; color: ${sidebarColor}; }
+      .language-proficiency { font-size: 9pt; color: #666; }
+    `;
+
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><title>Resume - ${resume.employee_name}</title>
-      <style>
-        /* Resume Preview Styles */
-        @page { margin: 0.5in; }
-        body { margin: 0; padding: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-        .no-print { display: none !important; }
-
-        .resume-container {
-          display: grid;
-          grid-template-columns: 30% 70%;
-          width: 100%;
-          min-height: 100vh;
-          font-family: Arial, Helvetica, sans-serif;
-          font-size: 10pt;
-          line-height: 1.5;
-          color: #1a1a1a;
-        }
-
-        /* Sidebar Styles */
-        .resume-sidebar {
-          background-color: #1e3a5f;
-          color: white;
-          padding: 2rem 1.5rem;
-        }
-
-        .photo-container {
-          display: flex;
-          justify-content: center;
-          margin-bottom: 1.5rem;
-        }
-
-        .employee-photo {
-          width: 150px;
-          height: 150px;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 4px solid white;
-        }
-
-        .name-title {
-          text-align: center;
-          margin-bottom: 2rem;
-          padding-bottom: 1.5rem;
-          border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .employee-name {
-          font-size: 18pt;
-          font-weight: bold;
-          margin-bottom: 0.5rem;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-
-        .job-title {
-          font-size: 11pt;
-          color: #e0e0e0;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 0.25rem;
-        }
-
-        .years-experience {
-          font-size: 9pt;
-          color: #b0b0b0;
-        }
-
-        .resume-sidebar-section {
-          margin-bottom: 1.5rem;
-        }
-
-        .resume-sidebar-title {
-          font-size: 11pt;
-          font-weight: bold;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin-bottom: 0.75rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .contact-item {
-          display: flex;
-          align-items: flex-start;
-          margin-bottom: 0.75rem;
-          font-size: 9pt;
-          line-height: 1.4;
-        }
-
-        .contact-icon {
-          margin-right: 0.5rem;
-          flex-shrink: 0;
-        }
-
-        .reference-item {
-          margin-bottom: 1rem;
-          padding-bottom: 1rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .reference-item:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
-          margin-bottom: 0;
-        }
-
-        .reference-name {
-          font-weight: bold;
-          font-size: 10pt;
-          margin-bottom: 0.25rem;
-        }
-
-        .reference-title, .reference-company, .reference-phone {
-          font-size: 9pt;
-          color: #e0e0e0;
-          margin-bottom: 0.1rem;
-        }
-
-        .hobbies-list {
-          list-style: none;
-          font-size: 9pt;
-          padding: 0;
-        }
-
-        .hobbies-list li {
-          padding-left: 1rem;
-          margin-bottom: 0.5rem;
-          position: relative;
-        }
-
-        .hobbies-list li:before {
-          content: "•";
-          position: absolute;
-          left: 0;
-          color: #10b981;
-        }
-
-        /* Main Content Styles */
-        .resume-main-content {
-          background-color: white;
-          padding: 2rem;
-        }
-
-        .resume-section {
-          margin-bottom: 2rem;
-        }
-
-        .resume-section-title {
-          font-size: 13pt;
-          font-weight: bold;
-          color: #1e3a5f;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          margin-bottom: 1rem;
-          padding-bottom: 0.5rem;
-          border-bottom: 3px solid #1e3a5f;
-        }
-
-        .summary-text {
-          font-size: 10pt;
-          line-height: 1.6;
-          text-align: justify;
-        }
-
-        .project-item {
-          margin-bottom: 1.5rem;
-          padding-bottom: 1.5rem;
-          border-bottom: 1px solid #e0e0e0;
-          page-break-inside: avoid;
-        }
-
-        .project-item:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
-          margin-bottom: 0;
-        }
-
-        .project-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          margin-bottom: 0.5rem;
-        }
-
-        .project-name {
-          font-size: 11pt;
-          font-weight: bold;
-          color: #1e3a5f;
-          margin-bottom: 0.25rem;
-        }
-
-        .project-role {
-          font-size: 10pt;
-          color: #1e3a5f;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .project-dates {
-          font-size: 9pt;
-          color: #666;
-          font-style: italic;
-          margin-bottom: 0.5rem;
-        }
-
-        .project-details {
-          font-size: 9pt;
-          color: #555;
-          margin-bottom: 0.5rem;
-        }
-
-        .project-description {
-          font-size: 10pt;
-          line-height: 1.5;
-        }
-
-        .education-text {
-          font-size: 10pt;
-          line-height: 1.6;
-          margin-bottom: 1rem;
-          white-space: pre-line;
-        }
-
-        .certifications-list {
-          list-style: none;
-          font-size: 10pt;
-          padding: 0;
-        }
-
-        .certifications-list li {
-          padding-left: 1.5rem;
-          margin-bottom: 0.5rem;
-          position: relative;
-        }
-
-        .certifications-list li:before {
-          content: "✓";
-          position: absolute;
-          left: 0;
-          color: #10b981;
-          font-weight: bold;
-        }
-
-        .skills-grid {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-        }
-
-        .skill-pill {
-          display: inline-block;
-          padding: 0.4rem 0.8rem;
-          background-color: #f0f0f0;
-          color: #1e3a5f;
-          border-radius: 20px;
-          font-size: 9pt;
-          font-weight: 600;
-        }
-
-        .languages-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-        }
-
-        .language-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.5rem;
-          background-color: #f8f8f8;
-          border-radius: 4px;
-        }
-
-        .language-name {
-          font-size: 10pt;
-          font-weight: bold;
-          color: #1e3a5f;
-        }
-
-        .language-proficiency {
-          font-size: 9pt;
-          color: #666;
-        }
-      </style>
-      </head><body>${printRoot.innerHTML}</body></html>`);
+      <style>${PRINT_STYLES}</style>
+      </head><body>${printSource.outerHTML}</body></html>`);
     doc.close();
 
     // Wait for images to load before printing

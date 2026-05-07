@@ -295,10 +295,11 @@ function generateProjectsSection(projects) {
 
     // Layout: row 1 = title left + value right; row 2 = client left + dates right.
     // Sq ft and description are intentionally not shown.
+    // Match the live preview exactly — plain "Client:" prefix, no bold.
     const clientParts = [];
     if (proj.customer_name) clientParts.push(escapeHtml(proj.customer_name));
     if (proj.location) clientParts.push(escapeHtml(proj.location));
-    const clientLine = clientParts.length > 0 ? `<strong>Client:</strong> ${clientParts.join(' • ')}` : '';
+    const clientLine = clientParts.length > 0 ? `Client: ${clientParts.join(' • ')}` : '';
 
     const valueText = formatCurrency(proj.project_value);
     const showSubheader = !!(clientLine || dateRange);
