@@ -2877,10 +2877,14 @@ const PhaseSchedule: React.FC = () => {
   const handleExportPdf = async () => {
     setPdfLoading(true);
     try {
+      // Only send IDs when filters narrow the set — otherwise omit so the
+      // backend keeps its existing "all items" behavior.
+      const filtersActive = filteredItems.length < scheduleItems.length;
       const response = await phaseScheduleApi.downloadPdf(
         Number(projectId),
         viewMode,
-        viewMode === 'grid' ? gridMode : undefined
+        viewMode === 'grid' ? gridMode : undefined,
+        filtersActive ? filteredItems.map(i => i.id) : undefined
       );
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const a = document.createElement('a');

@@ -53,9 +53,28 @@ router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (re
     const view = req.query.view || 'grid';
     const mode = req.query.mode || 'cost';
 
-    const items = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
-    if (!items || items.length === 0) {
+    const allItems = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
+    if (!allItems || allItems.length === 0) {
       return res.status(400).json({ error: 'No schedule items to export' });
+    }
+
+    // Optional itemIds filter — comma-separated list of schedule item ids the
+    // client wants included. Honors the frontend cost-type / phase-prefix /
+    // search filters in the exported PDF.
+    let items = allItems;
+    if (req.query.itemIds) {
+      const allowed = new Set(
+        String(req.query.itemIds)
+          .split(',')
+          .map(s => parseInt(s, 10))
+          .filter(n => Number.isFinite(n))
+      );
+      if (allowed.size > 0) {
+        items = allItems.filter(i => allowed.has(i.id));
+      }
+      if (items.length === 0) {
+        return res.status(400).json({ error: 'No schedule items match the selected filters' });
+      }
     }
 
     const project = req.project;
