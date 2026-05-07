@@ -473,29 +473,37 @@ const hasAnyFilter = (f: StratusPartFilters): boolean => {
 };
 
 // ── Pipe LF Summary ──
+// Tracks physical progress (LF + install hours). Stratus's material dollars are
+// excluded on purpose — they reflect material cost, not earned labor value.
+// Labor-rate × installed-hours rollups belong in the Phase Schedule view, not here.
 const PipeLengthCard: React.FC<{ rows: PipeLengthRow[] }> = ({ rows }) => {
   if (rows.length === 0) {
     return (
       <div style={{ ...cardStyle, marginTop: 16 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Pipe Length — Earned Value</h2>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Pipe — Installation Progress</h2>
         <div style={{ color: '#6b7280', fontSize: 13 }}>No parts classified as "pipe" in this import. Pipe is auto-detected by description, length, and ServiceType.</div>
       </div>
     );
   }
   const totalLen = rows.reduce((s, r) => s + num(r.total_length), 0);
   const installedLen = rows.reduce((s, r) => s + num(r.installed_length), 0);
-  const totalCost = rows.reduce((s, r) => s + num(r.total_cost), 0);
-  const installedCost = rows.reduce((s, r) => s + num(r.installed_cost), 0);
-  const pct = totalLen > 0 ? installedLen / totalLen : 0;
+  const totalHrs = rows.reduce((s, r) => s + num(r.total_hours), 0);
+  const installedHrs = rows.reduce((s, r) => s + num(r.installed_hours), 0);
+  const lfPct = totalLen > 0 ? installedLen / totalLen : 0;
+  const hrsPct = totalHrs > 0 ? installedHrs / totalHrs : 0;
   return (
     <div style={{ ...cardStyle, marginTop: 16 }}>
-      <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>Pipe Length — Earned Value</h2>
+      <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Pipe — Installation Progress</h2>
+      <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 12 }}>
+        Quantities only. Stratus dollar fields are material cost, not labor — earned labor value belongs on the Phase Schedule.
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
         <Stat label="Estimated LF" value={fmt(totalLen, 1)} />
         <Stat label="Installed LF" value={fmt(installedLen, 1)} />
-        <Stat label="% LF Installed" value={fmtPct(pct)} accent />
-        <Stat label="Earned $" value={fmtMoney(installedCost)} />
-        <Stat label="Total Pipe $" value={fmtMoney(totalCost)} />
+        <Stat label="% LF Installed" value={fmtPct(lfPct)} accent />
+        <Stat label="Estimated Hrs" value={fmt(totalHrs, 1)} />
+        <Stat label="Installed Hrs" value={fmt(installedHrs, 1)} />
+        <Stat label="% Hrs Installed" value={fmtPct(hrsPct)} />
       </div>
       <details>
         <summary style={{ cursor: 'pointer', color: '#3b82f6', fontSize: 13 }}>Breakdown by phase code ({rows.length})</summary>
@@ -505,26 +513,30 @@ const PipeLengthCard: React.FC<{ rows: PipeLengthRow[] }> = ({ rows }) => {
               <tr>
                 <th style={thStyle}>Phase Code</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Pipe Count</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Estimated LF</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Installed LF</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>% Installed</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Earned $</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Total $</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Est LF</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Inst LF</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>% LF</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Est Hrs</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Inst Hrs</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>% Hrs</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
                 const tl = num(r.total_length); const il = num(r.installed_length);
-                const p = tl > 0 ? il / tl : 0;
+                const th = num(r.total_hours); const ih = num(r.installed_hours);
+                const lp = tl > 0 ? il / tl : 0;
+                const hp = th > 0 ? ih / th : 0;
                 return (
                   <tr key={r.part_field_phase_code || '(blank)'}>
                     <td style={tdStyle}>{r.part_field_phase_code || '(blank)'}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{r.pipe_count}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(tl, 1)}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(il, 1)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: p >= 0.5 ? '#10b981' : '#6b7280' }}>{fmtPct(p)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmtMoney(num(r.installed_cost))}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmtMoney(num(r.total_cost))}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: lp >= 0.5 ? '#10b981' : '#6b7280' }}>{fmtPct(lp)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(th, 1)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>{fmt(ih, 1)}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: hp >= 0.5 ? '#10b981' : '#6b7280' }}>{fmtPct(hp)}</td>
                   </tr>
                 );
               })}
