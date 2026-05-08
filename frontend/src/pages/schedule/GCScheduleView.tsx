@@ -30,6 +30,76 @@ const daysBetween = (a: string | null, b: string | null): number | null => {
   return Math.round((db - da) / 86400000);
 };
 
+// Renders the "What changed" cell as a verdict-first list:
+//   "Finish Date  Delayed by 7 days     (Mar 26, 2026 → Apr 2, 2026)"
+// The verdict is bold and colored; the values are muted context. Reads the
+// delta metadata the backend attaches to each diff so we don't have to
+// re-compute days/points on the client.
+const renderChangeLines = (diffs: Record<string, any>): React.ReactNode => {
+  const order = ['start', 'finish', 'duration', 'percent', 'name'];
+  const keys = Object.keys(diffs).sort((a, b) => {
+    const ai = order.indexOf(a); const bi = order.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  const days = (n: number) => `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'}`;
+
+  const row = (label: string, verdict: string, color: string, context: React.ReactNode) => (
+    <div key={label} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', columnGap: 10, alignItems: 'baseline', padding: '1px 0' }}>
+      <strong style={{ color: '#374151' }}>{label}</strong>
+      <span>
+        <span style={{ color, fontWeight: 600 }}>{verdict}</span>
+        <span style={{ color: '#9ca3af', marginLeft: 8 }}>{context}</span>
+      </span>
+    </div>
+  );
+
+  const dateRow = (label: string, v: any) => {
+    const d: number | null = v.deltaDays;
+    let verdict = '—'; let color = '#6b7280';
+    if (d != null) {
+      if (d > 0) { verdict = `Delayed by ${days(d)}`; color = '#dc2626'; }
+      else if (d < 0) { verdict = `Earlier by ${days(d)}`; color = '#16a34a'; }
+      else verdict = 'No change';
+    } else if (!v.from && v.to) { verdict = 'Date set'; color = '#16a34a'; }
+    else if (v.from && !v.to) { verdict = 'Date cleared'; color = '#dc2626'; }
+    return row(label, verdict, color, <>({fmtDate(v.from)} → {fmtDate(v.to)})</>);
+  };
+
+  const durRow = (v: any) => {
+    const d: number | null = v.deltaDays;
+    let verdict = '—'; let color = '#6b7280';
+    if (d != null) {
+      if (d > 0) { verdict = `Increased by ${days(d)}`; color = '#dc2626'; }
+      else if (d < 0) { verdict = `Decreased by ${days(d)}`; color = '#16a34a'; }
+      else verdict = 'No change';
+    } else if (v.from == null && v.to != null) verdict = 'Set';
+    else if (v.from != null && v.to == null) verdict = 'Cleared';
+    return row('Duration', verdict, color, <>({v.from ?? '-'} → {v.to ?? '-'} days)</>);
+  };
+
+  const pctRow = (v: any) => {
+    const d: number | null = v.deltaPoints;
+    let verdict = '—'; let color = '#6b7280';
+    if (d != null) {
+      if (d > 0) { verdict = `Increased by ${Math.abs(d)} pts`; color = '#16a34a'; }
+      else if (d < 0) { verdict = `Decreased by ${Math.abs(d)} pts`; color = '#dc2626'; }
+      else verdict = 'No change';
+    }
+    return row('% Complete', verdict, color, <>({v.from ?? '-'}% → {v.to ?? '-'}%)</>);
+  };
+
+  return keys.map((k) => {
+    const v = diffs[k];
+    if (k === 'start') return dateRow('Start Date', v);
+    if (k === 'finish') return dateRow('Finish Date', v);
+    if (k === 'duration') return durRow(v);
+    if (k === 'percent') return pctRow(v);
+    if (k === 'name') return row('Name', 'Renamed', '#6b7280', <>("{String(v.from ?? '')}" → "{String(v.to ?? '')}")</>);
+    return null;
+  });
+};
+
 const fmtTimestamp = (s: string | null | undefined): string => {
   if (!s) return '-';
   const d = new Date(s);
@@ -550,19 +620,7 @@ const DiffSection: React.FC<{ title: string; rows: any[]; kind: 'added' | 'remov
               <td style={tdStyle}>{r.name || r.activity_name}{r.is_mechanical ? ' ⚙' : ''}</td>
               {kind === 'changed' ? (
                 <td style={{ ...tdStyle, fontSize: 12, whiteSpace: 'normal' }}>
-                  {Object.entries(r.diffs).map(([k, v]: any) => {
-                    const isDate = k === 'start' || k === 'finish';
-                    const fmt = (val: unknown) => {
-                      if (val == null || val === '') return '-';
-                      if (isDate) return fmtDate(String(val));
-                      return String(val);
-                    };
-                    return (
-                      <div key={k}>
-                        <strong>{k}:</strong> {fmt(v.from)} → {fmt(v.to)}
-                      </div>
-                    );
-                  })}
+                  {renderChangeLines(r.diffs)}
                 </td>
               ) : (
                 <>

@@ -332,18 +332,26 @@ async function parsePDF(buffer) {
 
     // Strip dates from the rest to leave the name. P6 PDF rows look like:
     //   "<name>  <dur>  <start> [A]  <finish> [A]  <float>  <variance>"
-    // After dropping the dates we want to also drop the trailing duration /
-    // float / 'A' actual-flag columns so the activity name reads cleanly.
-    let name = rest;
+    // We need to drop the trailing duration / float / variance numbers and
+    // the 'A' actual-flag and '*' constraint markers. Run an iterative pass
+    // so it doesn't matter whether a row has 1, 2, or 3 trailing columns —
+    // we strip the rightmost token until nothing more matches. This makes
+    // the output deterministic across different P6 print layouts so the
+    // diff doesn't flag phantom name changes between uploads.
+    let name = rest.normalize('NFKC');
     for (const d of dates) name = name.replace(d, '');
-    name = name.replace(/\s+A\s+/g, ' ').replace(/\s+A$/i, '');
-    name = name.replace(/\s{2,}/g, ' ').trim();
-    // Drop trailing duration/float/variance number tokens (e.g. " 0 38" or " 4 94 0").
-    name = name.replace(/\s+[\-\d.]+(?:\s+[\-\d.]+){0,3}$/, '').trim();
-    // Also drop any leading lone duration number ("139 ", "0 ") if it sneaks through.
-    name = name.replace(/^\d+\s+/, '').trim();
-    // Tab characters between ID/name in P6 PDF — collapse.
     name = name.replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    let prev;
+    do {
+      prev = name;
+      name = name
+        .replace(/\s+A(?=\s|$)/g, '')          // 'A' actual flag tokens
+        .replace(/\s+\*(?=\s|$)/g, '')          // '*' constraint flag tokens
+        .replace(/\s+-?\d+(?:\.\d+)?\s*$/, '')  // trailing number (dur/float/variance)
+        .replace(/\s+/g, ' ')
+        .trim();
+    } while (name !== prev);
+    name = name.replace(/^-?\d+(?:\.\d+)?\s+/, '').trim(); // strip a leading lone number
     if (!name && !activity_id) continue;
 
     const start = coerceDate(dates[0]);

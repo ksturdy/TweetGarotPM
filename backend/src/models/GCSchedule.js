@@ -162,6 +162,15 @@ const GCSchedule = {
   // added (only in B), removed (only in A), and changed (in both, but
   // start/finish/duration/percent_complete or name differ). Match key is
   // activity_id; rows without an activity_id are skipped from the diff.
+  //
+  // Each date/numeric diff is annotated with direction + magnitude so the
+  // UI can render "pushed back 7 days" instead of just two ISO strings.
+  // We also suppress noise diffs:
+  //   • name diffs where the only difference is trailing P6 column residue
+  //     (e.g. "Steel Submittals (3 weeks)" vs "Steel Submittals (3 weeks) 0 A")
+  //   • duration diffs that are pure backfills — one side was null while the
+  //     start/finish on both sides match (the duration was just computed
+  //     after-the-fact and isn't a real schedule change)
   async diffVersions({ versionAId, versionBId }) {
     const aRows = await db.query(
       `SELECT activity_id, activity_name, start_date, finish_date,
@@ -181,6 +190,32 @@ const GCSchedule = {
     const aMap = new Map(aRows.rows.map((r) => [r.activity_id, r]));
     const bMap = new Map(bRows.rows.map((r) => [r.activity_id, r]));
 
+    const normalizeName = (s) => String(s || '')
+      .replace(/\s+[\dA*\.\-]+(?:\s+[A*])*\s*$/, '') // strip trailing P6 residue: " 0 A", " -3", " 0 *"
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+    // Postgres returns DATE columns as JS Date objects (not strings), so
+    // pass through new Date() directly — String() on a Date produces a
+    // locale string that won't reparse, which would silently null the delta.
+    const dayDiff = (from, to) => {
+      if (from == null || to == null) return null;
+      const fa = new Date(from).getTime();
+      const fb = new Date(to).getTime();
+      if (Number.isNaN(fa) || Number.isNaN(fb)) return null;
+      return Math.round((fb - fa) / 86400000);
+    };
+
+    // Effective duration: prefer the stored value, but fall back to
+    // (finish - start) so old uploads with null duration_days still
+    // produce a meaningful delta when dates are present on both sides.
+    const effectiveDuration = (row) => {
+      if (row.duration_days != null) return Number(row.duration_days);
+      const d = dayDiff(row.start_date, row.finish_date);
+      return d != null && d >= 0 ? d : null;
+    };
+
     const added = [];
     const removed = [];
     const changed = [];
@@ -191,11 +226,45 @@ const GCSchedule = {
         added.push(b);
       } else {
         const diffs = {};
-        if ((a.activity_name || '') !== (b.activity_name || '')) diffs.name = { from: a.activity_name, to: b.activity_name };
-        if (String(a.start_date || '') !== String(b.start_date || '')) diffs.start = { from: a.start_date, to: b.start_date };
-        if (String(a.finish_date || '') !== String(b.finish_date || '')) diffs.finish = { from: a.finish_date, to: b.finish_date };
-        if (String(a.duration_days || '') !== String(b.duration_days || '')) diffs.duration = { from: a.duration_days, to: b.duration_days };
-        if (String(a.percent_complete || '') !== String(b.percent_complete || '')) diffs.percent = { from: a.percent_complete, to: b.percent_complete };
+
+        // Name — only flag real semantic changes (ignore PDF cleanup residue)
+        if (normalizeName(a.activity_name) !== normalizeName(b.activity_name)) {
+          diffs.name = { from: a.activity_name, to: b.activity_name };
+        }
+
+        // Start date — earlier (-) or delayed (+) by N days
+        const startA = a.start_date ? new Date(a.start_date).toISOString().slice(0, 10) : null;
+        const startB = b.start_date ? new Date(b.start_date).toISOString().slice(0, 10) : null;
+        if (startA !== startB) {
+          diffs.start = { from: a.start_date, to: b.start_date, deltaDays: dayDiff(a.start_date, b.start_date) };
+        }
+
+        // Finish date
+        const finA = a.finish_date ? new Date(a.finish_date).toISOString().slice(0, 10) : null;
+        const finB = b.finish_date ? new Date(b.finish_date).toISOString().slice(0, 10) : null;
+        if (finA !== finB) {
+          diffs.finish = { from: a.finish_date, to: b.finish_date, deltaDays: dayDiff(a.finish_date, b.finish_date) };
+        }
+
+        // Duration — compare effective durations (stored OR start→finish derived)
+        // so rows uploaded before the duration-backfill don't show phantom
+        // "Set (- → N days)" diffs. Real change = real change.
+        const durA = effectiveDuration(a);
+        const durB = effectiveDuration(b);
+        if (durA !== durB) {
+          diffs.duration = {
+            from: durA, to: durB,
+            deltaDays: durA != null && durB != null ? +(durB - durA).toFixed(2) : null,
+          };
+        }
+
+        // Percent complete
+        const pctA = a.percent_complete != null ? Number(a.percent_complete) : null;
+        const pctB = b.percent_complete != null ? Number(b.percent_complete) : null;
+        if (pctA !== pctB) {
+          diffs.percent = { from: pctA, to: pctB, deltaPoints: pctA != null && pctB != null ? +(pctB - pctA).toFixed(2) : null };
+        }
+
         if (Object.keys(diffs).length) {
           changed.push({ activity_id: aid, name: b.activity_name, is_mechanical: b.is_mechanical, wbs_code: b.wbs_code, diffs });
         }
