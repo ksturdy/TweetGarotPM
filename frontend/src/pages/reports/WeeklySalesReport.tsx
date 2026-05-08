@@ -67,13 +67,13 @@ function shiftWeek(weekStart: string, delta: number): string {
 // ── Preferences ──────────────────────────────────────────
 
 interface WeeklySalesPreferences {
-  visibleSections: { kpis: boolean; newOpps: boolean; activities: boolean; wonLost: boolean };
+  visibleSections: { kpis: boolean; newOpps: boolean; activities: boolean; wonLost: boolean; newJobs: boolean };
   visibleLocations: string[];
   locationOrder: string[];
 }
 
 const DEFAULT_PREFS: WeeklySalesPreferences = {
-  visibleSections: { kpis: true, newOpps: true, activities: true, wonLost: true },
+  visibleSections: { kpis: true, newOpps: true, activities: true, wonLost: true, newJobs: true },
   visibleLocations: ['NEW', 'CW', 'WW', 'AZ'],
   locationOrder: ['NEW', 'CW', 'WW', 'AZ'],
 };
@@ -83,7 +83,14 @@ const PREFS_KEY = 'weeklySalesReportPrefs';
 function loadPrefs(): WeeklySalesPreferences {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      return {
+        ...DEFAULT_PREFS,
+        ...saved,
+        visibleSections: { ...DEFAULT_PREFS.visibleSections, ...(saved.visibleSections || {}) },
+      };
+    }
   } catch { /* ignore */ }
   return { ...DEFAULT_PREFS };
 }
@@ -383,7 +390,7 @@ const SettingsPanel: React.FC<{
       <div style={{ display: 'flex', gap: '3rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Sections</div>
-          {([['kpis', 'KPI Cards'], ['newOpps', 'New Opportunities'], ['activities', 'Activities'], ['wonLost', 'Won / Lost']] as const).map(([key, label]) => (
+          {([['kpis', 'KPI Cards'], ['newOpps', 'New Opportunities'], ['activities', 'Activities'], ['wonLost', 'Won / Lost'], ['newJobs', 'Newly Created Contracts']] as const).map(([key, label]) => (
             <label key={key} style={{ display: 'flex', alignItems: 'center', marginBottom: '0.375rem', fontSize: '0.8125rem', cursor: 'pointer' }}>
               <input type="checkbox" checked={prefs.visibleSections[key]} onChange={() => toggleSection(key)} style={checkboxStyle} />
               {label}
@@ -677,7 +684,7 @@ const WeeklySalesReport: React.FC = () => {
       )}
 
       {/* Newly Created Contracts */}
-      {data?.new_jobs && data.new_jobs.length > 0 && (
+      {prefs.visibleSections.newJobs && data?.new_jobs && data.new_jobs.length > 0 && (
         <div className="sales-table-section" style={{ position: 'relative', overflow: 'hidden', marginBottom: '1rem' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(135deg, #059669, #10b981)' }} />
           <div className="sales-table-header" style={{ paddingTop: '0.875rem' }}>

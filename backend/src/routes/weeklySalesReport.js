@@ -4,6 +4,7 @@ const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const VistaData = require('../models/VistaData');
+const Project = require('../models/Project');
 const { calcBacklogSnapshot } = require('../utils/backlogFitCalculator');
 
 router.use(authenticate);
@@ -170,15 +171,18 @@ async function buildWeeklySalesData(tenantId, weekStart) {
         WHEN COUNT(${GM_EXPR}) > 0
         THEN AVG(${GM_EXPR}) * 100
         ELSE NULL
-      END AS avg_project_gm_pct,
-      COUNT(*) FILTER (WHERE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
-                         AND p.override_gm_percent IS NOT NULL)::int AS gm_override_count
+      END AS avg_project_gm_pct
     FROM projects p
     LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
     WHERE p.tenant_id = $1
       AND COALESCE(vc.backlog, p.backlog) > 0
       AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
   `, [tenantId]);
+
+  // Use the same GM override count the Projects list page shows, so the two stay
+  // in lockstep. Counts every project with override_gm_percent set whose underlying
+  // GM is still ~100% (regardless of backlog/status).
+  const gmOverrideCount = await Project.countGmOverrides(tenantId);
 
   // Backlog projections: use the contour-based revenue projection system (same as backlog fit report).
   // Computes per-contract remaining backlog at 6 and 12 months with weighted GM%.
@@ -204,7 +208,9 @@ async function buildWeeklySalesData(tenantId, weekStart) {
   // the linked project since contract-level employee/department links are often
   // null on import.
   // Sub-jobs (e.g. "44448-10", "44448-20") are excluded — only parent
-  // contracts (whose Vista contract_number has no hyphen suffix) are shown.
+  // contracts are shown. Parent contract numbers in Vista typically end with a
+  // trailing hyphen (e.g. "44448-"), so we filter on "hyphen followed by another
+  // character" rather than "contains a hyphen".
   const newJobsResult = await db.query(`
     SELECT
       vc.id,
@@ -235,7 +241,7 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     WHERE vc.tenant_id = $1
       AND vc.created_at >= $2::date
       AND vc.created_at < ($2::date + INTERVAL '7 days')
-      AND vc.contract_number NOT LIKE '%-%'
+      AND vc.contract_number NOT LIKE '%-_%'
     ORDER BY vc.created_at DESC
   `, [tenantId, weekStart]);
 
@@ -348,7 +354,7 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     backlog_12mo_gm_pct: snapshot.backlog_12mo_gm_pct,
     weighted_gm_pct: backlogRow.weighted_gm_pct != null ? parseFloat(backlogRow.weighted_gm_pct) : null,
     avg_project_gm_pct: backlogRow.avg_project_gm_pct != null ? parseFloat(backlogRow.avg_project_gm_pct) : null,
-    gm_override_count: parseInt(backlogRow.gm_override_count) || 0,
+    gm_override_count: gmOverrideCount,
   };
 
   // Persist snapshot only when the requested week is the actual current week.
