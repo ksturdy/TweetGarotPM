@@ -396,16 +396,23 @@ const fmtDate = (d: string | null | undefined): string => {
   if (!d) return '';
   return d.substring(0, 10);
 };
+// Parse a YYYY-MM-DD or full-ISO string as local-midnight Date (avoids UTC shift)
+const ymdToDate = (d: string | null | undefined): Date | null => {
+  if (!d) return null;
+  return new Date(d.substring(0, 10) + 'T00:00:00');
+};
 // Short date display: MM/dd/yy
 const fmtDateShort = (d: string | null | undefined): string => {
-  if (!d) return '';
-  try { return format(new Date(d + 'T00:00:00'), 'MM/dd/yy'); } catch { return ''; }
+  const dt = ymdToDate(d);
+  if (!dt) return '';
+  try { return format(dt, 'MM/dd/yy'); } catch { return ''; }
 };
 
 // Compute duration in calendar days between two dates (inclusive)
 const getDuration = (start: string | null, end: string | null): number => {
-  if (!start || !end) return 0;
-  return differenceInCalendarDays(new Date(end + 'T00:00:00'), new Date(start + 'T00:00:00')) + 1;
+  const s = ymdToDate(start), e = ymdToDate(end);
+  if (!s || !e) return 0;
+  return differenceInCalendarDays(e, s) + 1;
 };
 
 // Generate months between two dates
@@ -442,8 +449,8 @@ const computeMonthlyValues = (
 
   if (total <= 0) return values;
 
-  const startDate = startOfMonth(new Date(item.start_date + 'T00:00:00'));
-  const endDate = startOfMonth(new Date(item.end_date + 'T00:00:00'));
+  const startDate = startOfMonth(ymdToDate(item.start_date)!);
+  const endDate = startOfMonth(ymdToDate(item.end_date)!);
 
   const itemMonths = months.filter(m => m >= startDate && m <= endDate);
   if (itemMonths.length === 0) return values;
@@ -595,8 +602,8 @@ const EditItemPanel: React.FC<{
 }> = ({ item, months, onSave, onDelete, onClose }) => {
   const { confirm } = useTitanFeedback();
   const [name, setName] = useState(item.name);
-  const [startDate, setStartDate] = useState(item.start_date || '');
-  const [endDate, setEndDate] = useState(item.end_date || '');
+  const [startDate, setStartDate] = useState(fmtDate(item.start_date));
+  const [endDate, setEndDate] = useState(fmtDate(item.end_date));
   const [contour, setContour] = useState<ContourType>((item.contour_type || 'flat') as ContourType);
   const [useManual, setUseManual] = useState(item.use_manual_values || false);
   const [manualValues, setManualValues] = useState<Record<string, number>>(item.manual_monthly_values || {});
@@ -624,7 +631,7 @@ const EditItemPanel: React.FC<{
 
   const itemMonths = useMemo(() => {
     if (!startDate || !endDate) return [];
-    return generateMonths(startOfMonth(new Date(startDate + 'T00:00:00')), startOfMonth(new Date(endDate + 'T00:00:00')));
+    return generateMonths(startOfMonth(ymdToDate(startDate)!), startOfMonth(ymdToDate(endDate)!));
   }, [startDate, endDate]);
 
   return (
@@ -976,8 +983,8 @@ const GanttView: React.FC<{
         case 'ct': text = item.cost_types?.map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('') || ''; break;
         case 'estHrs': text = fmtHrs(parseNum(item.total_est_hours)); break;
         case 'estCost': text = fmtCompact(parseNum(item.total_est_cost)); break;
-        case 'start': text = item.start_date ? format(new Date(item.start_date + 'T00:00:00'), 'MM/dd/yy') : ''; break;
-        case 'end': text = item.end_date ? format(new Date(item.end_date + 'T00:00:00'), 'MM/dd/yy') : ''; break;
+        case 'start': text = fmtDateShort(item.start_date); break;
+        case 'end': text = fmtDateShort(item.end_date); break;
         case 'dur': { const d = getDuration(item.start_date, item.end_date); text = d > 0 ? String(d) : ''; break; }
         case 'pred': text = item.predecessor_id ? String(item.predecessor_id) : ''; break;
         case 'contour': text = item.contour_type || 'flat'; break;
@@ -1212,8 +1219,8 @@ const GanttView: React.FC<{
                 </div>
                 {/* Child item bars */}
                 {!isCollapsed && group.items.map(item => {
-                  const startDate = item.start_date ? new Date(item.start_date + 'T00:00:00') : null;
-                  const endDate = item.end_date ? new Date(item.end_date + 'T00:00:00') : null;
+                  const startDate = ymdToDate(item.start_date);
+                  const endDate = ymdToDate(item.end_date);
                   let barLeft = 0, barWidth = 0;
                   if (startDate && endDate && firstMonth && startDate >= firstMonth) {
                     barLeft = dateToX(startDate) + 2;
@@ -1361,7 +1368,7 @@ const GanttRow: React.FC<{
 
   const handleDurationChange = (newDur: number) => {
     if (newDur > 0 && item.start_date) {
-      const newEnd = format(addMonths(new Date(item.start_date + 'T00:00:00'), newDur - 1), 'yyyy-MM-dd');
+      const newEnd = format(addMonths(ymdToDate(item.start_date)!, newDur - 1), 'yyyy-MM-dd');
       onUpdate(item.id, { end_date: newEnd } as any);
     }
   };
@@ -1380,9 +1387,9 @@ const GanttRow: React.FC<{
     if (!predItem) return;
     const updates: Partial<PhaseScheduleItem> = { predecessor_id: predRowNum } as any;
     if (predItem.end_date) {
-      updates.start_date = format(addDays(new Date(predItem.end_date + 'T00:00:00'), 1), 'yyyy-MM-dd');
+      updates.start_date = format(addDays(ymdToDate(predItem.end_date)!, 1), 'yyyy-MM-dd');
       if (dur > 0 && updates.start_date) {
-        updates.end_date = format(addDays(new Date(updates.start_date + 'T00:00:00'), dur - 1), 'yyyy-MM-dd');
+        updates.end_date = format(addDays(ymdToDate(updates.start_date)!, dur - 1), 'yyyy-MM-dd');
       }
     }
     onUpdate(item.id, updates);
@@ -2126,7 +2133,7 @@ const GridRow: React.FC<{
   const handleFieldChange = useCallback((field: string, value: any) => {
     if (field === 'duration') {
       if (value > 0 && item.start_date) {
-        const newEnd = format(addDays(new Date(item.start_date + 'T00:00:00'), value - 1), 'yyyy-MM-dd');
+        const newEnd = format(addDays(ymdToDate(item.start_date)!, value - 1), 'yyyy-MM-dd');
         onUpdate(item.id, { end_date: newEnd } as any);
       }
     } else if (field === 'predecessor') {
@@ -2139,9 +2146,9 @@ const GridRow: React.FC<{
       if (!predItem) return;
       const updates: any = { predecessor_id: predRowNum };
       if (predItem.end_date) {
-        updates.start_date = format(addDays(new Date(predItem.end_date + 'T00:00:00'), 1), 'yyyy-MM-dd');
+        updates.start_date = format(addDays(ymdToDate(predItem.end_date)!, 1), 'yyyy-MM-dd');
         if (dur > 0 && updates.start_date) {
-          updates.end_date = format(addDays(new Date(updates.start_date + 'T00:00:00'), dur - 1), 'yyyy-MM-dd');
+          updates.end_date = format(addDays(ymdToDate(updates.start_date)!, dur - 1), 'yyyy-MM-dd');
         }
       }
       onUpdate(item.id, updates);
@@ -2585,14 +2592,10 @@ const PhaseSchedule: React.FC = () => {
     let earliest: Date | null = null;
     let latest: Date | null = null;
     scheduleItems.forEach(item => {
-      if (item.start_date) {
-        const s = new Date(item.start_date + 'T00:00:00');
-        if (!earliest || s < earliest) earliest = s;
-      }
-      if (item.end_date) {
-        const e = new Date(item.end_date + 'T00:00:00');
-        if (!latest || e > latest) latest = e;
-      }
+      const s = ymdToDate(item.start_date);
+      if (s && (!earliest || s < earliest)) earliest = s;
+      const e = ymdToDate(item.end_date);
+      if (e && (!latest || e > latest)) latest = e;
     });
     if (!earliest || !latest) return [];
     return generateMonths(addMonths(earliest, -1), addMonths(latest, 1));
@@ -3131,6 +3134,7 @@ const PhaseSchedule: React.FC = () => {
       {/* Edit Panel */}
       {editingItem && (
         <EditItemPanel
+          key={editingItem.id}
           item={editingItem}
           months={months}
           onSave={handleSave}
