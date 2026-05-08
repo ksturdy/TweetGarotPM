@@ -145,6 +145,23 @@ router.patch('/activities/:activityId/mechanical', async (req, res) => {
   }
 });
 
+// Bulk-set mechanical override on many activities at once
+router.patch('/activities/bulk-mechanical', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map((n) => parseInt(n, 10)).filter(Number.isFinite) : [];
+    if (!ids.length) return res.status(400).json({ message: 'No activity ids provided.' });
+    const updated = await GCSchedule.bulkSetMechanical({
+      activityIds: ids,
+      isMechanical: !!req.body.isMechanical,
+      tenantId: req.tenantId,
+    });
+    res.json({ updated });
+  } catch (err) {
+    console.error('GC schedule bulk mechanical error:', err);
+    res.status(err.message?.includes('tenant') ? 403 : 500).json({ message: err.message || 'Failed to update activities.' });
+  }
+});
+
 // Diff two versions
 router.get('/project/:projectId/diff', async (req, res) => {
   try {

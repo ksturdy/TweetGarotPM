@@ -317,6 +317,7 @@ async function parsePDF(buffer) {
 
   const activities = [];
   const warnings = ['PDF parsing is best-effort — review and correct rows. For accurate import, ask the GC for an Excel, CSV, or P6 XER export.'];
+  let lastSummaryOrder = null;
 
   for (const line of lines) {
     const dates = line.match(dateRe);
@@ -338,7 +339,22 @@ async function parsePDF(buffer) {
     // we strip the rightmost token until nothing more matches. This makes
     // the output deterministic across different P6 print layouts so the
     // diff doesn't flag phantom name changes between uploads.
+    // Rows with no Activity ID are WBS / summary headers. P6 PDFs print
+    // them as "wbs_code\twbs_name" where the two halves are identical
+    // (e.g. "GP - Crossett Converting\tGP - Crossett Converting"). We
+    // detect that pattern up front so we can keep one clean copy of the
+    // name, mark the row as a summary, and skip the leading-number strip
+    // (which would clobber WBS codes like "500 - ...").
+    const isSummary = !activity_id;
     let name = rest.normalize('NFKC');
+
+    if (isSummary) {
+      // P6 prints "wbs_code\twbs_name" where halves are usually identical;
+      // allow trailing whitespace on either half so a "X\tX " row matches.
+      const dup = rest.match(/^\s*([^\t]{2,200}?)\s*\t\s*\1\s*(?:\t|$)/);
+      if (dup) name = dup[1].trim();
+    }
+
     for (const d of dates) name = name.replace(d, '');
     name = name.replace(/\t+/g, ' ').replace(/\s{2,}/g, ' ').trim();
     let prev;
@@ -351,11 +367,18 @@ async function parsePDF(buffer) {
         .replace(/\s+/g, ' ')
         .trim();
     } while (name !== prev);
-    name = name.replace(/^-?\d+(?:\.\d+)?\s+/, '').trim(); // strip a leading lone number
+    if (!isSummary) {
+      // Only strip a leading lone number on task rows — for summaries the
+      // leading number is usually part of the WBS code ("500 - ...") and
+      // must be preserved.
+      name = name.replace(/^-?\d+(?:\.\d+)?\s+/, '').trim();
+    }
     if (!name && !activity_id) continue;
 
     const start = coerceDate(dates[0]);
     const finish = dates.length > 1 ? coerceDate(dates[1]) : null;
+    const display_order = activities.length;
+    const parent_summary_order = isSummary ? null : (lastSummaryOrder != null ? lastSummaryOrder : null);
 
     activities.push({
       activity_id,
@@ -373,10 +396,14 @@ async function parsePDF(buffer) {
       successors: null,
       responsible: null,
       is_milestone: false,
-      is_summary: false,
+      is_summary: isSummary,
+      outline_level: isSummary ? 1 : 0,
+      parent_summary_order,
       raw: { line },
-      display_order: activities.length,
+      display_order,
     });
+
+    if (isSummary) lastSummaryOrder = display_order;
   }
 
   if (activities.length === 0) {

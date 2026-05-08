@@ -39,6 +39,8 @@ export interface GCScheduleActivity {
   mechanical_override: boolean;
   is_milestone: boolean;
   is_summary: boolean;
+  outline_level: number;
+  parent_summary_order: number | null;
   display_order: number;
 }
 
@@ -96,6 +98,9 @@ export const gcSchedulesApi = {
 
   toggleMechanical: (activityId: number, isMechanical: boolean) =>
     api.patch<GCScheduleActivity>(`/gc-schedules/activities/${activityId}/mechanical`, { isMechanical }),
+
+  bulkSetMechanical: (ids: number[], isMechanical: boolean) =>
+    api.patch<{ updated: number }>(`/gc-schedules/activities/bulk-mechanical`, { ids, isMechanical }),
 
   diff: (projectId: number, versionAId: number, versionBId: number) =>
     api.get<{ a: GCScheduleVersion; b: GCScheduleVersion; diff: DiffResult }>(

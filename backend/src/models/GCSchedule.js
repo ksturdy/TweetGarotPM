@@ -6,6 +6,7 @@ const ACTIVITY_COLUMNS = [
   'duration_days', 'percent_complete', 'status',
   'predecessors', 'successors', 'responsible',
   'trade', 'is_mechanical', 'is_milestone', 'is_summary',
+  'outline_level', 'parent_summary_order',
   'raw', 'display_order',
 ];
 
@@ -102,24 +103,27 @@ const GCSchedule = {
     const params = [versionId];
     let p = 2;
 
+    // Always include summary headers when filtering tasks — otherwise the
+    // tree view loses its grouping. The frontend can hide empty headers
+    // client-side after filtering.
     if (filters.mechanicalOnly === true || filters.mechanicalOnly === 'true') {
-      conditions.push('is_mechanical = TRUE');
+      conditions.push('(is_summary = TRUE OR is_mechanical = TRUE)');
     }
     if (filters.trade) {
-      conditions.push(`trade = $${p++}`);
+      conditions.push(`(is_summary = TRUE OR trade = $${p++})`);
       params.push(filters.trade);
     }
     if (filters.search) {
-      conditions.push(`(activity_name ILIKE $${p} OR activity_id ILIKE $${p} OR wbs_code ILIKE $${p} OR responsible ILIKE $${p})`);
+      conditions.push(`(is_summary = TRUE OR activity_name ILIKE $${p} OR activity_id ILIKE $${p} OR wbs_code ILIKE $${p} OR responsible ILIKE $${p})`);
       params.push(`%${filters.search}%`);
       p++;
     }
     if (filters.startAfter) {
-      conditions.push(`finish_date >= $${p++}`);
+      conditions.push(`(is_summary = TRUE OR finish_date >= $${p++})`);
       params.push(filters.startAfter);
     }
     if (filters.endBefore) {
-      conditions.push(`start_date <= $${p++}`);
+      conditions.push(`(is_summary = TRUE OR start_date <= $${p++})`);
       params.push(filters.endBefore);
     }
     if (filters.hideSummary) {
@@ -145,6 +149,31 @@ const GCSchedule = {
       [!!isMechanical, activityId]
     );
     return result.rows[0];
+  },
+
+  async bulkSetMechanical({ activityIds, isMechanical, tenantId }) {
+    if (!activityIds || !activityIds.length) return 0;
+    // Verify the activities all belong to versions in the caller's tenant
+    // before mutating. Done in one query so we don't touch any rows on
+    // a partial mismatch.
+    const verify = await db.query(
+      `SELECT COUNT(*)::int AS n
+       FROM gc_schedule_activities a
+       JOIN gc_schedule_versions v ON v.id = a.version_id
+       WHERE a.id = ANY($1::int[]) AND v.tenant_id = $2`,
+      [activityIds, tenantId]
+    );
+    if (verify.rows[0].n !== activityIds.length) {
+      throw new Error('One or more activities are outside the requested tenant.');
+    }
+    const result = await db.query(
+      `UPDATE gc_schedule_activities
+         SET is_mechanical = $1, mechanical_override = TRUE
+       WHERE id = ANY($2::int[])
+       RETURNING id`,
+      [!!isMechanical, activityIds]
+    );
+    return result.rowCount;
   },
 
   async getTradeRules({ tenantId }) {
@@ -174,14 +203,14 @@ const GCSchedule = {
   async diffVersions({ versionAId, versionBId }) {
     const aRows = await db.query(
       `SELECT activity_id, activity_name, start_date, finish_date,
-              duration_days, percent_complete, is_mechanical, wbs_code
+              duration_days, percent_complete, is_mechanical, trade, wbs_code, responsible
        FROM gc_schedule_activities
        WHERE version_id = $1 AND activity_id IS NOT NULL`,
       [versionAId]
     );
     const bRows = await db.query(
       `SELECT activity_id, activity_name, start_date, finish_date,
-              duration_days, percent_complete, is_mechanical, wbs_code
+              duration_days, percent_complete, is_mechanical, trade, wbs_code, responsible
        FROM gc_schedule_activities
        WHERE version_id = $1 AND activity_id IS NOT NULL`,
       [versionBId]
@@ -266,7 +295,15 @@ const GCSchedule = {
         }
 
         if (Object.keys(diffs).length) {
-          changed.push({ activity_id: aid, name: b.activity_name, is_mechanical: b.is_mechanical, wbs_code: b.wbs_code, diffs });
+          changed.push({
+            activity_id: aid,
+            name: b.activity_name,
+            is_mechanical: b.is_mechanical,
+            trade: b.trade,
+            wbs_code: b.wbs_code,
+            responsible: b.responsible,
+            diffs,
+          });
         }
       }
     }

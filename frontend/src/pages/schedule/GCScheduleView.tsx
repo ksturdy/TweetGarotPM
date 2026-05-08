@@ -126,6 +126,24 @@ const GCScheduleView: React.FC = () => {
   const queryClient = useQueryClient();
 
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const toggleCollapsed = (displayOrder: number) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(displayOrder)) next.delete(displayOrder);
+      else next.add(displayOrder);
+      return next;
+    });
+  };
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const [filters, setFilters] = useState<ActivityFilters>({ mechanicalOnly: false, hideSummary: false });
   const [searchInput, setSearchInput] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -170,6 +188,15 @@ const GCScheduleView: React.FC = () => {
     mutationFn: ({ id, on }: { id: number; on: boolean }) =>
       gcSchedulesApi.toggleMechanical(id, on),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gc-schedule-activities'] });
+    },
+  });
+
+  const bulkMech = useMutation({
+    mutationFn: ({ ids, on }: { ids: number[]; on: boolean }) =>
+      gcSchedulesApi.bulkSetMechanical(ids, on),
+    onSuccess: () => {
+      setSelectedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['gc-schedule-activities'] });
     },
   });
@@ -382,13 +409,74 @@ const GCScheduleView: React.FC = () => {
           </div>
 
           <div className="card" style={{ overflow: 'auto', padding: 0, maxHeight: 'calc(100vh - 320px)' }}>
+            {selectedIds.size > 0 && (
+              <div style={{
+                display: 'flex', gap: 8, padding: '8px 12px',
+                background: '#eff6ff', borderBottom: '1px solid #bfdbfe',
+                fontSize: 13, alignItems: 'center', position: 'sticky', top: 0, zIndex: 2,
+              }}>
+                <strong style={{ color: '#1e40af' }}>{selectedIds.size} selected</strong>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={bulkMech.isPending}
+                  onClick={() => bulkMech.mutate({ ids: Array.from(selectedIds), on: true })}
+                >
+                  Mark Mechanical
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={bulkMech.isPending}
+                  onClick={() => bulkMech.mutate({ ids: Array.from(selectedIds), on: false })}
+                >
+                  Mark Not Mechanical
+                </button>
+                <button className="btn btn-sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear selection
+                </button>
+              </div>
+            )}
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  <th style={{ ...thStyle, width: 32, textAlign: 'center' }} title="Mechanical">⚙</th>
+                  <th style={{ ...thStyle, width: 32, textAlign: 'center', padding: '4px 6px' }} title="Expand / collapse all">
+                    <button
+                      onClick={() => {
+                        const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
+                        const anyExpanded = allSummaries.some((d) => !collapsed.has(d));
+                        setCollapsed(anyExpanded ? new Set(allSummaries) : new Set());
+                      }}
+                      style={{
+                        background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 3,
+                        padding: '0 6px', height: 18, cursor: 'pointer', fontSize: 11, color: '#475569',
+                      }}
+                      title="Toggle expand / collapse all sections"
+                    >
+                      {(() => {
+                        const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
+                        const anyExpanded = allSummaries.some((d) => !collapsed.has(d));
+                        return anyExpanded ? '−' : '+';
+                      })()}
+                    </button>
+                  </th>
+                  <th style={{ ...thStyle, width: 28, textAlign: 'center', padding: '4px 6px' }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        activities.filter((a) => !a.is_summary).length > 0 &&
+                        activities.filter((a) => !a.is_summary).every((a) => selectedIds.has(a.id))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(new Set(activities.filter((a) => !a.is_summary).map((a) => a.id)));
+                        } else {
+                          setSelectedIds(new Set());
+                        }
+                      }}
+                      title="Select all visible tasks"
+                    />
+                  </th>
                   <th style={thStyle}>Activity ID</th>
                   <th style={thStyle}>Activity Name</th>
-                  <th style={thStyle}>WBS</th>
                   <th style={thStyle}>Start</th>
                   <th style={thStyle}>Finish</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Dur</th>
@@ -403,13 +491,25 @@ const GCScheduleView: React.FC = () => {
                 {!activitiesQuery.isLoading && activities.length === 0 && (
                   <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>No activities match the filters.</td></tr>
                 )}
-                {activities.map((a) => (
-                  <ActivityRow
-                    key={a.id}
-                    a={a}
-                    onToggleMech={(on) => toggleMech.mutate({ id: a.id, on })}
-                  />
-                ))}
+                {renderTreeRows({
+                  activities,
+                  collapsed,
+                  selectedIds,
+                  onToggleCollapsed: toggleCollapsed,
+                  onToggleSelected: toggleSelected,
+                  onToggleMech: (id, on) => toggleMech.mutate({ id, on }),
+                  onSelectChildren: (parentOrder, on) => {
+                    const childIds = activities
+                      .filter((a) => !a.is_summary && a.parent_summary_order === parentOrder)
+                      .map((a) => a.id);
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (on) childIds.forEach((id) => next.add(id));
+                      else childIds.forEach((id) => next.delete(id));
+                      return next;
+                    });
+                  },
+                })}
               </tbody>
             </table>
           </div>
@@ -434,36 +534,167 @@ const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   </div>
 );
 
-const ActivityRow: React.FC<{ a: GCScheduleActivity; onToggleMech: (on: boolean) => void }> = ({ a, onToggleMech }) => {
-  const isOverridden = a.mechanical_override;
-  const rowBg = a.is_summary ? '#f9fafb' : a.is_mechanical ? '#ecfdf5' : undefined;
+// Render the activity list as a 2-level tree. Summary rows are clickable
+// chevron headers; tasks under a collapsed header are skipped. Empty
+// summaries (no children visible after filter) are also skipped so the
+// table doesn't have orphaned headers.
+const renderTreeRows = ({
+  activities,
+  collapsed,
+  selectedIds,
+  onToggleCollapsed,
+  onToggleSelected,
+  onToggleMech,
+  onSelectChildren,
+}: {
+  activities: GCScheduleActivity[];
+  collapsed: Set<number>;
+  selectedIds: Set<number>;
+  onToggleCollapsed: (displayOrder: number) => void;
+  onToggleSelected: (id: number) => void;
+  onToggleMech: (activityId: number, on: boolean) => void;
+  onSelectChildren: (parentOrder: number, on: boolean) => void;
+}): React.ReactNode => {
+  // Pre-count visible children per summary so we can hide empty headers
+  // and tell whether the section's children are all/some/none selected.
+  const childrenBySummary = new Map<number, GCScheduleActivity[]>();
+  for (const a of activities) {
+    if (a.is_summary) continue;
+    if (a.parent_summary_order != null) {
+      const list = childrenBySummary.get(a.parent_summary_order) || [];
+      list.push(a);
+      childrenBySummary.set(a.parent_summary_order, list);
+    }
+  }
+
+  const out: React.ReactNode[] = [];
+  for (const a of activities) {
+    if (a.is_summary) {
+      const children = childrenBySummary.get(a.display_order) || [];
+      if (children.length === 0) continue;
+      const isCollapsed = collapsed.has(a.display_order);
+      const allChildrenSelected = children.every((c) => selectedIds.has(c.id));
+      const someChildrenSelected = !allChildrenSelected && children.some((c) => selectedIds.has(c.id));
+      out.push(
+        <SummaryRow
+          key={a.id}
+          a={a}
+          childCount={children.length}
+          isCollapsed={isCollapsed}
+          allChildrenSelected={allChildrenSelected}
+          someChildrenSelected={someChildrenSelected}
+          onClick={() => onToggleCollapsed(a.display_order)}
+          onSelectChildren={(on) => onSelectChildren(a.display_order, on)}
+        />
+      );
+    } else {
+      const parentOrder = a.parent_summary_order;
+      if (parentOrder != null && collapsed.has(parentOrder)) continue;
+      out.push(
+        <TaskRow
+          key={a.id}
+          a={a}
+          isSelected={selectedIds.has(a.id)}
+          onToggleSelected={() => onToggleSelected(a.id)}
+          onToggleMech={(on) => onToggleMech(a.id, on)}
+        />
+      );
+    }
+  }
+  return out;
+};
+
+const SummaryRow: React.FC<{
+  a: GCScheduleActivity;
+  childCount: number;
+  isCollapsed: boolean;
+  allChildrenSelected: boolean;
+  someChildrenSelected: boolean;
+  onClick: () => void;
+  onSelectChildren: (on: boolean) => void;
+}> = ({ a, childCount, isCollapsed, allChildrenSelected, someChildrenSelected, onClick, onSelectChildren }) => {
+  const checkboxRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (checkboxRef.current) checkboxRef.current.indeterminate = someChildrenSelected;
+  }, [someChildrenSelected]);
   return (
-    <tr style={{ background: rowBg, fontWeight: a.is_summary ? 600 : 400 }}>
+    <tr
+      style={{
+        background: '#f1f5f9',
+        borderTop: '1px solid #e2e8f0',
+        fontWeight: 600,
+      }}
+    >
+      <td
+        onClick={onClick}
+        style={{ ...tdStyle, textAlign: 'center', color: '#475569', userSelect: 'none', padding: '6px 4px', cursor: 'pointer' }}
+      >
+        {isCollapsed ? '▶' : '▼'}
+      </td>
+      <td style={{ ...tdStyle, textAlign: 'center', padding: '4px 6px' }} onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={checkboxRef}
+          type="checkbox"
+          checked={allChildrenSelected}
+          onChange={(e) => onSelectChildren(e.target.checked)}
+          title={`Select all ${childCount} task${childCount === 1 ? '' : 's'} in this section`}
+        />
+      </td>
+      <td style={tdStyle} onClick={onClick}></td>
+      <td style={{ ...tdStyle, color: '#0f172a', cursor: 'pointer' }} onClick={onClick}>
+        {a.activity_name}
+        <span style={{ marginLeft: 8, color: '#64748b', fontWeight: 400, fontSize: 11 }}>
+          ({childCount} task{childCount === 1 ? '' : 's'})
+        </span>
+      </td>
+      <td style={{ ...tdStyle, color: '#475569', cursor: 'pointer' }} onClick={onClick}>{fmtDate(a.start_date)}</td>
+      <td style={{ ...tdStyle, color: '#475569', cursor: 'pointer' }} onClick={onClick}>{fmtDate(a.finish_date)}</td>
+      <td style={{ ...tdStyle, textAlign: 'right', color: '#475569', cursor: 'pointer' }} onClick={onClick}>
+        {a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-'}
+      </td>
+      <td style={{ ...tdStyle, textAlign: 'right', color: '#475569', cursor: 'pointer' }} onClick={onClick}>
+        {a.percent_complete != null ? `${a.percent_complete}%` : '-'}
+      </td>
+      <td style={tdStyle} onClick={onClick}></td>
+    </tr>
+  );
+};
+
+const TaskRow: React.FC<{
+  a: GCScheduleActivity;
+  isSelected: boolean;
+  onToggleSelected: () => void;
+  onToggleMech: (on: boolean) => void;
+}> = ({ a, isSelected, onToggleSelected, onToggleMech }) => {
+  const rowBg = isSelected ? '#dbeafe' : a.is_mechanical ? '#ecfdf5' : undefined;
+  return (
+    <tr style={{ background: rowBg }}>
+      <td style={{ ...tdStyle, padding: '4px 6px' }}></td>
       <td style={{ ...tdStyle, textAlign: 'center', padding: '4px 6px' }}>
-        <button
-          onClick={() => onToggleMech(!a.is_mechanical)}
-          title={isOverridden ? 'Manually set — click to toggle' : 'Auto-detected — click to override'}
-          style={{
-            background: a.is_mechanical ? '#10b981' : '#e5e7eb',
-            color: a.is_mechanical ? 'white' : '#6b7280',
-            border: isOverridden ? '2px solid #f59e0b' : 'none',
-            borderRadius: 3,
-            padding: '0 5px',
-            cursor: 'pointer',
-            fontSize: 11,
-            lineHeight: '16px',
-            height: 18,
-          }}
-        >
-          {a.is_mechanical ? '✓' : '·'}
-        </button>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggleSelected}
+        />
       </td>
       <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{a.activity_id || '-'}</td>
-      <td style={tdStyle}>
+      <td style={{ ...tdStyle, paddingLeft: 24 }}>
+        {a.is_mechanical && (
+          <span
+            onClick={() => onToggleMech(false)}
+            title={a.mechanical_override ? 'Manually set mechanical — click to unmark' : 'Auto-detected mechanical — click to unmark'}
+            style={{
+              display: 'inline-block', background: '#10b981', color: 'white',
+              borderRadius: 3, padding: '0 5px', fontSize: 10, marginRight: 6, cursor: 'pointer',
+              border: a.mechanical_override ? '1px solid #b45309' : 'none',
+            }}
+          >
+            MECH
+          </span>
+        )}
         {a.is_milestone ? '🏁 ' : ''}
         {a.activity_name}
       </td>
-      <td style={{ ...tdStyle, color: '#6b7280' }}>{a.wbs_code || '-'}</td>
       <td style={tdStyle}>{fmtDate(a.start_date)}</td>
       <td style={tdStyle}>{fmtDate(a.finish_date)}</td>
       <td style={{ ...tdStyle, textAlign: 'right' }}>{a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-'}</td>
@@ -565,35 +796,93 @@ const DiffCard: React.FC<{
   data: any;
   loading: boolean;
 }> = ({ versions, a, b, onChangeA, onChangeB, data, loading }) => {
+  const [mechanicalOnly, setMechanicalOnly] = useState(false);
+  const [trade, setTrade] = useState<string>('');
+  const [search, setSearch] = useState('');
+
+  const matchesFilter = (row: any): boolean => {
+    if (mechanicalOnly && !row.is_mechanical) return false;
+    if (trade && row.trade !== trade) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = [
+        row.activity_id, row.name, row.activity_name,
+        row.wbs_code, row.responsible,
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  };
+
+  const filtered = data ? {
+    added: (data.diff.added as any[]).filter(matchesFilter),
+    removed: (data.diff.removed as any[]).filter(matchesFilter),
+    changed: (data.diff.changed as any[]).filter(matchesFilter),
+  } : null;
+
   return (
     <div className="card" style={{ marginBottom: '1rem' }}>
       <h3 style={{ marginBottom: '1rem' }}>Compare Versions</h3>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', display: 'block' }}>From (older)</label>
-          <select value={a || ''} onChange={(e) => onChangeA(Number(e.target.value))} style={{ minWidth: '250px', padding: '0.5rem' }}>
+          <label style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block' }}>From (older)</label>
+          <select value={a || ''} onChange={(e) => onChangeA(Number(e.target.value))} style={{ minWidth: 250, padding: '4px 6px', fontSize: 13 }}>
             {versions.map((v) => <option key={v.id} value={v.id}>{versionDisplay(v)}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--secondary)', textTransform: 'uppercase', display: 'block' }}>To (newer)</label>
-          <select value={b || ''} onChange={(e) => onChangeB(Number(e.target.value))} style={{ minWidth: '250px', padding: '0.5rem' }}>
+          <label style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block' }}>To (newer)</label>
+          <select value={b || ''} onChange={(e) => onChangeB(Number(e.target.value))} style={{ minWidth: 250, padding: '4px 6px', fontSize: 13 }}>
             {versions.map((v) => <option key={v.id} value={v.id}>{versionDisplay(v)}</option>)}
           </select>
         </div>
       </div>
 
-      {loading && <div>Loading diff…</div>}
       {data && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12, fontSize: 13, padding: 10, background: '#f9fafb', borderRadius: 6 }}>
+          <input
+            type="text"
+            placeholder="Search activity name, ID, WBS, responsible..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ flex: 1, minWidth: 220, padding: '4px 8px', fontSize: 13 }}
+          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="checkbox" checked={mechanicalOnly} onChange={(e) => setMechanicalOnly(e.target.checked)} />
+            Mechanical only
+          </label>
+          <select value={trade} onChange={(e) => setTrade(e.target.value)} style={{ padding: '4px 6px', fontSize: 13 }}>
+            <option value="">All trades</option>
+            <option value="mechanical">Mechanical</option>
+            <option value="electrical">Electrical</option>
+            <option value="plumbing">Plumbing</option>
+            <option value="sprinkler">Sprinkler</option>
+            <option value="controls">Controls</option>
+          </select>
+          {(mechanicalOnly || trade || search) && (
+            <button className="btn btn-sm" onClick={() => { setMechanicalOnly(false); setTrade(''); setSearch(''); }}>
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {loading && <div>Loading diff…</div>}
+      {filtered && (
         <>
           <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
-            <Stat label="Added" value={data.diff.added.length.toString()} />
-            <Stat label="Removed" value={data.diff.removed.length.toString()} />
-            <Stat label="Changed" value={data.diff.changed.length.toString()} />
+            <Stat label="Added" value={`${filtered.added.length}${filtered.added.length !== data.diff.added.length ? ` of ${data.diff.added.length}` : ''}`} />
+            <Stat label="Removed" value={`${filtered.removed.length}${filtered.removed.length !== data.diff.removed.length ? ` of ${data.diff.removed.length}` : ''}`} />
+            <Stat label="Changed" value={`${filtered.changed.length}${filtered.changed.length !== data.diff.changed.length ? ` of ${data.diff.changed.length}` : ''}`} />
           </div>
-          <DiffSection title="Changed" rows={data.diff.changed} kind="changed" />
-          <DiffSection title="Added (only in newer)" rows={data.diff.added} kind="added" />
-          <DiffSection title="Removed (only in older)" rows={data.diff.removed} kind="removed" />
+          <DiffSection title="Changed" rows={filtered.changed} kind="changed" />
+          <DiffSection title="Added (only in newer)" rows={filtered.added} kind="added" />
+          <DiffSection title="Removed (only in older)" rows={filtered.removed} kind="removed" />
+          {filtered.changed.length === 0 && filtered.added.length === 0 && filtered.removed.length === 0 && (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+              No differences match the current filters.
+            </div>
+          )}
         </>
       )}
     </div>
