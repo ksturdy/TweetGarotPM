@@ -12,6 +12,8 @@ import {
 import { projectsApi } from '../../services/projects';
 import { phaseScheduleApi, PhaseScheduleItem } from '../../services/phaseSchedule';
 import { phaseScheduleLinksApi } from '../../services/phaseScheduleLinks';
+import { useAuth } from '../../context/AuthContext';
+import { exportGcScheduleDiffPdf, loadImageAsDataUrl } from '../../utils/gcScheduleDiffPdf';
 import '../../styles/SalesPipeline.css';
 
 const fmtDate = (s: string | null): string => {
@@ -127,6 +129,8 @@ const GCScheduleView: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const pid = Number(projectId);
   const queryClient = useQueryClient();
+  const { user, tenant } = useAuth();
+  const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
 
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -358,6 +362,10 @@ const GCScheduleView: React.FC = () => {
           onChangeB={setDiffB}
           data={diffQuery.data}
           loading={diffQuery.isLoading}
+          projectName={project?.name || 'Project'}
+          projectNumber={project?.number}
+          generatedBy={user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null}
+          logoUrl={logoUrl}
         />
       )}
 
@@ -949,10 +957,15 @@ const DiffCard: React.FC<{
   onChangeB: (id: number) => void;
   data: any;
   loading: boolean;
-}> = ({ versions, a, b, onChangeA, onChangeB, data, loading }) => {
+  projectName: string;
+  projectNumber?: string | null;
+  generatedBy?: string | null;
+  logoUrl?: string;
+}> = ({ versions, a, b, onChangeA, onChangeB, data, loading, projectName, projectNumber, generatedBy, logoUrl }) => {
   const [mechanicalOnly, setMechanicalOnly] = useState(false);
   const [trade, setTrade] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const matchesFilter = (row: any): boolean => {
     if (mechanicalOnly && !row.is_mechanical) return false;
@@ -974,9 +987,56 @@ const DiffCard: React.FC<{
     changed: (data.diff.changed as any[]).filter(matchesFilter),
   } : null;
 
+  const exportPdf = async () => {
+    if (!data || !filtered) return;
+    setExporting(true);
+    try {
+      let logoDataUrl: string | undefined;
+      if (logoUrl) {
+        try { logoDataUrl = await loadImageAsDataUrl(logoUrl); } catch { /* skip logo */ }
+      }
+      const fromV: GCScheduleVersion = data.a;
+      const toV: GCScheduleVersion = data.b;
+      const fileName = `GC_Schedule_Diff_${(projectNumber || 'Project').replace(/[^\w-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      exportGcScheduleDiffPdf({
+        meta: {
+          projectName,
+          projectNumber,
+          fromVersionLabel: versionDisplay(fromV),
+          toVersionLabel: versionDisplay(toV),
+          fromUploadedAt: fromV.uploaded_at,
+          toUploadedAt: toV.uploaded_at,
+          generatedBy,
+        },
+        counts: {
+          changed: filtered.changed.length,
+          added: filtered.added.length,
+          removed: filtered.removed.length,
+        },
+        changed: filtered.changed,
+        added: filtered.added,
+        removed: filtered.removed,
+        fileName,
+        logoDataUrl,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="card" style={{ marginBottom: '1rem' }}>
-      <h3 style={{ marginBottom: '1rem' }}>Compare Versions</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h3 style={{ margin: 0 }}>Compare Versions</h3>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={!filtered || loading || exporting}
+          onClick={exportPdf}
+          title="Download a PDF report of the differences between these two versions"
+        >
+          {exporting ? 'Exporting…' : 'Export PDF'}
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <div>
           <label style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block' }}>From (older)</label>
