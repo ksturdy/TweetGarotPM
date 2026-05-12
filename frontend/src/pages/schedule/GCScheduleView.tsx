@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -9,6 +10,8 @@ import {
   ActivityFilters,
 } from '../../services/gcSchedules';
 import { projectsApi } from '../../services/projects';
+import { phaseScheduleApi, PhaseScheduleItem } from '../../services/phaseSchedule';
+import { phaseScheduleLinksApi } from '../../services/phaseScheduleLinks';
 import '../../styles/SalesPipeline.css';
 
 const fmtDate = (s: string | null): string => {
@@ -151,6 +154,7 @@ const GCScheduleView: React.FC = () => {
   const [diffA, setDiffA] = useState<number | null>(null);
   const [diffB, setDiffB] = useState<number | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [linkPhaseOpen, setLinkPhaseOpen] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', pid],
@@ -430,6 +434,13 @@ const GCScheduleView: React.FC = () => {
                 >
                   Mark Not Mechanical
                 </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setLinkPhaseOpen(true)}
+                  title="Link the selected activities to a Phase Schedule item"
+                >
+                  Link to phase…
+                </button>
                 <button className="btn btn-sm" onClick={() => setSelectedIds(new Set())}>
                   Clear selection
                 </button>
@@ -515,7 +526,150 @@ const GCScheduleView: React.FC = () => {
           </div>
         </>
       )}
+      {linkPhaseOpen && (
+        <LinkSelectedToPhaseModal
+          projectId={pid}
+          selectedActivities={activities.filter((a) => selectedIds.has(a.id) && !!a.activity_id)}
+          onClose={() => setLinkPhaseOpen(false)}
+          onLinked={() => { setLinkPhaseOpen(false); setSelectedIds(new Set()); }}
+        />
+      )}
     </div>
+  );
+};
+
+const LinkSelectedToPhaseModal: React.FC<{
+  projectId: number;
+  selectedActivities: GCScheduleActivity[];
+  onClose: () => void;
+  onLinked: () => void;
+}> = ({ projectId, selectedActivities, onClose, onLinked }) => {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [chosenPhaseId, setChosenPhaseId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const phasesQuery = useQuery({
+    queryKey: ['phaseScheduleItems', projectId],
+    queryFn: () => phaseScheduleApi.getScheduleItems(projectId).then((r) => r.data),
+  });
+  const phases: PhaseScheduleItem[] = phasesQuery.data || [];
+
+  const filteredPhases = useMemo(() => {
+    const t = search.trim().toLowerCase();
+    if (!t) return phases;
+    return phases.filter((p) =>
+      (p.name || '').toLowerCase().includes(t) ||
+      (p.phase_code_display || '').toLowerCase().includes(t)
+    );
+  }, [phases, search]);
+
+  const chosen = phases.find((p) => p.id === chosenPhaseId) || null;
+  const newActivityIds = selectedActivities.map((a) => a.activity_id!).filter(Boolean);
+
+  const submit = async () => {
+    if (!chosen) return;
+    setBusy(true); setError(null);
+    try {
+      const existing = chosen.linked_gc_activities?.map((l) => l.activity_id) || [];
+      const union = Array.from(new Set([...existing, ...newActivityIds]));
+      await phaseScheduleLinksApi.replaceForItem(chosen.id, union);
+      await queryClient.refetchQueries({ queryKey: ['phaseScheduleItems'] });
+      onLinked();
+    } catch (e: any) {
+      setError(e?.response?.data?.error || e?.message || 'Failed to link');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1300,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#fff', borderRadius: 12, width: '90%', maxWidth: 540,
+          maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>
+            Link {newActivityIds.length} activit{newActivityIds.length === 1 ? 'y' : 'ies'} to a phase
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+            Pick a Phase Schedule item to receive these GC activity links.
+          </div>
+          <input
+            type="text"
+            placeholder="Search phases by name or phase code…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: '100%', marginTop: 8, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {phasesQuery.isLoading && <div style={{ padding: 20, color: '#6b7280', fontSize: 13 }}>Loading phases…</div>}
+          {!phasesQuery.isLoading && filteredPhases.length === 0 && (
+            <div style={{ padding: 20, color: '#6b7280', fontSize: 13 }}>No phases match.</div>
+          )}
+          {filteredPhases.map((p) => {
+            const selected = p.id === chosenPhaseId;
+            const existingCount = p.linked_gc_activities?.length || 0;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setChosenPhaseId(p.id)}
+                style={{
+                  display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '8px 16px', border: 'none', borderBottom: '1px solid #f3f4f6',
+                  background: selected ? '#eff6ff' : 'transparent',
+                  textAlign: 'left', cursor: 'pointer', fontSize: 13, color: '#111827',
+                }}
+              >
+                <span>
+                  <span style={{ fontWeight: 500 }}>{p.name}</span>
+                  {p.phase_code_display && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: '#6b7280' }}>({p.phase_code_display})</span>
+                  )}
+                </span>
+                {existingCount > 0 && (
+                  <span style={{ fontSize: 11, color: '#0891b2' }}>🔗 {existingCount}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {error && (
+          <div style={{ padding: '8px 16px', color: '#b91c1c', fontSize: 12, background: '#fef2f2' }}>{error}</div>
+        )}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: '#f9fafb' }}>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>
+            {chosen ? (
+              <>Will add to <strong>{chosen.name}</strong>{(chosen.linked_gc_activities?.length || 0) > 0 ? ` (already linked to ${chosen.linked_gc_activities!.length})` : ''}</>
+            ) : (
+              'Select a phase'
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-sm" onClick={onClose}>Cancel</button>
+            <button className="btn btn-sm btn-primary" disabled={!chosen || busy || newActivityIds.length === 0} onClick={submit}>
+              {busy ? 'Linking…' : 'Link'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 

@@ -20,6 +20,15 @@ export interface PhaseCode {
   all_ids?: number[];  // all underlying vp_phase_codes IDs (when deduplicated across jobs)
 }
 
+export interface LinkedGCActivity {
+  activity_id: string;
+  activity_name: string | null;
+  wbs_code: string | null;
+  start_date: string | null;
+  finish_date: string | null;
+  missing: boolean;
+}
+
 export interface PhaseScheduleItem {
   id: number;
   project_id: number;
@@ -31,6 +40,8 @@ export interface PhaseScheduleItem {
   predecessor_id: number | null;
   start_date: string | null;
   end_date: string | null;
+  manual_start_date: string | null;
+  manual_end_date: string | null;
   contour_type: string;
   use_manual_values: boolean;
   manual_monthly_values: Record<string, number> | null;
@@ -51,6 +62,9 @@ export interface PhaseScheduleItem {
   phase_code_display: string | null;
   created_at: string;
   updated_at: string;
+  linked_gc_activities: LinkedGCActivity[];
+  linked_resolved_count: number;
+  active_gc_version_id: number | null;
 }
 
 export const phaseScheduleApi = {

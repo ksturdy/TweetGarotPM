@@ -36,10 +36,42 @@ const PhaseSchedule = {
 
   async getScheduleItems(projectId, tenantId) {
     const result = await db.query(
-      `SELECT psi.id, psi.project_id, psi.tenant_id, psi.name, psi.phase_code_ids, psi.cost_types,
+      `WITH active_version AS (
+         SELECT id FROM gc_schedule_versions
+         WHERE tenant_id = $2 AND project_id = $1 AND parse_status = 'completed'
+         ORDER BY uploaded_at DESC LIMIT 1
+       ),
+       link_agg AS (
+         SELECT
+           l.schedule_item_id,
+           json_agg(
+             json_build_object(
+               'activity_id',   l.gc_activity_id,
+               'activity_name', a.activity_name,
+               'wbs_code',      a.wbs_code,
+               'start_date',    a.start_date,
+               'finish_date',   a.finish_date,
+               'missing',       (a.id IS NULL)
+             ) ORDER BY l.gc_activity_id
+           ) AS linked_gc_activities,
+           MIN(a.start_date)  FILTER (WHERE a.start_date  IS NOT NULL) AS derived_start,
+           MAX(a.finish_date) FILTER (WHERE a.finish_date IS NOT NULL) AS derived_end,
+           COUNT(a.id)::int AS resolved_count
+         FROM phase_code_activity_links l
+         LEFT JOIN gc_schedule_activities a
+           ON a.activity_id = l.gc_activity_id
+          AND a.version_id  = (SELECT id FROM active_version)
+         WHERE l.tenant_id = $2 AND l.project_id = $1
+         GROUP BY l.schedule_item_id
+       )
+       SELECT psi.id, psi.project_id, psi.tenant_id, psi.name, psi.phase_code_ids, psi.cost_types,
          COALESCE(psi.row_number, ROW_NUMBER() OVER (PARTITION BY psi.project_id ORDER BY psi.sort_order, psi.id))::integer as row_number,
          psi.predecessor_id,
-         psi.start_date, psi.end_date, psi.contour_type,
+         COALESCE(la.derived_start, psi.start_date) as start_date,
+         COALESCE(la.derived_end,   psi.end_date)   as end_date,
+         psi.start_date as manual_start_date,
+         psi.end_date   as manual_end_date,
+         psi.contour_type,
          psi.use_manual_values, psi.manual_monthly_values,
          COALESCE(pc_agg.sum_est_cost, 0) as total_est_cost,
          COALESCE(pc_agg.sum_est_hours, 0) as total_est_hours,
@@ -52,9 +84,13 @@ const PhaseSchedule = {
          psi.sort_order, psi.created_by, psi.created_at, psi.updated_at,
          u.first_name || ' ' || u.last_name as created_by_name,
          (SELECT string_agg(DISTINCT rtrim(trim(pc.phase), '- '), ', ' ORDER BY rtrim(trim(pc.phase), '- '))
-          FROM vp_phase_codes pc WHERE pc.id = ANY(psi.phase_code_ids)) as phase_code_display
+          FROM vp_phase_codes pc WHERE pc.id = ANY(psi.phase_code_ids)) as phase_code_display,
+         COALESCE(la.linked_gc_activities, '[]'::json) as linked_gc_activities,
+         COALESCE(la.resolved_count, 0) as linked_resolved_count,
+         (SELECT id FROM active_version) as active_gc_version_id
        FROM phase_schedule_items psi
        LEFT JOIN users u ON psi.created_by = u.id
+       LEFT JOIN link_agg la ON la.schedule_item_id = psi.id
        LEFT JOIN LATERAL (
          SELECT
            SUM(pc.est_cost) as sum_est_cost,

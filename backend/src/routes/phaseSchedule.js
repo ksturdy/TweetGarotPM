@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const PhaseSchedule = require('../models/PhaseSchedule');
+const PhaseGCLink = require('../models/PhaseGCLink');
 const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
@@ -145,7 +146,16 @@ router.put('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Schedule item not found' });
     }
 
-    const updated = await PhaseSchedule.updateScheduleItem(req.params.id, req.body, req.tenantId);
+    // When a phase is linked to GC activities, its dates flow from GC.
+    // Silently drop start_date/end_date so manual edits don't quietly diverge.
+    const body = { ...req.body };
+    if (('start_date' in body || 'end_date' in body) &&
+        await PhaseGCLink.hasAnyLinks(req.params.id, req.tenantId)) {
+      delete body.start_date;
+      delete body.end_date;
+    }
+
+    const updated = await PhaseSchedule.updateScheduleItem(req.params.id, body, req.tenantId);
     res.json(updated);
   } catch (error) {
     next(error);
