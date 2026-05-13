@@ -119,6 +119,17 @@ export interface OpportunityComment {
   updated_at: string;
 }
 
+export interface OpportunityLink {
+  id: number;
+  opportunity_id: number;
+  tenant_id: number;
+  url: string;
+  created_by?: number;
+  created_by_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OpportunityEstimateData {
   labor_pct: number;
   material_pct: number;
@@ -343,6 +354,27 @@ const opportunitiesService = {
 
   async deleteComment(opportunityId: number, commentId: number): Promise<void> {
     await api.delete(`/opportunities/${opportunityId}/comments/${commentId}`);
+  },
+
+  // ===== Links =====
+
+  async getLinks(opportunityId: number): Promise<OpportunityLink[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/links`);
+    return response.data;
+  },
+
+  async createLink(opportunityId: number, url: string): Promise<OpportunityLink> {
+    const response = await api.post(`/opportunities/${opportunityId}/links`, { url });
+    return response.data;
+  },
+
+  async updateLink(opportunityId: number, linkId: number, url: string): Promise<OpportunityLink> {
+    const response = await api.put(`/opportunities/${opportunityId}/links/${linkId}`, { url });
+    return response.data;
+  },
+
+  async deleteLink(opportunityId: number, linkId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/links/${linkId}`);
   },
 
   // ===== Estimates =====

@@ -9,6 +9,7 @@ import CompanyPicker from '../CompanyPicker';
 import LocationPicker from '../LocationPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
+import OpportunityLinks from './OpportunityLinks';
 import TitanEstimate from './TitanEstimate';
 import OpportunityScore from './OpportunityScore';
 import FollowButton from './FollowButton';
@@ -755,6 +756,11 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Project Information Links (edit mode only — needs opportunity id) */}
+              {isEditMode && (
+                <OpportunityLinks opportunityId={opportunity!.id} />
+              )}
 
               {/* Form Actions */}
               <div className="form-actions">

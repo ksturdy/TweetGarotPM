@@ -4,6 +4,7 @@ const db = require('../config/database');
 const opportunities = require('../models/opportunities');
 const opportunityActivities = require('../models/opportunityActivities');
 const OpportunityComment = require('../models/OpportunityComment');
+const OpportunityLink = require('../models/OpportunityLink');
 const OpportunityFollower = require('../models/OpportunityFollower');
 const OpportunityEstimate = require('../models/OpportunityEstimate');
 const OpportunityScore = require('../models/OpportunityScore');
@@ -666,6 +667,83 @@ router.delete('/:id/comments/:commentId', async (req, res, next) => {
       return res.status(404).json({ error: 'Comment not found or not authorized' });
     }
     res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Link Routes =====
+
+// Get all links for an opportunity
+router.get('/:id/links', async (req, res, next) => {
+  try {
+    const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!opportunity) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    const links = await OpportunityLink.findByOpportunityId(req.params.id, req.tenantId);
+    res.json(links);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create a new link
+router.post('/:id/links',
+  [body('url').trim().notEmpty().withMessage('URL is required')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      const link = await OpportunityLink.create(
+        req.params.id, req.user.id, req.tenantId, req.body.url
+      );
+      res.status(201).json(link);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update a link
+router.put('/:id/links/:linkId',
+  [body('url').trim().notEmpty().withMessage('URL is required')],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const link = await OpportunityLink.update(
+        req.params.linkId, req.tenantId, req.body.url
+      );
+      if (!link) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+      res.json(link);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Delete a link
+router.delete('/:id/links/:linkId', async (req, res, next) => {
+  try {
+    const link = await OpportunityLink.delete(req.params.linkId, req.tenantId);
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
+    }
+    res.json({ message: 'Link deleted successfully' });
   } catch (error) {
     next(error);
   }

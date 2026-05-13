@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
@@ -719,6 +719,88 @@ const SalesPipeline: React.FC = () => {
     }
   };
 
+  // ===== Resizable columns =====
+  const COLUMN_STORAGE_KEY = 'salesPipeline_columnWidths';
+  const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+    activity: 80,
+    name: 0,         // flex
+    company: 0,      // flex
+    gc: 0,           // flex
+    locationGroup: 90,
+    value: 100,
+    stage: 130,
+    salesperson: 180,
+  };
+  const COLUMN_KEYS = Object.keys(DEFAULT_COLUMN_WIDTHS);
+  const MIN_COL_WIDTH = 50;
+
+  const loadSavedColumnWidths = (): Record<string, number> => {
+    try {
+      const saved = localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (saved) return { ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(saved) };
+    } catch {}
+    return { ...DEFAULT_COLUMN_WIDTHS };
+  };
+
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(loadSavedColumnWidths);
+  const resizingCol = useRef<string | null>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+  const salesTableRef = useRef<HTMLTableElement>(null);
+
+  const handleResizeStart = useCallback((colKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = colKey;
+    resizeStartX.current = e.clientX;
+    if (columnWidths[colKey] === 0 && salesTableRef.current) {
+      const colIndex = COLUMN_KEYS.indexOf(colKey);
+      const th = salesTableRef.current.querySelector(`thead th:nth-child(${colIndex + 1})`) as HTMLElement;
+      resizeStartWidth.current = th ? th.offsetWidth : 200;
+    } else {
+      resizeStartWidth.current = columnWidths[colKey];
+    }
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [columnWidths]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingCol.current) return;
+      const diff = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(MIN_COL_WIDTH, resizeStartWidth.current + diff);
+      setColumnWidths(prev => ({ ...prev, [resizingCol.current!]: newWidth }));
+    };
+    const handleMouseUp = () => {
+      if (!resizingCol.current) return;
+      setColumnWidths(prev => {
+        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(prev));
+        return prev;
+      });
+      resizingCol.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const getColStyle = (key: string): React.CSSProperties => {
+    const w = columnWidths[key];
+    if (w === 0) return {};
+    return { width: `${w}px` };
+  };
+
+  const columnsWereResized = JSON.stringify(columnWidths) !== JSON.stringify(DEFAULT_COLUMN_WIDTHS);
+  const handleResetColumns = () => {
+    setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
+    localStorage.removeItem(COLUMN_STORAGE_KEY);
+  };
+
   const toggleStageFilter = (stageName: string) => {
     setExcludedStages(prev => {
       const next = new Set(prev);
@@ -1111,43 +1193,64 @@ const SalesPipeline: React.FC = () => {
               </div>
             </div>
           </div>
+          {columnsWereResized && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 16px' }}>
+              <button
+                onClick={handleResetColumns}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.75rem',
+                  color: '#6b7280',
+                  background: 'transparent',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                Reset Columns
+              </button>
+            </div>
+          )}
           <div className="sales-table-scroll-wrapper">
-          <table className="sales-table">
+          <table className="sales-table" ref={salesTableRef}>
             <colgroup>
-              <col style={{ width: '80px' }} />
-              <col style={{ width: '20%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '90px' }} />
-              <col style={{ width: '100px' }} />
-              <col style={{ width: '130px' }} />
-              <col style={{ width: '180px' }} />
+              {COLUMN_KEYS.map(key => (
+                <col key={key} style={getColStyle(key)} />
+              ))}
             </colgroup>
             <thead>
               <tr>
                 <th className="sales-sortable" onClick={() => handleSort('activity')}>
                   Activity <span className="sales-sort-icon">{sortColumn === 'activity' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('activity', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('name')}>
                   Opportunity <span className="sales-sort-icon">{sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('name', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('company')}>
                   Company <span className="sales-sort-icon">{sortColumn === 'company' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('company', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('gc')}>
                   General Contractor <span className="sales-sort-icon">{sortColumn === 'gc' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('gc', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('locationGroup')}>
                   Location <span className="sales-sort-icon">{sortColumn === 'locationGroup' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('locationGroup', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('value')}>
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('value', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('stage')}>
                   Stage <span className="sales-sort-icon">{sortColumn === 'stage' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('stage', e)} />
                 </th>
                 <th className="sales-sortable" onClick={() => handleSort('salesperson')}>
                   Salesperson <span className="sales-sort-icon">{sortColumn === 'salesperson' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('salesperson', e)} />
                 </th>
               </tr>
             </thead>
