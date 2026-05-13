@@ -245,6 +245,113 @@
   transform: translateY(-1px);
 }
 
+/* Edit / Delete buttons in header */
+.timeline-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timeline-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.timeline-action-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+
+.timeline-action-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+/* Inline edit form */
+.activity-edit-area {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.activity-edit-area .form-group {
+  margin-bottom: 0.75rem;
+}
+
+.activity-edit-area .form-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.activity-edit-area .form-group input,
+.activity-edit-area .form-group textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.activity-edit-area .form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.activity-edit-area .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.activity-edit-area .btn-secondary,
+.activity-edit-area .btn-primary {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+
+.activity-edit-area .btn-secondary {
+  background: white;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.activity-edit-area .btn-secondary:hover {
+  background: #f3f4f6;
+}
+
+.activity-edit-area .btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.activity-edit-area .btn-primary:hover {
+  background: #5a67d8;
+}
+
+.activity-edit-area .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Empty State */
 .timeline-empty {
   text-align: center;

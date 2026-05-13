@@ -7,6 +7,13 @@ interface Employee {
   job_title?: string | null;
 }
 
+interface MentionRange {
+  start: number;
+  end: number;
+  employeeId: number;
+  displayName: string;
+}
+
 interface MentionTextareaProps {
   value: string;
   onChange: (value: string) => void;
@@ -16,6 +23,69 @@ interface MentionTextareaProps {
   rows?: number;
   autoFocus?: boolean;
   className?: string;
+}
+
+const MARKUP_REGEX = /@\[([^\]]+)\]\((\d+)\)/g;
+
+// Convert markup like "Hello @[Brian Smith](4)" to display "Hello @Brian Smith"
+// plus the position of each mention in the display string.
+function parseMarkup(markup: string): { display: string; ranges: MentionRange[] } {
+  const ranges: MentionRange[] = [];
+  let display = '';
+  let lastIndex = 0;
+  MARKUP_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = MARKUP_REGEX.exec(markup)) !== null) {
+    display += markup.slice(lastIndex, match.index);
+    const displayName = match[1];
+    const employeeId = parseInt(match[2], 10);
+    const displayMention = `@${displayName}`;
+    const start = display.length;
+    display += displayMention;
+    ranges.push({ start, end: display.length, employeeId, displayName });
+    lastIndex = match.index + match[0].length;
+  }
+  display += markup.slice(lastIndex);
+  return { display, ranges };
+}
+
+function buildMarkup(display: string, ranges: MentionRange[]): string {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  let result = '';
+  let pos = 0;
+  for (const r of sorted) {
+    result += display.slice(pos, r.start);
+    result += `@[${r.displayName}](${r.employeeId})`;
+    pos = r.end;
+  }
+  result += display.slice(pos);
+  return result;
+}
+
+// Shift / drop existing mention ranges based on a diff between old and new display.
+// Any range that overlaps the edit region is dropped (mention becomes plain text).
+function adjustRanges(oldDisplay: string, newDisplay: string, ranges: MentionRange[]): MentionRange[] {
+  const minLen = Math.min(oldDisplay.length, newDisplay.length);
+  let prefixLen = 0;
+  while (prefixLen < minLen && oldDisplay[prefixLen] === newDisplay[prefixLen]) prefixLen++;
+  let suffixLen = 0;
+  const maxSuffix = minLen - prefixLen;
+  while (
+    suffixLen < maxSuffix &&
+    oldDisplay[oldDisplay.length - 1 - suffixLen] === newDisplay[newDisplay.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+  const oldSuffixStart = oldDisplay.length - suffixLen;
+  const lengthDiff = newDisplay.length - oldDisplay.length;
+
+  return ranges.flatMap(r => {
+    if (r.end <= prefixLen) return [r];
+    if (r.start >= oldSuffixStart) {
+      return [{ ...r, start: r.start + lengthDiff, end: r.end + lengthDiff }];
+    }
+    return [];
+  });
 }
 
 const MentionTextarea: React.FC<MentionTextareaProps> = ({
@@ -34,7 +104,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   const [mentionStart, setMentionStart] = useState<number>(0);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Filter employees by the mention query
+  // value is markup (stored format). The textarea shows the parsed display text.
+  const { display, ranges } = useMemo(() => parseMarkup(value), [value]);
+
   const filtered = mentionQuery !== null
     ? employees.filter(emp => {
         const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
@@ -44,7 +116,6 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
   const showDropdown = mentionQuery !== null && filtered.length > 0;
 
-  // Sync overlay scroll with textarea
   const syncScroll = useCallback(() => {
     if (textareaRef.current && overlayRef.current) {
       overlayRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -52,21 +123,23 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }
   }, []);
 
-  // Detect @ mention trigger on input change
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    const cursorPos = e.target.selectionStart || 0;
-    onChange(newValue);
+  const emit = useCallback((newDisplay: string, newRanges: MentionRange[]) => {
+    onChange(buildMarkup(newDisplay, newRanges));
+  }, [onChange]);
 
-    // Look backwards from cursor for an unmatched @
-    const textBeforeCursor = newValue.slice(0, cursorPos);
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newDisplay = e.target.value;
+    const newRanges = adjustRanges(display, newDisplay, ranges);
+    emit(newDisplay, newRanges);
+
+    // Detect @ trigger from the just-typed display text
+    const cursorPos = e.target.selectionStart || 0;
+    const textBeforeCursor = newDisplay.slice(0, cursorPos);
     const lastAt = textBeforeCursor.lastIndexOf('@');
 
     if (lastAt >= 0) {
-      // Make sure we're not inside an existing mention tag
-      const textFromAt = newValue.slice(lastAt);
-      const existingMention = /^@\[[^\]]+\]\(\d+\)/.test(textFromAt);
-      if (!existingMention) {
+      const insideMention = newRanges.some(r => lastAt >= r.start && lastAt < r.end);
+      if (!insideMention) {
         const textAfterAt = textBeforeCursor.slice(lastAt + 1);
         if (!textAfterAt.includes('\n') && textAfterAt.length <= 30) {
           setMentionQuery(textAfterAt);
@@ -76,11 +149,44 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         }
       }
     }
-
     setMentionQuery(null);
-  }, [onChange]);
+  }, [display, ranges, emit]);
 
-  // Handle keyboard navigation in dropdown
+  const selectMention = useCallback((emp: Employee) => {
+    const displayName = `${emp.first_name} ${emp.last_name}`;
+    const displayMention = `@${displayName}`;
+    const cursorPos = textareaRef.current?.selectionStart ?? (mentionStart + (mentionQuery?.length ?? 0) + 1);
+    const before = display.slice(0, mentionStart);
+    const after = display.slice(cursorPos);
+    const newDisplay = before + displayMention + ' ' + after;
+
+    const lengthDiff = (displayMention.length + 1) - (cursorPos - mentionStart);
+    const shifted = ranges.flatMap(r => {
+      if (r.end <= mentionStart) return [r];
+      if (r.start >= cursorPos) return [{ ...r, start: r.start + lengthDiff, end: r.end + lengthDiff }];
+      return [];
+    });
+
+    const newMention: MentionRange = {
+      start: mentionStart,
+      end: mentionStart + displayMention.length,
+      employeeId: emp.id,
+      displayName,
+    };
+
+    const newRanges = [...shifted, newMention].sort((a, b) => a.start - b.start);
+    emit(newDisplay, newRanges);
+    setMentionQuery(null);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newCursorPos = mentionStart + displayMention.length + 1;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  }, [display, ranges, mentionStart, mentionQuery, emit]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showDropdown) {
       if (e.key === 'ArrowDown') {
@@ -105,32 +211,34 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       }
     }
 
-    // Forward to parent handler (e.g., Enter to post)
-    onKeyDown?.(e);
-  }, [showDropdown, filtered, activeIndex, onKeyDown]);
-
-  const selectMention = useCallback((emp: Employee) => {
-    const displayName = `${emp.first_name} ${emp.last_name}`;
-    const mentionTag = `@[${displayName}](${emp.id})`;
-    // Replace @query with the mention tag
-    const before = value.slice(0, mentionStart);
-    const cursorPos = textareaRef.current?.selectionStart || (mentionStart + mentionQuery!.length + 1);
-    const after = value.slice(cursorPos);
-    const newValue = before + mentionTag + ' ' + after;
-    onChange(newValue);
-    setMentionQuery(null);
-
-    // Restore focus and set cursor position after the mention
-    setTimeout(() => {
-      if (textareaRef.current) {
-        const newCursorPos = before.length + mentionTag.length + 1;
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+    // Backspace just after a mention deletes the whole mention as one unit
+    if (e.key === 'Backspace' && textareaRef.current) {
+      const ta = textareaRef.current;
+      if (ta.selectionStart === ta.selectionEnd) {
+        const pos = ta.selectionStart;
+        const r = ranges.find(rg => rg.end === pos);
+        if (r) {
+          e.preventDefault();
+          const removedLen = r.end - r.start;
+          const newDisplay = display.slice(0, r.start) + display.slice(r.end);
+          const newRanges = ranges
+            .filter(rg => rg !== r)
+            .map(rg => rg.start >= r.end
+              ? { ...rg, start: rg.start - removedLen, end: rg.end - removedLen }
+              : rg);
+          emit(newDisplay, newRanges);
+          setTimeout(() => {
+            textareaRef.current?.focus();
+            textareaRef.current?.setSelectionRange(r.start, r.start);
+          }, 0);
+          return;
+        }
       }
-    }, 0);
-  }, [value, mentionStart, mentionQuery, onChange]);
+    }
 
-  // Close dropdown when clicking outside
+    onKeyDown?.(e);
+  }, [showDropdown, filtered, activeIndex, selectMention, ranges, display, emit, onKeyDown]);
+
   useEffect(() => {
     const handleClickOutside = () => {
       if (mentionQuery !== null) setMentionQuery(null);
@@ -139,34 +247,21 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, [mentionQuery]);
 
-  // Build overlay: identical text but mention portions get a highlight background.
-  // Every character in the overlay matches 1:1 with the textarea so positions align.
   const overlayContent = useMemo(() => {
     const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    const regex = /@\[([^\]]+)\]\((\d+)\)/g;
-
-    while ((match = regex.exec(value)) !== null) {
-      // Plain text before this mention
-      if (match.index > lastIndex) {
-        parts.push(value.slice(lastIndex, match.index));
-      }
-      // Render the full raw mention text (same chars) but with highlight styling
+    let cursor = 0;
+    const sorted = [...ranges].sort((a, b) => a.start - b.start);
+    for (const r of sorted) {
+      if (r.start > cursor) parts.push(display.slice(cursor, r.start));
       parts.push(
-        <mark key={match.index} className="mention-hl">{match[0]}</mark>
+        <mark key={r.start} className="mention-hl">{display.slice(r.start, r.end)}</mark>
       );
-      lastIndex = match.index + match[0].length;
+      cursor = r.end;
     }
-
-    if (lastIndex < value.length) {
-      parts.push(value.slice(lastIndex));
-    }
-
-    // Trailing char so overlay always has height
-    parts.push('\u00A0');
+    if (cursor < display.length) parts.push(display.slice(cursor));
+    parts.push(' ');
     return parts;
-  }, [value]);
+  }, [display, ranges]);
 
   return (
     <div className="mention-textarea-wrapper" onClick={e => e.stopPropagation()}>
@@ -177,7 +272,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
               key={emp.id}
               className={`mention-option ${idx === activeIndex ? 'active' : ''}`}
               onMouseDown={e => {
-                e.preventDefault(); // prevent blur
+                e.preventDefault();
                 selectMention(emp);
               }}
               onMouseEnter={() => setActiveIndex(idx)}
@@ -202,7 +297,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         </div>
         <textarea
           ref={textareaRef}
-          value={value}
+          value={display}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onScroll={syncScroll}

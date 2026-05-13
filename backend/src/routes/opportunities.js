@@ -452,7 +452,9 @@ router.post('/:id/activities',
 
       const activityData = {
         ...req.body,
-        opportunity_id: req.params.id
+        opportunity_id: req.params.id,
+        scheduled_at: req.body.scheduled_at || null,
+        reminder_at: req.body.reminder_at || null,
       };
 
       const activity = await opportunityActivities.create(activityData, req.user.id);
@@ -472,7 +474,12 @@ router.put('/:opportunityId/activities/:activityId', async (req, res, next) => {
       return res.status(404).json({ error: 'Opportunity not found' });
     }
 
-    const activity = await opportunityActivities.update(req.params.activityId, req.body);
+    const updateData = {
+      ...req.body,
+      scheduled_at: req.body.scheduled_at === '' ? null : req.body.scheduled_at,
+      reminder_at: req.body.reminder_at === '' ? null : req.body.reminder_at,
+    };
+    const activity = await opportunityActivities.update(req.params.activityId, updateData);
 
     if (!activity) {
       return res.status(404).json({ error: 'Activity not found' });
