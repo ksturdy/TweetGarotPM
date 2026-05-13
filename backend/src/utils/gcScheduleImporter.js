@@ -309,11 +309,25 @@ async function parsePDF(buffer) {
     if (typeof parser.destroy === 'function') await parser.destroy().catch(() => {});
   }
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return parsePdfLines(lines);
+}
 
+// Per-line PDF parser logic, factored out so the re-parse script (which
+// reads stored raw.line values from a prior import) can run the same logic
+// without re-extracting text from a PDF buffer.
+function parsePdfLines(lines) {
   // Match: 04-Aug-25, 4-Aug-2025, 8/15/26, 2026-08-15
   const dateRe = /\b(\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)-\d{2,4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/gi;
-  // P6 / common GC activity ID patterns: A####, CROC####, CROC.####, AA-####
-  const idRe = /^([A-Z]{1,6}[\.\-]?\d{3,6})\b/;
+  // Some PDFs (e.g. BDW lookahead) prepend a row-index column before the
+  // activity ID: "7 \tDCC.B1.3827 \t...". Strip that first so the ID regex
+  // can anchor on the ID itself.
+  const rowPrefixRe = /^\s*\d{1,5}\s+/;
+  // Multi-segment IDs like DCC.B1.3827, BDW.PRE.1180, EQPTRK.400.900.000.G00.0001.
+  // Requires at least one separator-segment pair, and at least one digit
+  // somewhere — so plain alpha tokens don't get classified as activity IDs.
+  const multiSegIdRe = /^([A-Z][A-Z0-9]*(?:[.\-][A-Z0-9]+){1,10})\b/;
+  // P6 / common GC single-segment patterns: A####, CROC####, CROC.####, AA-####.
+  const singleSegIdRe = /^([A-Z]{1,6}[\.\-]?\d{3,6})\b/;
 
   const activities = [];
   const warnings = ['PDF parsing is best-effort — review and correct rows. For accurate import, ask the GC for an Excel, CSV, or P6 XER export.'];
@@ -325,10 +339,14 @@ async function parsePDF(buffer) {
 
     let activity_id = null;
     let rest = line;
-    const idMatch = line.match(idRe);
-    if (idMatch) {
+    const stripped = line.replace(rowPrefixRe, '');
+    let idMatch = stripped.match(multiSegIdRe);
+    if (idMatch && /\d/.test(idMatch[1])) {
       activity_id = idMatch[1];
-      rest = line.slice(idMatch[0].length).trim();
+      rest = stripped.slice(idMatch[0].length).trim();
+    } else if ((idMatch = stripped.match(singleSegIdRe))) {
+      activity_id = idMatch[1];
+      rest = stripped.slice(idMatch[0].length).trim();
     }
 
     // Strip dates from the rest to leave the name. P6 PDF rows look like:
@@ -375,8 +393,13 @@ async function parsePDF(buffer) {
     }
     if (!name && !activity_id) continue;
 
-    const start = coerceDate(dates[0]);
-    const finish = dates.length > 1 ? coerceDate(dates[1]) : null;
+    let start = coerceDate(dates[0]);
+    let finish = dates.length > 1 ? coerceDate(dates[1]) : null;
+    // Column order varies by PDF (P6 prints start→finish; BDW lookahead
+    // prints finish→start). If we have both and they're out of order, swap.
+    if (start && finish && start > finish) {
+      const tmp = start; start = finish; finish = tmp;
+    }
     const display_order = activities.length;
     const parent_summary_order = isSummary ? null : (lastSummaryOrder != null ? lastSummaryOrder : null);
 
@@ -469,6 +492,7 @@ module.exports = {
   parseSpreadsheet,
   parseXER,
   parsePDF,
+  parsePdfLines,
   applyTradeDetection,
   detectTrade,
 };
