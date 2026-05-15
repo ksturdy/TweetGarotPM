@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useDeferredValue } from 'react';
+import React, { useState, useMemo, useDeferredValue, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi, User, UpdateUserData } from '../services/users';
@@ -27,6 +27,85 @@ const UserManagement: React.FC = () => {
 
   // Check if current user has HR write access
   const hasHRWriteAccess = currentUser?.role === 'admin' || currentUser?.hrAccess === 'write';
+
+  // Resizable column widths
+  const STORAGE_KEY = 'userManagement_columnWidths';
+  const DEFAULT_WIDTHS: Record<string, number> = {
+    name: 0, // 0 = flexible, takes remaining space
+    email: 220,
+    role: 110,
+    hrAccess: 130,
+    twoFa: 110,
+    status: 100,
+    lastActive: 120,
+    created: 110,
+    actions: 200,
+  };
+  const COLUMN_KEYS = Object.keys(DEFAULT_WIDTHS);
+  const MIN_COL_WIDTH = 40;
+
+  const loadSavedWidths = (): Record<string, number> => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return { ...DEFAULT_WIDTHS, ...JSON.parse(saved) };
+    } catch {}
+    return { ...DEFAULT_WIDTHS };
+  };
+
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(loadSavedWidths);
+  const resizingCol = useRef<string | null>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const handleResizeStart = useCallback((colKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = colKey;
+    resizeStartX.current = e.clientX;
+    if (columnWidths[colKey] === 0 && tableRef.current) {
+      const colIndex = COLUMN_KEYS.indexOf(colKey);
+      const th = tableRef.current.querySelector(`thead th:nth-child(${colIndex + 1})`) as HTMLElement;
+      resizeStartWidth.current = th ? th.offsetWidth : 200;
+    } else {
+      resizeStartWidth.current = columnWidths[colKey];
+    }
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [columnWidths, COLUMN_KEYS]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingCol.current) return;
+      const diff = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(MIN_COL_WIDTH, resizeStartWidth.current + diff);
+      setColumnWidths(prev => ({ ...prev, [resizingCol.current!]: newWidth }));
+    };
+
+    const handleMouseUp = () => {
+      if (!resizingCol.current) return;
+      setColumnWidths(prev => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(prev));
+        return prev;
+      });
+      resizingCol.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const getColStyle = (key: string): React.CSSProperties => {
+    const w = columnWidths[key];
+    if (w === 0) return {};
+    return { width: `${w}px` };
+  };
 
   const { data: usersRaw, isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -343,6 +422,25 @@ const UserManagement: React.FC = () => {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+            {JSON.stringify(columnWidths) !== JSON.stringify(DEFAULT_WIDTHS) && (
+              <button
+                onClick={() => {
+                  setColumnWidths({ ...DEFAULT_WIDTHS });
+                  localStorage.removeItem(STORAGE_KEY);
+                }}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.75rem',
+                  color: '#6b7280',
+                  background: 'transparent',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                Reset Columns
+              </button>
+            )}
           </div>
         </div>
 
@@ -353,18 +451,50 @@ const UserManagement: React.FC = () => {
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>Try adjusting your filters</p>
           </div>
         ) : (
-          <table className="sales-table">
+          <table className="sales-table" ref={tableRef}>
+            <colgroup>
+              {COLUMN_KEYS.map(key => (
+                <col key={key} style={getColStyle(key)} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>Name{getSortIndicator('name')}</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>HR Access</th>
-                <th>2FA</th>
-                <th>Status</th>
-                <th onClick={() => handleSort('last_active')} style={{ cursor: 'pointer', userSelect: 'none' }}>Last Active{getSortIndicator('last_active')}</th>
-                <th onClick={() => handleSort('created')} style={{ cursor: 'pointer', userSelect: 'none' }}>Created{getSortIndicator('created')}</th>
-                <th>Actions</th>
+                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  Name{getSortIndicator('name')}
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('name', e)} />
+                </th>
+                <th>
+                  Email
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('email', e)} />
+                </th>
+                <th>
+                  Role
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('role', e)} />
+                </th>
+                <th>
+                  HR Access
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('hrAccess', e)} />
+                </th>
+                <th>
+                  2FA
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('twoFa', e)} />
+                </th>
+                <th>
+                  Status
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('status', e)} />
+                </th>
+                <th onClick={() => handleSort('last_active')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  Last Active{getSortIndicator('last_active')}
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('lastActive', e)} />
+                </th>
+                <th onClick={() => handleSort('created')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                  Created{getSortIndicator('created')}
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('created', e)} />
+                </th>
+                <th>
+                  Actions
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('actions', e)} />
+                </th>
               </tr>
             </thead>
             <tbody>
