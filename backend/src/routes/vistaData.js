@@ -172,10 +172,21 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
 
         let newCount = 0;
         let updatedCount = 0;
+        let skippedJobPattern = 0;
 
         for (const row of data) {
+          const contractNumber = String(row['Contract'] || row['Contract Number'] || '').trim();
+          // Vista contract numbers end in a bare trailing dash (e.g. "44448-").
+          // Anything matching digits-dash-digits (e.g. "44448-10") is a Job Number
+          // from the cost side and must not become a Contract / project row.
+          if (/^\d+-\d+$/.test(contractNumber)) {
+            skippedJobPattern++;
+            console.log(`[Vista Import] Skipped Job-pattern row in contracts sheet: ${contractNumber}`);
+            continue;
+          }
+
           const contractData = {
-            contract_number: String(row['Contract'] || row['Contract Number'] || '').trim(),
+            contract_number: contractNumber,
             description: row['Contract Description'] || row['Description'] || '',
             status: row['Contract Status'] || row['Status'] || '',
             employee_number: row['Employee Number Emp Number'] ? String(row['Employee Number Emp Number']) : null,
@@ -258,7 +269,6 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
           };
 
           if (!contractData.contract_number) continue;
-
           const result = await VistaData.upsertContract(contractData, req.tenantId, batch.id);
           if (result.isNew) {
             newCount++;
@@ -272,7 +282,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
           records_updated: updatedCount
         });
 
-        results.contracts = { total: data.length, new: newCount, updated: updatedCount, batch_id: batch.id };
+        results.contracts = { total: data.length, new: newCount, updated: updatedCount, skipped_job_pattern: skippedJobPattern, batch_id: batch.id };
         results.sheetsProcessed.push(contractSheetName);
       }
     }
