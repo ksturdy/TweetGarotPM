@@ -126,6 +126,7 @@ import ScheduledReports from './pages/reports/ScheduledReports';
 import BuyoutMetricReport from './pages/reports/BuyoutMetricReport';
 import ReportsHub from './pages/reports/ReportsHub';
 import WeeklySalesReport from './pages/reports/WeeklySalesReport';
+import PMWorkloadReport from './pages/reports/PMWorkloadReport';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -469,6 +470,7 @@ const App: React.FC = () => {
                 <Route path="/reports/scheduled" element={<ScheduledReports />} />
                 <Route path="/reports/buyout-metric" element={<BuyoutMetricReport />} />
                 <Route path="/reports/weekly-sales" element={<WeeklySalesReport />} />
+                <Route path="/reports/pm-workload" element={<PMWorkloadReport />} />
                 <Route path="/executive-report" element={<Navigate to="/reports/executive-report" />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />

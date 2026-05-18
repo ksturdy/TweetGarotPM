@@ -283,6 +283,51 @@ router.put('/backlog-fit-settings', async (req, res, next) => {
 });
 
 // =====================================================
+// PM WORKLOAD REPORT THRESHOLDS (global, any authenticated user)
+// =====================================================
+
+/**
+ * Get PM workload report thresholds
+ * GET /api/tenant/pm-workload-settings
+ */
+router.get('/pm-workload-settings', async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.tenantId);
+    res.json(tenant?.settings?.pmWorkloadThresholds || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Save PM workload report thresholds
+ * PUT /api/tenant/pm-workload-settings
+ */
+router.put('/pm-workload-settings', async (req, res, next) => {
+  try {
+    const allowed = ['maxBacklogHours', 'maxBacklogDollars', 'lowBacklogHours'];
+    const payload = {};
+    for (const key of allowed) {
+      const v = req.body[key];
+      if (v === null || v === undefined || v === '') continue;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({ error: `Invalid value for ${key}` });
+      }
+      payload[key] = n;
+    }
+
+    const tenant = await Tenant.updateSettings(req.tenantId, {
+      pmWorkloadThresholds: payload,
+    });
+
+    res.json(tenant.settings.pmWorkloadThresholds);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =====================================================
 // USER MANAGEMENT WITHIN TENANT
 // =====================================================
 
