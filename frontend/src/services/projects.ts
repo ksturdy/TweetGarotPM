@@ -37,6 +37,13 @@ export interface Project {
   override_original_estimated_margin_pct?: number | null;
   override_gm_percent?: number | null;
   gm_overridden?: boolean;
+  // Billing forecast markups (% — stored as plain percentage value, e.g. 15.5)
+  billing_markup_labor?: number | null;
+  billing_markup_material?: number | null;
+  billing_markup_subs?: number | null;
+  billing_markup_rentals?: number | null;
+  billing_markup_equipment?: number | null;
+  billing_markup_genconds?: number | null;
   created_at: string;
   // Note: favorite is now managed per-user via favoritesService
   isFavorited?: boolean; // Runtime property added by UI
