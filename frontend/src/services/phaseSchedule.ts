@@ -56,6 +56,7 @@ export interface PhaseScheduleItem {
   quantity_installed: number;
   use_manual_qty_values: boolean;
   manual_monthly_qty: Record<string, number> | null;
+  billable_rate_id: number | null;
   sort_order: number;
   created_by: number;
   created_by_name: string;
@@ -86,11 +87,36 @@ export const phaseScheduleApi = {
   reorder: (projectId: number, itemIds: number[]) =>
     api.put(`/phase-schedule/project/${projectId}/reorder`, { itemIds }),
 
-  downloadPdf: (projectId: number, view: 'grid' | 'gantt', mode?: 'cost' | 'qty', itemIds?: number[]) => {
+  downloadPdf: (
+    projectId: number,
+    view: 'grid' | 'gantt',
+    mode?: 'cost' | 'qty' | 'manpower' | 'billable',
+    itemIds?: number[],
+    groups?: string[],
+    shift?: string,
+  ) => {
     const params = new URLSearchParams({ view });
-    if (mode) params.set('mode', mode);
+    if (mode)  params.set('mode', mode);
+    if (shift) params.set('shift', shift);
     if (itemIds && itemIds.length > 0) params.set('itemIds', itemIds.join(','));
+    if (groups  && groups.length  > 0) params.set('groups',  groups.join(','));
     return api.get(`/phase-schedule/project/${projectId}/pdf-download?${params}`, {
+      responseType: 'blob',
+    });
+  },
+
+  downloadExcel: (
+    projectId: number,
+    mode: 'cost' | 'qty' | 'manpower' | 'billable',
+    itemIds?: number[],
+    groups?: string[],
+    shift?: string,
+  ) => {
+    const params = new URLSearchParams({ mode });
+    if (shift) params.set('shift', shift);
+    if (itemIds && itemIds.length > 0) params.set('itemIds', itemIds.join(','));
+    if (groups  && groups.length  > 0) params.set('groups',  groups.join(','));
+    return api.get(`/phase-schedule/project/${projectId}/excel-download?${params}`, {
       responseType: 'blob',
     });
   },

@@ -81,6 +81,7 @@ const PhaseSchedule = {
          CASE WHEN psi.percent_complete > 0 THEN psi.percent_complete ELSE COALESCE(pc_agg.weighted_pct, 0) END as percent_complete,
          psi.quantity, psi.quantity_uom, psi.quantity_installed,
          psi.use_manual_qty_values, psi.manual_monthly_qty,
+         psi.billable_rate_id,
          psi.sort_order, psi.created_by, psi.created_at, psi.updated_at,
          u.first_name || ' ' || u.last_name as created_by_name,
          (SELECT string_agg(DISTINCT rtrim(trim(pc.phase), '- '), ', ' ORDER BY rtrim(trim(pc.phase), '- '))
@@ -185,7 +186,8 @@ const PhaseSchedule = {
       phase_code_ids: 'phase_code_ids',
       cost_types: 'cost_types',
       row_number: 'row_number',
-      predecessor_id: 'predecessor_id'
+      predecessor_id: 'predecessor_id',
+      billable_rate_id: 'billable_rate_id'
     };
 
     for (const [key, column] of Object.entries(allowedFields)) {

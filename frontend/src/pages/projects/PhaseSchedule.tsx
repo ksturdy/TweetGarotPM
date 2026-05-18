@@ -2,8 +2,9 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { projectsApi } from '../../services/projects';
+import { projectsApi, Project } from '../../services/projects';
 import { phaseScheduleApi, PhaseCode, PhaseScheduleItem } from '../../services/phaseSchedule';
+import { projectLaborRatesApi, ProjectLaborRate } from '../../services/projectLaborRates';
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 import { format, addMonths, addDays, startOfMonth, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
@@ -59,6 +60,10 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
   { key: 'projCostField', label: 'Cost (Field)', group: 'Projected', hideable: true },
   { key: 'projCostVista', label: 'Cost (Vista)', group: 'Projected', hideable: true },
   { key: 'projPi', label: 'PI', group: 'Projected', hideable: true },
+  { key: 'remQty', label: 'Qty', group: 'Remaining', hideable: true },
+  { key: 'remHrs', label: 'Hrs', group: 'Remaining', hideable: true },
+  { key: 'remCost', label: 'Cost', group: 'Remaining', hideable: true },
+  { key: 'rate', label: 'Rate', group: 'Billing', hideable: true },
   { key: 'start', label: 'Start', group: 'Schedule', hideable: true },
   { key: 'end', label: 'End', group: 'Schedule', hideable: true },
   { key: 'dur', label: 'Days', group: 'Schedule', hideable: true },
@@ -370,6 +375,9 @@ interface CostTypeGroup {
   projHrs: number;
   projCostField: number;
   projCostVista: number;
+  remQty: number;
+  remHrs: number;
+  remCost: number;
   earliestStart: string | null;
   latestEnd: string | null;
   duration: number;
@@ -428,25 +436,87 @@ const generateMonths = (start: Date, end: Date): Date[] => {
   return months;
 };
 
+// Shift definitions for manpower mode. Hours/month uses 52/12 weeks per month.
+const SHIFT_HRS_PER_MONTH: Record<string, number> = {
+  '5/8':  (5 * 8)  * 52 / 12,  // 173.33
+  '5/10': (5 * 10) * 52 / 12,  // 216.67
+  '6/8':  (6 * 8)  * 52 / 12,  // 208
+  '6/10': (6 * 10) * 52 / 12,  // 260
+};
+const SHIFT_OPTIONS = ['5/8', '5/10', '6/8', '6/10'] as const;
+type ShiftKey = typeof SHIFT_OPTIONS[number];
+type GridMode = 'cost' | 'qty' | 'manpower' | 'billable';
+
+// Maps a project's per-cost-type markup % onto a lookup keyed by cost type number.
+// CT 1 (Labor) is the cost-plus fallback for labor lines with no rate assigned.
+const buildMarkupByCt = (project: Project | undefined): Record<number, number> => ({
+  1: project?.billing_markup_labor     ? Number(project.billing_markup_labor)     : 0,
+  2: project?.billing_markup_material  ? Number(project.billing_markup_material)  : 0,
+  3: project?.billing_markup_subs      ? Number(project.billing_markup_subs)      : 0,
+  4: project?.billing_markup_rentals   ? Number(project.billing_markup_rentals)   : 0,
+  5: project?.billing_markup_equipment ? Number(project.billing_markup_equipment) : 0,
+  6: project?.billing_markup_genconds  ? Number(project.billing_markup_genconds)  : 0,
+});
+
+// Helper: projected hours for a line, mirroring the GridRow formula.
+const computeProjHrs = (item: PhaseScheduleItem): number => {
+  const estQty = parseNum(item.quantity);
+  const jtdQty = parseNum(item.quantity_installed);
+  const jtdHrs = parseNum(item.total_jtd_hours);
+  const estHrs = parseNum(item.total_est_hours);
+  const jtdPi = jtdQty > 0 && jtdHrs > 0 ? jtdQty / jtdHrs : 0;
+  return jtdPi > 0 ? Math.max(estQty / jtdPi, jtdHrs) : jtdHrs > estHrs ? jtdHrs : estHrs;
+};
+
 // Compute monthly distribution for an item
 const computeMonthlyValues = (
   item: PhaseScheduleItem,
   months: Date[],
-  mode: 'cost' | 'qty'
+  mode: GridMode,
+  hoursPerWorkerPerMonth: number = SHIFT_HRS_PER_MONTH['5/8'],
+  laborRateById?: Map<number, number>,
+  markupByCt?: Record<number, number>
 ): Record<string, number> => {
   const values: Record<string, number> = {};
   if (!item.start_date || !item.end_date) return values;
 
-  const useManual = mode === 'cost' ? item.use_manual_values : item.use_manual_qty_values;
-  const manualValues = mode === 'cost' ? item.manual_monthly_values : item.manual_monthly_qty;
-
-  if (useManual && manualValues) {
-    return manualValues;
+  if (mode === 'cost' || mode === 'qty') {
+    const useManual = mode === 'cost' ? item.use_manual_values : item.use_manual_qty_values;
+    const manualValues = mode === 'cost' ? item.manual_monthly_values : item.manual_monthly_qty;
+    if (useManual && manualValues) return manualValues;
   }
 
-  const total = mode === 'cost'
-    ? parseNum(item.total_est_cost) - parseNum(item.total_jtd_cost)
-    : (parseNum(item.quantity) - parseNum(item.quantity_installed));
+  let total: number;
+  if (mode === 'cost') {
+    total = parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost);
+  } else if (mode === 'qty') {
+    total = parseNum(item.quantity) - parseNum(item.quantity_installed);
+  } else if (mode === 'manpower') {
+    // Distribute Remaining Hours (projHrs − jtdHrs); converted to workers below.
+    const jtdHrs = parseNum(item.total_jtd_hours);
+    total = Math.max(0, computeProjHrs(item) - jtdHrs);
+  } else {
+    // Billable:
+    //   Labor (CT 1): if a rate is assigned, Remaining Hours × rate.
+    //                 Otherwise fall back to Remaining Cost × (1 + labor markup%)
+    //                 — supports cost-plus contracts where labor is billed at
+    //                 cost + markup instead of a separate billable rate.
+    //   Non-labor (CT 2-6): Remaining Cost × (1 + markup%).
+    const ct = item.cost_types?.[0] || 0;
+    if (ct === 1 && item.billable_rate_id && laborRateById) {
+      const rate = laborRateById.get(item.billable_rate_id) || 0;
+      if (rate <= 0) return values;
+      const jtdHrs = parseNum(item.total_jtd_hours);
+      const remHrs = Math.max(0, computeProjHrs(item) - jtdHrs);
+      total = remHrs * rate;
+    } else {
+      const markupPct = markupByCt ? markupByCt[ct] || 0 : 0;
+      const vPC = parseNum(item.total_projected_cost);
+      if (vPC <= 0) return values;
+      const remCost = Math.max(0, vPC - parseNum(item.total_jtd_cost));
+      total = remCost * (1 + markupPct / 100);
+    }
+  }
 
   if (total <= 0) return values;
 
@@ -461,7 +531,8 @@ const computeMonthlyValues = (
 
   itemMonths.forEach((m, i) => {
     const key = format(m, 'yyyy-MM');
-    values[key] = perMonth * multipliers[i];
+    const v = perMonth * multipliers[i];
+    values[key] = mode === 'manpower' ? v / hoursPerWorkerPerMonth : v;
   });
 
   return values;
@@ -1529,6 +1600,8 @@ const COL_GROUP = {
   est:   { hdr: '#dbeafe', cell: '#eff6ff' },   // blue-100 / blue-50  — Estimated
   jtd:   { hdr: '#fef3c7', cell: '#fffbeb' },   // amber-100 / amber-50 — JTD
   proj:  { hdr: '#dcfce7', cell: '#f0fdf4' },   // green-100 / green-50 — Projected
+  rem:   { hdr: '#ede9fe', cell: '#f5f3ff' },   // violet-100 / violet-50 — Remaining
+  bill:  { hdr: '#fce7f3', cell: '#fdf2f8' },   // pink-100 / pink-50 — Billing (Rate)
   sched: { hdr: '#e2e8f0', cell: '#f8fafc' },   // slate-200 / slate-50 — Schedule
 };
 
@@ -1540,6 +1613,10 @@ const GRID_COL_DEFAULTS = {
   pctComp: 54, jtdQty: 62, jtdHrs: 62, jtdCost: 78, jtdPi: 50,
   // Projected group
   projQty: 62, projHrs: 62, projCostField: 78, projCostVista: 78, projPi: 50,
+  // Remaining group
+  remQty: 62, remHrs: 62, remCost: 78,
+  // Billing
+  rate: 130,
   // Schedule
   start: 100, end: 100, dur: 44, pred: 44, contour: 74
 };
@@ -1548,7 +1625,10 @@ const GridView: React.FC<{
   items: PhaseScheduleItem[];
   allItems: PhaseScheduleItem[];
   months: Date[];
-  mode: 'cost' | 'qty';
+  mode: GridMode;
+  shift: ShiftKey;
+  laborRates: ProjectLaborRate[];
+  markupByCt: Record<number, number>;
   projectId: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
@@ -1570,7 +1650,7 @@ const GridView: React.FC<{
   prefixFilter: Set<string>;
   onPrefixFilterToggle: (prefix: string) => void;
   onPrefixFilterClear: () => void;
-}> = ({ items, allItems, months, mode, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
+}> = ({ items, allItems, months, mode, shift, laborRates, markupByCt, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
   // Grid column widths (persisted to localStorage)
   const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
     try {
@@ -1693,13 +1773,19 @@ const GridView: React.FC<{
     setColWidths(prev => ({ ...prev, [col]: maxW }));
   };
 
+  const hpwm = SHIFT_HRS_PER_MONTH[shift];
+  const laborRateById = useMemo(() => {
+    const m = new Map<number, number>();
+    laborRates.forEach(r => m.set(r.id, Number(r.billable_rate) || 0));
+    return m;
+  }, [laborRates]);
   const allMonthlyValues = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     items.forEach(item => {
-      map.set(item.id, computeMonthlyValues(item, months, mode));
+      map.set(item.id, computeMonthlyValues(item, months, mode, hpwm, laborRateById, markupByCt));
     });
     return map;
-  }, [items, months, mode]);
+  }, [items, months, mode, hpwm, laborRateById, markupByCt]);
 
   const columnTotals = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -1741,16 +1827,22 @@ const GridView: React.FC<{
   const estCols = ['estQty', 'uom', 'estHrs', 'estCost', 'estPi'];
   const jtdCols = ['pctComp', 'jtdQty', 'jtdHrs', 'jtdCost', 'jtdPi'];
   const projCols = ['projQty', 'projHrs', 'projCostField', 'projCostVista', 'projPi'];
+  const remCols = ['remQty', 'remHrs', 'remCost'];
+  const billCols = ['rate'];
   const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
   const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
   const jtdGroupW = jtdCols.reduce((s, c) => s + vw(c), 0);
   const projGroupW = projCols.reduce((s, c) => s + vw(c), 0);
+  const remGroupW = remCols.reduce((s, c) => s + vw(c), 0);
+  const billGroupW = billCols.reduce((s, c) => s + vw(c), 0);
   const schedGroupW = schedCols.reduce((s, c) => s + vw(c), 0);
   const estColSpan = estCols.filter(c => gv(c)).length;
   const jtdColSpan = jtdCols.filter(c => gv(c)).length;
   const projColSpan = projCols.filter(c => gv(c)).length;
+  const remColSpan = remCols.filter(c => gv(c)).length;
+  const billColSpan = billCols.filter(c => gv(c)).length;
   const schedColSpan = schedCols.filter(c => gv(c)).length;
-  const fixedWidth = colWidths.sel + colWidths.rowNum + colWidths.gcLink + colWidths.phase + vw('ct') + estGroupW + jtdGroupW + projGroupW + schedGroupW;
+  const fixedWidth = colWidths.sel + colWidths.rowNum + colWidths.gcLink + colWidths.phase + vw('ct') + estGroupW + jtdGroupW + projGroupW + remGroupW + billGroupW + schedGroupW;
 
   const thStyle = (width: number, extra: React.CSSProperties = {}): React.CSSProperties => ({
     width, minWidth: width, maxWidth: width, padding: '0.15rem 0.2rem', textAlign: 'center' as const,
@@ -1822,6 +1914,10 @@ const GridView: React.FC<{
           {gv('projCostField') && <col style={{ width: colWidths.projCostField }} />}
           {gv('projCostVista') && <col style={{ width: colWidths.projCostVista }} />}
           {gv('projPi') && <col style={{ width: colWidths.projPi }} />}
+          {gv('remQty') && <col style={{ width: colWidths.remQty }} />}
+          {gv('remHrs') && <col style={{ width: colWidths.remHrs }} />}
+          {gv('remCost') && <col style={{ width: colWidths.remCost }} />}
+          {gv('rate') && <col style={{ width: colWidths.rate }} />}
           {gv('start') && <col style={{ width: colWidths.start }} />}
           {gv('end') && <col style={{ width: colWidths.end }} />}
           {gv('dur') && <col style={{ width: colWidths.dur }} />}
@@ -1843,6 +1939,8 @@ const GridView: React.FC<{
             {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8', borderRight: '2px solid #94a3b8' }}>Estimated</th>}
             {jtdColSpan > 0 && <th colSpan={jtdColSpan} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' }}>JTD</th>}
             {projColSpan > 0 && <th colSpan={projColSpan} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' }}>Projected</th>}
+            {remColSpan > 0 && <th colSpan={remColSpan} style={{ ...groupHeaderStyle(remGroupW, '#7c3aed'), background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' }}>Remaining</th>}
+            {billColSpan > 0 && <th colSpan={billColSpan} style={{ ...groupHeaderStyle(billGroupW, '#db2777'), background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8' }}>Billing</th>}
             {schedColSpan > 0 && <th colSpan={schedColSpan} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' }}>Schedule</th>}
             {months.length > 0 && (
               <th colSpan={months.length} style={groupHeaderStyle(months.length * monthColWidth, '#8b5cf6')}>Monthly Distribution</th>
@@ -1904,6 +2002,12 @@ const GridView: React.FC<{
             {gv('projCostField') && <th data-col="projCostField" onContextMenu={e => gridHeaderContextMenu(e, 'projCostField', 'Cost (Field)')} style={thStyle(colWidths.projCostField, { background: COL_GROUP.proj.hdr, fontSize: '0.6rem' })}>Cost (Field){resizeHandle('projCostField')}</th>}
             {gv('projCostVista') && <th data-col="projCostVista" onContextMenu={e => gridHeaderContextMenu(e, 'projCostVista', 'Cost (Vista)')} style={thStyle(colWidths.projCostVista, { background: COL_GROUP.proj.hdr, fontSize: '0.6rem' })}>Cost (Vista){resizeHandle('projCostVista')}</th>}
             {gv('projPi') && <th data-col="projPi" onContextMenu={e => gridHeaderContextMenu(e, 'projPi', 'Proj PI')} style={thStyle(colWidths.projPi, { background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('projPi')}</th>}
+            {/* Remaining group */}
+            {gv('remQty') && <th data-col="remQty" onContextMenu={e => gridHeaderContextMenu(e, 'remQty', 'Rem Qty')} style={thStyle(colWidths.remQty, { background: COL_GROUP.rem.hdr })}>Qty{resizeHandle('remQty')}</th>}
+            {gv('remHrs') && <th data-col="remHrs" onContextMenu={e => gridHeaderContextMenu(e, 'remHrs', 'Rem Hrs')} style={thStyle(colWidths.remHrs, { background: COL_GROUP.rem.hdr })}>Hrs{resizeHandle('remHrs')}</th>}
+            {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
+            {/* Billing group */}
+            {gv('rate') && <th data-col="rate" onContextMenu={e => gridHeaderContextMenu(e, 'rate', 'Rate')} style={thStyle(colWidths.rate, { background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8' })}>Rate{resizeHandle('rate')}</th>}
             {/* Schedule group */}
             {gv('start') && <th data-col="start" onContextMenu={e => gridHeaderContextMenu(e, 'start', 'Start')} style={thStyle(colWidths.start, { background: COL_GROUP.sched.hdr })}>Start{resizeHandle('start')}</th>}
             {gv('end') && <th data-col="end" onContextMenu={e => gridHeaderContextMenu(e, 'end', 'End')} style={thStyle(colWidths.end, { background: COL_GROUP.sched.hdr })}>End{resizeHandle('end')}</th>}
@@ -1938,6 +2042,7 @@ const GridView: React.FC<{
                     monthlyVals={allMonthlyValues.get(item.id) || {}} maxVal={maxVal}
                     colWidths={colWidths} monthColWidth={monthColWidth}
                     projectId={projectId}
+                    laborRates={laborRates}
                     onUpdate={onUpdate} onEdit={onEdit}
                     isSelected={selectedItems.has(item.id)}
                     onToggleSelection={onToggleItem}
@@ -1977,6 +2082,27 @@ const GridView: React.FC<{
               const jC = parseNum(i.total_jtd_cost);
               return s + (vPC > 0 ? Math.max(vPC, jC) : 0);
             }, 0);
+            // Remaining totals: per-line so labor-rate edge cases stay local.
+            const totRemCost = items.reduce((s, i) => {
+              const vPC = parseNum(i.total_projected_cost);
+              if (vPC <= 0) return s;
+              return s + Math.max(0, vPC - parseNum(i.total_jtd_cost));
+            }, 0);
+            const totRemHrs = items.reduce((s, i) => {
+              const vPC = parseNum(i.total_projected_cost);
+              if (vPC <= 0) return s;
+              const jC = parseNum(i.total_jtd_cost);
+              const jH = parseNum(i.total_jtd_hours);
+              const rate = jH > 0 ? jC / jH : 0;
+              if (rate <= 0) return s;
+              const remC = Math.max(0, vPC - jC);
+              return s + remC / rate;
+            }, 0);
+            const totRemQty = items.reduce((s, i) => {
+              const eQ = parseNum(i.quantity);
+              const jQ = parseNum(i.quantity_installed);
+              return s + Math.max(0, eQ - jQ);
+            }, 0);
             // Overall schedule rollup
             let totEarliestStart: string | null = null;
             let totLatestEnd: string | null = null;
@@ -2013,6 +2139,12 @@ const GridView: React.FC<{
                 {gv('projCostField') && (() => { const bl = totProjCostVista > 0 ? totProjCostVista : totEstCost; const pct = bl > 0 ? (totProjCostField - bl) / bl : 0; const bg = pct > 0.01 ? '#FFC7CE' : pct < -0.01 ? '#C6EFCE' : COL_GROUP.proj.cell; const fg = pct > 0.01 ? '#9C0006' : pct < -0.01 ? '#006100' : '#1e293b'; return <td style={{ ...tdTot, width: colWidths.projCostField, background: bg, color: fg }}>{fmtCompact(totProjCostField)}</td>; })()}
                 {gv('projCostVista') && (() => { const pct = totEstCost > 0 ? (totProjCostVista - totEstCost) / totEstCost : 0; const bg = pct < -0.01 ? '#C6EFCE' : pct > 0.01 ? '#FFC7CE' : COL_GROUP.proj.cell; const fg = pct < -0.01 ? '#006100' : pct > 0.01 ? '#9C0006' : '#1e293b'; return <td style={{ ...tdTot, width: colWidths.projCostVista, background: bg, color: fg }}>{totProjCostVista > 0 ? fmtCompact(totProjCostVista) : '$0'}</td>; })()}
                 {gv('projPi') && <td style={{ ...tdTot, width: colWidths.projPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.proj.cell }}>{fmtPi(totProjQty, totProjHrs)}</td>}
+                {/* Remaining totals */}
+                {gv('remQty') && <td style={{ ...tdTot, width: colWidths.remQty, background: COL_GROUP.rem.cell }}>{totRemQty > 0 ? Math.round(totRemQty).toLocaleString() : ''}</td>}
+                {gv('remHrs') && <td style={{ ...tdTot, width: colWidths.remHrs, background: COL_GROUP.rem.cell }}>{fmtHrs(totRemHrs)}</td>}
+                {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
+                {/* Billing totals (Rate column is config-only — no rollup) */}
+                {gv('rate') && <td style={{ ...tdTot, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: COL_GROUP.bill.cell }}></td>}
                 {/* Schedule totals */}
                 {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totEarliestStart)}</td>}
                 {gv('end') && <td style={{ ...tdTot, width: colWidths.end, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totLatestEnd)}</td>}
@@ -2025,7 +2157,7 @@ const GridView: React.FC<{
                   const total = columnTotals[key] || 0;
                   return (
                     <td key={key} style={{ ...tdTot, width: monthColWidth }}>
-                      {total > 0 ? (mode === 'cost' ? fmtCompact(total) : total.toFixed(0)) : ''}
+                      {total > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(total) : mode === 'manpower' ? total.toFixed(1) : total.toFixed(0)) : ''}
                     </td>
                   );
                 })}
@@ -2064,7 +2196,7 @@ const CostTypeSummaryRow: React.FC<{
   isCollapsed: boolean;
   onToggle: () => void;
   months: Date[];
-  mode: 'cost' | 'qty';
+  mode: GridMode;
   monthlyTotals: Record<string, number>;
   colWidths: typeof GRID_COL_DEFAULTS;
   monthColWidth: number;
@@ -2149,6 +2281,12 @@ const CostTypeSummaryRow: React.FC<{
       {sv('projCostField') && (() => { const bl = group.projCostVista > 0 ? group.projCostVista : group.estCost; const pct = bl > 0 ? (group.projCostField - bl) / bl : 0; const bg = pct > 0.01 ? '#FFC7CE' : pct < -0.01 ? '#C6EFCE' : COL_GROUP.proj.cell; const fg = pct > 0.01 ? '#9C0006' : pct < -0.01 ? '#006100' : '#1e293b'; return <td style={{ ...tdS, width: colWidths.projCostField, backgroundColor: bg, color: fg }}>{fmtCompact(group.projCostField)}</td>; })()}
       {sv('projCostVista') && (() => { const pct = group.estCost > 0 ? (group.projCostVista - group.estCost) / group.estCost : 0; const bg = pct < -0.01 ? '#C6EFCE' : pct > 0.01 ? '#FFC7CE' : COL_GROUP.proj.cell; const fg = pct < -0.01 ? '#006100' : pct > 0.01 ? '#9C0006' : '#1e293b'; return <td style={{ ...tdS, width: colWidths.projCostVista, backgroundColor: bg, color: fg }}>{group.projCostVista > 0 ? fmtCompact(group.projCostVista) : '$0'}</td>; })()}
       {sv('projPi') && <td style={{ ...tdS, width: colWidths.projPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.proj.cell, color: (() => { const ePi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const pPi = group.projHrs > 0 ? group.projQty / group.projHrs : 0; return pPi < ePi ? '#ef4444' : pPi > ePi ? '#10b981' : '#1e293b'; })() }}>{fmtPi(group.projQty, group.projHrs)}</td>}
+      {/* Remaining */}
+      {sv('remQty') && <td style={{ ...tdS, width: colWidths.remQty, backgroundColor: COL_GROUP.rem.cell }}>{group.remQty > 0 ? Math.round(group.remQty).toLocaleString() : ''}</td>}
+      {sv('remHrs') && <td style={{ ...tdS, width: colWidths.remHrs, backgroundColor: COL_GROUP.rem.cell }}>{fmtHrs(group.remHrs)}</td>}
+      {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
+      {/* Billing (Rate column is config-only — blank at group level) */}
+      {sv('rate') && <td style={{ ...tdS, width: colWidths.rate, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell }}></td>}
       {/* Schedule */}
       {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.earliestStart)}</td>}
       {sv('end') && <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.latestEnd)}</td>}
@@ -2165,7 +2303,7 @@ const CostTypeSummaryRow: React.FC<{
             backgroundColor: val > 0 ? `${group.color}15` : `${group.color}08`,
             fontSize: '0.63rem'
           }}>
-            {val > 0 ? (mode === 'cost' ? fmtCompact(val) : val.toFixed(0)) : ''}
+            {val > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(val) : mode === 'manpower' ? val.toFixed(1) : val.toFixed(0)) : ''}
           </td>
         );
       })}
@@ -2178,18 +2316,19 @@ const GridRow: React.FC<{
   item: PhaseScheduleItem;
   allItems: PhaseScheduleItem[];
   months: Date[];
-  mode: 'cost' | 'qty';
+  mode: GridMode;
   monthlyVals: Record<string, number>;
   maxVal: number;
   colWidths: typeof GRID_COL_DEFAULTS;
   monthColWidth: number;
   projectId: number;
+  laborRates: ProjectLaborRate[];
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
   hiddenCols: Set<string>;
-}> = React.memo(({ item, allItems, months, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
+}> = React.memo(({ item, allItems, months, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
   const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
   const dateLocked = (item.linked_resolved_count || 0) > 0;
@@ -2213,6 +2352,12 @@ const GridRow: React.FC<{
     : estCost;
   // Vista projection: ERP value (0 if not available)
   const projCostVista = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost) : 0;
+  // Remaining (only meaningful when Vista projection exists): cost = ProjVista − JTD;
+  // hours = Remaining cost ÷ JTD labor rate (JTD $ / JTD hrs); qty = ProjQty − JTD qty.
+  const remCost = projCostVista > 0 ? Math.max(0, projCostVista - jtdCost) : 0;
+  const jtdLaborRate = jtdHrs > 0 ? jtdCost / jtdHrs : 0;
+  const remHrs = jtdLaborRate > 0 ? remCost / jtdLaborRate : 0;
+  const remQty = Math.max(0, projQty - jtdQty);
   // Excel-style conditional shading: 1% tolerance to avoid false positives from rounding
   const costStyle = (proj: number, baseline: number): { background: string; color: string } => {
     if (baseline === 0 || proj === 0) return { background: '', color: '#1e293b' };
@@ -2405,6 +2550,45 @@ const GridRow: React.FC<{
         {fmtPi(projQty, projHrs)}
       </td>}
 
+      {/* === REMAINING GROUP === */}
+      {rv('remQty') && <td style={{ ...tdMuted, width: colWidths.remQty, background: bg(COL_GROUP.rem.cell) }}>
+        {remQty > 0 ? Math.round(remQty).toLocaleString() : '-'}
+      </td>}
+      {rv('remHrs') && <td style={{ ...tdMuted, width: colWidths.remHrs, background: bg(COL_GROUP.rem.cell) }}>
+        {fmtHrs(remHrs)}
+      </td>}
+      {rv('remCost') && <td style={{ ...tdData, width: colWidths.remCost, borderRight: '2px solid #94a3b8', fontWeight: 500, background: bg(COL_GROUP.rem.cell) }}>
+        {fmtCompact(remCost)}
+      </td>}
+
+      {/* === BILLING GROUP (Rate dropdown — labor lines only) === */}
+      {rv('rate') && (() => {
+        const isLabor = (item.cost_types?.[0] || 0) === 1;
+        if (!isLabor) {
+          return (
+            <td style={{ ...tdMuted, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.bill.cell), color: '#cbd5e1' }}>—</td>
+          );
+        }
+        return (
+          <td style={{ ...tdBase, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.bill.cell) }}>
+            <select
+              value={item.billable_rate_id ?? ''}
+              onChange={e => {
+                const v = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                if (v !== (item.billable_rate_id ?? null)) onUpdate(item.id, { billable_rate_id: v });
+              }}
+              style={{ ...inlineCtrl }}
+              title={item.billable_rate_id ? undefined : 'No rate assigned — line is unrated in $ Billable mode'}
+            >
+              <option value="">— unrated —</option>
+              {laborRates.map(r => (
+                <option key={r.id} value={r.id}>{r.label} (${Number(r.billable_rate).toFixed(0)}/hr)</option>
+              ))}
+            </select>
+          </td>
+        );
+      })()}
+
       {/* === SCHEDULE GROUP === */}
       {rv('start') && <td style={{ ...tdBase, textAlign: 'center', width: colWidths.start, background: dateLocked ? '#f1f5f9' : editBg, position: 'relative' as const }}
         title={dateLocked ? 'Date is driven by linked GC schedule activities — unlink from the Link column to edit manually.' : undefined}>
@@ -2471,7 +2655,7 @@ const GridRow: React.FC<{
         const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : 'transparent';
         return (
           <td key={key} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1', fontSize: '0.63rem', backgroundColor: bgColor, whiteSpace: 'nowrap', width: monthColWidth, color: val > 0 ? '#1e293b' : '#cbd5e1' }}>
-            {val > 0 ? (mode === 'cost' ? fmtCompact(val) : val.toFixed(0)) : ''}
+            {val > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(val) : mode === 'manpower' ? val.toFixed(1) : val.toFixed(0)) : ''}
           </td>
         );
       })}
@@ -2576,15 +2760,297 @@ const BulkEditBar: React.FC<{
   );
 };
 
+// ===== BILLING RATES MODAL =====
+// Edits the project's per-cost-type markup % (Material/Subs/Rentals/Equipment/Gen Conds)
+// and the labor rate pool. The pool feeds the per-line Rate dropdown in the grid.
+const BILLABLE_MARKUP_FIELDS: { key: keyof Project; label: string; ct: number; hint?: string }[] = [
+  { key: 'billing_markup_labor',     label: 'Labor',              ct: 1, hint: 'Used for labor lines that have no rate assigned (cost-plus billing).' },
+  { key: 'billing_markup_material',  label: 'Material',           ct: 2 },
+  { key: 'billing_markup_subs',      label: 'Subcontracts',       ct: 3 },
+  { key: 'billing_markup_rentals',   label: 'Rentals',            ct: 4 },
+  { key: 'billing_markup_equipment', label: 'MEP Equipment',      ct: 5 },
+  { key: 'billing_markup_genconds',  label: 'General Conditions', ct: 6 },
+];
+
+// ── Export Options Modal ──────────────────────────────────────────────────
+const EXPORT_GROUPS = [
+  { key: 'est',     label: 'Estimated' },
+  { key: 'jtd',     label: 'JTD' },
+  { key: 'proj',    label: 'Projected' },
+  { key: 'rem',     label: 'Remaining' },
+  { key: 'sched',   label: 'Schedule' },
+  { key: 'monthly', label: 'Monthly Distribution' },
+] as const;
+
+const ExportOptionsModal: React.FC<{
+  initialMode: GridMode;
+  initialShift: string;
+  onExport: (format: 'pdf' | 'excel', mode: GridMode, shift: string, groups: string[]) => void;
+  onClose: () => void;
+  loading: boolean;
+}> = ({ initialMode, initialShift, onExport, onClose, loading }) => {
+  const [format, setFormat]   = useState<'pdf' | 'excel'>('pdf');
+  const [mode, setMode]       = useState<GridMode>(initialMode === 'manpower' || initialMode === 'billable' ? initialMode : initialMode);
+  const [shift, setShift]     = useState(initialShift);
+  const [groups, setGroups]   = useState<Set<string>>(new Set(EXPORT_GROUPS.map(g => g.key)));
+
+  const toggleGroup = (key: string) =>
+    setGroups(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: 'white', borderRadius: '10px', padding: '1.5rem', width: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Export Phase Schedule</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#94a3b8' }}>✕</button>
+        </div>
+
+        {/* Format */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Format</div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {(['pdf', 'excel'] as const).map(f => (
+              <button key={f} onClick={() => setFormat(f)}
+                style={{ flex: 1, padding: '0.5rem', border: `2px solid ${format === f ? '#3b82f6' : '#e2e8f0'}`, borderRadius: '6px',
+                  background: format === f ? '#eff6ff' : 'white', color: format === f ? '#2563eb' : '#1e293b',
+                  cursor: 'pointer', fontSize: '0.8rem', fontWeight: format === f ? 600 : 400 }}>
+                {f === 'pdf' ? '📄 PDF' : '📊 Excel'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Mode */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Distribution Mode</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+            {([['cost','$ Cost'],['qty','Qty'],['manpower','Manpower'],['billable','$ Billable']] as [GridMode,string][]).map(([m, lbl]) => (
+              <button key={m} onClick={() => setMode(m)}
+                style={{ padding: '0.35rem 0.7rem', border: `2px solid ${mode === m ? '#10b981' : '#e2e8f0'}`, borderRadius: '6px',
+                  background: mode === m ? '#f0fdf4' : 'white', color: mode === m ? '#059669' : '#1e293b',
+                  cursor: 'pointer', fontSize: '0.78rem', fontWeight: mode === m ? 600 : 400 }}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Shift (manpower only) */}
+        {mode === 'manpower' && (
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Work Shift</div>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {SHIFT_OPTIONS.map(s => (
+                <button key={s} onClick={() => setShift(s)}
+                  style={{ flex: 1, padding: '0.35rem', border: `2px solid ${shift === s ? '#7c3aed' : '#e2e8f0'}`, borderRadius: '6px',
+                    background: shift === s ? '#f5f3ff' : 'white', color: shift === s ? '#7c3aed' : '#1e293b',
+                    cursor: 'pointer', fontSize: '0.78rem', fontWeight: shift === s ? 600 : 400 }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Column groups */}
+        <div style={{ marginBottom: '1.4rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Column Groups</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.3rem 1rem' }}>
+            {EXPORT_GROUPS.map(({ key, label }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem' }}>
+                <input type="checkbox" checked={groups.has(key)} onChange={() => toggleGroup(key)}
+                  style={{ width: '14px', height: '14px', cursor: 'pointer' }} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          <button onClick={onClose}
+            style={{ padding: '0.5rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: 'white', cursor: 'pointer', fontSize: '0.8rem' }}>
+            Cancel
+          </button>
+          <button onClick={() => onExport(format, mode, shift, [...groups])} disabled={loading || groups.size === 0}
+            style={{ padding: '0.5rem 1.2rem', border: 'none', borderRadius: '6px',
+              background: loading || groups.size === 0 ? '#94a3b8' : '#3b82f6', color: 'white',
+              cursor: loading || groups.size === 0 ? 'default' : 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+            {loading ? 'Exporting…' : `Export ${format.toUpperCase()}`}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const BillingRatesModal: React.FC<{
+  projectId: number;
+  project: Project;
+  rates: ProjectLaborRate[];
+  onClose: () => void;
+}> = ({ projectId, project, rates, onClose }) => {
+  const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
+
+  const saveProject = useMutation({
+    mutationFn: (data: Partial<Project>) => projectsApi.update(projectId, data).then(r => r.data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['project'] }); },
+    onError: () => { toast.error('Failed to save markup'); },
+  });
+
+  const createRate = useMutation({
+    mutationFn: () => projectLaborRatesApi.create(projectId, { label: 'New Rate', billable_rate: 0 }).then(r => r.data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projectLaborRates'] }); },
+  });
+  const updateRate = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { label?: string; billable_rate?: number } }) =>
+      projectLaborRatesApi.update(id, data).then(r => r.data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projectLaborRates'] }); },
+  });
+  const deleteRate = useMutation({
+    mutationFn: (id: number) => projectLaborRatesApi.delete(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['projectLaborRates'] }); },
+  });
+
+  const onMarkupBlur = (key: keyof Project, raw: string) => {
+    const v = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(v) || v < 0) return;
+    if (v === (project[key] ?? 0)) return;
+    saveProject.mutate({ [key]: v } as Partial<Project>);
+  };
+
+  const fmtPct = (v: number | null | undefined) =>
+    v === null || v === undefined ? '0' : String(v);
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.3rem 0.5rem', border: '1px solid #cbd5e1', borderRadius: '4px',
+    fontSize: '0.85rem', width: '100%', boxSizing: 'border-box'
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', width: '90%', maxWidth: '720px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: '1.15rem', color: '#1e293b' }}>Billing Rates &amp; Markups</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '1.25rem 1.5rem' }}>
+          {/* Markups */}
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#1e293b' }}>Markup % by Cost Type</h3>
+          <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.72rem', color: '#64748b' }}>
+            Applied to remaining cost on non-labor lines (e.g. 15.5 means +15.5%).
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '0.4rem 0.75rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+            {BILLABLE_MARKUP_FIELDS.map(f => (
+              <React.Fragment key={f.key as string}>
+                <label style={{ fontSize: '0.82rem', color: '#1e293b' }} title={f.hint}>
+                  {f.label}
+                  {f.hint && <span style={{ marginLeft: 6, color: '#94a3b8', fontSize: '0.7rem' }}>(cost-plus fallback)</span>}
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <input
+                    type="number" step="0.1" min="0"
+                    defaultValue={fmtPct(project[f.key] as number | null | undefined)}
+                    onBlur={e => onMarkupBlur(f.key, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    style={{ ...inputStyle, textAlign: 'right' }}
+                  />
+                  <span style={{ fontSize: '0.85rem', color: '#64748b' }}>%</span>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Labor rate pool */}
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#1e293b' }}>Labor Rate Pool</h3>
+          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.72rem', color: '#64748b' }}>
+            Define each billable labor rate once. Assign rates to individual labor phase lines in the schedule grid.
+          </p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                <th style={{ textAlign: 'left',  padding: '0.4rem 0.5rem', borderBottom: '1px solid #cbd5e1', fontSize: '0.75rem', color: '#64748b' }}>Label</th>
+                <th style={{ textAlign: 'right', padding: '0.4rem 0.5rem', borderBottom: '1px solid #cbd5e1', fontSize: '0.75rem', color: '#64748b', width: 140 }}>Billable $/hr</th>
+                <th style={{ padding: '0.4rem 0.5rem', borderBottom: '1px solid #cbd5e1', width: 40 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rates.length === 0 && (
+                <tr><td colSpan={3} style={{ padding: '0.75rem 0.5rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.8rem' }}>No rates yet. Click "Add Rate" below.</td></tr>
+              )}
+              {rates.map(r => (
+                <tr key={r.id}>
+                  <td style={{ padding: '0.3rem 0.4rem', borderBottom: '1px solid #f1f5f9' }}>
+                    <input defaultValue={r.label}
+                      onBlur={e => {
+                        const v = e.target.value.trim();
+                        if (v && v !== r.label) updateRate.mutate({ id: r.id, data: { label: v } });
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      style={inputStyle} />
+                  </td>
+                  <td style={{ padding: '0.3rem 0.4rem', borderBottom: '1px solid #f1f5f9' }}>
+                    <input type="number" step="0.01" min="0"
+                      defaultValue={r.billable_rate ?? 0}
+                      onBlur={e => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v) && v >= 0 && v !== Number(r.billable_rate)) updateRate.mutate({ id: r.id, data: { billable_rate: v } });
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      style={{ ...inputStyle, textAlign: 'right' }} />
+                  </td>
+                  <td style={{ padding: '0.3rem 0.4rem', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                    <button onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Delete rate?',
+                          message: `Delete rate "${r.label}"? Any lines assigned to it will become unrated.`,
+                          danger: true,
+                        });
+                        if (ok) deleteRate.mutate(r.id);
+                      }}
+                      title="Delete rate"
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>&times;</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: '0.6rem' }}>
+            <button onClick={() => createRate.mutate()} disabled={createRate.isPending}
+              style={{ padding: '0.35rem 0.75rem', border: '1px solid #cbd5e1', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '0.78rem', color: '#1e293b' }}>
+              + Add Rate
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: '0.75rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} className="btn btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===== MAIN PAGE =====
 const PhaseSchedule: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const queryClient = useQueryClient();
   const { confirm, toast } = useTitanFeedback();
   const [viewMode, setViewMode] = useState<'gantt' | 'grid'>('grid');
-  const [gridMode, setGridMode] = useState<'cost' | 'qty'>('cost');
+  const [gridMode, setGridMode] = useState<GridMode>('cost');
+  const [shift, setShift] = useState<ShiftKey>(() => {
+    const saved = localStorage.getItem('phaseSchedule_shift');
+    return (saved && SHIFT_OPTIONS.includes(saved as ShiftKey) ? saved : '5/8') as ShiftKey;
+  });
+  useEffect(() => { localStorage.setItem('phaseSchedule_shift', shift); }, [shift]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [stratusSyncing, setStratusSyncing] = useState(false);
   const [editingItem, setEditingItem] = useState<PhaseScheduleItem | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -2642,6 +3108,11 @@ const PhaseSchedule: React.FC = () => {
   const { data: scheduleItems = [], isLoading: loadingItems } = useQuery({
     queryKey: ['phaseScheduleItems', projectId],
     queryFn: () => phaseScheduleApi.getScheduleItems(Number(projectId)).then(r => r.data),
+  });
+
+  const { data: laborRates = [] } = useQuery({
+    queryKey: ['projectLaborRates', projectId],
+    queryFn: () => projectLaborRatesApi.list(Number(projectId)).then(r => r.data),
   });
 
   const createMutation = useMutation({
@@ -2793,6 +3264,23 @@ const PhaseSchedule: React.FC = () => {
         const vPC = parseNum(i.total_projected_cost); const jC = parseNum(i.total_jtd_cost);
         return s + (vPC > 0 ? Math.max(vPC, jC) : 0);
       }, 0);
+      const remCost = items.reduce((s, i) => {
+        const vPC = parseNum(i.total_projected_cost);
+        if (vPC <= 0) return s;
+        return s + Math.max(0, vPC - parseNum(i.total_jtd_cost));
+      }, 0);
+      const remHrs = items.reduce((s, i) => {
+        const vPC = parseNum(i.total_projected_cost);
+        if (vPC <= 0) return s;
+        const jC = parseNum(i.total_jtd_cost);
+        const jH = parseNum(i.total_jtd_hours);
+        const rate = jH > 0 ? jC / jH : 0;
+        if (rate <= 0) return s;
+        return s + Math.max(0, vPC - jC) / rate;
+      }, 0);
+      const remQty = items.reduce((s, i) => {
+        return s + Math.max(0, parseNum(i.quantity) - parseNum(i.quantity_installed));
+      }, 0);
       let earliestStart: string | null = null;
       let latestEnd: string | null = null;
       items.forEach(item => {
@@ -2802,7 +3290,9 @@ const PhaseSchedule: React.FC = () => {
       groups.push({
         costType: ct, name: COST_TYPE_NAMES[ct], color: COST_TYPE_COLORS[ct],
         items, estQty, estHrs, estCost, jtdQty, jtdHrs, jtdCost, pctComp,
-        projQty, projHrs, projCostField, projCostVista, earliestStart, latestEnd,
+        projQty, projHrs, projCostField, projCostVista,
+        remQty, remHrs, remCost,
+        earliestStart, latestEnd,
         duration: getDuration(earliestStart, latestEnd)
       });
     }
@@ -3032,29 +3522,49 @@ const PhaseSchedule: React.FC = () => {
     }
   };
 
-  const handleExportPdf = async () => {
-    setPdfLoading(true);
+  const handleExport = async (
+    format: 'pdf' | 'excel',
+    exportMode: GridMode,
+    exportShift: string,
+    exportGroups: string[],
+  ) => {
+    setExportLoading(true);
     try {
-      // Only send IDs when filters narrow the set — otherwise omit so the
-      // backend keeps its existing "all items" behavior.
       const filtersActive = filteredItems.length < scheduleItems.length;
-      const response = await phaseScheduleApi.downloadPdf(
-        Number(projectId),
-        viewMode,
-        viewMode === 'grid' ? gridMode : undefined,
-        filtersActive ? filteredItems.map(i => i.id) : undefined
-      );
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-      const a = document.createElement('a');
-      a.href = url;
-      const viewLabel = viewMode === 'gantt' ? 'Gantt' : 'Grid';
-      a.download = `Phase-Schedule-${viewLabel}-${project?.number || projectId}-${new Date().toISOString().split('T')[0]}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      const itemIds = filtersActive ? filteredItems.map(i => i.id) : undefined;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const safeName = project?.number || String(projectId);
+
+      if (format === 'excel') {
+        const response = await phaseScheduleApi.downloadExcel(
+          Number(projectId), exportMode, itemIds, exportGroups, exportShift,
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data],
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Phase-Schedule-${safeName}-${dateStr}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const view = viewMode;
+        const response = await phaseScheduleApi.downloadPdf(
+          Number(projectId), view, exportMode, itemIds, exportGroups, exportShift,
+        );
+        const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        const viewLabel = view === 'gantt' ? 'Gantt' : 'Grid';
+        a.download = `Phase-Schedule-${viewLabel}-${safeName}-${dateStr}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+      setShowExportModal(false);
     } catch (err) {
-      console.error('PDF export failed:', err);
+      console.error('Export failed:', err);
+      toast.error('Export failed. Please try again.');
     } finally {
-      setPdfLoading(false);
+      setExportLoading(false);
     }
   };
 
@@ -3095,9 +3605,37 @@ const PhaseSchedule: React.FC = () => {
               <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
                 <button onClick={() => setGridMode('cost')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: gridMode === 'cost' ? '#10b981' : 'white', color: gridMode === 'cost' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Cost</button>
                 <button onClick={() => setGridMode('qty')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'qty' ? '#10b981' : 'white', color: gridMode === 'qty' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Qty</button>
+                <button onClick={() => setGridMode('manpower')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'manpower' ? '#10b981' : 'white', color: gridMode === 'manpower' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Manpower</button>
+                <button onClick={() => setGridMode('billable')} title="Customer billing forecast using labor rates + cost-type markup %" style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'billable' ? '#db2777' : 'white', color: gridMode === 'billable' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Billable</button>
+              </div>
+            )}
+            {viewMode === 'grid' && gridMode === 'manpower' && (
+              <div title="Work shift — days per week / hours per day" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Shift</span>
+                <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                  {SHIFT_OPTIONS.map((s, i) => (
+                    <button key={s} onClick={() => setShift(s)} title={`${s} — ${SHIFT_HRS_PER_MONTH[s].toFixed(0)} hr/worker/mo`}
+                      style={{ padding: '0.3rem 0.5rem', border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #e2e8f0',
+                        backgroundColor: shift === s ? '#7c3aed' : 'white',
+                        color: shift === s ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.72rem' }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
+            <button
+              onClick={() => setShowBillingModal(true)}
+              title="Configure billable labor rates and markup % by cost type"
+              style={{
+                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+                border: '1px solid #e2e8f0', borderRadius: '6px',
+                backgroundColor: 'white', color: '#1e293b', cursor: 'pointer',
+              }}
+            >
+              💲 Billing Rates
+            </button>
             <button
               onClick={handleStratusSync}
               disabled={stratusSyncing || scheduleItems.length === 0}
@@ -3114,18 +3652,17 @@ const PhaseSchedule: React.FC = () => {
               {stratusSyncing ? 'Syncing...' : '☁ Sync Qty from Stratus'}
             </button>
             <button
-              onClick={handleExportPdf}
-              disabled={pdfLoading || scheduleItems.length === 0}
+              onClick={() => setShowExportModal(true)}
+              disabled={scheduleItems.length === 0}
               style={{
                 padding: '0.3rem 0.75rem', fontSize: '0.75rem',
                 border: '1px solid #e2e8f0', borderRadius: '6px',
-                backgroundColor: pdfLoading ? '#f1f5f9' : 'white',
-                color: pdfLoading ? '#94a3b8' : '#1e293b',
-                cursor: pdfLoading || scheduleItems.length === 0 ? 'default' : 'pointer',
+                backgroundColor: 'white', color: '#1e293b',
+                cursor: scheduleItems.length === 0 ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: '0.3rem'
               }}
             >
-              {pdfLoading ? 'Exporting...' : 'Export PDF'}
+              ↓ Export
             </button>
           </div>
         </div>
@@ -3229,7 +3766,7 @@ const PhaseSchedule: React.FC = () => {
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
               ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
               availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
-          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} shift={shift} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
@@ -3244,6 +3781,27 @@ const PhaseSchedule: React.FC = () => {
           scheduledIds={scheduledIds}
           onAdd={handleAdd}
           onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Billing Rates Modal */}
+      {showBillingModal && project && (
+        <BillingRatesModal
+          projectId={Number(projectId)}
+          project={project}
+          rates={laborRates}
+          onClose={() => setShowBillingModal(false)}
+        />
+      )}
+
+      {/* Export Options Modal */}
+      {showExportModal && (
+        <ExportOptionsModal
+          initialMode={gridMode}
+          initialShift={shift}
+          loading={exportLoading}
+          onExport={handleExport}
+          onClose={() => setShowExportModal(false)}
         />
       )}
 

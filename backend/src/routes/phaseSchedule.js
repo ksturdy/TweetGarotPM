@@ -6,7 +6,9 @@ const Project = require('../models/Project');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { generatePhaseSchedulePdfBuffer } = require('../utils/phaseSchedulePdfBuffer');
+const { generatePhaseScheduleExcelBuffer } = require('../utils/phaseScheduleExcelGenerator');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
+const ProjectLaborRate = require('../models/ProjectLaborRate');
 
 const router = express.Router();
 
@@ -48,44 +50,62 @@ router.get('/project/:projectId/phase-codes', verifyProjectOwnership, async (req
   }
 });
 
+// Shared helper — parse item filter and billing data from query params
+async function resolveExportData(req, mode) {
+  const allItems = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
+  if (!allItems || allItems.length === 0) return { error: 'No schedule items to export' };
+
+  let items = allItems;
+  if (req.query.itemIds) {
+    const allowed = new Set(
+      String(req.query.itemIds).split(',').map(s => parseInt(s, 10)).filter(n => Number.isFinite(n))
+    );
+    if (allowed.size > 0) items = allItems.filter(i => allowed.has(i.id));
+    if (items.length === 0) return { error: 'No schedule items match the selected filters' };
+  }
+
+  // Groups filter — e.g. "est,jtd,proj,rem,sched,monthly"
+  const groups = req.query.groups
+    ? new Set(String(req.query.groups).split(',').map(s => s.trim()).filter(Boolean))
+    : null; // null = all shown
+
+  const shift = req.query.shift || '5/8';
+
+  let laborRateById = new Map();
+  let markupByCt = {};
+  if (mode === 'billable') {
+    const rates = await ProjectLaborRate.list(req.params.projectId, req.tenantId);
+    laborRateById = new Map(rates.map(r => [r.id, parseFloat(r.billable_rate)]));
+    const p = req.project;
+    markupByCt = {
+      1: parseFloat(p.billing_markup_labor   || 0),
+      2: parseFloat(p.billing_markup_material || 0),
+      3: parseFloat(p.billing_markup_subs     || 0),
+      4: parseFloat(p.billing_markup_rentals  || 0),
+      5: parseFloat(p.billing_markup_equipment || 0),
+      6: parseFloat(p.billing_markup_genconds  || 0),
+    };
+  }
+
+  return { items, groups, shift, laborRateById, markupByCt };
+}
+
 // Download Phase Schedule as PDF (Grid or Gantt view)
 router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (req, res, next) => {
   try {
     const view = req.query.view || 'grid';
     const mode = req.query.mode || 'cost';
+    const result = await resolveExportData(req, mode);
+    if (result.error) return res.status(400).json({ error: result.error });
 
-    const allItems = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
-    if (!allItems || allItems.length === 0) {
-      return res.status(400).json({ error: 'No schedule items to export' });
-    }
-
-    // Optional itemIds filter — comma-separated list of schedule item ids the
-    // client wants included. Honors the frontend cost-type / phase-prefix /
-    // search filters in the exported PDF.
-    let items = allItems;
-    if (req.query.itemIds) {
-      const allowed = new Set(
-        String(req.query.itemIds)
-          .split(',')
-          .map(s => parseInt(s, 10))
-          .filter(n => Number.isFinite(n))
-      );
-      if (allowed.size > 0) {
-        items = allItems.filter(i => allowed.has(i.id));
-      }
-      if (items.length === 0) {
-        return res.status(400).json({ error: 'No schedule items match the selected filters' });
-      }
-    }
-
+    const { items, groups, shift, laborRateById, markupByCt } = result;
     const project = req.project;
     const logoBase64 = await fetchLogoBase64(req.tenantId);
+
     const pdfBuffer = await generatePhaseSchedulePdfBuffer({
       items,
       project: { name: project.name, number: project.number, id: project.id },
-      view,
-      mode,
-      logoBase64,
+      view, mode, logoBase64, groups, shift, laborRateById, markupByCt,
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
@@ -97,6 +117,33 @@ router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (re
   } catch (error) {
     console.error('Error generating phase schedule PDF:', error);
     res.status(500).json({ error: 'Failed to generate phase schedule PDF' });
+  }
+});
+
+// Download Phase Schedule as Excel
+router.get('/project/:projectId/excel-download', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const mode = req.query.mode || 'cost';
+    const result = await resolveExportData(req, mode);
+    if (result.error) return res.status(400).json({ error: result.error });
+
+    const { items, groups, shift, laborRateById, markupByCt } = result;
+    const project = req.project;
+
+    const xlBuffer = await generatePhaseScheduleExcelBuffer({
+      items,
+      project: { name: project.name, number: project.number, id: project.id },
+      mode, groups, shift, laborRateById, markupByCt,
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const safeName = (project.number || project.name || 'Project').replace(/[^a-zA-Z0-9\-_]/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Phase-Schedule-${safeName}-${dateStr}.xlsx"`);
+    res.send(xlBuffer);
+  } catch (error) {
+    console.error('Error generating phase schedule Excel:', error);
+    res.status(500).json({ error: 'Failed to generate phase schedule Excel' });
   }
 });
 
