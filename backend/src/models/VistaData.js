@@ -3281,16 +3281,25 @@ const VistaData = {
   },
 
   async linkPhaseCodesByContract(tenantId) {
-    // Auto-link phase codes to projects via vp_contracts
+    // Auto-link phase codes to projects via vp_contracts. Matches exact
+    // contract_number, and falls back to the parent contract (strip the
+    // trailing Job suffix, e.g. "44448-10" -> "44448-") for rows where
+    // Vista's Phase Codes export put a Job Number in the Contract column.
     const result = await db.query(
       `UPDATE vp_phase_codes pc
        SET linked_project_id = vc.linked_project_id
        FROM vp_contracts vc
        WHERE pc.tenant_id = $1
          AND pc.tenant_id = vc.tenant_id
-         AND pc.contract = vc.contract_number
          AND vc.linked_project_id IS NOT NULL
-         AND pc.linked_project_id IS NULL`,
+         AND pc.linked_project_id IS NULL
+         AND (
+           pc.contract = vc.contract_number
+           OR (
+             pc.contract ~ '-[0-9]+$'
+             AND vc.contract_number = regexp_replace(pc.contract, '-[0-9]+$', '-')
+           )
+         )`,
       [tenantId]
     );
     return result.rowCount;
