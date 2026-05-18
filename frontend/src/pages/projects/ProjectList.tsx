@@ -7,6 +7,7 @@ import { favoritesService } from '../../services/favorites';
 import SearchableSelect from '../../components/SearchableSelect';
 import { useAuth } from '../../context/AuthContext';
 import { teamsApi } from '../../services/teams';
+import { employeesApi } from '../../services/employees';
 import '../../styles/SalesPipeline.css';
 import { exportListToPdf } from '../../utils/listExportPdf';
 
@@ -134,6 +135,14 @@ const ProjectList: React.FC = () => {
     queryKey: ['customers'],
     queryFn: () => customersApi.getAll(),
   });
+
+  // Fetch current user's employee record — project.manager_id references employees.id, not users.id
+  const { data: currentEmployeeResponse } = useQuery({
+    queryKey: ['current-employee', user?.id],
+    queryFn: () => user?.id ? employeesApi.getByUserId(user.id).then(res => res.data) : Promise.resolve(null),
+    enabled: !!user?.id,
+  });
+  const currentEmployeeId: number | undefined = currentEmployeeResponse?.data?.id;
 
   // Fetch current user's team member IDs for "My Team" filter
   const { data: myTeamResponse } = useQuery({
@@ -361,7 +370,7 @@ const ProjectList: React.FC = () => {
     if (statusFilter !== 'all' && project.status !== statusFilter) return false;
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
-    if (myProjectsOnly && user && project.manager_id !== user.id) return false;
+    if (myProjectsOnly && project.manager_id !== currentEmployeeId) return false;
     if (myTeamOnly && teamMemberEmployeeIds.size > 0 && !teamMemberEmployeeIds.has(project.manager_id)) return false;
 
     // Then apply search filter
