@@ -20,6 +20,7 @@ const GROUP_ARGB = {
   proj:  { hdr: 'FFdcfce7', cell: 'FFf0fdf4' },
   rem:   { hdr: 'FFede9fe', cell: 'FFf5f3ff' },
   sched: { hdr: 'FFe2e8f0', cell: 'FFf8fafc' },
+  bill:  { hdr: 'FFfce7f3', cell: 'FFfdf2f8' },
   total: { hdr: 'FFf1f5f9', cell: 'FFf1f5f9' },
 };
 
@@ -205,14 +206,25 @@ function borderStyle(sides = {}) {
 
 // ─── Main export ──────────────────────────────────────────────────────
 async function generatePhaseScheduleExcelBuffer(data) {
-  const { items, project, mode, groups: groupsParam, laborRateById, markupByCt, shift } = data;
+  const { items, project, mode, groups: groupsParam, laborRateById, laborRates, markupByCt, shift } = data;
 
   const showEst     = !groupsParam || groupsParam.has('est');
   const showJtd     = !groupsParam || groupsParam.has('jtd');
   const showProj    = !groupsParam || groupsParam.has('proj');
   const showRem     = !groupsParam || groupsParam.has('rem');
   const showSched   = !groupsParam || groupsParam.has('sched');
+  const showBill    = !groupsParam || groupsParam.has('bill');
   const showMonthly = !groupsParam || groupsParam.has('monthly');
+
+  const rateLabelById = new Map(
+    (laborRates || []).map(r => [r.id, `${r.label} ($${Number(r.billable_rate).toFixed(0)}/hr)`])
+  );
+  const rateLabel = (item) => {
+    const isLabor = (item.cost_types?.[0] || 0) === 1;
+    if (!isLabor) return '—';
+    if (!item.billable_rate_id) return '— unrated —';
+    return rateLabelById.get(item.billable_rate_id) || '— unrated —';
+  };
 
   const shiftHrs = SHIFT_HRS_PER_MONTH[shift || '5/8'] || SHIFT_HRS_PER_MONTH['5/8'];
 
@@ -290,6 +302,11 @@ async function generatePhaseScheduleExcelBuffer(data) {
       { header: 'Contour', key: 'contour', width: 10, group: 'sched', groupRight: true },
     );
   }
+  if (showBill) {
+    colDefs.push(
+      { header: 'Rate', key: 'billRate', width: 22, group: 'bill', groupLeft: true, groupRight: true },
+    );
+  }
   if (showMonthly) {
     months.forEach((m, i) => {
       const isFirst = i === 0;
@@ -352,6 +369,7 @@ async function generatePhaseScheduleExcelBuffer(data) {
   if (showProj) addGroupHdr('Projected',  GROUP_ARGB.proj.hdr,  'FF10b981', 5);
   if (showRem)  addGroupHdr('Remaining',  GROUP_ARGB.rem.hdr,   'FF8b5cf6', 3);
   if (showSched) addGroupHdr('Schedule',  GROUP_ARGB.sched.hdr, 'FF64748b', 4);
+  if (showBill)  addGroupHdr('Billing',   GROUP_ARGB.bill.hdr,  'FFdb2777', 1);
   if (showMonthly && months.length > 0) addGroupHdr(monthlyLabel, 'FFeef2f7', 'FF8b5cf6', months.length);
 
   // ── Column header row (row 4) ───────────────────────────────────────
@@ -390,7 +408,7 @@ async function generatePhaseScheduleExcelBuffer(data) {
       }
       cell.fill      = isTotal ? totalRowFill : (isGroupRow ? groupRowFill(rowData._groupColor || 'FF64748b') : dataRowFill(def.group));
       cell.font      = { size: 7.5, bold: isGroupRow || isTotal, color: { argb: rowData._cellColor?.[def.key] || 'FF1e293b' } };
-      cell.alignment = { horizontal: def.key === 'phase' || def.key === 'ct' ? 'left' : 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: def.key === 'phase' || def.key === 'ct' || def.key === 'billRate' ? 'left' : 'center', vertical: 'middle' };
       cell.border    = borderStyle({ left: def?.groupLeft, right: def?.groupRight });
     });
     row.height = isGroupRow ? 13 : 12;
@@ -471,6 +489,7 @@ async function generatePhaseScheduleExcelBuffer(data) {
           ? Math.round((new Date(item.end_date) - new Date(item.start_date)) / 86400000) + 1
           : null,
         contour: item.contour_type || 'flat',
+        billRate: rateLabel(item),
       };
       months.forEach(m => {
         const key = formatMonthKey(m);

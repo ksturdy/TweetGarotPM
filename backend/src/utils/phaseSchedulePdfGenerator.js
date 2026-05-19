@@ -18,6 +18,7 @@ const COL_GROUP = {
   proj:  { hdr: '#dcfce7', cell: '#f0fdf4', color: '#10b981' },
   rem:   { hdr: '#ede9fe', cell: '#f5f3ff', color: '#8b5cf6' },
   sched: { hdr: '#e2e8f0', cell: '#f8fafc', color: '#64748b' },
+  bill:  { hdr: '#fce7f3', cell: '#fdf2f8', color: '#db2777' },
 };
 
 const SHIFT_HRS_PER_MONTH = {
@@ -294,14 +295,26 @@ function buildFooter(project, viewLabel) {
 // ═══════════════════════════════════════════════════════════════════════
 // GRID VIEW HTML
 // ═══════════════════════════════════════════════════════════════════════
-function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRateById, markupByCt, shift) {
+function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRateById, laborRates, markupByCt, shift) {
   // Groups visibility
   const showEst     = !groups || groups.has('est');
   const showJtd     = !groups || groups.has('jtd');
   const showProj    = !groups || groups.has('proj');
   const showRem     = !groups || groups.has('rem');
   const showSched   = !groups || groups.has('sched');
+  const showBill    = !groups || groups.has('bill');
   const showMonthly = !groups || groups.has('monthly');
+
+  // Rate label lookup: id → "Label ($XX/hr)" — matches the on-screen Billing/Rate column
+  const rateLabelById = new Map(
+    (laborRates || []).map(r => [r.id, `${r.label} ($${Number(r.billable_rate).toFixed(0)}/hr)`])
+  );
+  const rateLabel = (item) => {
+    const isLabor = (item.cost_types?.[0] || 0) === 1;
+    if (!isLabor) return '—';
+    if (!item.billable_rate_id) return '— unrated —';
+    return rateLabelById.get(item.billable_rate_id) || '— unrated —';
+  };
 
   const shiftHrs = SHIFT_HRS_PER_MONTH[shift || '5/8'] || SHIFT_HRS_PER_MONTH['5/8'];
 
@@ -348,6 +361,7 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
     projQty: 40, projHrs: 40, projCostField: 54, projCostVista: 54, projPi: 34,
     remQty: 40, remHrs: 40, remCost: 54,
     start: 48, end: 48, dur: 28, contour: 38,
+    rate: 110,
   };
 
   const fixedW = cw.rowNum + cw.phase + cw.ct
@@ -355,7 +369,8 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
     + (showJtd    ? cw.pctComp + cw.jtdQty + cw.jtdHrs + cw.jtdCost + cw.jtdPi : 0)
     + (showProj   ? cw.projQty + cw.projHrs + cw.projCostField + cw.projCostVista + cw.projPi : 0)
     + (showRem    ? cw.remQty + cw.remHrs + cw.remCost : 0)
-    + (showSched  ? cw.start + cw.end + cw.dur + cw.contour : 0);
+    + (showSched  ? cw.start + cw.end + cw.dur + cw.contour : 0)
+    + (showBill   ? cw.rate : 0);
   const totalW = fixedW + (showMonthly ? mc * mColW : 0);
 
   const totalColCount = 3
@@ -364,6 +379,7 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
     + (showProj   ? 5 : 0)
     + (showRem    ? 3 : 0)
     + (showSched  ? 4 : 0)
+    + (showBill   ? 1 : 0)
     + (showMonthly ? mc : 0);
 
   const header = buildProjectHeader(project, viewLabel, items.length, totalEst, totalJtd, logoBase64);
@@ -386,15 +402,17 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
   if (showProj) colgroupCols += `<col style="width: ${cw.projQty}px" /><col style="width: ${cw.projHrs}px" /><col style="width: ${cw.projCostField}px" /><col style="width: ${cw.projCostVista}px" /><col style="width: ${cw.projPi}px" />`;
   if (showRem)  colgroupCols += `<col style="width: ${cw.remQty}px" /><col style="width: ${cw.remHrs}px" /><col style="width: ${cw.remCost}px" />`;
   if (showSched) colgroupCols += `<col style="width: ${cw.start}px" /><col style="width: ${cw.end}px" /><col style="width: ${cw.dur}px" /><col style="width: ${cw.contour}px" />`;
+  if (showBill) colgroupCols += `<col style="width: ${cw.rate}px" />`;
   if (showMonthly) colgroupCols += months.map(() => `<col style="width: ${mColW}px" />`).join('');
 
   // ── Group header row ──────────────────────────────────────────────
   let groupHdrRow = `<tr style="background: #eef2f7;"><th colspan="3" style="${thS} background: #eef2f7;"></th>`;
-  if (showEst)     groupHdrRow += groupHdrTh('Estimated', '#3b82f6', COL_GROUP.est.hdr, 5, !showJtd && !showProj && !showRem && !showSched && !showMonthly);
-  if (showJtd)     groupHdrRow += groupHdrTh('JTD',       '#f59e0b', COL_GROUP.jtd.hdr, 5, !showProj && !showRem && !showSched && !showMonthly);
-  if (showProj)    groupHdrRow += groupHdrTh('Projected', '#10b981', COL_GROUP.proj.hdr, 5, !showRem && !showSched && !showMonthly);
-  if (showRem)     groupHdrRow += groupHdrTh('Remaining', '#8b5cf6', COL_GROUP.rem.hdr,  3, !showSched && !showMonthly);
-  if (showSched)   groupHdrRow += groupHdrTh('Schedule',  '#64748b', COL_GROUP.sched.hdr, 4, !showMonthly);
+  if (showEst)     groupHdrRow += groupHdrTh('Estimated', '#3b82f6', COL_GROUP.est.hdr, 5, !showJtd && !showProj && !showRem && !showSched && !showBill && !showMonthly);
+  if (showJtd)     groupHdrRow += groupHdrTh('JTD',       '#f59e0b', COL_GROUP.jtd.hdr, 5, !showProj && !showRem && !showSched && !showBill && !showMonthly);
+  if (showProj)    groupHdrRow += groupHdrTh('Projected', '#10b981', COL_GROUP.proj.hdr, 5, !showRem && !showSched && !showBill && !showMonthly);
+  if (showRem)     groupHdrRow += groupHdrTh('Remaining', '#8b5cf6', COL_GROUP.rem.hdr,  3, !showSched && !showBill && !showMonthly);
+  if (showSched)   groupHdrRow += groupHdrTh('Schedule',  '#64748b', COL_GROUP.sched.hdr, 4, !showBill && !showMonthly);
+  if (showBill)    groupHdrRow += groupHdrTh('Billing',   '#db2777', COL_GROUP.bill.hdr,  1, !showMonthly);
   if (showMonthly && mc > 0) groupHdrRow += `<th colspan="${mc}" style="${thS} background: #eef2f7; color: #8b5cf6; font-size: 5.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">${monthlyLabel}</th>`;
   groupHdrRow += '</tr>';
 
@@ -430,6 +448,8 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
     <th style="${thS} background: ${COL_GROUP.sched.hdr};">End</th>
     <th style="${thS} background: ${COL_GROUP.sched.hdr};">Days</th>
     <th style="${thS} background: ${COL_GROUP.sched.hdr}; ${grpBdr}">Contour</th>`;
+  if (showBill) colHdrRow += `
+    <th style="${thS} background: ${COL_GROUP.bill.hdr}; border-left: 2px solid #94a3b8; ${grpBdr}">Rate</th>`;
   if (showMonthly) colHdrRow += months.map(m => `<th style="${thS} background: #eef2f7; font-size: ${mFont};">${fmtMonthLabel(m)}</th>`).join('');
   colHdrRow += '</tr>';
 
@@ -486,6 +506,9 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${fmtDateShort(group.latestEnd)}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${group.duration || '-'}</td>`;
       rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; ${grpBdr}"></td>`;
+    }
+    if (showBill) {
+      rows += `<td style="${tdS} background: ${COL_GROUP.bill.cell}; border-left: 2px solid #94a3b8; ${grpBdr} color: #cbd5e1;">—</td>`;
     }
     if (showMonthly) {
       months.forEach(m => {
@@ -568,6 +591,12 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
         rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell};">${dur || '-'}</td>`;
         rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; font-size: 5.5pt; ${grpBdr}">${item.contour_type || 'flat'}</td>`;
       }
+      if (showBill) {
+        const isLabor = (item.cost_types?.[0] || 0) === 1;
+        const isUnrated = isLabor && !item.billable_rate_id;
+        const color = !isLabor || isUnrated ? '#cbd5e1' : '#1e293b';
+        rows += `<td style="${tdS} background: ${COL_GROUP.bill.cell}; border-left: 2px solid #94a3b8; ${grpBdr} font-size: 5.5pt; color: ${color}; text-align: left; padding-left: 4px;">${escHtml(rateLabel(item))}</td>`;
+      }
       if (showMonthly) {
         months.forEach(m => {
           const key = formatMonthKey(m);
@@ -627,6 +656,9 @@ function buildGridHtml(items, months, mode, project, logoBase64, groups, laborRa
   }
   if (showSched) {
     rows += `<td style="${tdS} background: ${COL_GROUP.sched.cell}; border-left: 2px solid #94a3b8;" colspan="4"></td>`;
+  }
+  if (showBill) {
+    rows += `<td style="${tdS} background: ${COL_GROUP.bill.cell}; border-left: 2px solid #94a3b8; ${grpBdr}"></td>`;
   }
   if (showMonthly) {
     months.forEach(m => {
@@ -795,12 +827,12 @@ function buildGanttHtml(items, months, project, logoBase64) {
 // MAIN ENTRY POINT
 // ═══════════════════════════════════════════════════════════════════════
 function generatePhaseSchedulePdfHtml(data) {
-  const { items, project, view, mode, logoBase64, groups, laborRateById, markupByCt, shift } = data;
+  const { items, project, view, mode, logoBase64, groups, laborRateById, laborRates, markupByCt, shift } = data;
   const months = generateMonths(items);
 
   const content = view === 'gantt'
     ? buildGanttHtml(items, months, project, logoBase64)
-    : buildGridHtml(items, months, mode || 'cost', project, logoBase64, groups, laborRateById, markupByCt, shift);
+    : buildGridHtml(items, months, mode || 'cost', project, logoBase64, groups, laborRateById, laborRates, markupByCt, shift);
 
   return `<!DOCTYPE html>
 <html>

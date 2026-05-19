@@ -64,18 +64,17 @@ async function resolveExportData(req, mode) {
     if (items.length === 0) return { error: 'No schedule items match the selected filters' };
   }
 
-  // Groups filter — e.g. "est,jtd,proj,rem,sched,monthly"
+  // Groups filter — e.g. "est,jtd,proj,rem,sched,bill,monthly"
   const groups = req.query.groups
     ? new Set(String(req.query.groups).split(',').map(s => s.trim()).filter(Boolean))
     : null; // null = all shown
 
   const shift = req.query.shift || '5/8';
 
-  let laborRateById = new Map();
+  const laborRates = await ProjectLaborRate.list(req.params.projectId, req.tenantId);
+  const laborRateById = new Map(laborRates.map(r => [r.id, parseFloat(r.billable_rate)]));
   let markupByCt = {};
   if (mode === 'billable') {
-    const rates = await ProjectLaborRate.list(req.params.projectId, req.tenantId);
-    laborRateById = new Map(rates.map(r => [r.id, parseFloat(r.billable_rate)]));
     const p = req.project;
     markupByCt = {
       1: parseFloat(p.billing_markup_labor   || 0),
@@ -87,7 +86,7 @@ async function resolveExportData(req, mode) {
     };
   }
 
-  return { items, groups, shift, laborRateById, markupByCt };
+  return { items, groups, shift, laborRateById, laborRates, markupByCt };
 }
 
 // Download Phase Schedule as PDF (Grid or Gantt view)
@@ -98,14 +97,14 @@ router.get('/project/:projectId/pdf-download', verifyProjectOwnership, async (re
     const result = await resolveExportData(req, mode);
     if (result.error) return res.status(400).json({ error: result.error });
 
-    const { items, groups, shift, laborRateById, markupByCt } = result;
+    const { items, groups, shift, laborRateById, laborRates, markupByCt } = result;
     const project = req.project;
     const logoBase64 = await fetchLogoBase64(req.tenantId);
 
     const pdfBuffer = await generatePhaseSchedulePdfBuffer({
       items,
       project: { name: project.name, number: project.number, id: project.id },
-      view, mode, logoBase64, groups, shift, laborRateById, markupByCt,
+      view, mode, logoBase64, groups, shift, laborRateById, laborRates, markupByCt,
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
@@ -127,13 +126,13 @@ router.get('/project/:projectId/excel-download', verifyProjectOwnership, async (
     const result = await resolveExportData(req, mode);
     if (result.error) return res.status(400).json({ error: result.error });
 
-    const { items, groups, shift, laborRateById, markupByCt } = result;
+    const { items, groups, shift, laborRateById, laborRates, markupByCt } = result;
     const project = req.project;
 
     const xlBuffer = await generatePhaseScheduleExcelBuffer({
       items,
       project: { name: project.name, number: project.number, id: project.id },
-      mode, groups, shift, laborRateById, markupByCt,
+      mode, groups, shift, laborRateById, laborRates, markupByCt,
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
