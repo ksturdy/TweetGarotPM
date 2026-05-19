@@ -2729,14 +2729,16 @@ const GridRow: React.FC<{
 const BulkEditBar: React.FC<{
   items: PhaseScheduleItem[];
   selectedItems: Set<number>;
-  bulkEditValues: { start_date: string; end_date: string; duration: string; contour_type: string };
-  onBulkEditChange: (v: { start_date: string; end_date: string; duration: string; contour_type: string }) => void;
+  laborRates: ProjectLaborRate[];
+  bulkEditValues: { start_date: string; end_date: string; duration: string; contour_type: string; billable_rate_id: string };
+  onBulkEditChange: (v: { start_date: string; end_date: string; duration: string; contour_type: string; billable_rate_id: string }) => void;
   onApply: () => void;
   onClear: () => void;
   bulkUpdating: boolean;
-}> = ({ items, selectedItems, bulkEditValues, onBulkEditChange, onApply, onClear, bulkUpdating }) => {
+}> = ({ items, selectedItems, laborRates, bulkEditValues, onBulkEditChange, onApply, onClear, bulkUpdating }) => {
   const selectedCount = selectedItems.size;
   const undatedCount = items.filter(i => !i.start_date || !i.end_date).length;
+  const selectedLaborCount = items.filter(i => selectedItems.has(i.id) && (i.cost_types?.[0] || 0) === 1).length;
 
   const handleDurationChange = (val: string) => {
     const dur = parseInt(val);
@@ -2768,7 +2770,7 @@ const BulkEditBar: React.FC<{
     );
   }
 
-  const hasValues = bulkEditValues.start_date || bulkEditValues.end_date || bulkEditValues.duration || bulkEditValues.contour_type;
+  const hasValues = bulkEditValues.start_date || bulkEditValues.end_date || bulkEditValues.duration || bulkEditValues.contour_type || bulkEditValues.billable_rate_id;
   return (
     <div className="card" style={{ marginBottom: '0.75rem', padding: '0.6rem 1.5rem', border: '2px solid #3b82f6', backgroundColor: '#eff6ff' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
@@ -2806,6 +2808,19 @@ const BulkEditBar: React.FC<{
             <option value="">— No Change —</option>
             {contourOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Billing Rate</label>
+          <select value={bulkEditValues.billable_rate_id}
+            onChange={e => onBulkEditChange({ ...bulkEditValues, billable_rate_id: e.target.value })}
+            style={inputStyle}
+            title={selectedLaborCount === 0 ? 'No labor lines selected — billing rate only applies to labor (CT=L).' : `Applies to ${selectedLaborCount} labor line${selectedLaborCount === 1 ? '' : 's'}; non-labor lines are skipped.`}>
+            <option value="">— No Change —</option>
+            <option value="unrated">— Unrated —</option>
+            {laborRates.map(r => (
+              <option key={r.id} value={String(r.id)}>{r.label} (${Number(r.billable_rate).toFixed(0)}/hr)</option>
             ))}
           </select>
         </div>
@@ -3124,7 +3139,7 @@ const PhaseSchedule: React.FC = () => {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
-  const [bulkEditValues, setBulkEditValues] = useState<{ start_date: string; end_date: string; duration: string; contour_type: string }>({ start_date: '', end_date: '', duration: '', contour_type: '' });
+  const [bulkEditValues, setBulkEditValues] = useState<{ start_date: string; end_date: string; duration: string; contour_type: string; billable_rate_id: string }>({ start_date: '', end_date: '', duration: '', contour_type: '', billable_rate_id: '' });
   const [filterText, setFilterText] = useState('');
   const [sortDir, setSortDir] = useState<'none' | 'asc' | 'desc'>('none');
   const [costTypeFilter, setCostTypeFilter] = useState<Set<number>>(new Set());
@@ -3416,7 +3431,7 @@ const PhaseSchedule: React.FC = () => {
 
   const clearSelection = useCallback(() => {
     setSelectedItems(new Set());
-    setBulkEditValues({ start_date: '', end_date: '', duration: '', contour_type: '' });
+    setBulkEditValues({ start_date: '', end_date: '', duration: '', contour_type: '', billable_rate_id: '' });
   }, []);
 
   // Chart data — buckets follow the grid's period zoom, headcount uses the
@@ -3557,6 +3572,12 @@ const PhaseSchedule: React.FC = () => {
           }
         }
         if (bulkEditValues.contour_type) updates.contour_type = bulkEditValues.contour_type;
+        if (bulkEditValues.billable_rate_id) {
+          const isLabor = (item.cost_types?.[0] || 0) === 1;
+          if (isLabor) {
+            updates.billable_rate_id = bulkEditValues.billable_rate_id === 'unrated' ? null : parseInt(bulkEditValues.billable_rate_id, 10);
+          }
+        }
         if (linked && (bulkEditValues.start_date || bulkEditValues.end_date || bulkEditValues.duration)) {
           skippedLinked += 1;
         }
@@ -3837,7 +3858,7 @@ const PhaseSchedule: React.FC = () => {
 
       {/* Bulk edit bar (shared across Gantt and Grid views) */}
       {scheduleItems.length > 0 && (
-        <BulkEditBar items={scheduleItems} selectedItems={selectedItems}
+        <BulkEditBar items={scheduleItems} selectedItems={selectedItems} laborRates={laborRates}
           bulkEditValues={bulkEditValues} onBulkEditChange={setBulkEditValues}
           onApply={handleBulkEditApply} onClear={clearSelection} bulkUpdating={bulkUpdating} />
       )}
