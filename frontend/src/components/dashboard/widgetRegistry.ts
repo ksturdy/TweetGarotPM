@@ -6,6 +6,10 @@ import ActiveProjectsWidget from './widgets/ActiveProjectsWidget';
 import ActiveOpportunitiesWidget from './widgets/ActiveOpportunitiesWidget';
 import RecentActivityWidget from './widgets/RecentActivityWidget';
 import TradeShowsWidget from './widgets/TradeShowsWidget';
+import CashFlowNegativeWidget from './widgets/CashFlowNegativeWidget';
+import CashFlowPositiveWidget from './widgets/CashFlowPositiveWidget';
+import LargestBacklogWidget from './widgets/LargestBacklogWidget';
+import MostGmDollarsWidget from './widgets/MostGmDollarsWidget';
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
   kpi_cards: {
@@ -21,7 +25,6 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
     title: 'Needs Attention',
     category: 'overview',
     defaultColumn: 'left',
-    locked: true,
     component: NeedsAttentionWidget,
   },
   recent_estimates: {
@@ -58,6 +61,34 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
     category: 'marketing',
     defaultColumn: 'right',
     component: TradeShowsWidget,
+  },
+  cash_flow_negative: {
+    id: 'cash_flow_negative',
+    title: 'Top Cash Flow Negative',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: CashFlowNegativeWidget,
+  },
+  cash_flow_positive: {
+    id: 'cash_flow_positive',
+    title: 'Top Cash Flow Positive',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: CashFlowPositiveWidget,
+  },
+  largest_backlog: {
+    id: 'largest_backlog',
+    title: 'Largest Backlog $',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: LargestBacklogWidget,
+  },
+  most_gm_dollars: {
+    id: 'most_gm_dollars',
+    title: 'Most GM $',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: MostGmDollarsWidget,
   },
 };
 

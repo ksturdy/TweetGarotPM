@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { vistaDataService, VPWorkOrder } from '../../services/vistaData';
+import { renderMarketIcon, getMarketGradient } from '../../utils/marketIcons';
 import '../../styles/SalesPipeline.css';
 
 const PAGE_SIZE_OPTIONS = [50, 100, 250, 500];
@@ -35,74 +36,6 @@ const WorkOrderList: React.FC = () => {
     [...new Set((workOrders || []).map(w => w.primary_market).filter((m): m is string => Boolean(m)))].sort(),
     [workOrders]
   );
-
-  // Helper function to get market icon (VP Markets)
-  const getMarketIcon = (market?: string | null): string => {
-    const marketIcons: { [key: string]: string } = {
-      'MFG-Food': '🍔',
-      'Health Care': '🏥',
-      'MFG-Other': '🏭',
-      'MFG-Paper': '📄',
-      'Amusement/Recreation': '🎢',
-      'Educational': '🏫',
-      'Manufacturing': '🏭',
-      'Commercial': '🏢',
-      'Office': '🏢',
-      'Power': '⚡',
-      'Lodging': '🏨',
-      'Religious': '⛪',
-      'Public Safety': '🚔',
-      'Transportation': '🚚',
-      'Communication': '📡',
-      'Conservation/Development': '🌲',
-      'Sewage/Waste Disposal': '♻️',
-      'Highway/Street': '🛣️',
-      'Water Supply': '💧',
-      'Residential': '🏠',
-      'Healthcare': '🏥',
-      'Education': '🏫',
-      'Industrial': '🏭',
-      'Retail': '🏬',
-      'Government': '🏛️',
-      'Hospitality': '🏨',
-      'Data Center': '💾'
-    };
-    return marketIcons[market || ''] || '🔧';
-  };
-
-  // Helper function to get market gradient (VP Markets)
-  const getMarketGradient = (market?: string | null): string => {
-    const marketGradients: { [key: string]: string } = {
-      'MFG-Food': 'linear-gradient(135deg, #f97316, #eab308)',
-      'Health Care': 'linear-gradient(135deg, #10b981, #06b6d4)',
-      'MFG-Other': 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-      'MFG-Paper': 'linear-gradient(135deg, #64748b, #94a3b8)',
-      'Amusement/Recreation': 'linear-gradient(135deg, #ec4899, #f43f5e)',
-      'Educational': 'linear-gradient(135deg, #f59e0b, #f97316)',
-      'Manufacturing': 'linear-gradient(135deg, #6366f1, #3b82f6)',
-      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-      'Office': 'linear-gradient(135deg, #3b82f6, #06b6d4)',
-      'Power': 'linear-gradient(135deg, #eab308, #f59e0b)',
-      'Lodging': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-      'Religious': 'linear-gradient(135deg, #8b5cf6, #a855f7)',
-      'Public Safety': 'linear-gradient(135deg, #ef4444, #f97316)',
-      'Transportation': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-      'Communication': 'linear-gradient(135deg, #14b8a6, #06b6d4)',
-      'Conservation/Development': 'linear-gradient(135deg, #22c55e, #10b981)',
-      'Sewage/Waste Disposal': 'linear-gradient(135deg, #84cc16, #22c55e)',
-      'Highway/Street': 'linear-gradient(135deg, #64748b, #475569)',
-      'Water Supply': 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
-      'Residential': 'linear-gradient(135deg, #a855f7, #ec4899)',
-      'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
-      'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-      'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
-      'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-      'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-      'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-      'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
-    };
-    return marketGradients[market || ''] || 'linear-gradient(135deg, #8b5cf6, #6366f1)';
-  };
 
   // Helper function to get status color
   const getStatusColor = (status: string | null): string => {
@@ -470,8 +403,8 @@ const WorkOrderList: React.FC = () => {
                   <td>{workOrder.entered_date ? new Date(workOrder.entered_date).toLocaleDateString('en-US') : '-'}</td>
                   <td>
                     <div className="sales-project-cell">
-                      <div className="sales-project-icon" style={{ background: getMarketGradient(workOrder.primary_market) }}>
-                        {getMarketIcon(workOrder.primary_market)}
+                      <div className="sales-project-icon" style={{ background: getMarketGradient(workOrder.primary_market || undefined) }}>
+                        {renderMarketIcon(workOrder.primary_market || undefined)}
                       </div>
                       <div className="sales-project-info">
                         <h4>{workOrder.description || 'No description'}</h4>

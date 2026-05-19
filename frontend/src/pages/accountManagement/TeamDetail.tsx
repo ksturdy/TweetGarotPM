@@ -8,57 +8,13 @@ import { Opportunity } from '../../services/opportunities';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import SearchableSelect from '../../components/SearchableSelect';
 import { LOCATION_GROUPS } from '../../constants/locationGroups';
+import {
+  renderMarketIcon,
+  renderProjectIcon,
+  getMarketGradient,
+  getProjectGradient,
+} from '../../utils/marketIcons';
 import '../../styles/SalesPipeline.css';
-
-// --- Helper functions matching ProjectList.tsx and SalesPipeline.tsx ---
-
-const getMarketIcon = (market?: string): string => {
-  const marketIcons: { [key: string]: string } = {
-    'MFG-Food': '🍔', 'Health Care': '🏥', 'MFG-Other': '🏭', 'MFG-Paper': '📄',
-    'Amusement/Recreation': '🎢', 'Educational': '🏫', 'Manufacturing': '🏭',
-    'Commercial': '🏢', 'Office': '🏢', 'Power': '⚡', 'Lodging': '🏨',
-    'Religious': '⛪', 'Public Safety': '🚔', 'Transportation': '🚚',
-    'Communication': '📡', 'Conservation/Development': '🌲',
-    'Sewage/Waste Disposal': '♻️', 'Highway/Street': '🛣️',
-    'Water Supply': '💧', 'Residential': '🏠',
-    'Healthcare': '🏥', 'Education': '🏫', 'Industrial': '🏭',
-    'Retail': '🏬', 'Government': '🏛️', 'Hospitality': '🏨', 'Data Center': '💾'
-  };
-  return marketIcons[market || ''] || '🏢';
-};
-
-const getMarketGradient = (market?: string): string => {
-  const marketGradients: { [key: string]: string } = {
-    'MFG-Food': 'linear-gradient(135deg, #f97316, #eab308)',
-    'Health Care': 'linear-gradient(135deg, #10b981, #06b6d4)',
-    'MFG-Other': 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    'MFG-Paper': 'linear-gradient(135deg, #64748b, #94a3b8)',
-    'Amusement/Recreation': 'linear-gradient(135deg, #ec4899, #f43f5e)',
-    'Educational': 'linear-gradient(135deg, #f59e0b, #f97316)',
-    'Manufacturing': 'linear-gradient(135deg, #6366f1, #3b82f6)',
-    'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-    'Office': 'linear-gradient(135deg, #3b82f6, #06b6d4)',
-    'Power': 'linear-gradient(135deg, #eab308, #f59e0b)',
-    'Lodging': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-    'Religious': 'linear-gradient(135deg, #8b5cf6, #a855f7)',
-    'Public Safety': 'linear-gradient(135deg, #ef4444, #f97316)',
-    'Transportation': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-    'Communication': 'linear-gradient(135deg, #14b8a6, #06b6d4)',
-    'Conservation/Development': 'linear-gradient(135deg, #22c55e, #10b981)',
-    'Sewage/Waste Disposal': 'linear-gradient(135deg, #84cc16, #22c55e)',
-    'Highway/Street': 'linear-gradient(135deg, #64748b, #475569)',
-    'Water Supply': 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
-    'Residential': 'linear-gradient(135deg, #a855f7, #ec4899)',
-    'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
-    'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-    'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
-    'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-    'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-    'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-    'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
-  };
-  return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
-};
 
 const getStatusColor = (status: string): string => {
   const colors: { [key: string]: string } = {
@@ -66,27 +22,6 @@ const getStatusColor = (status: string): string => {
     active: '#10b981', on_hold: '#f59e0b', completed: '#3b82f6', cancelled: '#ef4444'
   };
   return colors[status] || '#6b7280';
-};
-
-const getProjectIcon = (status: string): string => {
-  const icons: { [key: string]: string } = {
-    'Open': '🏗️', 'Soft-Closed': '📋', 'Hard-Closed': '✅',
-    active: '🏗️', on_hold: '⏸️', completed: '✅', cancelled: '❌'
-  };
-  return icons[status] || '📋';
-};
-
-const getProjectGradient = (status: string): string => {
-  const gradients: { [key: string]: string } = {
-    'Open': 'linear-gradient(135deg, #10b981, #06b6d4)',
-    'Soft-Closed': 'linear-gradient(135deg, #f59e0b, #f97316)',
-    'Hard-Closed': 'linear-gradient(135deg, #6b7280, #4b5563)',
-    active: 'linear-gradient(135deg, #10b981, #06b6d4)',
-    on_hold: 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-    completed: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-    cancelled: 'linear-gradient(135deg, #ef4444, #dc2626)'
-  };
-  return gradients[status] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
 };
 
 const getManagerColor = (name: string): string => {
@@ -119,6 +54,25 @@ const TeamDetailPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState('member');
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    team_lead_id: '',
+    color: '#6366f1',
+    is_active: true,
+  });
+
+  const teamColorOptions = [
+    { value: '#6366f1', label: 'Indigo' },
+    { value: '#3b82f6', label: 'Blue' },
+    { value: '#10b981', label: 'Green' },
+    { value: '#f59e0b', label: 'Amber' },
+    { value: '#ef4444', label: 'Red' },
+    { value: '#8b5cf6', label: 'Purple' },
+    { value: '#ec4899', label: 'Pink' },
+    { value: '#06b6d4', label: 'Cyan' },
+  ];
 
   // Fetch team details
   const { data: team, isLoading: isLoadingTeam } = useQuery({
@@ -239,6 +193,52 @@ const TeamDetailPage: React.FC = () => {
     },
   });
 
+  const updateTeamMutation = useMutation({
+    mutationFn: (data: any) => teamsApi.update(teamId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      queryClient.invalidateQueries({ queryKey: ['teams', teamId] });
+      setShowEditModal(false);
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to update team: ${error.response?.data?.error || error.message}`);
+    },
+  });
+
+  const deleteTeamMutation = useMutation({
+    mutationFn: () => teamsApi.delete(teamId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      navigate('/account-management/teams');
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete team: ${error.response?.data?.error || error.message}`);
+    },
+  });
+
+  const openEditModal = () => {
+    if (!team) return;
+    setEditForm({
+      name: team.name,
+      description: team.description || '',
+      team_lead_id: team.team_lead_id?.toString() || '',
+      color: team.color,
+      is_active: team.is_active,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateTeamMutation.mutate({
+      name: editForm.name,
+      description: editForm.description || undefined,
+      team_lead_id: editForm.team_lead_id ? parseInt(editForm.team_lead_id) : null,
+      color: editForm.color,
+      is_active: editForm.is_active,
+    });
+  };
+
   const handleAddMember = () => {
     if (!selectedEmployeeId) return;
     addMemberMutation.mutate({ employeeId: parseInt(selectedEmployeeId), role: selectedRole });
@@ -314,6 +314,30 @@ const TeamDetailPage: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
+          <button
+            onClick={openEditModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              background: 'white',
+              color: '#374151',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            title="Edit team details"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            Edit Team
+          </button>
           {/* Active / All filter toggle */}
           <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
             <button
@@ -656,7 +680,7 @@ const TeamDetailPage: React.FC = () => {
                         <td>
                           <div className="sales-project-cell">
                             <div className="sales-project-icon" style={{ background: proj.market ? getMarketGradient(proj.market) : getProjectGradient(proj.status) }}>
-                              {proj.market ? getMarketIcon(proj.market) : getProjectIcon(proj.status)}
+                              {proj.market ? renderMarketIcon(proj.market) : renderProjectIcon(proj.status)}
                             </div>
                             <div className="sales-project-info">
                               <h4>{proj.name}</h4>
@@ -814,7 +838,7 @@ const TeamDetailPage: React.FC = () => {
                           <td>
                             <div className="sales-project-cell">
                               <div className="sales-project-icon" style={{ background: getMarketGradient(opp.market) }}>
-                                {getMarketIcon(opp.market)}
+                                {renderMarketIcon(opp.market)}
                               </div>
                               <div className="sales-project-info">
                                 <h4>{opp.title}</h4>
@@ -1104,6 +1128,190 @@ const TeamDetailPage: React.FC = () => {
                 {addMemberMutation.isPending ? 'Adding...' : 'Add Member'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Team Modal */}
+      {showEditModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '24px' }}>Edit Team</h2>
+            <form onSubmit={handleEditSubmit}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
+                  Team Name *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb',
+                    fontSize: '0.875rem',
+                  }}
+                  placeholder="Enter team name"
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
+                  Description
+                </label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb',
+                    fontSize: '0.875rem',
+                    resize: 'vertical',
+                  }}
+                  placeholder="Enter team description"
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
+                  Team Lead
+                </label>
+                <SearchableSelect
+                  options={allEmployees.map((emp: AssignableEmployee) => ({
+                    value: emp.id.toString(),
+                    label: `${emp.first_name} ${emp.last_name}${emp.job_title ? ` - ${emp.job_title}` : ''}`,
+                  }))}
+                  value={editForm.team_lead_id}
+                  onChange={(value) => setEditForm({ ...editForm, team_lead_id: value })}
+                  placeholder="Search for team lead..."
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#374151' }}>
+                  Team Color
+                </label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {teamColorOptions.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, color: color.value })}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '8px',
+                        background: color.value,
+                        border: editForm.color === color.value ? '3px solid #1f2937' : '2px solid transparent',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s',
+                      }}
+                      title={color.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_active}
+                    onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  <span style={{ fontWeight: 500, color: '#374151' }}>Active Team</span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await confirm({
+                      message: `Are you sure you want to delete "${team.name}"? This action cannot be undone.`,
+                      danger: true,
+                    });
+                    if (ok) {
+                      deleteTeamMutation.mutate();
+                    }
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  Delete Team
+                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      background: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateTeamMutation.isPending}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#6366f1',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {updateTeamMutation.isPending ? 'Saving...' : 'Update Team'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

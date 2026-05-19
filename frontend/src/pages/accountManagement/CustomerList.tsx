@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-do
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import CustomerFormModal from '../../components/modals/CustomerFormModal';
+import { renderMarketIcon, getMarketGradient } from '../../utils/marketIcons';
 import '../../styles/SalesPipeline.css';
 
 const CustomerList: React.FC = () => {
@@ -43,36 +44,6 @@ const CustomerList: React.FC = () => {
 
   // Market options
   const marketOptions = ['Healthcare', 'Education', 'Commercial', 'Industrial', 'Retail', 'Government', 'Hospitality', 'Data Center'];
-
-  // Helper function to get market icon
-  const getMarketIcon = (market?: string): string => {
-    const marketIcons: { [key: string]: string } = {
-      'Healthcare': '🏥',
-      'Education': '🏫',
-      'Commercial': '🏢',
-      'Industrial': '🏭',
-      'Retail': '🏬',
-      'Government': '🏛️',
-      'Hospitality': '🏨',
-      'Data Center': '💾'
-    };
-    return marketIcons[market || ''] || '🏢';
-  };
-
-  // Helper function to get market gradient
-  const getMarketGradient = (market?: string): string => {
-    const marketGradients: { [key: string]: string } = {
-      'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
-      'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-      'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
-      'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-      'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-      'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-      'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
-    };
-    return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
-  };
 
   // Helper function to get manager initials
   const getManagerInitials = (name?: string): string => {
@@ -514,7 +485,7 @@ const CustomerList: React.FC = () => {
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: getMarketGradient(customer.market) }}>
-                        {getMarketIcon(customer.market)}
+                        {renderMarketIcon(customer.market)}
                       </div>
                       <div className="sales-project-info">
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

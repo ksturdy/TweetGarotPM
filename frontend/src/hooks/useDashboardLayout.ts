@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { dashboardLayoutApi } from '../services/dashboardLayout';
-import { DashboardLayout } from '../components/dashboard/types';
+import { dashboardLayoutApi, DashboardSettings } from '../services/dashboardLayout';
+import { DashboardLayout, ViewScope } from '../components/dashboard/types';
 import { defaultLayout } from '../components/dashboard/defaultLayout';
 import { widgetRegistry } from '../components/dashboard/widgetRegistry';
 
@@ -22,33 +22,36 @@ const reconcileWithRegistry = (layout: DashboardLayout): DashboardLayout => {
 export function useDashboardLayout() {
   const queryClient = useQueryClient();
 
-  const { data: savedLayout, isLoading } = useQuery({
+  const { data: saved, isLoading } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: () => dashboardLayoutApi.get(),
   });
 
-  const layout: DashboardLayout = Array.isArray(savedLayout)
-    ? reconcileWithRegistry(savedLayout)
+  const layout: DashboardLayout = saved?.layout
+    ? reconcileWithRegistry(saved.layout)
     : defaultLayout;
 
-  const isCustomized = Array.isArray(savedLayout);
+  const defaultViewScope: ViewScope | null = saved?.defaultViewScope ?? null;
+  const isCustomized = !!saved?.layout;
 
   const saveMutation = useMutation({
-    mutationFn: (next: DashboardLayout) => dashboardLayoutApi.save(next),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(QUERY_KEY, saved);
+    mutationFn: ({ layout: nextLayout, defaultViewScope: nextScope }: { layout: DashboardLayout; defaultViewScope: ViewScope | null }) =>
+      dashboardLayoutApi.save(nextLayout, nextScope),
+    onSuccess: (next) => {
+      queryClient.setQueryData(QUERY_KEY, next);
     },
   });
 
   const resetMutation = useMutation({
     mutationFn: () => dashboardLayoutApi.reset(),
     onSuccess: () => {
-      queryClient.setQueryData(QUERY_KEY, null);
+      queryClient.setQueryData(QUERY_KEY, { layout: null, defaultViewScope: null } as DashboardSettings);
     },
   });
 
   return {
     layout,
+    defaultViewScope,
     isLoading,
     isCustomized,
     save: saveMutation.mutate,

@@ -19,13 +19,23 @@ import '../styles/SalesPipeline.css';
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [viewScope, setViewScope] = useState<ViewScope>('my');
+  const [scopeInitialized, setScopeInitialized] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const { layout, save, reset, isSaving } = useDashboardLayout();
+  const { layout, defaultViewScope, save, reset, isSaving } = useDashboardLayout();
 
   useEffect(() => {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
   }, []);
+
+  useEffect(() => {
+    if (!scopeInitialized && defaultViewScope) {
+      setViewScope(defaultViewScope);
+      setScopeInitialized(true);
+    } else if (!scopeInitialized && defaultViewScope === null) {
+      setScopeInitialized(true);
+    }
+  }, [defaultViewScope, scopeInitialized]);
 
   const { data: currentEmployeeResponse } = useQuery({
     queryKey: ['current-employee', user?.id],
@@ -156,9 +166,11 @@ const Dashboard: React.FC = () => {
       <CustomizeDashboardDrawer
         open={customizeOpen}
         layout={layout}
+        defaultViewScope={defaultViewScope}
         onClose={() => setCustomizeOpen(false)}
-        onSave={(next) => {
-          save(next);
+        onSave={(nextLayout, nextScope) => {
+          save({ layout: nextLayout, defaultViewScope: nextScope });
+          if (nextScope) setViewScope(nextScope);
           setCustomizeOpen(false);
         }}
         onReset={() => reset()}

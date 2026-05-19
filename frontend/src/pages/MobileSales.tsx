@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
+import { renderMarketIcon } from '../utils/marketIcons';
 import '../styles/MobileSales.css';
 
 const MobileSales: React.FC = () => {
@@ -44,20 +45,6 @@ const MobileSales: React.FC = () => {
       return `$${(value / 1000000).toFixed(1)}M`;
     }
     return `$${(value / 1000).toFixed(0)}K`;
-  };
-
-  const getMarketIcon = (market?: string): string => {
-    const marketIcons: { [key: string]: string } = {
-      'Healthcare': '🏥',
-      'Education': '🏫',
-      'Commercial': '🏢',
-      'Industrial': '🏭',
-      'Retail': '🏬',
-      'Government': '🏛️',
-      'Hospitality': '🏨',
-      'Data Center': '💾'
-    };
-    return marketIcons[market || ''] || '🏢';
   };
 
   const getStageColor = (stageName: string): string => {
@@ -172,7 +159,7 @@ const MobileSales: React.FC = () => {
               }}
             >
               <div className="mobile-opp-header">
-                <div className="mobile-opp-icon">{getMarketIcon(opp.market)}</div>
+                <div className="mobile-opp-icon">{renderMarketIcon(opp.market, 18)}</div>
                 <div className="mobile-opp-title-section">
                   <h3 className="mobile-opp-title">{opp.title}</h3>
                   <div className="mobile-opp-subtitle">{opp.owner || 'No owner'}</div>

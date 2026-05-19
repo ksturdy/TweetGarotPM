@@ -15,11 +15,14 @@ router.get('/', authenticate, async (req, res) => {
 
 router.put('/', authenticate, async (req, res) => {
   try {
-    const { layout } = req.body;
+    const { layout, defaultViewScope } = req.body;
     if (!Array.isArray(layout)) {
       return res.status(400).json({ error: 'layout must be an array' });
     }
-    const saved = await DashboardLayout.upsert(req.user.id, layout);
+    if (defaultViewScope != null && !['my', 'team', 'company'].includes(defaultViewScope)) {
+      return res.status(400).json({ error: 'defaultViewScope must be one of: my, team, company' });
+    }
+    const saved = await DashboardLayout.upsert(req.user.id, layout, defaultViewScope);
     res.json(saved);
   } catch (error) {
     console.error('Error saving dashboard layout:', error);

@@ -3,21 +3,22 @@ const pool = require('../config/database');
 const DashboardLayout = {
   async getByUserId(userId) {
     const result = await pool.query(
-      'SELECT layout_json, updated_at FROM user_dashboard_layouts WHERE user_id = $1',
+      'SELECT layout_json, default_view_scope, updated_at FROM user_dashboard_layouts WHERE user_id = $1',
       [userId]
     );
     return result.rows[0] || null;
   },
 
-  async upsert(userId, layoutJson) {
+  async upsert(userId, layoutJson, defaultViewScope) {
     const result = await pool.query(
-      `INSERT INTO user_dashboard_layouts (user_id, layout_json, updated_at)
-       VALUES ($1, $2, CURRENT_TIMESTAMP)
+      `INSERT INTO user_dashboard_layouts (user_id, layout_json, default_view_scope, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id) DO UPDATE
          SET layout_json = EXCLUDED.layout_json,
+             default_view_scope = EXCLUDED.default_view_scope,
              updated_at = CURRENT_TIMESTAMP
-       RETURNING layout_json, updated_at`,
-      [userId, JSON.stringify(layoutJson)]
+       RETURNING layout_json, default_view_scope, updated_at`,
+      [userId, JSON.stringify(layoutJson), defaultViewScope || null]
     );
     return result.rows[0];
   },

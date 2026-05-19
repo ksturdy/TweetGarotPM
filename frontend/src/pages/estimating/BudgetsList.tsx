@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { budgetsApi, Budget, BudgetStats } from '../../services/budgets';
+import { renderMarketIcon, getMarketGradient, resolveMarketKey } from '../../utils/marketIcons';
 import './BudgetsList.css';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
@@ -79,29 +80,12 @@ const BudgetsList: React.FC = () => {
     setSelectedBudget(null);
   };
 
-  // Get building type icon and gradient
   const getBuildingTypeIcon = (buildingType: string) => {
-    const icons: { [key: string]: { icon: string; gradient: string } } = {
-      'Healthcare': { icon: '🏥', gradient: 'linear-gradient(135deg, #10b981, #06b6d4)' },
-      'Education': { icon: '🏫', gradient: 'linear-gradient(135deg, #f59e0b, #f43f5e)' },
-      'Commercial': { icon: '🏢', gradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' },
-      'Industrial': { icon: '🏭', gradient: 'linear-gradient(135deg, #06b6d4, #10b981)' },
-      'Retail': { icon: '🏬', gradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)' },
-      'Government': { icon: '🏛️', gradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
-      'Hospitality': { icon: '🏨', gradient: 'linear-gradient(135deg, #f43f5e, #f59e0b)' },
-      'Hotel': { icon: '🏨', gradient: 'linear-gradient(135deg, #f43f5e, #f59e0b)' },
-      'Data Center': { icon: '💾', gradient: 'linear-gradient(135deg, #8b5cf6, #3b82f6)' },
-      'Multi-Family': { icon: '🏘️', gradient: 'linear-gradient(135deg, #10b981, #3b82f6)' },
-      'Office': { icon: '🏢', gradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' },
+    const resolved = resolveMarketKey(buildingType);
+    return {
+      icon: renderMarketIcon(resolved),
+      gradient: getMarketGradient(resolved),
     };
-    // Try exact match first
-    if (icons[buildingType]) return icons[buildingType];
-    // Try partial match (e.g., "Healthcare - Clinic" should match "Healthcare")
-    const lowerType = (buildingType || '').toLowerCase();
-    for (const [key, value] of Object.entries(icons)) {
-      if (lowerType.includes(key.toLowerCase())) return value;
-    }
-    return { icon: '📋', gradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' };
   };
 
   // Get confidence color for preview modal

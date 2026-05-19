@@ -3,15 +3,19 @@ import CloseIcon from '@mui/icons-material/Close';
 import LockIcon from '@mui/icons-material/Lock';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import { DashboardColumn, DashboardLayout, WidgetLayoutItem } from './types';
+import PersonIcon from '@mui/icons-material/Person';
+import GroupsIcon from '@mui/icons-material/Groups';
+import BusinessIcon from '@mui/icons-material/Business';
+import { DashboardColumn, DashboardLayout, ViewScope, WidgetLayoutItem } from './types';
 import { widgetRegistry } from './widgetRegistry';
 import './CustomizeDashboardDrawer.css';
 
 interface Props {
   open: boolean;
   layout: DashboardLayout;
+  defaultViewScope: ViewScope | null;
   onClose: () => void;
-  onSave: (layout: DashboardLayout) => void;
+  onSave: (layout: DashboardLayout, defaultViewScope: ViewScope | null) => void;
   onReset: () => void;
   isSaving?: boolean;
 }
@@ -46,13 +50,17 @@ const reorderColumn = (layout: DashboardLayout): DashboardLayout => {
 };
 
 const CustomizeDashboardDrawer: React.FC<Props> = ({
-  open, layout, onClose, onSave, onReset, isSaving,
+  open, layout, defaultViewScope, onClose, onSave, onReset, isSaving,
 }) => {
   const [draft, setDraft] = useState<DashboardLayout>(layout);
+  const [scopeDraft, setScopeDraft] = useState<ViewScope>(defaultViewScope || 'my');
 
   useEffect(() => {
-    if (open) setDraft(layout);
-  }, [open, layout]);
+    if (open) {
+      setDraft(layout);
+      setScopeDraft(defaultViewScope || 'my');
+    }
+  }, [open, layout, defaultViewScope]);
 
   if (!open) return null;
 
@@ -97,7 +105,7 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
   };
 
   const handleSave = () => {
-    onSave(reorderColumn(draft));
+    onSave(reorderColumn(draft), scopeDraft);
   };
 
   const handleReset = () => {
@@ -134,6 +142,37 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
         </div>
 
         <div className="customize-drawer-body">
+          <section className="customize-section">
+            <h3>Default View</h3>
+            <p className="customize-section-hint">Which scope the dashboard opens to.</p>
+            <div className="customize-scope-toggle">
+              <button
+                type="button"
+                className={`customize-scope-btn ${scopeDraft === 'my' ? 'active' : ''}`}
+                onClick={() => setScopeDraft('my')}
+              >
+                <PersonIcon fontSize="small" />
+                <span>My Work</span>
+              </button>
+              <button
+                type="button"
+                className={`customize-scope-btn ${scopeDraft === 'team' ? 'active' : ''}`}
+                onClick={() => setScopeDraft('team')}
+              >
+                <GroupsIcon fontSize="small" />
+                <span>My Team</span>
+              </button>
+              <button
+                type="button"
+                className={`customize-scope-btn ${scopeDraft === 'company' ? 'active' : ''}`}
+                onClick={() => setScopeDraft('company')}
+              >
+                <BusinessIcon fontSize="small" />
+                <span>Company</span>
+              </button>
+            </div>
+          </section>
+
           <section className="customize-section">
             <h3>Available Widgets</h3>
             <p className="customize-section-hint">Toggle widgets on or off.</p>

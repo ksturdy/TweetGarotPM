@@ -15,6 +15,7 @@ import {
 } from 'chart.js';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OpportunityModal from '../components/opportunities/OpportunityModal';
+import { renderMarketIcon, getMarketGradient } from '../utils/marketIcons';
 import opportunitiesService, { Opportunity as OpportunityType } from '../services/opportunities';
 import { employeesApi } from '../services/employees';
 import { teamsApi } from '../services/teams';
@@ -54,7 +55,7 @@ interface SalesOpportunity {
   facilityLocationName: string;
   company: string;
   market: string;
-  icon: string;
+  icon: React.ReactNode;
   iconGradient: string;
 }
 
@@ -135,36 +136,6 @@ const SalesPipeline: React.FC = () => {
   });
 
 
-  // Helper function to get market icon
-  const getMarketIcon = (market?: string): string => {
-    const marketIcons: { [key: string]: string } = {
-      'Healthcare': '🏥',
-      'Education': '🏫',
-      'Commercial': '🏢',
-      'Industrial': '🏭',
-      'Retail': '🏬',
-      'Government': '🏛️',
-      'Hospitality': '🏨',
-      'Data Center': '💾'
-    };
-    return marketIcons[market || ''] || '🏢';
-  };
-
-  // Helper function to get market gradient
-  const getMarketGradient = (market?: string): string => {
-    const marketGradients: { [key: string]: string } = {
-      'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
-      'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
-      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-      'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
-      'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
-      'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-      'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
-      'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)'
-    };
-    return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
-  };
-
   // Helper function to get salesperson color based on name
   const getSalespersonColor = (name: string): string => {
     const colors = [
@@ -214,7 +185,7 @@ const SalesPipeline: React.FC = () => {
       facilityLocationName: opp.facility_location_name || opp.facility_name || '',
       company: opp.customer_id ? (opp.customer_name || '') : (opp.owner || ''),
       market: opp.market || '',
-      icon: getMarketIcon(opp.market),
+      icon: renderMarketIcon(opp.market),
       iconGradient: getMarketGradient(opp.market)
     };
   };

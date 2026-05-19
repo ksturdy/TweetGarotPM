@@ -6,6 +6,10 @@ export const defaultLayout: DashboardLayout = [
   { id: 'recent_estimates', column: 'left', order: 1, visible: true },
   { id: 'active_projects', column: 'center', order: 0, visible: true },
   { id: 'active_opportunities', column: 'center', order: 1, visible: true },
+  { id: 'cash_flow_negative', column: 'center', order: 2, visible: true },
+  { id: 'cash_flow_positive', column: 'center', order: 3, visible: true },
+  { id: 'largest_backlog', column: 'center', order: 4, visible: true },
+  { id: 'most_gm_dollars', column: 'center', order: 5, visible: true },
   { id: 'recent_activity', column: 'right', order: 0, visible: true },
   { id: 'trade_shows', column: 'right', order: 1, visible: true },
 ];
