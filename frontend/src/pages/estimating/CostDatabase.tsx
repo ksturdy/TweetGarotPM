@@ -1,1155 +1,881 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import * as XLSX from 'xlsx';
-import { historicalProjectsService } from '../../services/historicalProjects';
-import './CostDatabase.css';
-import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { useQuery } from '@tanstack/react-query';
+import {
+  costDatabaseService,
+  CostDbFilters,
+  COST_TYPE_LABELS,
+  PhaseRow,
+  PhaseProjectRow,
+  ProjectRow,
+} from '../../services/costDatabase';
 import '../../styles/SalesPipeline.css';
 
+const fmt = (value: number | null | undefined): string => {
+  if (value == null) return '-';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(value);
+};
+
+const fmtNum = (value: number | null | undefined): string => {
+  if (value == null) return '-';
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+};
+
+const fmtPct = (value: number | null | undefined): string => {
+  if (value == null) return '-';
+  return `${(value * 100).toFixed(1)}%`;
+};
+
+type Tab = 'cost-type' | 'phase' | 'projects';
+
+type PhaseRowEnriched = PhaseRow & {
+  avg_est_cost: number;
+  avg_jtd_cost: number;
+  avg_committed_cost: number;
+  avg_projected_cost: number;
+  avg_est_hours: number;
+  avg_jtd_hours: number;
+  pct_of_total: number;
+};
+
+const safeAvg = (sum: number, count: number) => (count > 0 ? sum / count : 0);
+
 const CostDatabase: React.FC = () => {
-  const { toast, confirm } = useTitanFeedback();
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<string>('');
-  const [previewData, setPreviewData] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
-  const [editingProject, setEditingProject] = useState<any | null>(null);
-  const [filterBuildingType, setFilterBuildingType] = useState('all');
-  const [filterProjectType, setFilterProjectType] = useState('all');
-  const [filterBidType, setFilterBidType] = useState('all');
-  const [sortField, setSortField] = useState<string>('name');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [filters, setFilters] = useState<CostDbFilters>({});
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
+  const [tab, setTab] = useState<Tab>('cost-type');
+  const [drillPhase, setDrillPhase] = useState<{ phase: string; cost_type: number } | null>(null);
+  const [search, setSearch] = useState('');
 
-  // Load historical projects on component mount
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  // Filters with exclusions applied — used for all aggregations.
+  const aggFilters = useMemo<CostDbFilters>(
+    () => ({ ...filters, excluded_project_ids: excluded.size ? Array.from(excluded) : undefined }),
+    [filters, excluded]
+  );
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await historicalProjectsService.getAll();
-      setProjects(data);
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Get unique building types, project types, and bid types from projects
-  const buildingTypes = ['all', ...new Set(projects.map(p => p.building_type).filter(Boolean))];
-  const projectTypes = ['all', ...new Set(projects.map(p => p.project_type).filter(Boolean))];
-  const bidTypes = ['all', ...new Set(projects.map(p => p.bid_type).filter(Boolean))];
-
-  // Handle sorting
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-
-  // Filter and sort projects
-  const filteredProjects = projects
-    .filter(project => {
-      const matchesSearch = !searchTerm ||
-        project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.building_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.project_type?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesBuildingType = filterBuildingType === 'all' || project.building_type === filterBuildingType;
-      const matchesProjectType = filterProjectType === 'all' || project.project_type === filterProjectType;
-      const matchesBidType = filterBidType === 'all' || project.bid_type === filterBidType;
-
-      return matchesSearch && matchesBuildingType && matchesProjectType && matchesBidType;
-    })
-    .sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
-
-      // Handle null/undefined values
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      // Convert to numbers for numeric fields
-      if (['total_cost', 'total_sqft', 'total_cost_per_sqft'].includes(sortField)) {
-        aVal = parseFloat(aVal) || 0;
-        bVal = parseFloat(bVal) || 0;
-      }
-
-      // Convert dates
-      if (sortField === 'bid_date') {
-        aVal = new Date(aVal + 'T00:00:00').getTime();
-        bVal = new Date(bVal + 'T00:00:00').getTime();
-      }
-
-      // String comparison
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+  const toggleExcluded = (projectId: number) => {
+    setExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
     });
+  };
+  const [phaseSort, setPhaseSort] = useState<{ key: keyof PhaseRowEnriched; dir: 'asc' | 'desc' }>({
+    key: 'avg_jtd_cost', dir: 'desc',
+  });
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const { data: opts } = useQuery({
+    queryKey: ['costDb', 'filters'],
+    queryFn: () => costDatabaseService.getFilters(),
+  });
 
-    setUploadProgress('Reading file...');
+  const { data: summary } = useQuery({
+    queryKey: ['costDb', 'summary', aggFilters],
+    queryFn: () => costDatabaseService.getSummary(aggFilters),
+  });
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+  const { data: byCostType, isLoading: ctLoading } = useQuery({
+    queryKey: ['costDb', 'by-cost-type', aggFilters],
+    queryFn: () => costDatabaseService.getByCostType(aggFilters),
+  });
 
-        // Get first sheet
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+  const { data: byPhase, isLoading: phaseLoading } = useQuery({
+    queryKey: ['costDb', 'by-phase', aggFilters],
+    queryFn: () => costDatabaseService.getByPhase(aggFilters),
+    enabled: tab === 'phase',
+  });
 
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+  // Source-project list uses the *base* filters (no exclusion) so users can see
+  // and re-include excluded projects.
+  const { data: projects, isLoading: projLoading } = useQuery({
+    queryKey: ['costDb', 'projects', filters],
+    queryFn: () => costDatabaseService.getProjects(filters),
+  });
 
-        setUploadProgress(`Found ${jsonData.length} rows - Ready to import`);
-        setPreviewData(jsonData); // Store all data for import
+  const { data: drillRows, isLoading: drillLoading } = useQuery({
+    queryKey: ['costDb', 'phase-projects', drillPhase, aggFilters],
+    queryFn: () => drillPhase
+      ? costDatabaseService.getPhaseProjects(drillPhase.phase, { ...aggFilters, cost_type: drillPhase.cost_type })
+      : Promise.resolve([] as PhaseProjectRow[]),
+    enabled: !!drillPhase,
+  });
 
-        console.log('Parsed data:', jsonData);
-        console.log('Column headers:', Object.keys(jsonData[0] || {}));
+  const setFilter = <K extends keyof CostDbFilters>(key: K, value: CostDbFilters[K]) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
 
-      } catch (error) {
-        console.error('Error parsing Excel:', error);
-        setUploadProgress('');
-        toast.error('Error parsing Excel file. Please check the file format.');
+  const toggleListFilter = (key: 'status' | 'department' | 'market', value: string) => {
+    setFilters(prev => {
+      const list = prev[key] || [];
+      const next = list.includes(value) ? list.filter(v => v !== value) : [...list, value];
+      return { ...prev, [key]: next.length ? next : undefined };
+    });
+  };
+
+  const clearFilters = () => { setFilters({}); setSearch(''); };
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (filters.status?.length) n++;
+    if (filters.department?.length) n++;
+    if (filters.market?.length) n++;
+    if (filters.manager_id?.length) n++;
+    if (filters.date_from || filters.date_to) n++;
+    if (filters.value_min != null || filters.value_max != null) n++;
+    return n;
+  }, [filters]);
+
+  const filteredPhases = useMemo<PhaseRowEnriched[]>(() => {
+    if (!byPhase) return [];
+    let rows = byPhase;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      rows = rows.filter(r =>
+        r.phase.toLowerCase().includes(q) ||
+        (r.phase_description || '').toLowerCase().includes(q)
+      );
+    }
+    const total = rows.reduce((s, r) => s + r.projected_cost, 0);
+    const enriched: PhaseRowEnriched[] = rows.map(r => ({
+      ...r,
+      avg_est_cost: safeAvg(r.est_cost, r.project_count),
+      avg_jtd_cost: safeAvg(r.jtd_cost, r.project_count),
+      avg_committed_cost: safeAvg(r.committed_cost, r.project_count),
+      avg_projected_cost: safeAvg(r.projected_cost, r.project_count),
+      avg_est_hours: safeAvg(r.est_hours, r.project_count),
+      avg_jtd_hours: safeAvg(r.jtd_hours, r.project_count),
+      pct_of_total: total > 0 ? r.projected_cost / total : 0,
+    }));
+    const { key, dir } = phaseSort;
+    enriched.sort((a, b) => {
+      const av = a[key]; const bv = b[key];
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
       }
-    };
+      const an = Number(av || 0); const bn = Number(bv || 0);
+      return dir === 'asc' ? an - bn : bn - an;
+    });
+    return enriched;
+  }, [byPhase, search, phaseSort]);
 
-    reader.onerror = () => {
-      setUploadProgress('');
-      toast.error('Error reading file');
-    };
-
-    reader.readAsBinaryString(file);
-  };
-
-  const handleImportSubmit = async () => {
-    if (previewData.length === 0) {
-      toast.error('Please select a file first');
-      return;
-    }
-
-    try {
-      setUploadProgress('Saving to database...');
-      const result = await historicalProjectsService.importProjects(previewData);
-      setUploadProgress('');
-      setPreviewData([]);
-      setShowImportModal(false);
-      toast.success(`Successfully imported ${result.count} projects to the database!`);
-      loadProjects(); // Reload the projects list
-    } catch (error: any) {
-      console.error('Error importing projects:', error);
-      setUploadProgress('');
-      toast.error('Error saving projects to database: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleModalClose = () => {
-    setShowImportModal(false);
-    setPreviewData([]);
-    setUploadProgress('');
-  };
-
-  const handleDelete = async (id: number) => {
-    const ok = await confirm({ message: 'Are you sure you want to delete this project? This action cannot be undone.', danger: true });
-    if (!ok) {
-      return;
-    }
-
-    try {
-      await historicalProjectsService.delete(id);
-      loadProjects(); // Reload the list
-      toast.success('Project deleted successfully');
-    } catch (error: any) {
-      console.error('Error deleting project:', error);
-      toast.error('Error deleting project: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!editingProject) return;
-
-    try {
-      await historicalProjectsService.update(editingProject.id, {
-        name: editingProject.name,
-        bid_date: editingProject.bid_date,
-        building_type: editingProject.building_type,
-        project_type: editingProject.project_type,
-        bid_type: editingProject.bid_type,
-        total_cost: editingProject.total_cost,
-        total_sqft: editingProject.total_sqft,
-        cost_per_sqft_with_index: editingProject.cost_per_sqft_with_index,
-        total_cost_per_sqft: editingProject.total_cost_per_sqft
-      });
-
-      setEditingProject(null);
-      loadProjects(); // Reload the list
-      toast.success('Project updated successfully');
-    } catch (error: any) {
-      console.error('Error updating project:', error);
-      toast.error('Error updating project: ' + (error.response?.data?.error || error.message));
-    }
+  const togglePhaseSort = (key: keyof PhaseRowEnriched) => {
+    setPhaseSort(p => p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' });
   };
 
   return (
-    <div className="cost-database">
-      <div className="sales-page-header">
-        <div className="sales-page-title">
-          <div>
-            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Estimating
-            </Link>
-            <h1>💲 Cost Database</h1>
-            <div className="sales-subtitle">Manage cost items and pricing</div>
-          </div>
-        </div>
-        <div className="sales-header-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowImportModal(true)}
-          >
-            Import Excel
-          </button>
-          <button className="btn btn-primary">
-            + Add Project
-          </button>
+    <div style={{ padding: '1rem 1.5rem', maxWidth: '1600px', margin: '0 auto' }}>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+          &larr; Back to Estimating
+        </Link>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.15rem' }}>
+          📊 Cost Database
+        </h1>
+        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+          Historical cost data aggregated from project phase codes
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">📊</div>
-          <div className="stat-info">
-            <div className="stat-value">{filteredProjects.length}</div>
-            <div className="stat-label">Historical Projects</div>
+      {/* Filters panel */}
+      <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+            Filters {activeFilterCount > 0 && <span style={{ marginLeft: '0.4rem', background: '#3b82f6', color: '#fff', padding: '0.05rem 0.4rem', borderRadius: '8px', fontSize: '0.7rem' }}>{activeFilterCount}</span>}
           </div>
+          {activeFilterCount > 0 && (
+            <button onClick={clearFilters} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#64748b' }}>
+              Clear all
+            </button>
+          )}
         </div>
-        <div className="stat-card">
-          <div className="stat-icon">🏗️</div>
-          <div className="stat-info">
-            <div className="stat-value">{new Set(filteredProjects.map(p => p.building_type).filter(Boolean)).size}</div>
-            <div className="stat-label">Building Types</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">📅</div>
-          <div className="stat-info">
-            <div className="stat-value">
-              {filteredProjects.length > 0
-                ? new Date(Math.max(...filteredProjects.map(p => new Date(p.created_at || 0).getTime()))).toLocaleDateString()
-                : '-'
-              }
-            </div>
-            <div className="stat-label">Last Import</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">💰</div>
-          <div className="stat-info">
-            <div className="stat-value">
-              ${filteredProjects.length > 0
-                ? Math.round(filteredProjects.reduce((sum, p) => sum + (parseFloat(p.total_cost) || 0), 0) / filteredProjects.length).toLocaleString()
-                : '0'
-              }
-            </div>
-            <div className="stat-label">Avg Project Cost</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">📐</div>
-          <div className="stat-info">
-            <div className="stat-value">
-              ${filteredProjects.length > 0
-                ? (() => {
-                    const validProjects = filteredProjects.filter(p => p.total_cost_per_sqft);
-                    return validProjects.length > 0
-                      ? (validProjects.reduce((sum, p) => sum + (parseFloat(p.total_cost_per_sqft) || 0), 0) / validProjects.length).toFixed(2)
-                      : '0.00';
-                  })()
-                : '0.00'
-              }
-            </div>
-            <div className="stat-label">Avg Cost/SqFt</div>
-          </div>
-        </div>
-      </div>
 
-      {/* Table Section */}
-      <div className="cd-table-section">
-        <div className="sales-table-header">
-          <div className="sales-table-title">
-            Historical Projects
-            <span className="cd-table-count">{filteredProjects.length} of {projects.length}</span>
-          </div>
-          <div className="sales-table-controls">
-            <select
-              value={filterBuildingType}
-              onChange={(e) => setFilterBuildingType(e.target.value)}
-              className="cd-filter-select"
-            >
-              {buildingTypes.map(type => (
-                <option key={type} value={type}>
-                  {type === 'all' ? 'All Building Types' : type}
-                </option>
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          gap: '0.75rem 1rem',
+        }}>
+          {/* Status — wider basis so 3 chips fit on one line */}
+          <div style={{ flex: '1 1 240px' }}>
+            <Label>Status</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+              {opts?.statuses.map(s => (
+                <Chip key={s} active={filters.status?.includes(s) ?? false}
+                  onClick={() => toggleListFilter('status', s)}>
+                  {s}
+                </Chip>
               ))}
-            </select>
-            <select
-              value={filterProjectType}
-              onChange={(e) => setFilterProjectType(e.target.value)}
-              className="cd-filter-select"
-            >
-              {projectTypes.map(type => (
-                <option key={type} value={type}>
-                  {type === 'all' ? 'All Project Types' : type}
-                </option>
-              ))}
-            </select>
-            <select
-              value={filterBidType}
-              onChange={(e) => setFilterBidType(e.target.value)}
-              className="cd-filter-select"
-            >
-              {bidTypes.map(type => (
-                <option key={type} value={type}>
-                  {type === 'all' ? 'All Bid Types' : type}
-                </option>
-              ))}
-            </select>
-            <div className="sales-search-box">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input
-                type="text"
-                placeholder="Search projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
             </div>
           </div>
-        </div>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
-            <p>Loading historical projects...</p>
+
+          {/* Department */}
+          <div style={{ flex: '1 1 150px' }}>
+            <Label>Department</Label>
+            <MultiSelect
+              options={opts?.departments.map(d => ({ value: d.number, label: `${d.number} — ${d.name}` })) || []}
+              selected={filters.department || []}
+              onChange={next => setFilter('department', next.length ? next : undefined)}
+              placeholder="All departments"
+            />
           </div>
-        ) : filteredProjects.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>
-            <div className="empty-state">
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
-              <p style={{ fontSize: '1.125rem', fontWeight: 600, margin: '0 0 0.5rem 0' }}>
-                {projects.length === 0 ? 'No historical projects in database' : 'No projects match your filters'}
-              </p>
-              <p style={{ color: 'var(--secondary)', marginBottom: '1.5rem' }}>
-                {projects.length === 0 ? 'Import your Excel file to get started' : 'Try adjusting your search or filters'}
-              </p>
-              {projects.length === 0 && (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setShowImportModal(true)}
-                >
-                  Import Excel File
-                </button>
-              )}
-            </div>
+
+          {/* Market */}
+          <div style={{ flex: '1 1 150px' }}>
+            <Label>Market</Label>
+            <MultiSelect
+              options={(opts?.markets || []).map(m => ({ value: m, label: m }))}
+              selected={filters.market || []}
+              onChange={next => setFilter('market', next.length ? next : undefined)}
+              placeholder="All markets"
+            />
           </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="cd-col-name" onClick={() => handleSort('name')}>
-                  Project Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-date" onClick={() => handleSort('bid_date')}>
-                  Bid Date {sortField === 'bid_date' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-btype" onClick={() => handleSort('building_type')}>
-                  Building Type {sortField === 'building_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-ptype" onClick={() => handleSort('project_type')}>
-                  Project Type {sortField === 'project_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-bid" onClick={() => handleSort('bid_type')}>
-                  Bid Type {sortField === 'bid_type' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-cost" onClick={() => handleSort('total_cost')}>
-                  Total Cost {sortField === 'total_cost' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-sqft" onClick={() => handleSort('total_sqft')}>
-                  SqFt {sortField === 'total_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="cd-col-costsf" onClick={() => handleSort('total_cost_per_sqft')}>
-                  Cost/SqFt {sortField === 'total_cost_per_sqft' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProjects.map((project) => (
-                <tr key={project.id}>
-                  <td className="cd-col-name">
-                    <span className="cd-project-link" onClick={() => setSelectedProject(project)}>
-                      {project.name}
-                    </span>
-                  </td>
-                  <td className="cd-col-date">{project.bid_date ? new Date(project.bid_date + 'T00:00:00').toLocaleDateString() : '-'}</td>
-                  <td className="cd-col-btype">
-                    {project.building_type && (
-                      <span className="badge badge-info">{project.building_type}</span>
-                    )}
-                  </td>
-                  <td className="cd-col-ptype">
-                    {project.project_type && (
-                      <span className="badge badge-secondary">{project.project_type}</span>
-                    )}
-                  </td>
-                  <td className="cd-col-bid">{project.bid_type || '-'}</td>
-                  <td className="cd-col-cost">
-                    {project.total_cost ? `$${Math.round(project.total_cost).toLocaleString()}` : '-'}
-                  </td>
-                  <td className="cd-col-sqft">
-                    {project.total_sqft ? Math.round(project.total_sqft).toLocaleString() : '-'}
-                  </td>
-                  <td className="cd-col-costsf">
-                    {project.total_cost_per_sqft ? `$${parseFloat(project.total_cost_per_sqft).toFixed(2)}` : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="modal-overlay" onClick={handleModalClose}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Import Excel File</h2>
-              <button
-                className="modal-close"
-                onClick={handleModalClose}
-              >
-                ×
-              </button>
+          {/* Manager */}
+          <div style={{ flex: '1 1 170px' }}>
+            <Label>Project Manager</Label>
+            <MultiSelect
+              options={(opts?.managers || []).map(m => ({ value: String(m.id), label: m.name }))}
+              selected={(filters.manager_id || []).map(String)}
+              onChange={next => setFilter('manager_id', next.length ? next.map(v => parseInt(v, 10)) : undefined)}
+              placeholder="All managers"
+            />
+          </div>
+
+          {/* Project Date Range (overlap) */}
+          <div style={{ flex: '0 0 260px' }}>
+            <Label>Project Date Range</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <input type="date" value={filters.date_from || ''}
+                onChange={e => setFilter('date_from', e.target.value || undefined)}
+                style={inputStyle} />
+              <input type="date" value={filters.date_to || ''}
+                onChange={e => setFilter('date_to', e.target.value || undefined)}
+                style={inputStyle} />
             </div>
-
-            <div className="modal-body">
-              <div className="import-instructions">
-                <h3>📄 Excel File Format</h3>
-                <p>Your Excel file should include the following columns:</p>
-                <ul>
-                  <li><strong>Item Code</strong> - Unique identifier</li>
-                  <li><strong>Description</strong> - Item description</li>
-                  <li><strong>Category</strong> - Equipment, Ductwork, Piping, etc.</li>
-                  <li><strong>Unit Cost</strong> - Cost per unit</li>
-                  <li><strong>Unit</strong> - Each, LF, SF, etc.</li>
-                  <li><strong>Labor Hours</strong> - (Optional) Hours per unit</li>
-                </ul>
-              </div>
-
-              <div className="upload-area">
-                <input
-                  type="file"
-                  id="excel-upload"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  style={{ display: 'none' }}
+            {opts?.dateRange.minStart && opts?.dateRange.maxEnd && (() => {
+              const minMs = new Date(opts.dateRange.minStart).getTime();
+              const maxMs = new Date(opts.dateRange.maxEnd!).getTime();
+              const lowMs = filters.date_from ? new Date(filters.date_from).getTime() : minMs;
+              const highMs = filters.date_to ? new Date(filters.date_to).getTime() : maxMs;
+              return (
+                <DualRangeSlider
+                  min={minMs} max={maxMs} step={86_400_000}
+                  low={lowMs} high={highMs}
+                  onChange={(lo, hi) => setFilters(prev => ({
+                    ...prev,
+                    date_from: lo === minMs ? undefined : new Date(lo).toISOString().slice(0, 10),
+                    date_to: hi === maxMs ? undefined : new Date(hi).toISOString().slice(0, 10),
+                  }))}
+                  formatValue={ms => new Date(ms).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
                 />
-                <label htmlFor="excel-upload" className="upload-label">
-                  <div className="upload-icon">📁</div>
-                  <div className="upload-text">
-                    <strong>Click to upload</strong> or drag and drop
-                  </div>
-                  <div className="upload-hint">
-                    Excel (.xlsx, .xls) or CSV files
-                  </div>
-                </label>
-              </div>
-
-              <div className="import-options">
-                <label className="checkbox-label">
-                  <input type="checkbox" defaultChecked />
-                  <span>Replace existing items with same code</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" defaultChecked />
-                  <span>Skip rows with missing required fields</span>
-                </label>
-              </div>
-
-              {uploadProgress && (
-                <div className="upload-status" style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                  background: '#eff6ff',
-                  borderRadius: '8px',
-                  color: '#1e40af',
-                  fontWeight: 600
-                }}>
-                  {uploadProgress}
-                </div>
-              )}
-
-              {previewData.length > 0 && (
-                <div className="preview-section" style={{ marginTop: '1.5rem' }}>
-                  <h4 style={{ marginBottom: '0.75rem' }}>Preview (First 5 rows)</h4>
-                  <div style={{
-                    maxHeight: '200px',
-                    overflow: 'auto',
-                    background: '#f8f9fa',
-                    padding: '1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.75rem'
-                  }}>
-                    <pre>{JSON.stringify(previewData.slice(0, 5), null, 2)}</pre>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={handleModalClose}
-              >
-                Cancel
-              </button>
-              {previewData.length > 0 && (
-                <button
-                  className="btn btn-primary"
-                  onClick={handleImportSubmit}
-                  disabled={!!uploadProgress && uploadProgress.includes('Saving')}
-                >
-                  {uploadProgress && uploadProgress.includes('Saving') ? 'Importing...' : `Import ${previewData.length} Projects`}
-                </button>
-              )}
-            </div>
+              );
+            })()}
           </div>
+
+          {/* Contract value range */}
+          <div style={{ flex: '0 0 260px' }}>
+            <Label>Contract Value</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <CurrencyInput placeholder="Min" value={filters.value_min}
+                onChange={v => setFilter('value_min', v)} style={inputStyle} />
+              <CurrencyInput placeholder="Max" value={filters.value_max}
+                onChange={v => setFilter('value_max', v)} style={inputStyle} />
+            </div>
+            {opts?.valueRange.min != null && opts?.valueRange.max != null && opts.valueRange.max > opts.valueRange.min && (() => {
+              const minV = Math.floor(opts.valueRange.min!);
+              const maxV = Math.ceil(opts.valueRange.max!);
+              const lowV = filters.value_min != null ? filters.value_min : minV;
+              const highV = filters.value_max != null ? filters.value_max : maxV;
+              const step = Math.max(1000, Math.round((maxV - minV) / 1000));
+              return (
+                <DualRangeSlider
+                  min={minV} max={maxV} step={step}
+                  low={lowV} high={highV}
+                  onChange={(lo, hi) => setFilters(prev => ({
+                    ...prev,
+                    value_min: lo === minV ? null : lo,
+                    value_max: hi === maxV ? null : hi,
+                  }))}
+                  formatValue={v => fmt(v)}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Summary cards — per-project averages (project count stays a count) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
+        <Card label="Projects" value={fmtNum(summary?.project_count)} color="#3b82f6" />
+        <Card label="Avg Contract Value" value={fmt(safeAvg(summary?.contract_value_total || 0, summary?.project_count || 0))} color="#0ea5e9" />
+        <Card label="Avg Est Cost" value={fmt(safeAvg(summary?.est_cost || 0, summary?.project_count || 0))} color="#8b5cf6" />
+        <Card label="Avg JTD Cost" value={fmt(safeAvg(summary?.jtd_cost || 0, summary?.project_count || 0))} color="#f59e0b" />
+        <Card label="Avg Committed" value={fmt(safeAvg(summary?.committed_cost || 0, summary?.project_count || 0))} color="#6366f1" />
+        <Card label="Avg Projected" value={fmt(safeAvg(summary?.projected_cost || 0, summary?.project_count || 0))} color="#10b981" />
+        <Card label="Avg Est Hours" value={fmtNum(safeAvg(summary?.est_hours || 0, summary?.project_count || 0))} color="#64748b" />
+        <Card label="Avg JTD Hours" value={fmtNum(safeAvg(summary?.jtd_hours || 0, summary?.project_count || 0))} color="#64748b" />
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+        <TabBtn active={tab === 'cost-type'} onClick={() => setTab('cost-type')}>By Cost Type</TabBtn>
+        <TabBtn active={tab === 'phase'} onClick={() => setTab('phase')}>By Phase Code</TabBtn>
+        <TabBtn active={tab === 'projects'} onClick={() => setTab('projects')}>Source Projects</TabBtn>
+      </div>
+
+      {/* Tab content */}
+      {tab === 'cost-type' && (
+        <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          {ctLoading ? <Loading /> : !byCostType?.length ? (
+            <Empty>
+              {summary && summary.project_count > 0
+                ? `${summary.project_count} project${summary.project_count === 1 ? '' : 's'} match your filters, but no Vista phase code data is linked to them.`
+                : 'No projects match your filters.'}
+            </Empty>
+          ) : (() => {
+            const ctTotal = byCostType.reduce((s, r) => s + r.projected_cost, 0);
+            return (
+              <table style={tableStyle}>
+                <thead><tr style={theadRow}>
+                  <Th align="left">Cost Type</Th>
+                  <Th>Projects</Th><Th>Phases</Th>
+                  <Th>Avg Est Cost</Th><Th>Avg JTD Cost</Th>
+                  <Th>Avg Committed</Th><Th>Avg Projected</Th>
+                  <Th>Avg Est Hrs</Th><Th>Avg JTD Hrs</Th>
+                  <Th>Variance %</Th>
+                  <Th>% of Total</Th>
+                </tr></thead>
+                <tbody>
+                  {byCostType.map(r => {
+                    const variancePct = r.est_cost > 0 ? (r.projected_cost - r.est_cost) / r.est_cost : null;
+                    const pct = ctTotal > 0 ? r.projected_cost / ctTotal : 0;
+                    return (
+                      <tr key={r.cost_type} style={tbodyRow}
+                        onClick={() => { setFilter('cost_type', r.cost_type); setTab('phase'); }}>
+                        <Td style={{ fontWeight: 600 }}>{COST_TYPE_LABELS[r.cost_type] || `Type ${r.cost_type}`}</Td>
+                        <Td align="right">{fmtNum(r.project_count)}</Td>
+                        <Td align="right">{fmtNum(r.phase_count)}</Td>
+                        <Td align="right">{fmt(safeAvg(r.est_cost, r.project_count))}</Td>
+                        <Td align="right">{fmt(safeAvg(r.jtd_cost, r.project_count))}</Td>
+                        <Td align="right">{fmt(safeAvg(r.committed_cost, r.project_count))}</Td>
+                        <Td align="right">{fmt(safeAvg(r.projected_cost, r.project_count))}</Td>
+                        <Td align="right">{fmtNum(safeAvg(r.est_hours, r.project_count))}</Td>
+                        <Td align="right">{fmtNum(safeAvg(r.jtd_hours, r.project_count))}</Td>
+                        <Td align="right" style={{ color: variancePct == null ? undefined : variancePct > 0.05 ? '#ef4444' : variancePct < -0.05 ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
+                          {variancePct == null ? '-' : `${(variancePct * 100).toFixed(1)}%`}
+                        </Td>
+                        <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>{(pct * 100).toFixed(1)}%</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       )}
 
-      {/* Project Details Modal */}
-      {selectedProject && (
-        <div className="modal-overlay" onClick={() => setSelectedProject(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="modal-header">
-              <h2>{selectedProject.name}</h2>
-              <button
-                className="modal-close"
-                onClick={() => setSelectedProject(null)}
-              >
-                ×
+      {/* Source projects under the cost-type table — exclude checkboxes feed back into all aggregations */}
+      {tab === 'cost-type' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '1.5rem 0 0.5rem' }}>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>Source Projects</div>
+              <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                Uncheck any project to exclude it from the aggregations above.
+                {excluded.size > 0 && <> <span style={{ color: '#ef4444', fontWeight: 600 }}>{excluded.size} excluded</span></>}
+              </div>
+            </div>
+            {excluded.size > 0 && (
+              <button onClick={() => setExcluded(new Set())}
+                style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#64748b' }}>
+                Re-include all
               </button>
-            </div>
-
-            <div className="modal-body">
-              {/* Project Overview */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Project Overview</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Bid Date</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.bid_date ? new Date(selectedProject.bid_date + 'T00:00:00').toLocaleDateString() : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Building Type</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.building_type || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Project Type</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.project_type || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Bid Type</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.bid_type || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Cost</label>
-                    <div style={{ fontWeight: 600, fontSize: '1.25rem', color: '#16a34a' }}>
-                      {selectedProject.total_cost ? `$${Math.round(selectedProject.total_cost).toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total SqFt</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.total_sqft ? Math.round(selectedProject.total_sqft).toLocaleString() : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Cost per SqFt</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.total_cost_per_sqft ? `$${parseFloat(selectedProject.total_cost_per_sqft).toFixed(2)}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Cost/SqFt w/ Index</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.cost_per_sqft_with_index ? `$${parseFloat(selectedProject.cost_per_sqft_with_index).toFixed(2)}` : '-'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* PM Section */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Project Management (PM)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>PM Hours</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.pm_hours || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>PM Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.pm_cost ? `$${selectedProject.pm_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SM Section */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Sheet Metal (SM)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Rate</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.sm_field_rate || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Rate</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.sm_shop_rate || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Field</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.sm_misc_field || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Field Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.sm_misc_field_cost ? `$${selectedProject.sm_misc_field_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Shop</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.sm_misc_shop || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Shop Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.sm_misc_shop_cost ? `$${selectedProject.sm_misc_shop_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Equip Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.sm_equip_cost ? `$${selectedProject.sm_equip_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Supply Ductwork */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Supply Ductwork (S)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.s_field || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.s_field_cost ? `$${selectedProject.s_field_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Hours</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.s_shop || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.s_shop_cost ? `$${selectedProject.s_shop_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.s_material_cost ? `$${selectedProject.s_material_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Materials w/ Escalation</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.s_materials_with_escalation ? `$${selectedProject.s_materials_with_escalation.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>LBS per Sq</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.s_lbs_per_sq || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total LBS</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.s_lbs || '-'}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Return Ductwork */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Return Ductwork (R)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.r_field || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.r_field_cost ? `$${selectedProject.r_field_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Hours</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.r_shop || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.r_shop_cost ? `$${selectedProject.r_shop_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.r_material_cost ? `$${selectedProject.r_material_cost.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Materials w/ Escalation</label>
-                    <div style={{ fontWeight: 600 }}>
-                      {selectedProject.r_materials_with_escalation ? `$${selectedProject.r_materials_with_escalation.toLocaleString()}` : '-'}
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>LBS per Sq</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.r_lbs_per_sq || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total LBS</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.r_lbs || '-'}</div>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Plenum</label>
-                    <div style={{ fontWeight: 600 }}>{selectedProject.r_plenum || '-'}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Exhaust Ductwork */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Exhaust Ductwork (E)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.e_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.e_field_cost ? `$${selectedProject.e_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.e_shop || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.e_shop_cost ? `$${selectedProject.e_shop_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.e_material_cost ? `$${selectedProject.e_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Materials w/ Escalation</label><div style={{ fontWeight: 600 }}>{selectedProject.e_material_with_escalation ? `$${selectedProject.e_material_with_escalation.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>LBS per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.e_lbs_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total LBS</label><div style={{ fontWeight: 600 }}>{selectedProject.e_lbs || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Outside Air Ductwork */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Outside Air Ductwork (O)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.o_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.o_field_cost ? `$${selectedProject.o_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.o_shop || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.o_shop_cost ? `$${selectedProject.o_shop_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.o_material_cost ? `$${selectedProject.o_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Materials w/ Escalation</label><div style={{ fontWeight: 600 }}>{selectedProject.o_materials_with_escalation ? `$${selectedProject.o_materials_with_escalation.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>LBS per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.o_lbs_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total LBS</label><div style={{ fontWeight: 600 }}>{selectedProject.o_lbs || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Welded Ductwork */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Welded Ductwork (W)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.w_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.w_field_cost ? `$${selectedProject.w_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.w_shop || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Shop Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.w_shop_cost ? `$${selectedProject.w_shop_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.w_material_cost ? `$${selectedProject.w_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Materials w/ Escalation</label><div style={{ fontWeight: 600 }}>{selectedProject.w_materials_with_escalation ? `$${selectedProject.w_materials_with_escalation.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>LBS per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.w_lbs_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total LBS</label><div style={{ fontWeight: 600 }}>{selectedProject.w_lbs || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Plumbing Field */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Plumbing Field (PF)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Rate</label><div style={{ fontWeight: 600 }}>{selectedProject.pf_field_rate || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Field</label><div style={{ fontWeight: 600 }}>{selectedProject.pf_misc_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Misc Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.pf_misc_field_cost ? `$${selectedProject.pf_misc_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Equip Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.pf_equip_cost ? `$${selectedProject.pf_equip_cost.toLocaleString()}` : '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Piping Systems - HW */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Hot Water Piping (HW)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_field_cost ? `$${selectedProject.hw_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_material_cost ? `$${selectedProject.hw_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_material_with_esc ? `$${selectedProject.hw_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.hw_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Piping Systems - CHW */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Chilled Water Piping (CHW)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_field_cost ? `$${selectedProject.chw_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_material_cost ? `$${selectedProject.chw_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_material_with_esc ? `$${selectedProject.chw_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.chw_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Piping Systems - D, G, GS, CW, RAD, REF, Stm&Cond - Following same pattern */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Domestic Water Piping (D)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.d_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.d_field_cost ? `$${selectedProject.d_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.d_material_cost ? `$${selectedProject.d_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.d_material_with_esc ? `$${selectedProject.d_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.d_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.d_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Gas Piping (G)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.g_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.g_field_cost ? `$${selectedProject.g_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.g_material_cost ? `$${selectedProject.g_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.g_material_with_esc ? `$${selectedProject.g_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.g_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.g_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Grease Piping (GS)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_field_cost ? `$${selectedProject.gs_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_material_cost ? `$${selectedProject.gs_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_material_with_esc ? `$${selectedProject.gs_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.gs_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Condensate Water Piping (CW)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_field_cost ? `$${selectedProject.cw_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_material_cost ? `$${selectedProject.cw_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_material_with_esc ? `$${selectedProject.cw_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.cw_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Radiant Piping (RAD)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_field_cost ? `$${selectedProject.rad_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_material_cost ? `$${selectedProject.rad_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_material_with_esc ? `$${selectedProject.rad_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.rad_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Refrigerant Piping (REF)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_field_cost ? `$${selectedProject.ref_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_material_cost ? `$${selectedProject.ref_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_material_with_esc ? `$${selectedProject.ref_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.ref_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Steam & Condensate Piping (Stm&Cond)</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Hours</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_field || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Field Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_field_cost ? `$${selectedProject.stm_cond_field_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material Cost</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_material_cost ? `$${selectedProject.stm_cond_material_cost.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Material w/ Esc</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_material_with_esc ? `$${selectedProject.stm_cond_material_with_esc.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Feet per Sq</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_feet_per_sq || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Total Footage</label><div style={{ fontWeight: 600 }}>{selectedProject.stm_cond_footage || '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Equipment Counts - ALL equipment */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Equipment Counts</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', fontSize: '0.875rem' }}>
-                  {selectedProject.ahu > 0 && <div><strong>AHU:</strong> {selectedProject.ahu}</div>}
-                  {selectedProject.rtu > 0 && <div><strong>RTU:</strong> {selectedProject.rtu}</div>}
-                  {selectedProject.mau > 0 && <div><strong>MAU:</strong> {selectedProject.mau}</div>}
-                  {selectedProject.eru > 0 && <div><strong>ERU:</strong> {selectedProject.eru}</div>}
-                  {selectedProject.chiller > 0 && <div><strong>Chiller:</strong> {selectedProject.chiller}</div>}
-                  {selectedProject.drycooler > 0 && <div><strong>Drycooler:</strong> {selectedProject.drycooler}</div>}
-                  {selectedProject.vfd > 0 && <div><strong>VFD:</strong> {selectedProject.vfd}</div>}
-                  {selectedProject.vav > 0 && <div><strong>VAV:</strong> {selectedProject.vav}</div>}
-                  {selectedProject.vav_fan_powered > 0 && <div><strong>VAV Fan Powered:</strong> {selectedProject.vav_fan_powered}</div>}
-                  {selectedProject.booster_coil > 0 && <div><strong>Booster Coil:</strong> {selectedProject.booster_coil}</div>}
-                  {selectedProject.cuh > 0 && <div><strong>CUH:</strong> {selectedProject.cuh}</div>}
-                  {selectedProject.uh > 0 && <div><strong>UH:</strong> {selectedProject.uh}</div>}
-                  {selectedProject.fcu > 0 && <div><strong>FCU:</strong> {selectedProject.fcu}</div>}
-                  {selectedProject.indoor_vrf_systems > 0 && <div><strong>Indoor VRF Systems:</strong> {selectedProject.indoor_vrf_systems}</div>}
-                  {selectedProject.radiant_panels > 0 && <div><strong>Radiant Panels:</strong> {selectedProject.radiant_panels}</div>}
-                  {selectedProject.humidifier > 0 && <div><strong>Humidifier:</strong> {selectedProject.humidifier}</div>}
-                  {selectedProject.prv > 0 && <div><strong>PRV:</strong> {selectedProject.prv}</div>}
-                  {selectedProject.inline_fan > 0 && <div><strong>Inline Fan:</strong> {selectedProject.inline_fan}</div>}
-                  {selectedProject.high_plume_fan > 0 && <div><strong>High Plume Fan:</strong> {selectedProject.high_plume_fan}</div>}
-                  {selectedProject.rac > 0 && <div><strong>RAC:</strong> {selectedProject.rac}</div>}
-                  {selectedProject.lieberts > 0 && <div><strong>Lieberts:</strong> {selectedProject.lieberts}</div>}
-                  {selectedProject.grds > 0 && <div><strong>GRDs:</strong> {selectedProject.grds}</div>}
-                  {selectedProject.laminar_flow > 0 && <div><strong>Laminar Flow:</strong> {selectedProject.laminar_flow}</div>}
-                  {selectedProject.louvers > 0 && <div><strong>Louvers:</strong> {selectedProject.louvers}</div>}
-                  {selectedProject.hoods > 0 && <div><strong>Hoods:</strong> {selectedProject.hoods}</div>}
-                  {selectedProject.fire_dampers > 0 && <div><strong>Fire Dampers:</strong> {selectedProject.fire_dampers}</div>}
-                  {selectedProject.silencers > 0 && <div><strong>Silencers:</strong> {selectedProject.silencers}</div>}
-                  {selectedProject.boilers > 0 && <div><strong>Boilers:</strong> {selectedProject.boilers}</div>}
-                  {selectedProject.htx > 0 && <div><strong>HTX:</strong> {selectedProject.htx}</div>}
-                  {selectedProject.pumps > 0 && <div><strong>Pumps:</strong> {selectedProject.pumps}</div>}
-                  {selectedProject.cond_pumps > 0 && <div><strong>Cond Pumps:</strong> {selectedProject.cond_pumps}</div>}
-                  {selectedProject.tower > 0 && <div><strong>Tower:</strong> {selectedProject.tower}</div>}
-                  {selectedProject.air_sep > 0 && <div><strong>Air Sep:</strong> {selectedProject.air_sep}</div>}
-                  {selectedProject.exp_tanks > 0 && <div><strong>Exp Tanks:</strong> {selectedProject.exp_tanks}</div>}
-                  {selectedProject.filters > 0 && <div><strong>Filters:</strong> {selectedProject.filters}</div>}
-                  {selectedProject.pot_feeder > 0 && <div><strong>Pot Feeder:</strong> {selectedProject.pot_feeder}</div>}
-                  {selectedProject.buffer_tank > 0 && <div><strong>Buffer Tank:</strong> {selectedProject.buffer_tank}</div>}
-                  {selectedProject.triple_duty > 0 && <div><strong>Triple Duty:</strong> {selectedProject.triple_duty}</div>}
-                </div>
-              </div>
-
-              {/* Additional Costs */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Additional Costs</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Truck Rental</label><div style={{ fontWeight: 600 }}>{selectedProject.truck_rental ? `$${selectedProject.truck_rental.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Temp Heat</label><div style={{ fontWeight: 600 }}>{selectedProject.temp_heat || '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Controls</label><div style={{ fontWeight: 600 }}>{selectedProject.controls ? `$${selectedProject.controls.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Insulation</label><div style={{ fontWeight: 600 }}>{selectedProject.insulation ? `$${selectedProject.insulation.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Balancing</label><div style={{ fontWeight: 600 }}>{selectedProject.balancing ? `$${selectedProject.balancing.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Electrical</label><div style={{ fontWeight: 600 }}>{selectedProject.electrical ? `$${selectedProject.electrical.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>General</label><div style={{ fontWeight: 600 }}>{selectedProject.general ? `$${selectedProject.general.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Allowance</label><div style={{ fontWeight: 600 }}>{selectedProject.allowance ? `$${selectedProject.allowance.toLocaleString()}` : '-'}</div></div>
-                  <div><label style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Geo Thermal</label><div style={{ fontWeight: 600 }}>{selectedProject.geo_thermal ? `$${selectedProject.geo_thermal.toLocaleString()}` : '-'}</div></div>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {selectedProject.notes && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <h3 style={{ marginBottom: '1rem', borderBottom: '2px solid #002356', paddingBottom: '0.5rem' }}>Notes</h3>
-                  <div style={{ padding: '1rem', background: '#f8f9fa', borderRadius: '8px', whiteSpace: 'pre-wrap' }}>
-                    {selectedProject.notes}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setSelectedProject(null)}
-              >
-                Close
-              </button>
-            </div>
+            )}
           </div>
-        </div>
+          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+            <SourceProjectsTable
+              projects={projects || []}
+              excluded={excluded}
+              onToggle={toggleExcluded}
+              loading={projLoading}
+            />
+          </div>
+        </>
       )}
 
-      {/* Edit Project Modal */}
-      {editingProject && (
-        <div className="modal-overlay" onClick={() => setEditingProject(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Edit Project</h2>
-              <button
-                className="modal-close"
-                onClick={() => setEditingProject(null)}
-              >
-                ×
+      {tab === 'phase' && (
+        <>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="text" placeholder="Search phase or description..."
+              value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: '300px' }} />
+            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cost Type:</span>
+            <Chip active={!filters.cost_type} onClick={() => setFilter('cost_type', undefined)}>All</Chip>
+            {[1, 2, 3, 4, 5, 6].map(ct => (
+              <Chip key={ct} active={filters.cost_type === ct} onClick={() => setFilter('cost_type', ct)}>
+                {COST_TYPE_LABELS[ct]}
+              </Chip>
+            ))}
+          </div>
+          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+            {phaseLoading ? <Loading /> : !filteredPhases.length ? (
+              <Empty>
+                {summary && summary.project_count > 0
+                  ? `${summary.project_count} project${summary.project_count === 1 ? '' : 's'} match your filters, but no Vista phase code data is linked to them.`
+                  : 'No phase codes match your filters.'}
+              </Empty>
+            ) : (
+              <table style={tableStyle}>
+                <thead><tr style={theadRow}>
+                  <SortHeader k="phase" sort={phaseSort} onSort={togglePhaseSort} align="left">Phase</SortHeader>
+                  <SortHeader k="phase_description" sort={phaseSort} onSort={togglePhaseSort} align="left">Description</SortHeader>
+                  <SortHeader k="cost_type" sort={phaseSort} onSort={togglePhaseSort}>Cost Type</SortHeader>
+                  <SortHeader k="project_count" sort={phaseSort} onSort={togglePhaseSort}>Projects</SortHeader>
+                  <SortHeader k="avg_est_cost" sort={phaseSort} onSort={togglePhaseSort}>Avg Est Cost</SortHeader>
+                  <SortHeader k="avg_jtd_cost" sort={phaseSort} onSort={togglePhaseSort}>Avg JTD Cost</SortHeader>
+                  <SortHeader k="avg_committed_cost" sort={phaseSort} onSort={togglePhaseSort}>Avg Committed</SortHeader>
+                  <SortHeader k="avg_projected_cost" sort={phaseSort} onSort={togglePhaseSort}>Avg Projected</SortHeader>
+                  <SortHeader k="avg_est_hours" sort={phaseSort} onSort={togglePhaseSort}>Avg Est Hrs</SortHeader>
+                  <SortHeader k="avg_jtd_hours" sort={phaseSort} onSort={togglePhaseSort}>Avg JTD Hrs</SortHeader>
+                  <SortHeader k="avg_percent_complete" sort={phaseSort} onSort={togglePhaseSort}>Avg %</SortHeader>
+                  <SortHeader k="pct_of_total" sort={phaseSort} onSort={togglePhaseSort}>% of Total</SortHeader>
+                </tr></thead>
+                <tbody>
+                  {filteredPhases.map(r => (
+                    <tr key={`${r.phase}-${r.cost_type}`} style={tbodyRow}
+                      onClick={() => setDrillPhase({ phase: r.phase, cost_type: r.cost_type })}>
+                      <Td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.phase}</Td>
+                      <Td style={{ maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.phase_description || '-'}
+                      </Td>
+                      <Td align="right">{COST_TYPE_LABELS[r.cost_type] || r.cost_type}</Td>
+                      <Td align="right">{fmtNum(r.project_count)}</Td>
+                      <Td align="right">{fmt(r.avg_est_cost)}</Td>
+                      <Td align="right">{fmt(r.avg_jtd_cost)}</Td>
+                      <Td align="right">{fmt(r.avg_committed_cost)}</Td>
+                      <Td align="right">{fmt(r.avg_projected_cost)}</Td>
+                      <Td align="right">{fmtNum(r.avg_est_hours)}</Td>
+                      <Td align="right">{fmtNum(r.avg_jtd_hours)}</Td>
+                      <Td align="right">{fmtPct(r.avg_percent_complete)}</Td>
+                      <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>{(r.pct_of_total * 100).toFixed(1)}%</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === 'projects' && (
+        <>
+          {excluded.size > 0 && (
+            <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: '#64748b' }}>
+              <span style={{ color: '#ef4444', fontWeight: 600 }}>{excluded.size} excluded</span>
+              <button onClick={() => setExcluded(new Set())}
+                style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#64748b' }}>
+                Re-include all
               </button>
             </div>
+          )}
+          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+            <SourceProjectsTable
+              projects={projects || []}
+              excluded={excluded}
+              onToggle={toggleExcluded}
+              loading={projLoading}
+            />
+          </div>
+        </>
+      )}
 
-            <form onSubmit={handleEditSubmit}>
-              <div className="modal-body">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <label className="form-label">Project Name *</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editingProject.name || ''}
-                      onChange={(e) => setEditingProject({...editingProject, name: e.target.value})}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Bid Date</label>
-                    <input
-                      type="date"
-                      className="form-input"
-                      value={editingProject.bid_date ? editingProject.bid_date.split('T')[0] : ''}
-                      onChange={(e) => setEditingProject({...editingProject, bid_date: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Building Type</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editingProject.building_type || ''}
-                      onChange={(e) => setEditingProject({...editingProject, building_type: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Project Type</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editingProject.project_type || ''}
-                      onChange={(e) => setEditingProject({...editingProject, project_type: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Bid Type</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editingProject.bid_type || ''}
-                      onChange={(e) => setEditingProject({...editingProject, bid_type: e.target.value})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Total Cost</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={editingProject.total_cost || ''}
-                      onChange={(e) => setEditingProject({...editingProject, total_cost: parseFloat(e.target.value) || null})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Total SqFt</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={editingProject.total_sqft || ''}
-                      onChange={(e) => setEditingProject({...editingProject, total_sqft: parseFloat(e.target.value) || null})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Cost per SqFt (with Index)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-input"
-                      value={editingProject.cost_per_sqft_with_index || ''}
-                      onChange={(e) => setEditingProject({...editingProject, cost_per_sqft_with_index: parseFloat(e.target.value) || null})}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="form-label">Total Cost per SqFt</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-input"
-                      value={editingProject.total_cost_per_sqft || ''}
-                      onChange={(e) => setEditingProject({...editingProject, total_cost_per_sqft: parseFloat(e.target.value) || null})}
-                    />
-                  </div>
+      {/* Drill-in modal: phase → projects */}
+      {drillPhase && (
+        <div onClick={() => setDrillPhase(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: '8px', maxWidth: '1200px', width: '100%',
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Phase {drillPhase.phase} · {COST_TYPE_LABELS[drillPhase.cost_type]}
+                </div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>
+                  Per-Project Breakdown
                 </div>
               </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEditingProject(null)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Changes
-                </button>
-              </div>
-            </form>
+              <button onClick={() => setDrillPhase(null)} style={{
+                background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b',
+              }}>×</button>
+            </div>
+            <div style={{ overflow: 'auto', flex: 1 }}>
+              {drillLoading ? <Loading /> : !drillRows?.length ? <Empty>No project data for this phase.</Empty> : (
+                <table style={tableStyle}>
+                  <thead><tr style={theadRow}>
+                    <Th align="left">Number</Th><Th align="left">Project</Th>
+                    <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
+                    <Th>Contract</Th><Th>Est Cost</Th><Th>JTD Cost</Th>
+                    <Th>Committed</Th><Th>Projected</Th>
+                    <Th>Est Hrs</Th><Th>JTD Hrs</Th><Th>% Comp</Th>
+                    <Th>% of Phase</Th>
+                  </tr></thead>
+                  <tbody>
+                    {(() => {
+                      const drillTotal = drillRows.reduce((s, r) => s + r.projected_cost, 0);
+                      return drillRows.map(r => {
+                        const pct = drillTotal > 0 ? r.projected_cost / drillTotal : 0;
+                        return (
+                          <tr key={r.project_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <Td><Link to={`/projects/${r.project_id}`} style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>{r.number}</Link></Td>
+                            <Td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</Td>
+                            <Td>{r.status}</Td>
+                            <Td>{r.department_number || '-'}</Td>
+                            <Td>{r.market || '-'}</Td>
+                            <Td align="right">{fmt(r.contract_value)}</Td>
+                            <Td align="right">{fmt(r.est_cost)}</Td>
+                            <Td align="right">{fmt(r.jtd_cost)}</Td>
+                            <Td align="right">{fmt(r.committed_cost)}</Td>
+                            <Td align="right">{fmt(r.projected_cost)}</Td>
+                            <Td align="right">{fmtNum(r.est_hours)}</Td>
+                            <Td align="right">{fmtNum(r.jtd_hours)}</Td>
+                            <Td align="right">{fmtPct(r.percent_complete)}</Td>
+                            <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>{(pct * 100).toFixed(1)}%</Td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}
     </div>
+  );
+};
+
+// ============== UI helpers ==============
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: '30px', padding: '0 0.5rem', fontSize: '0.78rem',
+  border: '1px solid #e2e8f0', borderRadius: '4px', outline: 'none', background: '#fff',
+  fontFamily: 'inherit', color: '#1e293b', lineHeight: 1.4,
+  boxSizing: 'border-box',
+};
+
+const tableStyle: React.CSSProperties = {
+  width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem',
+};
+
+const theadRow: React.CSSProperties = {
+  backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0',
+};
+
+const tbodyRow: React.CSSProperties = {
+  borderBottom: '1px solid #f1f5f9', cursor: 'pointer',
+};
+
+const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+    {children}
+  </div>
+);
+
+const Chip: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+  <button onClick={onClick} style={{
+    fontSize: '0.7rem', padding: '0.2rem 0.55rem', borderRadius: '4px',
+    border: active ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+    background: active ? '#eff6ff' : '#fff',
+    color: active ? '#1e40af' : '#475569',
+    cursor: 'pointer', fontWeight: active ? 600 : 500,
+  }}>
+    {children}
+  </button>
+);
+
+const Card: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
+  <div className="card" style={{ padding: '0.5rem 0.75rem' }}>
+    <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.1rem' }}>{label}</div>
+    <div style={{ fontSize: '1.05rem', fontWeight: 700, color: color || '#1e293b' }}>{value}</div>
+  </div>
+);
+
+const TabBtn: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+  <button onClick={onClick} style={{
+    padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600,
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    color: active ? '#3b82f6' : '#64748b',
+    borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+    marginBottom: '-1px',
+  }}>
+    {children}
+  </button>
+);
+
+const Th: React.FC<{ children: React.ReactNode; align?: 'left' | 'right' }> = ({ children, align = 'right' }) => (
+  <th style={{
+    textAlign: align, padding: '0.5rem 0.5rem', fontSize: '0.65rem',
+    fontWeight: 700, color: '#475569', textTransform: 'uppercase', whiteSpace: 'nowrap',
+  }}>{children}</th>
+);
+
+const Td: React.FC<{ children?: React.ReactNode; align?: 'left' | 'right'; style?: React.CSSProperties }> = ({ children, align = 'left', style }) => (
+  <td style={{ textAlign: align, padding: '0.4rem 0.5rem', ...style }}>{children ?? '-'}</td>
+);
+
+function SortHeader<K extends keyof PhaseRowEnriched>({
+  k, sort, onSort, children, align = 'right',
+}: {
+  k: K;
+  sort: { key: keyof PhaseRowEnriched; dir: 'asc' | 'desc' };
+  onSort: (k: keyof PhaseRowEnriched) => void;
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
+  const active = sort.key === k;
+  return (
+    <th onClick={() => onSort(k)} style={{
+      textAlign: align, padding: '0.5rem 0.5rem', fontSize: '0.65rem',
+      fontWeight: 700, color: active ? '#1e293b' : '#475569', textTransform: 'uppercase',
+      whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
+    }}>
+      {children}
+      <span style={{ marginLeft: '0.25rem', opacity: active ? 1 : 0.3 }}>
+        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '▲'}
+      </span>
+    </th>
+  );
+}
+
+const Loading: React.FC = () => (
+  <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Loading...</div>
+);
+const Empty: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>{children}</div>
+);
+
+// Currency input — displays "$1,234,567" but stores a plain number.
+const CurrencyInput: React.FC<{
+  value: number | null | undefined;
+  onChange: (next: number | null) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}> = ({ value, onChange, placeholder, style }) => {
+  const display = value == null || value === undefined || isNaN(Number(value))
+    ? ''
+    : `$${Number(value).toLocaleString('en-US')}`;
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={display}
+      onChange={e => {
+        const digits = e.target.value.replace(/[^\d]/g, '');
+        onChange(digits === '' ? null : parseInt(digits, 10));
+      }}
+      style={style}
+    />
+  );
+};
+
+// Source-projects table with per-row exclude checkboxes.
+// Rendered both below the cost-type table and inside the Source Projects tab.
+const SourceProjectsTable: React.FC<{
+  projects: ProjectRow[];
+  excluded: Set<number>;
+  onToggle: (id: number) => void;
+  loading: boolean;
+}> = ({ projects, excluded, onToggle, loading }) => {
+  if (loading) return <Loading />;
+  if (!projects.length) return <Empty>No projects match your filters.</Empty>;
+  const includedTotal = projects.reduce((s, p) => (excluded.has(p.id) ? s : s + p.phase_jtd_cost), 0);
+  return (
+    <table style={tableStyle}>
+      <thead><tr style={theadRow}>
+        <Th align="left">Incl.</Th>
+        <Th align="left">Number</Th><Th align="left">Name</Th>
+        <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
+        <Th align="left">Start</Th><Th align="left">End</Th>
+        <Th>Contract</Th><Th>Phase Est</Th><Th>Phase JTD</Th>
+        <Th>% of Total</Th>
+      </tr></thead>
+      <tbody>
+        {projects.map(p => {
+          const isExcluded = excluded.has(p.id);
+          const pct = includedTotal > 0 && !isExcluded ? p.phase_jtd_cost / includedTotal : 0;
+          return (
+            <tr key={p.id} style={{
+              borderBottom: '1px solid #f1f5f9',
+              opacity: isExcluded ? 0.45 : 1,
+              background: isExcluded ? '#fef2f2' : undefined,
+            }}>
+              <Td align="left" style={{ width: '40px' }}>
+                <input type="checkbox" checked={!isExcluded}
+                  onChange={() => onToggle(p.id)}
+                  title={isExcluded ? 'Include in reporting' : 'Exclude from reporting'} />
+              </Td>
+              <Td><Link to={`/projects/${p.id}`} style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>{p.number}</Link></Td>
+              <Td>{p.name}</Td>
+              <Td>{p.status}</Td>
+              <Td>{p.department_number || '-'}</Td>
+              <Td>{p.market || '-'}</Td>
+              <Td>{p.start_date ? new Date(p.start_date).toLocaleDateString() : '-'}</Td>
+              <Td>{p.end_date ? new Date(p.end_date).toLocaleDateString() : '-'}</Td>
+              <Td align="right">{fmt(p.contract_value)}</Td>
+              <Td align="right">{fmt(p.phase_est_cost)}</Td>
+              <Td align="right">{fmt(p.phase_jtd_cost)}</Td>
+              <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
+                {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+};
+
+// Dual-thumb range slider built from two overlaid range inputs.
+const DualRangeSlider: React.FC<{
+  min: number;
+  max: number;
+  step?: number;
+  low: number;
+  high: number;
+  onChange: (low: number, high: number) => void;
+  formatValue: (n: number) => string;
+}> = ({ min, max, step = 1, low, high, onChange, formatValue }) => {
+  const clampedLow = Math.max(min, Math.min(low, max));
+  const clampedHigh = Math.max(min, Math.min(high, max));
+  const range = max - min;
+  const lowPct = range > 0 ? ((clampedLow - min) / range) * 100 : 0;
+  const highPct = range > 0 ? ((clampedHigh - min) / range) * 100 : 100;
+
+  return (
+    <div style={{ marginTop: '0.4rem', padding: '0 7px' }}>
+      <div style={{ position: 'relative', height: '14px' }}>
+        {/* Inputs first, with transparent tracks — only the thumbs are visible. */}
+        <input type="range" min={min} max={max} step={step} value={clampedLow}
+          onChange={e => onChange(Math.min(parseFloat(e.target.value), clampedHigh), clampedHigh)}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '14px',
+            background: 'transparent', appearance: 'none', WebkitAppearance: 'none',
+            pointerEvents: 'none', margin: 0, padding: 0, border: 'none',
+            zIndex: 3,
+          }}
+          className="cd-range-slider" />
+        <input type="range" min={min} max={max} step={step} value={clampedHigh}
+          onChange={e => onChange(clampedLow, Math.max(parseFloat(e.target.value), clampedLow))}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '14px',
+            background: 'transparent', appearance: 'none', WebkitAppearance: 'none',
+            pointerEvents: 'none', margin: 0, padding: 0, border: 'none',
+            zIndex: 3,
+          }}
+          className="cd-range-slider" />
+        {/* Custom track and fill — pointer-events: none so they don't block thumb dragging. */}
+        <div style={{
+          position: 'absolute', top: '6px', left: 0, right: 0, height: '2px',
+          background: '#e2e8f0', borderRadius: '2px',
+          pointerEvents: 'none', zIndex: 1,
+        }} />
+        <div style={{
+          position: 'absolute', top: '6px', left: `${lowPct}%`, width: `${Math.max(0, highPct - lowPct)}%`,
+          height: '2px', background: '#3b82f6', borderRadius: '2px',
+          pointerEvents: 'none', zIndex: 2,
+        }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#64748b', marginTop: '0.25rem' }}>
+        <span>{formatValue(clampedLow)}</span>
+        <span>{formatValue(clampedHigh)}</span>
+      </div>
+    </div>
+  );
+};
+
+// Multi-select dropdown — menu is portaled to body so it escapes stacking contexts.
+const MultiSelect: React.FC<{
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+}> = ({ options, selected, onChange, placeholder }) => {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const updatePos = () => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 2, left: r.left, width: r.width });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const onScroll = () => updatePos();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open]);
+
+  const toggle = (v: string) => {
+    onChange(selected.includes(v) ? selected.filter(s => s !== v) : [...selected, v]);
+  };
+  const label = selected.length === 0 ? placeholder :
+    selected.length === 1 ? options.find(o => o.value === selected[0])?.label || selected[0] :
+    `${selected.length} selected`;
+
+  return (
+    <>
+      <button ref={btnRef} onClick={() => setOpen(o => !o)} style={{
+        width: '100%', padding: '0.35rem 0.5rem', fontSize: '0.78rem',
+        border: '1px solid #e2e8f0', borderRadius: '4px', background: '#fff',
+        textAlign: 'left', cursor: 'pointer',
+        color: selected.length === 0 ? '#94a3b8' : '#1e293b',
+      }}>
+        {label}
+      </button>
+      {open && pos && createPortal(
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
+          <div style={{
+            position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
+            background: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 9999,
+            maxHeight: '240px', overflow: 'auto',
+          }}>
+            {options.length === 0 ? (
+              <div style={{ padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8' }}>No options</div>
+            ) : options.map(o => (
+              <label key={o.value} style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.35rem 0.5rem', fontSize: '0.78rem', cursor: 'pointer',
+                background: selected.includes(o.value) ? '#eff6ff' : 'transparent',
+              }}>
+                <input type="checkbox" checked={selected.includes(o.value)} onChange={() => toggle(o.value)} />
+                {o.label}
+              </label>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
 };
 

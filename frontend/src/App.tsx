@@ -65,6 +65,7 @@ import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
 import EstimateDetail from './pages/estimating/EstimateDetail';
 import BudgetsList from './pages/estimating/BudgetsList';
+import CostModel from './pages/estimating/CostModel';
 import CostDatabase from './pages/estimating/CostDatabase';
 import BudgetGenerator from './pages/estimating/BudgetGenerator';
 import TakeoffsList from './pages/estimating/TakeoffsList';
@@ -421,6 +422,7 @@ const App: React.FC = () => {
                 <Route path="/estimating/estimates/:id" element={<EstimateDetail />} />
                 <Route path="/estimating/budgets" element={<BudgetsList />} />
                 <Route path="/estimating/budgets/:id/edit" element={<BudgetGenerator />} />
+                <Route path="/estimating/cost-model" element={<CostModel />} />
                 <Route path="/estimating/cost-database" element={<CostDatabase />} />
                 <Route path="/estimating/budget-generator" element={<BudgetGenerator />} />
                 <Route path="/estimating/takeoffs" element={<TakeoffsList />} />

@@ -186,7 +186,7 @@ export const MODULE_OPTIONS = [
 export const SUBMODULE_OPTIONS: Record<string, string[]> = {
   'Dashboard': ['Overview', 'Widgets', 'Reports'],
   'Sales': ['Pipeline', 'Campaigns', 'Marketing'],
-  'Estimating': ['Estimates', 'Budgets', 'Cost Database'],
+  'Estimating': ['Estimates', 'Budgets', 'Cost Model', 'Cost Database'],
   'Accounts': ['Overview', 'Customers', 'Contacts', 'Vendors', 'Work Orders', 'Teams'],
   'Projects': ['Project List', 'Project Details', 'RFIs', 'Submittals', 'Change Orders', 'Daily Reports', 'Schedule', 'Specifications', 'Drawings'],
   'Field': ['Dashboard', 'Daily Reports', 'Purchase Orders', 'Fitting Orders', 'Safety JSA', 'PDF Generation'],

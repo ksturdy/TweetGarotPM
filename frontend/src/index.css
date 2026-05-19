@@ -80,6 +80,48 @@ button {
   padding: 1.5rem;
 }
 
+/* Dual-thumb range slider — thumbs are draggable, track is invisible (custom track drawn behind). */
+/* Input height (14px) matches thumb diameter so the thumb auto-centers vertically. */
+.cd-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  background: transparent;
+}
+.cd-range-slider::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+  height: 14px;
+}
+.cd-range-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 14px;
+}
+.cd-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  margin-top: 0;
+}
+.cd-range-slider::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #3b82f6;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
 .form-group {
   margin-bottom: 1rem;
 }

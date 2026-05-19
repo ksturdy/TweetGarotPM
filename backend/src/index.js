@@ -123,6 +123,7 @@ const leadInboxRoutes = require('./routes/leadInbox');
 const weeklySalesReportRoutes = require('./routes/weeklySalesReport');
 const pmWorkloadReportRoutes = require('./routes/pmWorkloadReport');
 const projectCostModelRoutes = require('./routes/projectCostModel');
+const costDatabaseRoutes = require('./routes/costDatabase');
 const orgChartRoutes = require('./routes/orgCharts');
 const tradeShowRoutes = require('./routes/tradeShows');
 
@@ -285,6 +286,7 @@ app.use('/api/lead-inbox', leadInboxRoutes);
 app.use('/api/reports/weekly-sales', weeklySalesReportRoutes);
 app.use('/api/reports/pm-workload', pmWorkloadReportRoutes);
 app.use('/api/projects', projectCostModelRoutes);
+app.use('/api/cost-database', costDatabaseRoutes);
 app.use('/api/org-charts', orgChartRoutes);
 app.use('/api/trade-shows', tradeShowRoutes);
 

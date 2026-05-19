@@ -14,12 +14,20 @@ const EstimatingDashboard: React.FC = () => {
       stats: { label1: 'Projects', value1: '492+', label2: 'AI Model', value2: 'Titan' },
     },
     {
-      name: 'Cost Database',
+      name: 'Cost Model',
       icon: '📚',
-      path: '/estimating/cost-database',
-      desc: 'HVAC cost item library & templates',
+      path: '/estimating/cost-model',
+      desc: 'Imported cost model spreadsheet data',
       color: '#8b5cf6',
       stats: { label1: 'Items', value1: '0', label2: 'Categories', value2: '8' },
+    },
+    {
+      name: 'Cost Database',
+      icon: '📊',
+      path: '/estimating/cost-database',
+      desc: 'Live cost data aggregated from project phase codes',
+      color: '#0ea5e9',
+      stats: { label1: 'Source', value1: 'Phase Codes', label2: 'Drilldown', value2: 'By Type' },
     },
   ];
 
