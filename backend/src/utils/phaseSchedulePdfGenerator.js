@@ -266,18 +266,17 @@ function buildCostTypeGroups(items) {
 }
 
 // ─── Project Header / Footer HTML ────────────────────────────────────
-function buildProjectHeader(project, viewLabel, itemCount, totalEst, totalJtd, logoBase64) {
+function buildProjectHeader(project, viewLabel, itemCount, totalEst, totalJtd, _logoBase64) {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  // Logo is rendered in Puppeteer's page-margin headerTemplate (appears in the
+  // upper-right of every page), so the body header is title/meta only here.
   return `
     <div class="header">
       <div class="header-left">
         <h1>Phase Schedule &mdash; ${viewLabel} View</h1>
         <div class="header-project">${project.number ? '#' + escHtml(project.number) + ' &mdash; ' : ''}${escHtml(project.name || '')}</div>
         <div class="header-meta">${dateStr} at ${timeStr} &nbsp;&bull;&nbsp; ${itemCount} items &nbsp;&bull;&nbsp; Est: ${fmtCompact(totalEst)} &nbsp; JTD: ${fmtCompact(totalJtd)}</div>
-      </div>
-      <div class="header-right">
-        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="logo" />` : ''}
       </div>
     </div>`;
 }

@@ -320,24 +320,46 @@ async function generatePhaseScheduleExcelBuffer(data) {
     });
   }
 
-  ws.columns = colDefs.map(c => ({ header: c.header, key: c.key, width: c.width }));
+  // Set keys + widths only — omitting `header` keeps ExcelJS from auto-inserting
+  // a plain header row at row 1. Styled headers are written manually below.
+  ws.columns = colDefs.map(c => ({ key: c.key, width: c.width }));
 
-  // ── Title row ──────────────────────────────────────────────────────
-  const titleRow = ws.addRow([]);
+  // ── Title rows ─────────────────────────────────────────────────────
+  // Row 1: project number/name (bold, prominent) + date (right-aligned)
+  // Row 2: report name (smaller, slate-500)
+  // Merged blocks so each label has its own horizontal space.
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  titleRow.getCell(1).value = `Phase Schedule — Grid (${modeLabels[mode] || 'Cost'})`;
-  titleRow.getCell(1).font  = { bold: true, size: 13, color: { argb: 'FF1e293b' } };
-  const projCell = titleRow.getCell(2);
+  const lastCol = colDefs.length;
+
+  const projectRow = ws.addRow([]);
+  const r1 = projectRow.number;
+  ws.mergeCells(r1, 1, r1, Math.max(2, lastCol - 3));
+  const projCell = projectRow.getCell(1);
   projCell.value = `${project.number ? '#' + project.number + ' — ' : ''}${project.name || ''}`;
-  projCell.font  = { size: 10, color: { argb: 'FF475569' } };
-  const dateCell = titleRow.getCell(colDefs.length);
-  dateCell.value = `Generated ${dateStr}`;
-  dateCell.font  = { size: 8, color: { argb: 'FF94a3b8' }, italic: true };
-  dateCell.alignment = { horizontal: 'right' };
-  titleRow.height = 22;
+  projCell.font  = { bold: true, size: 13, color: { argb: 'FF1e293b' } };
+  projCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+  if (lastCol >= 4) {
+    ws.mergeCells(r1, lastCol - 2, r1, lastCol);
+    const dateCell = projectRow.getCell(lastCol - 2);
+    dateCell.value = `Generated ${dateStr}`;
+    dateCell.font  = { size: 8, color: { argb: 'FF94a3b8' }, italic: true };
+    dateCell.alignment = { horizontal: 'right', vertical: 'middle' };
+  }
+  projectRow.height = 22;
+
+  const reportRow = ws.addRow([]);
+  const r2 = reportRow.number;
+  ws.mergeCells(r2, 1, r2, lastCol);
+  const reportCell = reportRow.getCell(1);
+  reportCell.value = `Phase Schedule — Grid (${modeLabels[mode] || 'Cost'})`;
+  reportCell.font  = { size: 10, color: { argb: 'FF475569' } };
+  reportCell.alignment = { horizontal: 'left', vertical: 'middle' };
+  reportRow.height = 16;
+
   ws.addRow([]); // blank spacer
 
-  // ── Group header row (row 3) ────────────────────────────────────────
+  // ── Group header row (row 4) ────────────────────────────────────────
   const groupHdrRow = ws.addRow([]);
   groupHdrRow.height = 14;
 
@@ -354,7 +376,7 @@ async function generatePhaseScheduleExcelBuffer(data) {
       cell.border    = borderStyle({ top: true, bottom: true, left: c === startCol, right: c === endCol });
     }
     groupHdrRow.getCell(startCol).value = label;
-    if (count > 1) ws.mergeCells(3, startCol, 3, endCol);
+    if (count > 1) ws.mergeCells(groupHdrRow.number, startCol, groupHdrRow.number, endCol);
     colIdx += count;
   }
 
@@ -537,7 +559,7 @@ async function generatePhaseScheduleExcelBuffer(data) {
   addDataRow(totRow, false, true);
 
   // ── Freeze header rows ────────────────────────────────────────────
-  ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 4 }];
+  ws.views = [{ state: 'frozen', xSplit: 3, ySplit: 5 }];
 
   return wb.xlsx.writeBuffer();
 }
