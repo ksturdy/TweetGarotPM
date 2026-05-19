@@ -31,6 +31,21 @@ export interface CashFlowProject {
   percent_complete?: number;
 }
 
+export interface GmTrendProject {
+  id: number;
+  number: string;
+  name: string;
+  status: string;
+  market?: string;
+  manager_id?: number;
+  manager_name?: string;
+  latest_date: string;
+  latest_gm_percent: number;
+  prior_date: string;
+  prior_gm_percent: number;
+  gm_delta: number;
+}
+
 export interface CashFlowMetrics {
   avg_pct_at_first_positive: number;
   projects_that_turned_positive: number;
@@ -56,6 +71,10 @@ export const cashFlowReportApi = {
     api.get<CashFlowProject[]>('/reports/cash-flow').then(res => res.data),
   getMetrics: () =>
     api.get<CashFlowMetrics>('/reports/cash-flow/metrics').then(res => res.data),
+  getGmTrend: (minGapDays?: number) =>
+    api.get<GmTrendProject[]>('/reports/cash-flow/gm-trend', {
+      params: minGapDays != null ? { minGapDays } : undefined,
+    }).then(res => res.data),
   downloadPdf: async (filters: CashFlowPdfFilters = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => {

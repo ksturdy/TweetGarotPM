@@ -10,6 +10,8 @@ import CashFlowNegativeWidget from './widgets/CashFlowNegativeWidget';
 import CashFlowPositiveWidget from './widgets/CashFlowPositiveWidget';
 import LargestBacklogWidget from './widgets/LargestBacklogWidget';
 import MostGmDollarsWidget from './widgets/MostGmDollarsWidget';
+import GmTrendingDownWidget from './widgets/GmTrendingDownWidget';
+import GmTrendingUpWidget from './widgets/GmTrendingUpWidget';
 
 export const widgetRegistry: Record<string, WidgetDefinition> = {
   kpi_cards: {
@@ -89,6 +91,20 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
     category: 'projects',
     defaultColumn: 'center',
     component: MostGmDollarsWidget,
+  },
+  gm_trending_down: {
+    id: 'gm_trending_down',
+    title: 'Top 10 Trending Down GM%',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: GmTrendingDownWidget,
+  },
+  gm_trending_up: {
+    id: 'gm_trending_up',
+    title: 'Top 10 Trending Up GM%',
+    category: 'projects',
+    defaultColumn: 'center',
+    component: GmTrendingUpWidget,
   },
 };
 

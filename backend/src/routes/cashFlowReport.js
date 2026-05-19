@@ -277,6 +277,84 @@ router.get('/metrics', async (req, res) => {
   }
 });
 
+/**
+ * Build GM% trend per project by comparing latest snapshot to a prior one.
+ * The prior snapshot is the most recent snapshot that is at least `minGapDays`
+ * older than the latest snapshot. Projects without enough snapshot history
+ * (or a zero delta) are excluded.
+ */
+async function buildGmTrend(tenantId, options = {}) {
+  const minGapDays = Number.isFinite(Number(options.minGapDays))
+    ? Number(options.minGapDays)
+    : 7;
+
+  const result = await db.query(
+    `WITH latest AS (
+       SELECT DISTINCT ON (ps.project_id)
+         ps.project_id,
+         ps.snapshot_date AS latest_date,
+         ps.gross_profit_percent AS latest_gm
+       FROM project_snapshots ps
+       WHERE ps.tenant_id = $1
+         AND ps.gross_profit_percent IS NOT NULL
+       ORDER BY ps.project_id, ps.snapshot_date DESC
+     ),
+     prior AS (
+       SELECT DISTINCT ON (ps.project_id)
+         ps.project_id,
+         ps.snapshot_date AS prior_date,
+         ps.gross_profit_percent AS prior_gm
+       FROM project_snapshots ps
+       JOIN latest l ON l.project_id = ps.project_id
+       WHERE ps.tenant_id = $1
+         AND ps.gross_profit_percent IS NOT NULL
+         AND ps.snapshot_date <= l.latest_date - ($2::int * INTERVAL '1 day')
+       ORDER BY ps.project_id, ps.snapshot_date DESC
+     )
+     SELECT
+       p.id,
+       p.number,
+       p.name,
+       p.status,
+       p.market,
+       p.manager_id,
+       e.first_name || ' ' || e.last_name AS manager_name,
+       l.latest_date,
+       l.latest_gm  AS latest_gm_percent,
+       pr.prior_date,
+       pr.prior_gm  AS prior_gm_percent,
+       (l.latest_gm - pr.prior_gm) AS gm_delta
+     FROM projects p
+     JOIN latest l ON l.project_id = p.id
+     JOIN prior pr ON pr.project_id = p.id
+     LEFT JOIN employees e ON p.manager_id = e.id
+     WHERE p.tenant_id = $1
+       AND (l.latest_gm - pr.prior_gm) <> 0`,
+    [tenantId, minGapDays]
+  );
+
+  return result.rows;
+}
+
+/**
+ * GET /api/reports/cash-flow/gm-trend
+ * Returns per-project GM% trend computed from weekly snapshots.
+ * Query params: minGapDays (default 7) — minimum days between compared snapshots.
+ */
+router.get('/gm-trend', async (req, res) => {
+  try {
+    const minGapDays = req.query.minGapDays
+      ? Number(req.query.minGapDays)
+      : 7;
+    const rows = await buildGmTrend(req.tenantId, { minGapDays });
+    res.json(rows);
+  } catch (error) {
+    console.error('GM trend report error:', error);
+    res.status(500).json({ error: 'Failed to load GM trend data' });
+  }
+});
+
 module.exports = router;
 module.exports.buildCashFlowData = buildCashFlowData;
 module.exports.buildCashFlowMetrics = buildCashFlowMetrics;
+module.exports.buildGmTrend = buildGmTrend;
