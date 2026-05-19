@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Feedback, FeedbackComment } from '../../services/feedback';
+import { attachmentsApi } from '../../services/attachments';
 import { useAuth } from '../../context/AuthContext';
 import './FeedbackDetail.css';
 
@@ -21,6 +23,15 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   const { user } = useAuth();
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['attachments', 'feedback', feedback.id],
+    queryFn: async () => {
+      const res = await attachmentsApi.getByEntity('feedback', feedback.id);
+      return res.data;
+    },
+    enabled: !!feedback.id,
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -146,6 +157,21 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
           <h3>Description</h3>
           <p>{feedback.description}</p>
         </div>
+
+        {attachments.length > 0 && (
+          <div className="feedback-detail-attachments">
+            <h3>Attachments ({attachments.length})</h3>
+            <ul className="feedback-attachment-list">
+              {attachments.map(att => (
+                <li key={att.id} className="feedback-attachment-item">
+                  <a href={att.url} target="_blank" rel="noopener noreferrer">
+                    {att.original_name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="feedback-detail-comments">
           <h3>Comments ({comments.length})</h3>

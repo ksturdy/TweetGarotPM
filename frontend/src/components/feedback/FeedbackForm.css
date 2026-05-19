@@ -136,6 +136,67 @@
   color: #721c24;
 }
 
+.feedback-form-container .feedback-file-input {
+  padding: 3px 6px !important;
+  height: auto !important;
+  font-size: 11px !important;
+}
+
+.feedback-form-container .feedback-file-hint {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #6c757d;
+}
+
+.feedback-form-container .feedback-file-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.feedback-form-container .feedback-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.feedback-form-container .feedback-file-name {
+  flex: 1;
+  color: #212529;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-form-container .feedback-file-size {
+  color: #6c757d;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.feedback-form-container .feedback-file-remove {
+  background: none;
+  border: none;
+  color: #dc3545;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.feedback-form-container .feedback-file-remove:hover {
+  color: #a71d2a;
+}
+
 .feedback-form-container .feedback-tips {
   padding: 8px 10px;
   background-color: #f8f9fa;

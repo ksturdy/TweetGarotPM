@@ -8,6 +8,7 @@ import {
   FeedbackFilters
 } from '../services/feedback';
 import { useAuth } from '../context/AuthContext';
+import { attachmentsApi } from '../services/attachments';
 import FeedbackList from '../components/feedback/FeedbackList';
 import FeedbackForm from '../components/feedback/FeedbackForm';
 import FeedbackDetail from '../components/feedback/FeedbackDetail';
@@ -328,7 +329,17 @@ const FeedbackPage: React.FC = () => {
         <div className="feedback-right">
           {showForm ? (
             <FeedbackForm onSubmit={async (data) => {
-              await createFeedbackMutation.mutateAsync(data);
+              const { files, ...feedbackData } = data;
+              const created = await createFeedbackMutation.mutateAsync(feedbackData);
+              if (files && files.length > 0 && created?.id) {
+                for (const file of files) {
+                  try {
+                    await attachmentsApi.upload('feedback', created.id, file);
+                  } catch (err) {
+                    console.error('Failed to upload attachment:', file.name, err);
+                  }
+                }
+              }
             }} />
           ) : selectedFeedback ? (
             <FeedbackDetail

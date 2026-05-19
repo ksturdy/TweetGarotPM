@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { MODULE_OPTIONS, SUBMODULE_OPTIONS } from '../../services/feedback';
 import './FeedbackForm.css';
 
@@ -10,8 +10,18 @@ interface FeedbackFormProps {
     description: string;
     type: 'bug' | 'enhancement' | 'feature_request' | 'improvement' | 'other';
     priority?: 'low' | 'medium' | 'high' | 'critical';
+    files?: File[];
   }) => Promise<void>;
 }
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB — matches backend attachments cap
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'application/pdf'];
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
   const [formData, setFormData] = useState({
@@ -25,6 +35,47 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
+
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+    for (const file of selected) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        rejected.push(`${file.name} (unsupported type)`);
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        rejected.push(`${file.name} (over 20 MB)`);
+        continue;
+      }
+      accepted.push(file);
+    }
+
+    setFiles(prev => [...prev, ...accepted]);
+
+    if (rejected.length > 0) {
+      setErrors(prev => ({ ...prev, files: `Skipped: ${rejected.join(', ')}` }));
+    } else if (errors.files) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.files;
+        return next;
+      });
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -57,7 +108,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
     try {
       await onSubmit({
         ...formData,
-        submodule: formData.submodule || undefined
+        submodule: formData.submodule || undefined,
+        files: files.length > 0 ? files : undefined
       });
 
       // Reset form
@@ -69,6 +121,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
         type: 'enhancement',
         priority: 'medium'
       });
+      setFiles([]);
       setErrors({});
     } catch (error) {
       console.error('Error submitting feedback:', error);
@@ -199,6 +252,41 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
           <div className="character-count">
             {formData.description.length} characters
           </div>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="feedback-attachments">Attachments</label>
+          <input
+            ref={fileInputRef}
+            id="feedback-attachments"
+            type="file"
+            accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf"
+            multiple
+            onChange={handleFilesChange}
+            className="form-control feedback-file-input"
+          />
+          <div className="feedback-file-hint">
+            Images or PDFs, up to 20 MB each.
+          </div>
+          {files.length > 0 && (
+            <ul className="feedback-file-list">
+              {files.map((file, i) => (
+                <li key={`${file.name}-${i}`} className="feedback-file-item">
+                  <span className="feedback-file-name">{file.name}</span>
+                  <span className="feedback-file-size">{formatBytes(file.size)}</span>
+                  <button
+                    type="button"
+                    className="feedback-file-remove"
+                    onClick={() => removeFile(i)}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {errors.files && <div className="invalid-feedback">{errors.files}</div>}
         </div>
 
         {errors.submit && (
