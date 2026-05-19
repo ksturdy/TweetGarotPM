@@ -483,6 +483,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
 
         let newCount = 0;
         let updatedCount = 0;
+        let reconciliationCount = 0;
 
         let errorCount = 0;
         for (const row of validRows) {
@@ -511,6 +512,9 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
             } else {
               updatedCount++;
             }
+            if (result.isReconciliationStaged) {
+              reconciliationCount++;
+            }
           } catch (rowError) {
             errorCount++;
             if (errorCount <= 3) {
@@ -530,7 +534,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
         const linkedCount = await VistaData.linkPhaseCodesByContract(req.tenantId);
         console.log(`[Vista Auto-Import] Phase codes auto-linked to projects: ${linkedCount}`);
 
-        results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, batch_id: batch.id };
+        results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, reconciliations_staged: reconciliationCount, batch_id: batch.id };
         results.sheetsProcessed.push(phaseCodesSheetName);
       }
     }

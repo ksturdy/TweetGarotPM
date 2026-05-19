@@ -59,6 +59,9 @@ const VistaDataSettings: React.FC = () => {
       }
       if (data.phaseCodes && data.phaseCodes.total > 0) {
         details.push(`Vista: ${data.phaseCodes.total} phase codes (${data.phaseCodes.new} new, ${data.phaseCodes.updated} updated, ${data.phaseCodes.linked || 0} linked)`);
+        if ((data.phaseCodes.reconciliations_staged || 0) > 0) {
+          details.push(`⚠ ${data.phaseCodes.reconciliations_staged} provisional code${data.phaseCodes.reconciliations_staged === 1 ? '' : 's'} need review — open the affected project's Phase Schedule and use the "Review" banner before next forecast.`);
+        }
       }
       // Show auto-import results (Vista → Titan sync)
       if (data.autoImport) {

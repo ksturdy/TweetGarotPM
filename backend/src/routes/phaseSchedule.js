@@ -237,6 +237,150 @@ router.put('/project/:projectId/reorder', verifyProjectOwnership, async (req, re
   }
 });
 
+// ==================== PROVISIONAL PHASE CODES ====================
+// Used when Vista isn't set up yet but a billing forecast is needed.
+// Rows live in vp_phase_codes with is_provisional = TRUE. Reconciled later.
+
+router.get('/project/:projectId/provisional', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const rows = await PhaseSchedule.listProvisionalByProject(req.params.projectId, req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/project/:projectId/provisional',
+  [
+    body('job').isString().trim().notEmpty(),
+    body('phase').isString().trim().notEmpty(),
+    body('cost_type').isInt({ min: 1, max: 6 }),
+    body('phase_description').optional().isString(),
+    body('job_description').optional().isString(),
+    body('contract').optional().isString(),
+    body('est_hours').optional().isFloat({ min: 0 }),
+    body('est_cost').optional().isFloat({ min: 0 }),
+    body('provisional_notes').optional().isString(),
+  ],
+  validate,
+  verifyProjectOwnership,
+  async (req, res, next) => {
+    try {
+      const row = await PhaseSchedule.createProvisional(
+        { ...req.body, linked_project_id: Number(req.params.projectId) },
+        req.tenantId,
+        req.user.id
+      );
+      res.status(201).json(row);
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'A phase code with that job/cost_type/phase already exists for this tenant.' });
+      }
+      next(error);
+    }
+  }
+);
+
+router.post('/project/:projectId/provisional/bulk',
+  [body('rows').isArray({ min: 1 })],
+  validate,
+  verifyProjectOwnership,
+  async (req, res, next) => {
+    try {
+      const inserted = await PhaseSchedule.bulkCreateProvisional(
+        req.body.rows, Number(req.params.projectId), req.tenantId, req.user.id
+      );
+      res.status(201).json({ inserted, skipped: req.body.rows.length - inserted.length });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.patch('/provisional/:id', async (req, res, next) => {
+  try {
+    const row = await PhaseSchedule.updateProvisional(req.params.id, req.body, req.tenantId);
+    if (!row) {
+      return res.status(404).json({ error: 'Provisional phase code not found, already reconciled, or no updatable fields supplied.' });
+    }
+    res.json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/provisional/:id', async (req, res, next) => {
+  try {
+    const row = await PhaseSchedule.deleteProvisional(req.params.id, req.tenantId);
+    if (!row) {
+      return res.status(404).json({ error: 'Provisional phase code not found.' });
+    }
+    res.status(204).send();
+  } catch (error) {
+    if (error.code === 'PROVISIONAL_IN_USE') {
+      return res.status(409).json({ error: error.message });
+    }
+    next(error);
+  }
+});
+
+router.post('/provisional/:id/reconcile',
+  [body('realPhaseCodeId').isInt({ min: 1 })],
+  validate,
+  async (req, res, next) => {
+    try {
+      const result = await PhaseSchedule.reconcileProvisional(
+        Number(req.params.id), Number(req.body.realPhaseCodeId), req.tenantId
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get('/project/:projectId/reconciliations', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const rows = await PhaseSchedule.listPendingReconciliations(req.params.projectId, req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/project/:projectId/reconciliations/count', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const n = await PhaseSchedule.countPendingReconciliations(req.params.projectId, req.tenantId);
+    res.json({ count: n });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/reconciliations/:id/accept', async (req, res, next) => {
+  try {
+    const result = await PhaseSchedule.acceptReconciliation(Number(req.params.id), req.tenantId, req.user.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/reconciliations/:id/reject',
+  [body('notes').optional().isString()],
+  validate,
+  async (req, res, next) => {
+    try {
+      const result = await PhaseSchedule.rejectReconciliation(
+        Number(req.params.id), req.tenantId, req.user.id, req.body.notes
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Sync schedule item quantity / quantity_installed with the latest Stratus import
 // for the project (LF -> SUM(length), EA -> COUNT). Hours and costs are not touched.
 router.post('/project/:projectId/sync-stratus-quantities', verifyProjectOwnership, async (req, res, next) => {

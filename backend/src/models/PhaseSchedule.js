@@ -24,9 +24,11 @@ const PhaseSchedule = {
            THEN SUM(pc.est_cost * pc.percent_complete) / SUM(pc.est_cost)
            ELSE 0 END as percent_complete,
          $2::integer as linked_project_id,
-         array_agg(pc.id ORDER BY pc.id) as all_ids
+         array_agg(pc.id ORDER BY pc.id) as all_ids,
+         BOOL_OR(pc.is_provisional) as is_provisional
        FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2
+         AND pc.reconciled_at IS NULL
        GROUP BY pc.tenant_id, pc.cost_type, pc.phase
        ORDER BY MIN(pc.job), pc.cost_type, pc.phase`,
       [tenantId, projectId]
@@ -78,6 +80,7 @@ const PhaseSchedule = {
          COALESCE(pc_agg.sum_jtd_cost, 0) as total_jtd_cost,
          COALESCE(pc_agg.sum_jtd_hours, 0) as total_jtd_hours,
          COALESCE(pc_agg.sum_projected_cost, 0) as total_projected_cost,
+         COALESCE(pc_agg.has_provisional, FALSE) as has_provisional,
          CASE WHEN psi.percent_complete > 0 THEN psi.percent_complete ELSE COALESCE(pc_agg.weighted_pct, 0) END as percent_complete,
          psi.quantity, psi.quantity_uom, psi.quantity_installed,
          psi.use_manual_qty_values, psi.manual_monthly_qty,
@@ -101,7 +104,8 @@ const PhaseSchedule = {
            SUM(pc.projected_cost) as sum_projected_cost,
            CASE WHEN SUM(pc.est_cost) > 0
              THEN SUM(pc.est_cost * pc.percent_complete) / SUM(pc.est_cost)
-             ELSE 0 END as weighted_pct
+             ELSE 0 END as weighted_pct,
+           COALESCE(BOOL_OR(pc.is_provisional), FALSE) as has_provisional
          FROM vp_phase_codes pc
          WHERE pc.id = ANY(psi.phase_code_ids)
        ) pc_agg ON true
@@ -451,6 +455,384 @@ const PhaseSchedule = {
 
       await client.query('COMMIT');
       return { import_id: importId, updated, skipped };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async listProvisionalByProject(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT pc.*, u.first_name || ' ' || u.last_name AS created_by_name
+       FROM vp_phase_codes pc
+       LEFT JOIN users u ON u.id = pc.created_by_user_id
+       WHERE pc.tenant_id = $1
+         AND pc.linked_project_id = $2
+         AND pc.is_provisional = TRUE
+         AND pc.reconciled_at IS NULL
+       ORDER BY pc.job, pc.cost_type, pc.phase`,
+      [tenantId, projectId]
+    );
+    return result.rows;
+  },
+
+  async createProvisional(data, tenantId, userId) {
+    // For provisional rows, mirror est_cost into projected_cost so the
+    // cost-mode auto-distribution (which uses projected − jtd) has something
+    // to spread. When the row is reconciled to a real Vista code later,
+    // Vista's projected_cost takes over.
+    const estCost = data.est_cost || 0;
+    const result = await db.query(
+      `INSERT INTO vp_phase_codes (
+         tenant_id, contract, job, job_description, cost_type, phase, phase_description,
+         est_hours, est_cost, projected_cost, linked_project_id,
+         is_provisional, provisional_notes, created_by_user_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, $12, $13)
+       RETURNING *`,
+      [
+        tenantId,
+        data.contract || null,
+        data.job,
+        data.job_description || null,
+        data.cost_type,
+        data.phase,
+        data.phase_description || null,
+        data.est_hours || 0,
+        estCost,
+        estCost,
+        data.linked_project_id,
+        data.provisional_notes || null,
+        userId,
+      ]
+    );
+    return result.rows[0];
+  },
+
+  async bulkCreateProvisional(rows, projectId, tenantId, userId) {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      const inserted = [];
+      for (const r of rows) {
+        if (!r.job || !r.phase || r.cost_type == null) continue;
+        const estCost = r.est_cost || 0;
+        const ins = await client.query(
+          `INSERT INTO vp_phase_codes (
+             tenant_id, contract, job, job_description, cost_type, phase, phase_description,
+             est_hours, est_cost, projected_cost, linked_project_id,
+             is_provisional, provisional_notes, created_by_user_id
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, $12, $13)
+           ON CONFLICT (tenant_id, job, cost_type, phase) DO NOTHING
+           RETURNING *`,
+          [
+            tenantId,
+            r.contract || null,
+            r.job,
+            r.job_description || null,
+            r.cost_type,
+            r.phase,
+            r.phase_description || null,
+            r.est_hours || 0,
+            estCost,
+            estCost,
+            projectId,
+            r.provisional_notes || null,
+            userId,
+          ]
+        );
+        if (ins.rows[0]) inserted.push(ins.rows[0]);
+      }
+      await client.query('COMMIT');
+      return inserted;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async updateProvisional(id, data, tenantId) {
+    const allowed = {
+      contract: 'contract',
+      job: 'job',
+      job_description: 'job_description',
+      cost_type: 'cost_type',
+      phase: 'phase',
+      phase_description: 'phase_description',
+      est_hours: 'est_hours',
+      est_cost: 'est_cost',
+      provisional_notes: 'provisional_notes',
+    };
+    const fields = [];
+    const values = [];
+    let i = 1;
+    for (const [k, col] of Object.entries(allowed)) {
+      if (data[k] !== undefined) {
+        fields.push(`${col} = $${i++}`);
+        values.push(data[k]);
+      }
+    }
+    // Mirror est_cost into projected_cost so cost-mode auto-distribution stays in sync.
+    if (data.est_cost !== undefined) {
+      fields.push(`projected_cost = $${i++}`);
+      values.push(data.est_cost);
+    }
+    if (fields.length === 0) return null;
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, tenantId);
+    const result = await db.query(
+      `UPDATE vp_phase_codes SET ${fields.join(', ')}
+       WHERE id = $${i} AND tenant_id = $${i + 1}
+         AND is_provisional = TRUE
+         AND reconciled_at IS NULL
+       RETURNING *`,
+      values
+    );
+    return result.rows[0];
+  },
+
+  async deleteProvisional(id, tenantId) {
+    const refs = await db.query(
+      `SELECT COUNT(*)::int AS n
+       FROM phase_schedule_items
+       WHERE tenant_id = $1 AND $2 = ANY(phase_code_ids)`,
+      [tenantId, id]
+    );
+    if (refs.rows[0].n > 0) {
+      const err = new Error('Provisional code is referenced by schedule items; remove it from those rows first.');
+      err.code = 'PROVISIONAL_IN_USE';
+      throw err;
+    }
+    const result = await db.query(
+      `DELETE FROM vp_phase_codes
+       WHERE id = $1 AND tenant_id = $2
+         AND is_provisional = TRUE
+         AND reconciled_at IS NULL
+       RETURNING id`,
+      [id, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  // ==================== STAGED RECONCILIATIONS ====================
+  // Surfaces the side-by-side diff to the PM after Vista lands data on a
+  // provisional row. Each pending row holds a snapshot of the provisional's
+  // pre-Vista values so a reject can roll the vp_phase_codes row back.
+
+  async listPendingReconciliations(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT r.id, r.provisional_phase_code_id, r.snapshot, r.vista_import_batch_id,
+              r.status, r.created_at,
+              pc.id AS phase_code_id, pc.contract, pc.job, pc.job_description,
+              pc.cost_type, pc.phase, pc.phase_description,
+              pc.est_hours, pc.est_cost, pc.jtd_hours, pc.jtd_cost,
+              pc.committed_cost, pc.projected_cost, pc.percent_complete,
+              pc.is_provisional, pc.linked_project_id
+       FROM pending_phase_code_reconciliations r
+       JOIN vp_phase_codes pc ON pc.id = r.provisional_phase_code_id
+       WHERE r.tenant_id = $1
+         AND r.status = 'pending'
+         AND pc.linked_project_id = $2
+       ORDER BY pc.cost_type, pc.phase`,
+      [tenantId, projectId]
+    );
+    return result.rows;
+  },
+
+  async countPendingReconciliations(projectId, tenantId) {
+    const result = await db.query(
+      `SELECT COUNT(*)::int AS n
+       FROM pending_phase_code_reconciliations r
+       JOIN vp_phase_codes pc ON pc.id = r.provisional_phase_code_id
+       WHERE r.tenant_id = $1 AND r.status = 'pending' AND pc.linked_project_id = $2`,
+      [tenantId, projectId]
+    );
+    return result.rows[0].n;
+  },
+
+  // Accept: keep Vista's values (already on vp_phase_codes), flip the
+  // provisional flag off so the PROV pill disappears and the row becomes
+  // a normal Vista phase code.
+  async acceptReconciliation(id, tenantId, userId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query(
+        `SELECT provisional_phase_code_id
+         FROM pending_phase_code_reconciliations
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+         FOR UPDATE`,
+        [id, tenantId]
+      );
+      if (r.rowCount === 0) {
+        throw new Error('Pending reconciliation not found');
+      }
+      const pcId = r.rows[0].provisional_phase_code_id;
+      // Clearing the CHECK constraint: cannot set reconciled_* unless still
+      // provisional. We're flipping is_provisional to FALSE, so reconciled_*
+      // must remain NULL — that's fine since this is auto-promote, not
+      // tombstone.
+      await client.query(
+        `UPDATE vp_phase_codes
+         SET is_provisional = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND tenant_id = $2`,
+        [pcId, tenantId]
+      );
+      await client.query(
+        `UPDATE pending_phase_code_reconciliations
+         SET status = 'accepted', decided_at = NOW(), decided_by_user_id = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [userId, id]
+      );
+      await client.query('COMMIT');
+      return { id, action: 'accepted', phase_code_id: pcId };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Reject: roll vp_phase_codes back to the snapshot (the values the PM had
+  // typed). is_provisional stays TRUE. The row remains a candidate for
+  // future Vista imports — next sync will create another pending row.
+  async rejectReconciliation(id, tenantId, userId, notes) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query(
+        `SELECT provisional_phase_code_id, snapshot
+         FROM pending_phase_code_reconciliations
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+         FOR UPDATE`,
+        [id, tenantId]
+      );
+      if (r.rowCount === 0) {
+        throw new Error('Pending reconciliation not found');
+      }
+      const pcId = r.rows[0].provisional_phase_code_id;
+      const snap = r.rows[0].snapshot || {};
+      await client.query(
+        `UPDATE vp_phase_codes
+         SET contract = $1,
+             job_description = $2,
+             phase_description = $3,
+             est_hours = $4,
+             est_cost = $5,
+             jtd_hours = $6,
+             jtd_cost = $7,
+             committed_cost = $8,
+             projected_cost = $9,
+             percent_complete = $10,
+             prior_week_cost = $11,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $12 AND tenant_id = $13`,
+        [
+          snap.contract ?? null,
+          snap.job_description ?? null,
+          snap.phase_description ?? null,
+          snap.est_hours ?? 0,
+          snap.est_cost ?? 0,
+          snap.jtd_hours ?? 0,
+          snap.jtd_cost ?? 0,
+          snap.committed_cost ?? 0,
+          snap.projected_cost ?? 0,
+          snap.percent_complete ?? 0,
+          snap.prior_week_cost ?? 0,
+          pcId,
+          tenantId,
+        ]
+      );
+      await client.query(
+        `UPDATE pending_phase_code_reconciliations
+         SET status = 'rejected', decided_at = NOW(), decided_by_user_id = $1,
+             decision_notes = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [userId, notes || null, id]
+      );
+      await client.query('COMMIT');
+      return { id, action: 'rejected', phase_code_id: pcId };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Tombstone a provisional row by pointing it at a real vp_phase_codes row,
+  // and rewrite every phase_schedule_items.phase_code_ids array that referenced
+  // the provisional id so it now references the real id instead. If the real id
+  // is already in the array, just remove the provisional id to avoid duplicates.
+  async reconcileProvisional(provisionalId, realId, tenantId) {
+    if (provisionalId === realId) {
+      throw new Error('provisional and real phase code ids must differ');
+    }
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const provRow = await client.query(
+        `SELECT id, is_provisional, reconciled_at
+         FROM vp_phase_codes
+         WHERE id = $1 AND tenant_id = $2
+         FOR UPDATE`,
+        [provisionalId, tenantId]
+      );
+      if (provRow.rowCount === 0 || !provRow.rows[0].is_provisional) {
+        throw new Error('Source row is not a provisional phase code');
+      }
+      if (provRow.rows[0].reconciled_at) {
+        throw new Error('Provisional row is already reconciled');
+      }
+
+      const realRow = await client.query(
+        `SELECT id, is_provisional
+         FROM vp_phase_codes
+         WHERE id = $1 AND tenant_id = $2`,
+        [realId, tenantId]
+      );
+      if (realRow.rowCount === 0) {
+        throw new Error('Target Vista phase code not found');
+      }
+      if (realRow.rows[0].is_provisional) {
+        throw new Error('Target row must be a real (non-provisional) Vista phase code');
+      }
+
+      const swap = await client.query(
+        `UPDATE phase_schedule_items
+         SET phase_code_ids = CASE
+               WHEN $2 = ANY(phase_code_ids)
+                 THEN array_remove(phase_code_ids, $1)
+               ELSE array_replace(phase_code_ids, $1, $2)
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE tenant_id = $3 AND $1 = ANY(phase_code_ids)
+         RETURNING id`,
+        [provisionalId, realId, tenantId]
+      );
+
+      await client.query(
+        `UPDATE vp_phase_codes
+         SET reconciled_to_id = $1,
+             reconciled_at = NOW(),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2 AND tenant_id = $3`,
+        [realId, provisionalId, tenantId]
+      );
+
+      await client.query('COMMIT');
+      return {
+        provisional_id: provisionalId,
+        real_id: realId,
+        schedule_items_updated: swap.rowCount,
+      };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

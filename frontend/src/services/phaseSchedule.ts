@@ -18,6 +18,7 @@ export interface PhaseCode {
   percent_complete: number;
   linked_project_id: number;
   all_ids?: number[];  // all underlying vp_phase_codes IDs (when deduplicated across jobs)
+  is_provisional?: boolean;
 }
 
 export interface LinkedGCActivity {
@@ -66,6 +67,7 @@ export interface PhaseScheduleItem {
   linked_gc_activities: LinkedGCActivity[];
   linked_resolved_count: number;
   active_gc_version_id: number | null;
+  has_provisional: boolean;
 }
 
 export const phaseScheduleApi = {
@@ -123,7 +125,107 @@ export const phaseScheduleApi = {
 
   syncStratusQuantities: (projectId: number) =>
     api.post<StratusSyncResult>(`/phase-schedule/project/${projectId}/sync-stratus-quantities`),
+
+  listProvisional: (projectId: number) =>
+    api.get<ProvisionalPhaseCode[]>(`/phase-schedule/project/${projectId}/provisional`),
+
+  createProvisional: (projectId: number, data: ProvisionalPhaseCodeInput) =>
+    api.post<ProvisionalPhaseCode>(`/phase-schedule/project/${projectId}/provisional`, data),
+
+  bulkCreateProvisional: (projectId: number, rows: ProvisionalPhaseCodeInput[]) =>
+    api.post<{ inserted: ProvisionalPhaseCode[]; skipped: number }>(
+      `/phase-schedule/project/${projectId}/provisional/bulk`,
+      { rows }
+    ),
+
+  updateProvisional: (id: number, data: Partial<ProvisionalPhaseCodeInput>) =>
+    api.patch<ProvisionalPhaseCode>(`/phase-schedule/provisional/${id}`, data),
+
+  deleteProvisional: (id: number) =>
+    api.delete(`/phase-schedule/provisional/${id}`),
+
+  reconcileProvisional: (provisionalId: number, realPhaseCodeId: number) =>
+    api.post<{ provisional_id: number; real_id: number; schedule_items_updated: number }>(
+      `/phase-schedule/provisional/${provisionalId}/reconcile`,
+      { realPhaseCodeId }
+    ),
+
+  listReconciliations: (projectId: number) =>
+    api.get<PendingReconciliation[]>(`/phase-schedule/project/${projectId}/reconciliations`),
+
+  countReconciliations: (projectId: number) =>
+    api.get<{ count: number }>(`/phase-schedule/project/${projectId}/reconciliations/count`),
+
+  acceptReconciliation: (id: number) =>
+    api.post<{ id: number; action: 'accepted'; phase_code_id: number }>(`/phase-schedule/reconciliations/${id}/accept`),
+
+  rejectReconciliation: (id: number, notes?: string) =>
+    api.post<{ id: number; action: 'rejected'; phase_code_id: number }>(
+      `/phase-schedule/reconciliations/${id}/reject`,
+      { notes }
+    ),
 };
+
+export interface PhaseCodeSnapshot {
+  contract?: string | null;
+  job_description?: string | null;
+  phase_description?: string | null;
+  est_hours?: number;
+  est_cost?: number;
+  jtd_hours?: number;
+  jtd_cost?: number;
+  committed_cost?: number;
+  projected_cost?: number;
+  percent_complete?: number;
+  prior_week_cost?: number;
+}
+
+export interface PendingReconciliation {
+  id: number;
+  provisional_phase_code_id: number;
+  snapshot: PhaseCodeSnapshot;
+  vista_import_batch_id: number | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  // current vp_phase_codes row (Vista's values after the import)
+  phase_code_id: number;
+  contract: string | null;
+  job: string;
+  job_description: string | null;
+  cost_type: number;
+  phase: string;
+  phase_description: string | null;
+  est_hours: number;
+  est_cost: number;
+  jtd_hours: number;
+  jtd_cost: number;
+  committed_cost: number;
+  projected_cost: number;
+  percent_complete: number;
+  is_provisional: boolean;
+  linked_project_id: number;
+}
+
+export interface ProvisionalPhaseCodeInput {
+  contract?: string;
+  job: string;
+  job_description?: string;
+  cost_type: number;
+  phase: string;
+  phase_description?: string;
+  est_hours?: number;
+  est_cost?: number;
+  provisional_notes?: string;
+}
+
+export interface ProvisionalPhaseCode extends PhaseCode {
+  is_provisional: true;
+  provisional_notes: string | null;
+  created_by_user_id: number | null;
+  created_by_name: string | null;
+  reconciled_to_id: number | null;
+  reconciled_at: string | null;
+}
 
 export interface StratusSyncRowChange {
   id: number;

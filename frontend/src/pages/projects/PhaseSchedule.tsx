@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi, Project } from '../../services/projects';
-import { phaseScheduleApi, PhaseCode, PhaseScheduleItem } from '../../services/phaseSchedule';
+import { phaseScheduleApi, PhaseCode, PhaseScheduleItem, ProvisionalPhaseCode, ProvisionalPhaseCodeInput, PendingReconciliation } from '../../services/phaseSchedule';
 import { projectLaborRatesApi, ProjectLaborRate } from '../../services/projectLaborRates';
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
@@ -677,6 +677,9 @@ const AddPhaseCodesModal: React.FC<{
                     setSelected(next);
                   }} />
                   <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[pc.cost_type], flexShrink: 0 }} />
+                  {pc.is_provisional && (
+                    <span title="Provisional — manually entered, not yet from Vista" style={{ padding: '0.05rem 0.35rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '3px', fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>PROV</span>
+                  )}
                   <span style={{ flex: 1 }}>{pc.phase.trim()} - {pc.phase_description}</span>
                   <span style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>{COST_TYPE_NAMES[pc.cost_type]}</span>
                   <span style={{ fontSize: '0.75rem', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmt(parseNum(pc.est_cost))}</span>
@@ -715,16 +718,599 @@ const AddPhaseCodesModal: React.FC<{
   );
 };
 
+// ===== PROVISIONAL PHASE CODES MODAL =====
+// Lets users seed manual phase codes when Vista isn't set up yet so a billing
+// forecast can be built. Provisional rows live in vp_phase_codes with
+// is_provisional = TRUE and are reconciled to real Vista codes later.
+const ProvisionalCodesModal: React.FC<{
+  projectId: number;
+  defaultJob: string;
+  onClose: () => void;
+}> = ({ projectId, defaultJob, onClose }) => {
+  const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
+  const [tab, setTab] = useState<'paste' | 'single'>('paste');
+
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ['provisionalPhaseCodes', projectId],
+    queryFn: () => phaseScheduleApi.listProvisional(projectId).then(r => r.data),
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['provisionalPhaseCodes', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['phaseCodes', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
+  };
+
+  // After inserting one or more provisional vp_phase_codes rows, also create
+  // matching phase_schedule_items so the codes actually show up in the grid.
+  // Failure here is non-fatal — the codes still exist in the picker.
+  const scheduleNewCodes = async (codeIds: number[]) => {
+    if (codeIds.length === 0) return 0;
+    try {
+      const r = await phaseScheduleApi.createItems({ projectId, phaseCodeIds: codeIds, groupBy: 'individual' });
+      return r.data.length;
+    } catch {
+      toast.error('Code saved, but failed to add it to the schedule. Use "Add Phase Codes" to add it manually.');
+      return 0;
+    }
+  };
+
+  const [form, setForm] = useState<ProvisionalPhaseCodeInput>({
+    job: defaultJob, phase: '', cost_type: 1,
+    est_hours: 0, est_cost: 0,
+    phase_description: '', provisional_notes: '',
+  });
+
+  const addOne = useMutation({
+    mutationFn: async (data: ProvisionalPhaseCodeInput) => {
+      const r = await phaseScheduleApi.createProvisional(projectId, data);
+      const scheduled = await scheduleNewCodes([r.data.id]);
+      return { code: r.data, scheduled };
+    },
+    onSuccess: ({ scheduled }) => {
+      invalidate();
+      setForm(f => ({ ...f, phase: '', phase_description: '', est_hours: 0, est_cost: 0, provisional_notes: '' }));
+      toast.success(scheduled > 0 ? 'Provisional code added and scheduled' : 'Provisional code added');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to add'),
+  });
+
+  const delOne = useMutation({
+    mutationFn: (id: number) => phaseScheduleApi.deleteProvisional(id),
+    onSuccess: () => { invalidate(); toast.success('Removed'); },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Delete failed'),
+  });
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<ProvisionalPhaseCodeInput>>({});
+
+  const startEdit = (r: ProvisionalPhaseCode) => {
+    setEditingId(r.id);
+    setEditDraft({
+      phase: r.phase,
+      cost_type: r.cost_type,
+      job: r.job,
+      phase_description: r.phase_description || '',
+      est_hours: Number(r.est_hours) || 0,
+      est_cost: Number(r.est_cost) || 0,
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditDraft({}); };
+
+  const updateOne = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ProvisionalPhaseCodeInput> }) =>
+      phaseScheduleApi.updateProvisional(id, data),
+    onSuccess: () => { invalidate(); cancelEdit(); toast.success('Updated'); },
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Update failed'),
+  });
+
+  const [pasteText, setPasteText] = useState('');
+  const [preview, setPreview] = useState<{ rows: ProvisionalPhaseCodeInput[]; errors: string[] } | null>(null);
+
+  const addBulk = useMutation({
+    mutationFn: async (data: ProvisionalPhaseCodeInput[]) => {
+      const r = await phaseScheduleApi.bulkCreateProvisional(projectId, data);
+      const scheduled = await scheduleNewCodes(r.data.inserted.map(c => c.id));
+      return { ...r.data, scheduled };
+    },
+    onSuccess: (r) => {
+      invalidate();
+      setPasteText('');
+      setPreview(null);
+      const inserted = r.inserted.length;
+      const skipped = r.skipped;
+      const parts = [`Added ${inserted} code${inserted === 1 ? '' : 's'}`];
+      if (r.scheduled > 0) parts.push(`scheduled ${r.scheduled}`);
+      if (skipped > 0) parts.push(`${skipped} skipped (duplicate)`);
+      toast.success(parts.join(', '));
+    },
+    onError: () => toast.error('Bulk import failed'),
+  });
+
+  // Parse pasted text: tab- or comma-separated; columns:
+  //   phase | cost_type (1-6 or label) | est_hours | est_cost | [job] | [phase_description]
+  const parsePaste = (text: string) => {
+    const ctByLabel: Record<string, number> = {
+      labor: 1, material: 2, materials: 2, subcontracts: 3, subs: 3, sub: 3,
+      rentals: 4, rental: 4, equipment: 5, 'mep equipment': 5, equip: 5,
+      'general conditions': 6, gc: 6, 'gen cond': 6,
+    };
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const out: ProvisionalPhaseCodeInput[] = [];
+    const errors: string[] = [];
+    lines.forEach((line, idx) => {
+      const cols = line.split(/\t|,/).map(s => s.trim());
+      if (idx === 0 && /phase/i.test(cols[0]) && /cost|type|ct/i.test(cols[1] || '')) return; // header
+      const [phase, ctRaw, hrsRaw, costRaw, jobRaw, descRaw] = cols;
+      if (!phase || !ctRaw) { errors.push(`Line ${idx + 1}: missing phase or cost type`); return; }
+      let ct: number = parseInt(ctRaw, 10);
+      if (!Number.isFinite(ct)) ct = ctByLabel[ctRaw.toLowerCase()];
+      if (!ct || ct < 1 || ct > 6) { errors.push(`Line ${idx + 1}: cost type "${ctRaw}" not recognized`); return; }
+      const est_hours = hrsRaw ? parseFloat(hrsRaw.replace(/[,$]/g, '')) || 0 : 0;
+      const est_cost  = costRaw ? parseFloat(costRaw.replace(/[,$]/g, '')) || 0 : 0;
+      out.push({
+        phase, cost_type: ct, est_hours, est_cost,
+        job: (jobRaw && jobRaw.length > 0) ? jobRaw : defaultJob,
+        phase_description: descRaw || undefined,
+      });
+    });
+    setPreview({ rows: out, errors });
+  };
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: '0.7rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.25rem' };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', width: '90%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', color: '#1e293b' }}>Provisional Phase Codes</h2>
+            <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', color: '#64748b' }}>
+              Use when Vista isn't set up yet. These rows are tagged provisional and reconcile to real codes when Vista data lands.
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+        </div>
+
+        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '0 1.5rem' }}>
+          {(['paste', 'single'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{
+                padding: '0.6rem 1rem', border: 'none', background: 'none',
+                borderBottom: tab === t ? '2px solid #3b82f6' : '2px solid transparent',
+                color: tab === t ? '#3b82f6' : '#64748b', fontWeight: 500,
+                cursor: 'pointer', fontSize: '0.85rem'
+              }}>
+              {t === 'paste' ? 'Paste from Excel' : 'Add One'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '1.25rem 1.5rem' }}>
+          {tab === 'single' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={labelStyle}>Phase Code *</label>
+                <input style={inputStyle} value={form.phase}
+                  onChange={e => setForm({ ...form, phase: e.target.value })}
+                  placeholder="e.g. 1010-100" />
+              </div>
+              <div>
+                <label style={labelStyle}>Cost Type *</label>
+                <select style={inputStyle} value={form.cost_type}
+                  onChange={e => setForm({ ...form, cost_type: Number(e.target.value) })}>
+                  {[1, 2, 3, 4, 5, 6].map(ct => <option key={ct} value={ct}>{COST_TYPE_NAMES[ct]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Job *</label>
+                <input style={inputStyle} value={form.job}
+                  onChange={e => setForm({ ...form, job: e.target.value })}
+                  placeholder="Best-guess job number" />
+              </div>
+              <div style={{ gridColumn: 'span 3' }}>
+                <label style={labelStyle}>Phase Description</label>
+                <input style={inputStyle} value={form.phase_description || ''}
+                  onChange={e => setForm({ ...form, phase_description: e.target.value })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Est Hours</label>
+                <input style={inputStyle} type="number" min={0} value={form.est_hours ?? 0}
+                  onChange={e => setForm({ ...form, est_hours: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Est Cost</label>
+                <input style={inputStyle} type="number" min={0} value={form.est_cost ?? 0}
+                  onChange={e => setForm({ ...form, est_cost: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label style={labelStyle}>Notes</label>
+                <input style={inputStyle} value={form.provisional_notes || ''}
+                  onChange={e => setForm({ ...form, provisional_notes: e.target.value })} />
+              </div>
+              <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => addOne.mutate(form)}
+                  disabled={!form.phase.trim() || !form.job.trim() || addOne.isPending}
+                  style={{
+                    padding: '0.5rem 1.25rem', border: 'none', borderRadius: '6px',
+                    backgroundColor: (!form.phase.trim() || !form.job.trim()) ? '#d1d5db' : '#3b82f6',
+                    color: 'white', cursor: (!form.phase.trim() || !form.job.trim()) ? 'default' : 'pointer',
+                    fontWeight: 500
+                  }}>
+                  {addOne.isPending ? 'Adding…' : 'Add Provisional Code'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'paste' && (
+            <div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                Paste TSV/CSV from Excel. Columns: <b>Phase, Cost Type, Est Hours, Est Cost, [Job], [Description]</b>.
+                Cost Type accepts <code>1–6</code> or labels like <code>Labor</code>, <code>Material</code>, <code>Subs</code>.
+                Job defaults to <code>{defaultJob || '(blank — set in your paste)'}</code>.
+              </div>
+              <textarea
+                value={pasteText}
+                onChange={e => { setPasteText(e.target.value); setPreview(null); }}
+                placeholder={'1010-100\tLabor\t120\t8400\n1020-200\tMaterial\t0\t15000'}
+                style={{ width: '100%', minHeight: '140px', padding: '0.6rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.82rem', fontFamily: 'monospace' }} />
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  onClick={() => parsePaste(pasteText)}
+                  disabled={!pasteText.trim()}
+                  style={{ padding: '0.4rem 0.9rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: pasteText.trim() ? 'pointer' : 'default', fontSize: '0.82rem' }}>
+                  Preview
+                </button>
+                {preview && preview.rows.length > 0 && (
+                  <button
+                    onClick={() => addBulk.mutate(preview.rows)}
+                    disabled={addBulk.isPending}
+                    style={{ padding: '0.4rem 0.9rem', border: 'none', borderRadius: '6px', backgroundColor: '#3b82f6', color: 'white', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500 }}>
+                    {addBulk.isPending ? 'Importing…' : `Import ${preview.rows.length} row${preview.rows.length === 1 ? '' : 's'}`}
+                  </button>
+                )}
+              </div>
+              {preview && preview.errors.length > 0 && (
+                <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.78rem', color: '#991b1b' }}>
+                  {preview.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+              {preview && preview.rows.length > 0 && (
+                <div style={{ marginTop: '0.75rem', maxHeight: '180px', overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc' }}>
+                        <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Phase</th>
+                        <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>CT</th>
+                        <th style={{ textAlign: 'right', padding: '0.4rem 0.6rem' }}>Hrs</th>
+                        <th style={{ textAlign: 'right', padding: '0.4rem 0.6rem' }}>Cost</th>
+                        <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Job</th>
+                        <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.rows.map((r, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>{r.phase}</td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>{COST_TYPE_NAMES[r.cost_type]}</td>
+                          <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>{r.est_hours}</td>
+                          <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>${(r.est_cost || 0).toLocaleString()}</td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>{r.job}</td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>{r.phase_description || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Existing provisional codes */}
+          <div style={{ marginTop: '1.5rem' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginBottom: '0.5rem' }}>
+              Existing Provisional Codes ({rows.length})
+            </div>
+            {isLoading ? (
+              <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Loading…</div>
+            ) : rows.length === 0 ? (
+              <div style={{ fontSize: '0.82rem', color: '#94a3b8', fontStyle: 'italic' }}>None yet.</div>
+            ) : (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#fefce8' }}>
+                      <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Phase</th>
+                      <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>CT</th>
+                      <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Job</th>
+                      <th style={{ textAlign: 'right', padding: '0.4rem 0.6rem' }}>Hrs</th>
+                      <th style={{ textAlign: 'right', padding: '0.4rem 0.6rem' }}>Cost</th>
+                      <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem' }}>Description</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => {
+                      const isEditing = editingId === r.id;
+                      const cellInput: React.CSSProperties = { width: '100%', padding: '0.25rem 0.4rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.78rem', boxSizing: 'border-box' };
+                      return (
+                        <tr key={r.id} style={{ borderTop: '1px solid #f1f5f9', backgroundColor: isEditing ? '#f8fafc' : undefined }}>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>
+                            <span style={{ display: 'inline-block', padding: '0.05rem 0.4rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600, marginRight: '0.4rem' }}>PROV</span>
+                            {isEditing
+                              ? <input style={cellInput} value={editDraft.phase ?? ''} onChange={e => setEditDraft(d => ({ ...d, phase: e.target.value }))} />
+                              : r.phase}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>
+                            {isEditing
+                              ? <select style={cellInput} value={editDraft.cost_type ?? r.cost_type} onChange={e => setEditDraft(d => ({ ...d, cost_type: Number(e.target.value) }))}>
+                                  {[1, 2, 3, 4, 5, 6].map(ct => <option key={ct} value={ct}>{COST_TYPE_NAMES[ct]}</option>)}
+                                </select>
+                              : COST_TYPE_NAMES[r.cost_type]}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>
+                            {isEditing
+                              ? <input style={cellInput} value={editDraft.job ?? ''} onChange={e => setEditDraft(d => ({ ...d, job: e.target.value }))} />
+                              : r.job}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
+                            {isEditing
+                              ? <input type="number" min={0} style={{ ...cellInput, textAlign: 'right' }} value={editDraft.est_hours ?? 0} onChange={e => setEditDraft(d => ({ ...d, est_hours: parseFloat(e.target.value) || 0 }))} />
+                              : Number(r.est_hours).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right' }}>
+                            {isEditing
+                              ? <input type="number" min={0} style={{ ...cellInput, textAlign: 'right' }} value={editDraft.est_cost ?? 0} onChange={e => setEditDraft(d => ({ ...d, est_cost: parseFloat(e.target.value) || 0 }))} />
+                              : `$${Number(r.est_cost).toLocaleString()}`}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem' }}>
+                            {isEditing
+                              ? <input style={cellInput} value={editDraft.phase_description ?? ''} onChange={e => setEditDraft(d => ({ ...d, phase_description: e.target.value }))} />
+                              : (r.phase_description || '')}
+                          </td>
+                          <td style={{ padding: '0.3rem 0.6rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {isEditing ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    if (!editDraft.phase?.trim() || !editDraft.job?.trim()) {
+                                      toast.error('Phase and Job are required');
+                                      return;
+                                    }
+                                    updateOne.mutate({ id: r.id, data: editDraft });
+                                  }}
+                                  disabled={updateOne.isPending}
+                                  style={{ padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px', backgroundColor: '#3b82f6', color: 'white', cursor: 'pointer', fontSize: '0.72rem', marginRight: '0.25rem' }}>
+                                  Save
+                                </button>
+                                <button onClick={cancelEdit}
+                                  style={{ padding: '0.2rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.72rem' }}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => startEdit(r)}
+                                  style={{ padding: '0.2rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', backgroundColor: 'white', color: '#1e293b', cursor: 'pointer', fontSize: '0.72rem', marginRight: '0.25rem' }}>
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    const ok = await confirm({ title: `Delete ${r.phase}?`, message: 'Provisional codes referenced by schedule items must be unlinked first.', danger: true });
+                                    if (ok) delOne.mutate(r.id);
+                                  }}
+                                  style={{ padding: '0.2rem 0.5rem', border: '1px solid #fecaca', borderRadius: '4px', backgroundColor: 'white', color: '#991b1b', cursor: 'pointer', fontSize: '0.72rem' }}>
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '0.5rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer' }}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ===== RECONCILIATION REVIEW DIALOG =====
+// Surfaces deltas between PM-typed provisional values and Vista's incoming
+// numbers after an import. Per row: Accept (provisional flag flips off,
+// Vista values win) or Reject (vp_phase_codes rolled back to snapshot).
+const ReconciliationDialog: React.FC<{
+  projectId: number;
+  rows: PendingReconciliation[];
+  onClose: () => void;
+}> = ({ projectId, rows, onClose }) => {
+  const queryClient = useQueryClient();
+  const { toast, confirm } = useTitanFeedback();
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['pendingReconciliations', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['reconciliationCount', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['phaseCodes', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['provisionalPhaseCodes', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['phaseScheduleItems', projectId] });
+  };
+
+  const handleAccept = async (r: PendingReconciliation) => {
+    setBusyId(r.id);
+    try {
+      await phaseScheduleApi.acceptReconciliation(r.id);
+      invalidate();
+      toast.success(`Accepted Vista values for ${r.phase}`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Accept failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async (r: PendingReconciliation) => {
+    const ok = await confirm({
+      title: `Reject Vista update for ${r.phase}?`,
+      message: 'Phase code values roll back to what you originally typed. The row stays provisional and will surface again on the next Vista import.',
+      confirmText: 'Reject',
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyId(r.id);
+    try {
+      await phaseScheduleApi.rejectReconciliation(r.id);
+      invalidate();
+      toast.success(`Reverted to your provisional values for ${r.phase}`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Reject failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAcceptAll = async () => {
+    const ok = await confirm({
+      title: `Accept all ${rows.length} Vista updates?`,
+      message: 'Each provisional row will adopt Vista’s incoming values and lose its PROV flag.',
+      confirmText: 'Accept All',
+    });
+    if (!ok) return;
+    for (const r of rows) {
+      try {
+        await phaseScheduleApi.acceptReconciliation(r.id);
+      } catch {
+        // continue; failed ones stay pending
+      }
+    }
+    invalidate();
+    toast.success('Accepted all reconciliations');
+  };
+
+  const diffCell = (label: string, before: any, after: any, isCurrency = false) => {
+    const b = parseNum(before);
+    const a = parseNum(after);
+    const numeric = typeof before === 'number' || typeof after === 'number' || isCurrency;
+    const changed = numeric ? Math.abs(b - a) > 0.005 : String(before ?? '') !== String(after ?? '');
+    const fmtVal = (v: any) => {
+      if (v === null || v === undefined || v === '') return '—';
+      if (isCurrency) return fmt(parseNum(v));
+      if (numeric) return parseNum(v).toLocaleString();
+      return String(v);
+    };
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 12px 1fr', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', padding: '0.2rem 0' }}>
+        <span style={{ color: '#64748b' }}>{label}</span>
+        <span style={{ color: changed ? '#991b1b' : '#1e293b', textDecoration: changed ? 'line-through' : 'none' }}>{fmtVal(before)}</span>
+        <span style={{ color: '#94a3b8' }}>{changed ? '→' : ''}</span>
+        <span style={{ color: changed ? '#15803d' : '#1e293b', fontWeight: changed ? 600 : 400 }}>{fmtVal(after)}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '12px', width: '92%', maxWidth: '1000px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', color: '#1e293b' }}>Review Vista Updates</h2>
+            <div style={{ marginTop: '0.25rem', fontSize: '0.78rem', color: '#64748b' }}>
+              Vista landed data on {rows.length} provisional code{rows.length === 1 ? '' : 's'}. Per row: <b>Accept</b> to adopt Vista’s values (PROV flag clears), or <b>Reject</b> to roll back to what you typed.
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '1rem 1.5rem' }}>
+          {rows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No pending reconciliations.</div>
+          ) : rows.map(r => (
+            <div key={r.id} style={{ marginBottom: '1rem', padding: '0.75rem 1rem', border: '1px solid #fde68a', backgroundColor: '#fefce8', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ display: 'inline-block', padding: '0.05rem 0.4rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700 }}>PROV</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1e293b' }}>{r.phase} · {COST_TYPE_NAMES[r.cost_type]} · Job {r.job}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button onClick={() => handleReject(r)} disabled={busyId === r.id}
+                    style={{ padding: '0.3rem 0.8rem', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: 'white', color: '#991b1b', cursor: busyId === r.id ? 'default' : 'pointer', fontSize: '0.78rem' }}>
+                    Reject
+                  </button>
+                  <button onClick={() => handleAccept(r)} disabled={busyId === r.id}
+                    style={{ padding: '0.3rem 0.8rem', border: 'none', borderRadius: '6px', backgroundColor: '#3b82f6', color: 'white', cursor: busyId === r.id ? 'default' : 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
+                    {busyId === r.id ? 'Working…' : 'Accept'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 12px 1fr', columnGap: '0.4rem', fontSize: '0.7rem', color: '#64748b', padding: '0.15rem 0', borderBottom: '1px solid #fde68a', marginBottom: '0.2rem' }}>
+                <span />
+                <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>Your value (snapshot)</span>
+                <span />
+                <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>Vista incoming</span>
+              </div>
+              {diffCell('Description', r.snapshot.phase_description, r.phase_description)}
+              {diffCell('Est Hours', r.snapshot.est_hours, r.est_hours)}
+              {diffCell('Est Cost', r.snapshot.est_cost, r.est_cost, true)}
+              {diffCell('JTD Hours', r.snapshot.jtd_hours, r.jtd_hours)}
+              {diffCell('JTD Cost', r.snapshot.jtd_cost, r.jtd_cost, true)}
+              {diffCell('Projected', r.snapshot.projected_cost, r.projected_cost, true)}
+              {diffCell('Committed', r.snapshot.committed_cost, r.committed_cost, true)}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={handleAcceptAll} disabled={rows.length === 0}
+            style={{ padding: '0.5rem 1rem', border: '1px solid #3b82f6', borderRadius: '6px', backgroundColor: 'white', color: '#3b82f6', cursor: rows.length === 0 ? 'default' : 'pointer', fontSize: '0.85rem' }}>
+            Accept All ({rows.length})
+          </button>
+          <button onClick={onClose} style={{ padding: '0.5rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer' }}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===== EDIT ITEM PANEL (for advanced: manual values, delete) =====
 const EditItemPanel: React.FC<{
   item: PhaseScheduleItem;
   months: Date[];
   projectId: number;
+  provisionalCodes: ProvisionalPhaseCode[];
   onSave: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onDelete: (id: number) => void;
   onClose: () => void;
-}> = ({ item, months, projectId, onSave, onDelete, onClose }) => {
-  const { confirm } = useTitanFeedback();
+}> = ({ item, months, projectId, provisionalCodes, onSave, onDelete, onClose }) => {
+  const { confirm, toast } = useTitanFeedback();
+  const queryClient = useQueryClient();
+
+  const matchedProvisional = useMemo(
+    () => provisionalCodes.filter(pc => item.phase_code_ids?.includes(pc.id)),
+    [provisionalCodes, item.phase_code_ids]
+  );
+  const [provDrafts, setProvDrafts] = useState<Record<number, { est_hours: number; est_cost: number; phase: string; phase_description: string }>>(
+    () => Object.fromEntries(
+      matchedProvisional.map(pc => [pc.id, {
+        est_hours: Number(pc.est_hours) || 0,
+        est_cost: Number(pc.est_cost) || 0,
+        phase: pc.phase,
+        phase_description: pc.phase_description || '',
+      }])
+    )
+  );
   const [name, setName] = useState(item.name);
   const [startDate, setStartDate] = useState(fmtDate(item.start_date));
   const [endDate, setEndDate] = useState(fmtDate(item.end_date));
@@ -738,7 +1324,33 @@ const EditItemPanel: React.FC<{
   const [useManualQty, setUseManualQty] = useState(item.use_manual_qty_values || false);
   const [manualQty, setManualQty] = useState<Record<string, number>>(item.manual_monthly_qty || {});
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // First commit any changes to underlying provisional phase codes (so the
+    // schedule item's recomputed totals reflect the new estimates on next read).
+    const provUpdates = matchedProvisional
+      .map(pc => {
+        const d = provDrafts[pc.id];
+        if (!d) return null;
+        const changed: Partial<ProvisionalPhaseCodeInput> = {};
+        if (d.est_hours !== Number(pc.est_hours)) changed.est_hours = d.est_hours;
+        if (d.est_cost !== Number(pc.est_cost)) changed.est_cost = d.est_cost;
+        if (d.phase !== pc.phase) changed.phase = d.phase;
+        if (d.phase_description !== (pc.phase_description || '')) changed.phase_description = d.phase_description;
+        return Object.keys(changed).length > 0 ? { id: pc.id, data: changed } : null;
+      })
+      .filter((x): x is { id: number; data: Partial<ProvisionalPhaseCodeInput> } => x !== null);
+
+    if (provUpdates.length > 0) {
+      try {
+        await Promise.all(provUpdates.map(u => phaseScheduleApi.updateProvisional(u.id, u.data)));
+        queryClient.invalidateQueries({ queryKey: ['provisionalPhaseCodes', projectId] });
+        queryClient.invalidateQueries({ queryKey: ['phaseCodes', projectId] });
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error || 'Failed to update provisional code');
+        return;
+      }
+    }
+
     const payload: any = {
       name,
       contour_type: contour,
@@ -834,6 +1446,62 @@ const EditItemPanel: React.FC<{
           </div>
         </div>
 
+        {matchedProvisional.length > 0 && (
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#fefce8', borderRadius: '8px', border: '1px solid #fde68a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+              <span style={{ display: 'inline-block', padding: '0.05rem 0.4rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700 }}>PROV</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#854d0e' }}>Provisional Phase Code{matchedProvisional.length > 1 ? 's' : ''}</span>
+            </div>
+            <div style={{ fontSize: '0.7rem', color: '#854d0e', marginBottom: '0.5rem' }}>
+              Manually-entered code — edit the estimate below. Reconciled to Vista when real data lands.
+            </div>
+            {matchedProvisional.map(pc => {
+              const draft = provDrafts[pc.id] || { est_hours: Number(pc.est_hours) || 0, est_cost: Number(pc.est_cost) || 0, phase: pc.phase, phase_description: pc.phase_description || '' };
+              const setDraft = (patch: Partial<typeof draft>) =>
+                setProvDrafts(prev => ({ ...prev, [pc.id]: { ...draft, ...patch } }));
+              const costDisplay = draft.est_cost ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(draft.est_cost) : '';
+              return (
+                <div key={pc.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.65rem', color: '#854d0e', display: 'block', marginBottom: '0.15rem' }}>Phase Code</label>
+                    <input type="text" value={draft.phase}
+                      onChange={e => setDraft({ phase: e.target.value })}
+                      style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white' }} />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '0.65rem', color: '#854d0e', display: 'block', marginBottom: '0.15rem' }}>Description</label>
+                    <input type="text" value={draft.phase_description}
+                      onChange={e => setDraft({ phase_description: e.target.value })}
+                      style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.65rem', color: '#854d0e', display: 'block', marginBottom: '0.15rem' }}>Est Hours</label>
+                    <input type="number" min={0} value={draft.est_hours || ''}
+                      onChange={e => setDraft({ est_hours: parseFloat(e.target.value) || 0 })}
+                      placeholder="0"
+                      style={{ width: '100%', padding: '0.35rem 0.5rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white', textAlign: 'right' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.65rem', color: '#854d0e', display: 'block', marginBottom: '0.15rem' }}>Est Cost</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#854d0e', fontSize: '0.8rem', pointerEvents: 'none' }}>$</span>
+                      <input type="text" inputMode="decimal" value={costDisplay}
+                        onChange={e => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '');
+                          const parts = cleaned.split('.');
+                          const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                          setDraft({ est_cost: parseFloat(normalized) || 0 });
+                        }}
+                        placeholder="0"
+                        style={{ width: '100%', padding: '0.35rem 0.5rem 0.35rem 1.1rem', border: '1px solid #fde68a', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', backgroundColor: 'white', textAlign: 'right' }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.5rem' }}>Quantity Tracking</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
@@ -861,18 +1529,58 @@ const EditItemPanel: React.FC<{
             <input type="checkbox" checked={useManual} onChange={e => setUseManual(e.target.checked)} />
             Manual Monthly Cost Values
           </label>
-          {useManual && itemMonths.length > 0 && (
-            <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-              {itemMonths.map(m => {
-                const key = format(m, 'yyyy-MM');
-                return (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.75rem', borderBottom: '1px solid #f1f5f9' }}>
-                    <span style={{ fontSize: '0.8rem', width: '70px' }}>{format(m, 'MMM yyyy')}</span>
-                    <input type="number" value={manualValues[key] || ''} onChange={e => setManualValues({ ...manualValues, [key]: parseFloat(e.target.value) || 0 })}
-                      placeholder="0" style={{ flex: 1, padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem' }} />
+          {useManual && itemMonths.length > 0 && (() => {
+            const budget = Math.max(parseNum(item.total_projected_cost), parseNum(item.total_est_cost)) - parseNum(item.total_jtd_cost);
+            const allocated = itemMonths.reduce((s, m) => s + (manualValues[format(m, 'yyyy-MM')] || 0), 0);
+            const remaining = budget - allocated;
+            const over = remaining < -0.005;
+            return (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', padding: '0.45rem 0.75rem', backgroundColor: over ? '#fef2f2' : '#f8fafc', border: `1px solid ${over ? '#fecaca' : '#e2e8f0'}`, borderRadius: '6px', marginBottom: '0.4rem', fontSize: '0.75rem' }}>
+                  <span><span style={{ color: '#64748b' }}>Budget:</span> <b>{fmt(budget)}</b></span>
+                  <span><span style={{ color: '#64748b' }}>Allocated:</span> <b style={{ color: over ? '#991b1b' : '#1e293b' }}>{fmt(allocated)}</b></span>
+                  <span><span style={{ color: '#64748b' }}>Remaining:</span> <b style={{ color: over ? '#991b1b' : remaining > 0.005 ? '#15803d' : '#1e293b' }}>{fmt(remaining)}</b></span>
+                </div>
+                {over && (
+                  <div style={{ padding: '0.35rem 0.75rem', backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: '4px', fontSize: '0.72rem', marginBottom: '0.4rem' }}>
+                    Allocated exceeds budget by {fmt(-remaining)}.
                   </div>
-                );
-              })}
+                )}
+                <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  {itemMonths.map(m => {
+                    const key = format(m, 'yyyy-MM');
+                    const v = manualValues[key];
+                    const display = v ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(v) : '';
+                    return (
+                      <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.75rem', borderBottom: '1px solid #f1f5f9' }}>
+                        <span style={{ fontSize: '0.8rem', width: '70px' }}>{format(m, 'MMM yyyy')}</span>
+                        <div style={{ flex: 1, position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.8rem', pointerEvents: 'none' }}>$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={display}
+                            onChange={e => {
+                              const cleaned = e.target.value.replace(/[^0-9.]/g, '');
+                              const parts = cleaned.split('.');
+                              const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                              const n = parseFloat(normalized) || 0;
+                              setManualValues({ ...manualValues, [key]: n });
+                            }}
+                            placeholder="0"
+                            style={{ width: '100%', padding: '0.3rem 0.5rem 0.3rem 1.1rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.8rem', boxSizing: 'border-box', textAlign: 'right' }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+          {useManual && itemMonths.length === 0 && (
+            <div style={{ padding: '0.5rem 0.75rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '0.78rem', color: '#854d0e' }}>
+              Set <b>Start Date</b> and <b>End Date</b> above to choose which months to enter values for.
             </div>
           )}
         </div>
@@ -884,6 +1592,11 @@ const EditItemPanel: React.FC<{
               <input type="checkbox" checked={useManualQty} onChange={e => setUseManualQty(e.target.checked)} />
               Manual Monthly Quantity Values
             </label>
+            {useManualQty && itemMonths.length === 0 && (
+              <div style={{ padding: '0.5rem 0.75rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '0.78rem', color: '#854d0e' }}>
+                Set <b>Start Date</b> and <b>End Date</b> above to choose which months to enter quantities for.
+              </div>
+            )}
             {useManualQty && itemMonths.length > 0 && (
               <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                 {itemMonths.map(m => {
@@ -1572,6 +2285,9 @@ const GanttRow: React.FC<{
         {item.cost_types?.map(ct => (
           <span key={ct} style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} />
         ))}
+        {item.has_provisional && (
+          <span title="Provisional phase code — not yet from Vista" style={{ display: 'inline-block', padding: '0 4px', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '3px', fontSize: '0.6rem', fontWeight: 700, flexShrink: 0, lineHeight: '1.2' }}>PROV</span>
+        )}
         {item.phase_code_display && (
           <span style={{ color: '#64748b', flexShrink: 0 }}>{item.phase_code_display} -</span>
         )}
@@ -2514,6 +3230,9 @@ const GridRow: React.FC<{
           {item.cost_types?.map(ct => (
             <span key={ct} style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: COST_TYPE_COLORS[ct], flexShrink: 0 }} title={COST_TYPE_NAMES[ct]} />
           ))}
+          {item.has_provisional && (
+            <span title="Provisional phase code — not yet from Vista" style={{ display: 'inline-block', padding: '0 4px', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '3px', fontSize: '0.6rem', fontWeight: 700, flexShrink: 0, lineHeight: '1.2' }}>PROV</span>
+          )}
           {item.phase_code_display && (
             <span style={{ color: '#64748b', flexShrink: 0 }}>{item.phase_code_display} -</span>
           )}
@@ -3131,6 +3850,8 @@ const PhaseSchedule: React.FC = () => {
   });
   useEffect(() => { localStorage.setItem('phaseSchedule_period', period); }, [period]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showProvisionalModal, setShowProvisionalModal] = useState(false);
+  const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
@@ -3186,6 +3907,16 @@ const PhaseSchedule: React.FC = () => {
   const { data: phaseCodes = [], isLoading: loadingPhaseCodes } = useQuery({
     queryKey: ['phaseCodes', projectId],
     queryFn: () => phaseScheduleApi.getPhaseCodesByProject(Number(projectId)).then(r => r.data),
+  });
+
+  const { data: provisionalCodes = [] } = useQuery({
+    queryKey: ['provisionalPhaseCodes', projectId],
+    queryFn: () => phaseScheduleApi.listProvisional(Number(projectId)).then(r => r.data),
+  });
+
+  const { data: pendingReconciliations = [] } = useQuery({
+    queryKey: ['pendingReconciliations', projectId],
+    queryFn: () => phaseScheduleApi.listReconciliations(Number(projectId)).then(r => r.data),
   });
 
   const { data: scheduleItems = [], isLoading: loadingItems } = useQuery({
@@ -3816,6 +4547,17 @@ const PhaseSchedule: React.FC = () => {
         <div style={{ flex: 1, minWidth: 0 }} />
         <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
         <button
+          onClick={() => setShowProvisionalModal(true)}
+          title="Manually enter phase codes when Vista isn't set up yet (for billing forecasts on new projects)"
+          style={{
+            padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+            border: '1px solid #fde68a', borderRadius: '6px',
+            backgroundColor: '#fefce8', color: '#854d0e', cursor: 'pointer',
+          }}
+        >
+          ✎ Manual Codes
+        </button>
+        <button
           onClick={() => setShowBillingModal(true)}
           title="Configure billable labor rates and markup % by cost type"
           style={{
@@ -3855,6 +4597,19 @@ const PhaseSchedule: React.FC = () => {
           ↓ Export
         </button>
       </div>
+
+      {/* Reconciliation review banner */}
+      {pendingReconciliations.length > 0 && (
+        <div style={{ marginBottom: '0.6rem', padding: '0.5rem 0.75rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+          <div style={{ fontSize: '0.82rem', color: '#854d0e' }}>
+            <b>{pendingReconciliations.length}</b> provisional code{pendingReconciliations.length === 1 ? '' : 's'} {pendingReconciliations.length === 1 ? 'has' : 'have'} new Vista data — review before customer forecasts update.
+          </div>
+          <button onClick={() => setShowReconcileModal(true)}
+            style={{ padding: '0.3rem 0.75rem', border: 'none', borderRadius: '6px', backgroundColor: '#854d0e', color: 'white', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
+            Review
+          </button>
+        </div>
+      )}
 
       {/* Bulk edit bar (shared across Gantt and Grid views) */}
       {scheduleItems.length > 0 && (
@@ -3909,6 +4664,22 @@ const PhaseSchedule: React.FC = () => {
         />
       )}
 
+      {showProvisionalModal && (
+        <ProvisionalCodesModal
+          projectId={Number(projectId)}
+          defaultJob={project?.number || ''}
+          onClose={() => setShowProvisionalModal(false)}
+        />
+      )}
+
+      {showReconcileModal && (
+        <ReconciliationDialog
+          projectId={Number(projectId)}
+          rows={pendingReconciliations}
+          onClose={() => setShowReconcileModal(false)}
+        />
+      )}
+
       {/* Billing Rates Modal */}
       {showBillingModal && project && (
         <BillingRatesModal
@@ -3937,6 +4708,7 @@ const PhaseSchedule: React.FC = () => {
           item={editingItem}
           months={months}
           projectId={Number(projectId)}
+          provisionalCodes={provisionalCodes}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setEditingItem(null)}

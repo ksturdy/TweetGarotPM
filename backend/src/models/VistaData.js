@@ -3239,12 +3239,19 @@ const VistaData = {
   // ==================== PHASE CODES ====================
 
   async upsertPhaseCode(data, tenantId, batchId = null) {
+    // Need full row, not just id — we snapshot the before-state if it's a
+    // provisional collision so a future reject can roll back.
     const existing = await db.query(
-      'SELECT id FROM vp_phase_codes WHERE tenant_id = $1 AND job = $2 AND cost_type = $3 AND phase = $4',
+      `SELECT id, is_provisional, contract, job_description, phase_description,
+              est_hours, est_cost, jtd_hours, jtd_cost,
+              committed_cost, projected_cost, percent_complete, prior_week_cost
+       FROM vp_phase_codes
+       WHERE tenant_id = $1 AND job = $2 AND cost_type = $3 AND phase = $4`,
       [tenantId, data.job, data.cost_type, data.phase]
     );
 
     if (existing.rows.length > 0) {
+      const before = existing.rows[0];
       const result = await db.query(
         `UPDATE vp_phase_codes SET
           contract = $1, job_description = $2, phase_description = $3,
@@ -3257,10 +3264,46 @@ const VistaData = {
           data.contract, data.job_description, data.phase_description,
           data.est_hours, data.est_cost, data.jtd_hours, data.jtd_cost,
           data.committed_cost, data.projected_cost, data.percent_complete,
-          batchId, existing.rows[0].id, data.prior_week_cost || 0
+          batchId, before.id, data.prior_week_cost || 0
         ]
       );
-      return { row: result.rows[0], isNew: false };
+
+      // Provisional collision → stage for PM review. The vp_phase_codes row
+      // now holds Vista's values; the pending row holds the PM's snapshot
+      // so reject can roll back. If a pending reconciliation already exists
+      // for this provisional row (second Vista import while still
+      // unresolved), keep the ORIGINAL snapshot and just update the import
+      // batch — that way reject still rolls back to the PM's typed values,
+      // not to a previous Vista update.
+      let isReconciliationStaged = false;
+      if (before.is_provisional) {
+        const snapshot = {
+          contract: before.contract,
+          job_description: before.job_description,
+          phase_description: before.phase_description,
+          est_hours: before.est_hours,
+          est_cost: before.est_cost,
+          jtd_hours: before.jtd_hours,
+          jtd_cost: before.jtd_cost,
+          committed_cost: before.committed_cost,
+          projected_cost: before.projected_cost,
+          percent_complete: before.percent_complete,
+          prior_week_cost: before.prior_week_cost,
+        };
+        const ins = await db.query(
+          `INSERT INTO pending_phase_code_reconciliations
+             (tenant_id, provisional_phase_code_id, snapshot, vista_import_batch_id)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (provisional_phase_code_id) WHERE status = 'pending'
+           DO UPDATE SET vista_import_batch_id = EXCLUDED.vista_import_batch_id,
+                         updated_at = CURRENT_TIMESTAMP
+           RETURNING id`,
+          [tenantId, before.id, JSON.stringify(snapshot), batchId]
+        );
+        isReconciliationStaged = ins.rowCount > 0;
+      }
+
+      return { row: result.rows[0], isNew: false, isReconciliationStaged };
     } else {
       const result = await db.query(
         `INSERT INTO vp_phase_codes (
