@@ -132,8 +132,8 @@ function buildChangeLines(diffs: Record<string, any>): ChangeLine[] {
       let verdict = '—';
       let color: RGB = SLATE_500;
       if (d != null) {
-        if (d > 0) { verdict = `Increased by ${days(d)}`; color = RED_600; }
-        else if (d < 0) { verdict = `Decreased by ${days(d)}`; color = GREEN_600; }
+        if (d > 0) { verdict = `Increased by ${days(d)}`; color = GREEN_600; }
+        else if (d < 0) { verdict = `Decreased by ${days(d)}`; color = RED_600; }
         else verdict = 'No change';
       } else if (v.from == null && v.to != null) verdict = 'Set';
       else if (v.from != null && v.to == null) verdict = 'Cleared';

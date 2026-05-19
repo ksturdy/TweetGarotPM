@@ -75,8 +75,8 @@ const renderChangeLines = (diffs: Record<string, any>): React.ReactNode => {
     const d: number | null = v.deltaDays;
     let verdict = '—'; let color = '#6b7280';
     if (d != null) {
-      if (d > 0) { verdict = `Increased by ${days(d)}`; color = '#dc2626'; }
-      else if (d < 0) { verdict = `Decreased by ${days(d)}`; color = '#16a34a'; }
+      if (d > 0) { verdict = `Increased by ${days(d)}`; color = '#16a34a'; }
+      else if (d < 0) { verdict = `Decreased by ${days(d)}`; color = '#dc2626'; }
       else verdict = 'No change';
     } else if (v.from == null && v.to != null) verdict = 'Set';
     else if (v.from != null && v.to == null) verdict = 'Cleared';
