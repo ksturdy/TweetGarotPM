@@ -1,5 +1,25 @@
 const db = require('../config/database');
 
+// Run a SQL query with a per-statement timeout so a slow plan can't tie
+// up a connection forever. The timeout is set inside a transaction on a
+// dedicated client (SET LOCAL is transaction-scoped), then released back
+// to the pool.
+async function runWithTimeout(sql, params, timeoutSec = 20) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL statement_timeout = '${timeoutSec}s'`);
+    const result = await client.query(sql, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // Build the project-filter WHERE clause and params array.
 // Returns { whereSql, params, nextParamIndex } — params already includes tenantId at $1.
 function buildProjectFilter(tenantId, filters = {}) {
@@ -101,14 +121,14 @@ function projectFilterCte(whereSql) {
     )`;
 }
 
-// Inline join clause that finds phase codes for a project via either
-// direct linked_project_id or contract-number fallback.
-const PHASE_JOIN = `pc.tenant_id = $1 AND (
-  pc.linked_project_id = fp.id
-  OR (pc.linked_project_id IS NULL
-      AND cardinality(fp.contract_numbers) > 0
-      AND pc.contract = ANY(fp.contract_numbers))
-)`;
+// Inline join clause that finds phase codes for a project via direct
+// linked_project_id. The previous OR fallback to the contract path was
+// expensive at scale (forced hash join, no index help). The
+// linkPhaseCodesByContract() routine runs after every Vista import and
+// backfills linked_project_id, so the fallback is no longer load-bearing.
+// If a phase code row lacks a linked_project_id, fix it with that routine
+// rather than re-introducing the OR here.
+const PHASE_JOIN = `pc.tenant_id = $1 AND pc.linked_project_id = fp.id`;
 
 const CostDatabase = {
   // Distinct values + range info to populate the filter UI.
@@ -207,7 +227,7 @@ const CostDatabase = {
         pt.est_cost, pt.jtd_cost, pt.committed_cost, pt.projected_cost,
         pt.est_hours, pt.jtd_hours
       FROM phase_totals pt`;
-    const { rows } = await db.query(sql, params);
+    const { rows } = await runWithTimeout(sql, params);
     const r = rows[0] || {};
     return {
       project_count: parseInt(r.project_count || 0, 10),
@@ -238,7 +258,7 @@ const CostDatabase = {
       JOIN vp_phase_codes pc ON ${PHASE_JOIN}
       GROUP BY pc.cost_type
       ORDER BY pc.cost_type`;
-    const { rows } = await db.query(sql, params);
+    const { rows } = await runWithTimeout(sql, params);
     return rows.map(r => ({
       cost_type: parseInt(r.cost_type, 10),
       project_count: parseInt(r.project_count, 10),
@@ -285,7 +305,7 @@ const CostDatabase = {
       WHERE 1=1${extra}
       GROUP BY pc.phase, pc.cost_type
       ORDER BY pc.phase, pc.cost_type`;
-    const { rows } = await db.query(sql, params);
+    const { rows } = await runWithTimeout(sql, params);
     return rows.map(r => ({
       phase: r.phase,
       cost_type: parseInt(r.cost_type, 10),
@@ -325,7 +345,7 @@ const CostDatabase = {
       JOIN vp_phase_codes pc ON ${PHASE_JOIN}
       WHERE pc.phase = $${phaseParam}${ctClause}
       ORDER BY fp.number`;
-    const { rows } = await db.query(sql, params);
+    const { rows } = await runWithTimeout(sql, params);
     return rows.map(r => ({
       project_id: r.project_id,
       number: r.number,
@@ -366,7 +386,7 @@ const CostDatabase = {
         WHERE ${PHASE_JOIN}
       ) pc_sum ON true
       ORDER BY fp.number`;
-    const { rows } = await db.query(sql, params);
+    const { rows } = await runWithTimeout(sql, params);
     return rows.map(r => ({
       id: r.id,
       number: r.number,
