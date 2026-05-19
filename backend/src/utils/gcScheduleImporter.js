@@ -315,7 +315,7 @@ async function parsePDF(buffer) {
 // Per-line PDF parser logic, factored out so the re-parse script (which
 // reads stored raw.line values from a prior import) can run the same logic
 // without re-extracting text from a PDF buffer.
-function parsePdfLines(lines) {
+function parsePdfLines(lines, options = {}) {
   // Match: 04-Aug-25, 4-Aug-2025, 8/15/26, 2026-08-15
   const dateRe = /\b(\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)-\d{2,4}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/gi;
   // Some PDFs (e.g. BDW lookahead) prepend a row-index column before the
@@ -329,8 +329,36 @@ function parsePdfLines(lines) {
   // P6 / common GC single-segment patterns: A####, CROC####, CROC.####, AA-####.
   const singleSegIdRe = /^([A-Z]{1,6}[\.\-]?\d{3,6})\b/;
 
+  // BDW lookahead PDFs print BOTH "Prev Wk Start/Fin" AND current "Start/Finish"
+  // columns. If we naively take the first two dates per row, we get the previous
+  // week's dates instead of the current ones. Detect that layout so we can take
+  // the LAST dates instead. Two signals:
+  //   1. Explicit header text "Prev Wk Start" or "Prev Wk Fin" anywhere in the
+  //      doc (works for fresh PDF imports where the header lines are present).
+  //   2. Fallback for re-parse, where only activity rows are available: if at
+  //      least 25% of date-bearing rows carry ≥3 dates, treat as Prev/Current.
+  let bdwLayout = options.bdwLayout === true;
+  if (!bdwLayout) {
+    const headerHit = lines.some((l) => /Prev\s*Wk\s*(Start|Fin)/i.test(l));
+    if (headerHit) bdwLayout = true;
+  }
+  if (!bdwLayout) {
+    let dateRows = 0;
+    let prevCurRows = 0;
+    for (const l of lines) {
+      const m = l.match(dateRe);
+      if (!m) continue;
+      dateRows++;
+      if (m.length >= 3) prevCurRows++;
+    }
+    if (dateRows >= 20 && prevCurRows / dateRows >= 0.25) bdwLayout = true;
+  }
+
   const activities = [];
   const warnings = ['PDF parsing is best-effort — review and correct rows. For accurate import, ask the GC for an Excel, CSV, or P6 XER export.'];
+  if (bdwLayout) {
+    warnings.push('Detected a "Prev Wk Start/Fin" + current "Start/Finish" column layout. Using the current (rightmost) dates. Milestone direction (Start vs Finish) is ambiguous from PDF text — verify against the source spreadsheet if available.');
+  }
   let lastSummaryOrder = null;
 
   for (const line of lines) {
@@ -393,12 +421,37 @@ function parsePdfLines(lines) {
     }
     if (!name && !activity_id) continue;
 
-    let start = coerceDate(dates[0]);
-    let finish = dates.length > 1 ? coerceDate(dates[1]) : null;
-    // Column order varies by PDF (P6 prints start→finish; BDW lookahead
-    // prints finish→start). If we have both and they're out of order, swap.
-    if (start && finish && start > finish) {
-      const tmp = start; start = finish; finish = tmp;
+    let start;
+    let finish;
+    if (bdwLayout) {
+      // Columns: Prev Wk Start | Prev Wk Fin | Prev Start Var | Prev Fin Var | Start | Finish
+      // Typical counts after numeric variance columns are skipped:
+      //   4 dates → full activity (Prev WS, Prev WF, Start, Finish) → take last 2
+      //   2 dates → milestone (Prev WS, Start)  OR  (Prev WF, Finish) — ambiguous
+      //            from text alone; assume start-only milestone (more common).
+      //   1 date  → single current date → use as start
+      //   3 dates → uncommon mix; take last 2
+      if (dates.length >= 4) {
+        start = coerceDate(dates[dates.length - 2]);
+        finish = coerceDate(dates[dates.length - 1]);
+      } else if (dates.length === 3) {
+        start = coerceDate(dates[dates.length - 2]);
+        finish = coerceDate(dates[dates.length - 1]);
+      } else if (dates.length === 2) {
+        start = coerceDate(dates[1]);
+        finish = null;
+      } else {
+        start = coerceDate(dates[0]);
+        finish = null;
+      }
+    } else {
+      start = coerceDate(dates[0]);
+      finish = dates.length > 1 ? coerceDate(dates[1]) : null;
+      // Column order varies by PDF (P6 prints start→finish; BDW lookahead
+      // prints finish→start). If we have both and they're out of order, swap.
+      if (start && finish && start > finish) {
+        const tmp = start; start = finish; finish = tmp;
+      }
     }
     const display_order = activities.length;
     const parent_summary_order = isSummary ? null : (lastSummaryOrder != null ? lastSummaryOrder : null);
