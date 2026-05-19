@@ -7,7 +7,7 @@ import { phaseScheduleApi, PhaseCode, PhaseScheduleItem } from '../../services/p
 import { projectLaborRatesApi, ProjectLaborRate } from '../../services/projectLaborRates';
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
-import { format, addMonths, addDays, startOfMonth, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
+import { format, addMonths, addDays, addWeeks, addQuarters, startOfMonth, startOfWeek, startOfQuarter, getQuarter, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
@@ -436,15 +436,64 @@ const generateMonths = (start: Date, end: Date): Date[] => {
   return months;
 };
 
-// Shift definitions for manpower mode. Hours/month uses 52/12 weeks per month.
-const SHIFT_HRS_PER_MONTH: Record<string, number> = {
-  '5/8':  (5 * 8)  * 52 / 12,  // 173.33
-  '5/10': (5 * 10) * 52 / 12,  // 216.67
-  '6/8':  (6 * 8)  * 52 / 12,  // 208
-  '6/10': (6 * 10) * 52 / 12,  // 260
+// Period zoom for the monthly-distribution columns. Week starts Monday.
+const PERIOD_OPTIONS = ['week', 'month', 'quarter'] as const;
+type Period = typeof PERIOD_OPTIONS[number];
+
+const startOfPeriod = (d: Date, period: Period): Date => {
+  if (period === 'week') return startOfWeek(d, { weekStartsOn: 1 });
+  if (period === 'quarter') return startOfQuarter(d);
+  return startOfMonth(d);
 };
+const addPeriod = (d: Date, n: number, period: Period): Date => {
+  if (period === 'week') return addWeeks(d, n);
+  if (period === 'quarter') return addQuarters(d, n);
+  return addMonths(d, n);
+};
+const periodKey = (d: Date, period: Period): string => {
+  if (period === 'week') return format(d, "yyyy-'W'") + format(d, 'MM-dd');
+  if (period === 'quarter') return `${format(d, 'yyyy')}-Q${getQuarter(d)}`;
+  return format(d, 'yyyy-MM');
+};
+const periodLabel = (d: Date, period: Period): string => {
+  if (period === 'week') return format(d, 'MMM d');
+  if (period === 'quarter') return `Q${getQuarter(d)} ${format(d, 'yy')}`;
+  return format(d, 'MMM yy');
+};
+const generatePeriods = (start: Date, end: Date, period: Period): Date[] => {
+  const out: Date[] = [];
+  let current = startOfPeriod(start, period);
+  const last = startOfPeriod(end, period);
+  while (current <= last) {
+    out.push(current);
+    current = addPeriod(current, 1, period);
+  }
+  return out;
+};
+
+// Shift definitions for manpower mode. Hours/month uses 52/12 weeks per month;
+// weeks and quarters derive from the same days/week × hours/day base.
 const SHIFT_OPTIONS = ['5/8', '5/10', '6/8', '6/10'] as const;
 type ShiftKey = typeof SHIFT_OPTIONS[number];
+const SHIFT_BASE: Record<ShiftKey, { days: number; hours: number }> = {
+  '5/8':  { days: 5, hours: 8 },
+  '5/10': { days: 5, hours: 10 },
+  '6/8':  { days: 6, hours: 8 },
+  '6/10': { days: 6, hours: 10 },
+};
+const hoursPerWorkerPerPeriod = (shift: ShiftKey, period: Period): number => {
+  const { days, hours } = SHIFT_BASE[shift];
+  const perWeek = days * hours;
+  if (period === 'week') return perWeek;
+  if (period === 'quarter') return perWeek * 13;     // 52 weeks / 4 quarters
+  return perWeek * 52 / 12;                          // monthly average
+};
+const SHIFT_HRS_PER_MONTH: Record<string, number> = {
+  '5/8':  hoursPerWorkerPerPeriod('5/8',  'month'),  // 173.33
+  '5/10': hoursPerWorkerPerPeriod('5/10', 'month'),  // 216.67
+  '6/8':  hoursPerWorkerPerPeriod('6/8',  'month'),  // 208
+  '6/10': hoursPerWorkerPerPeriod('6/10', 'month'),  // 260
+};
 type GridMode = 'cost' | 'qty' | 'manpower' | 'billable';
 
 // Maps a project's per-cost-type markup % onto a lookup keyed by cost type number.
@@ -468,19 +517,21 @@ const computeProjHrs = (item: PhaseScheduleItem): number => {
   return jtdPi > 0 ? Math.max(estQty / jtdPi, jtdHrs) : jtdHrs > estHrs ? jtdHrs : estHrs;
 };
 
-// Compute monthly distribution for an item
+// Compute distribution for an item across the chosen period buckets (week/month/quarter).
 const computeMonthlyValues = (
   item: PhaseScheduleItem,
-  months: Date[],
+  periods: Date[],
   mode: GridMode,
-  hoursPerWorkerPerMonth: number = SHIFT_HRS_PER_MONTH['5/8'],
+  hoursPerWorker: number = SHIFT_HRS_PER_MONTH['5/8'],
   laborRateById?: Map<number, number>,
-  markupByCt?: Record<number, number>
+  markupByCt?: Record<number, number>,
+  period: Period = 'month'
 ): Record<string, number> => {
   const values: Record<string, number> = {};
   if (!item.start_date || !item.end_date) return values;
 
-  if (mode === 'cost' || mode === 'qty') {
+  if ((mode === 'cost' || mode === 'qty') && period === 'month') {
+    // Manual overrides are stored at month granularity; only honor them in monthly view.
     const useManual = mode === 'cost' ? item.use_manual_values : item.use_manual_qty_values;
     const manualValues = mode === 'cost' ? item.manual_monthly_values : item.manual_monthly_qty;
     if (useManual && manualValues) return manualValues;
@@ -520,19 +571,19 @@ const computeMonthlyValues = (
 
   if (total <= 0) return values;
 
-  const startDate = startOfMonth(ymdToDate(item.start_date)!);
-  const endDate = startOfMonth(ymdToDate(item.end_date)!);
+  const startDate = startOfPeriod(ymdToDate(item.start_date)!, period);
+  const endDate = startOfPeriod(ymdToDate(item.end_date)!, period);
 
-  const itemMonths = months.filter(m => m >= startDate && m <= endDate);
-  if (itemMonths.length === 0) return values;
+  const itemPeriods = periods.filter(p => p >= startDate && p <= endDate);
+  if (itemPeriods.length === 0) return values;
 
-  const multipliers = getContourMultipliers(itemMonths.length, (item.contour_type || 'flat') as ContourType);
-  const perMonth = total / itemMonths.length;
+  const multipliers = getContourMultipliers(itemPeriods.length, (item.contour_type || 'flat') as ContourType);
+  const perPeriod = total / itemPeriods.length;
 
-  itemMonths.forEach((m, i) => {
-    const key = format(m, 'yyyy-MM');
-    const v = perMonth * multipliers[i];
-    values[key] = mode === 'manpower' ? v / hoursPerWorkerPerMonth : v;
+  itemPeriods.forEach((p, i) => {
+    const key = periodKey(p, period);
+    const v = perPeriod * multipliers[i];
+    values[key] = mode === 'manpower' ? v / hoursPerWorker : v;
   });
 
   return values;
@@ -1627,6 +1678,7 @@ const GridView: React.FC<{
   months: Date[];
   mode: GridMode;
   shift: ShiftKey;
+  period: Period;
   laborRates: ProjectLaborRate[];
   markupByCt: Record<number, number>;
   projectId: number;
@@ -1650,7 +1702,7 @@ const GridView: React.FC<{
   prefixFilter: Set<string>;
   onPrefixFilterToggle: (prefix: string) => void;
   onPrefixFilterClear: () => void;
-}> = ({ items, allItems, months, mode, shift, laborRates, markupByCt, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
+}> = ({ items, allItems, months, mode, shift, period, laborRates, markupByCt, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
   // Grid column widths (persisted to localStorage)
   const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
     try {
@@ -1773,7 +1825,7 @@ const GridView: React.FC<{
     setColWidths(prev => ({ ...prev, [col]: maxW }));
   };
 
-  const hpwm = SHIFT_HRS_PER_MONTH[shift];
+  const hpwm = hoursPerWorkerPerPeriod(shift, period);
   const laborRateById = useMemo(() => {
     const m = new Map<number, number>();
     laborRates.forEach(r => m.set(r.id, Number(r.billable_rate) || 0));
@@ -1782,22 +1834,22 @@ const GridView: React.FC<{
   const allMonthlyValues = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     items.forEach(item => {
-      map.set(item.id, computeMonthlyValues(item, months, mode, hpwm, laborRateById, markupByCt));
+      map.set(item.id, computeMonthlyValues(item, months, mode, hpwm, laborRateById, markupByCt, period));
     });
     return map;
-  }, [items, months, mode, hpwm, laborRateById, markupByCt]);
+  }, [items, months, mode, hpwm, laborRateById, markupByCt, period]);
 
   const columnTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     months.forEach(m => {
-      const key = format(m, 'yyyy-MM');
+      const key = periodKey(m, period);
       totals[key] = 0;
       items.forEach(item => {
         totals[key] += allMonthlyValues.get(item.id)?.[key] || 0;
       });
     });
     return totals;
-  }, [items, months, allMonthlyValues]);
+  }, [items, months, period, allMonthlyValues]);
 
   const maxVal = useMemo(() => {
     let max = 0;
@@ -1813,15 +1865,16 @@ const GridView: React.FC<{
     costTypeGroups.forEach(group => {
       const totals: Record<string, number> = {};
       months.forEach(m => {
-        const key = format(m, 'yyyy-MM');
+        const key = periodKey(m, period);
         totals[key] = group.items.reduce((s, item) => s + (allMonthlyValues.get(item.id)?.[key] || 0), 0);
       });
       map.set(group.costType, totals);
     });
     return map;
-  }, [costTypeGroups, months, allMonthlyValues]);
+  }, [costTypeGroups, months, period, allMonthlyValues]);
 
-  const monthColWidth = 62;
+  const monthColWidth = period === 'week' ? 48 : period === 'quarter' ? 78 : 62;
+  const distributionLabel = period === 'week' ? 'Weekly Distribution' : period === 'quarter' ? 'Quarterly Distribution' : 'Monthly Distribution';
   // Compute group widths for spanning headers (skip hidden columns)
   const vw = (col: string) => gv(col) ? (colWidths as any)[col] : 0;
   const estCols = ['estQty', 'uom', 'estHrs', 'estCost', 'estPi'];
@@ -1943,7 +1996,7 @@ const GridView: React.FC<{
             {billColSpan > 0 && <th colSpan={billColSpan} style={{ ...groupHeaderStyle(billGroupW, '#db2777'), background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8' }}>Billing</th>}
             {schedColSpan > 0 && <th colSpan={schedColSpan} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' }}>Schedule</th>}
             {months.length > 0 && (
-              <th colSpan={months.length} style={groupHeaderStyle(months.length * monthColWidth, '#8b5cf6')}>Monthly Distribution</th>
+              <th colSpan={months.length} style={groupHeaderStyle(months.length * monthColWidth, '#8b5cf6')}>{distributionLabel}</th>
             )}
           </tr>
           {/* Column header row */}
@@ -2014,10 +2067,10 @@ const GridView: React.FC<{
             {gv('dur') && <th data-col="dur" onContextMenu={e => gridHeaderContextMenu(e, 'dur', 'Days')} style={thStyle(colWidths.dur, { background: COL_GROUP.sched.hdr })}>Days{resizeHandle('dur')}</th>}
             {gv('pred') && <th data-col="pred" onContextMenu={e => gridHeaderContextMenu(e, 'pred', 'Predecessor')} style={thStyle(colWidths.pred, { background: COL_GROUP.sched.hdr })}>Pred{resizeHandle('pred')}</th>}
             {gv('contour') && <th data-col="contour" onContextMenu={e => gridHeaderContextMenu(e, 'contour', 'Contour')} style={thStyle(colWidths.contour, { background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' })}>Contour{resizeHandle('contour')}</th>}
-            {/* Monthly columns */}
+            {/* Period columns (week / month / quarter) */}
             {months.map(m => (
               <th key={m.toISOString()} style={thStyle(monthColWidth, { borderRight: '1px solid #cbd5e1' })}>
-                {format(m, 'MMM yy')}
+                {periodLabel(m, period)}
               </th>
             ))}
           </tr>
@@ -2030,7 +2083,7 @@ const GridView: React.FC<{
                 <CostTypeSummaryRow
                   group={group} isCollapsed={isCollapsed}
                   onToggle={() => onToggleGroup(group.costType)}
-                  months={months} mode={mode}
+                  months={months} period={period} mode={mode}
                   monthlyTotals={groupMonthlyTotals.get(group.costType) || {}}
                   colWidths={colWidths} monthColWidth={monthColWidth}
                   selectedItems={selectedItems}
@@ -2038,7 +2091,7 @@ const GridView: React.FC<{
                   hiddenCols={gridHiddenCols}
                 />
                 {!isCollapsed && group.items.map(item => (
-                  <GridRow key={item.id} item={item} allItems={allItems} months={months} mode={mode}
+                  <GridRow key={item.id} item={item} allItems={allItems} months={months} period={period} mode={mode}
                     monthlyVals={allMonthlyValues.get(item.id) || {}} maxVal={maxVal}
                     colWidths={colWidths} monthColWidth={monthColWidth}
                     projectId={projectId}
@@ -2155,9 +2208,9 @@ const GridView: React.FC<{
                 {gv('dur') && <td style={{ ...tdTot, width: colWidths.dur, background: COL_GROUP.sched.cell }}>{totDuration || ''}</td>}
                 {gv('pred') && <td style={{ ...tdTot, width: colWidths.pred, background: COL_GROUP.sched.cell }}></td>}
                 {gv('contour') && <td style={{ ...tdTot, width: colWidths.contour, borderRight: '2px solid #94a3b8', background: COL_GROUP.sched.cell }}></td>}
-                {/* Monthly totals */}
+                {/* Period totals */}
                 {months.map(m => {
-                  const key = format(m, 'yyyy-MM');
+                  const key = periodKey(m, period);
                   const total = columnTotals[key] || 0;
                   return (
                     <td key={key} style={{ ...tdTot, width: monthColWidth }}>
@@ -2200,6 +2253,7 @@ const CostTypeSummaryRow: React.FC<{
   isCollapsed: boolean;
   onToggle: () => void;
   months: Date[];
+  period: Period;
   mode: GridMode;
   monthlyTotals: Record<string, number>;
   colWidths: typeof GRID_COL_DEFAULTS;
@@ -2207,7 +2261,7 @@ const CostTypeSummaryRow: React.FC<{
   selectedItems: Set<number>;
   onToggleGroupSelection: () => void;
   hiddenCols: Set<string>;
-}> = ({ group, isCollapsed, onToggle, months, mode, monthlyTotals, colWidths, monthColWidth, selectedItems, onToggleGroupSelection, hiddenCols }) => {
+}> = ({ group, isCollapsed, onToggle, months, period, mode, monthlyTotals, colWidths, monthColWidth, selectedItems, onToggleGroupSelection, hiddenCols }) => {
   const sv = (col: string) => !hiddenCols.has(col);
   const checkRef = useRef<HTMLInputElement>(null);
   const allSelected = group.items.length > 0 && group.items.every(i => selectedItems.has(i.id));
@@ -2297,9 +2351,9 @@ const CostTypeSummaryRow: React.FC<{
       {sv('dur') && <td style={{ ...tdS, width: colWidths.dur, textAlign: 'center', backgroundColor: COL_GROUP.sched.cell }}>{group.duration || ''}</td>}
       {sv('pred') && <td style={{ ...tdS, width: colWidths.pred, backgroundColor: COL_GROUP.sched.cell }}></td>}
       {sv('contour') && <td style={{ ...tdS, width: colWidths.contour, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.sched.cell }}></td>}
-      {/* Monthly subtotals */}
+      {/* Period subtotals */}
       {months.map(m => {
-        const key = format(m, 'yyyy-MM');
+        const key = periodKey(m, period);
         const val = monthlyTotals[key] || 0;
         return (
           <td key={key} style={{
@@ -2320,6 +2374,7 @@ const GridRow: React.FC<{
   item: PhaseScheduleItem;
   allItems: PhaseScheduleItem[];
   months: Date[];
+  period: Period;
   mode: GridMode;
   monthlyVals: Record<string, number>;
   maxVal: number;
@@ -2332,7 +2387,7 @@ const GridRow: React.FC<{
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
   hiddenCols: Set<string>;
-}> = React.memo(({ item, allItems, months, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
+}> = React.memo(({ item, allItems, months, period, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
   const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
   const dateLocked = (item.linked_resolved_count || 0) > 0;
@@ -2656,7 +2711,7 @@ const GridRow: React.FC<{
 
       {/* Monthly value columns */}
       {months.map(m => {
-        const key = format(m, 'yyyy-MM');
+        const key = periodKey(m, period);
         const val = monthlyVals[key] || 0;
         const intensity = maxVal > 0 ? val / maxVal : 0;
         const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : 'transparent';
@@ -3055,6 +3110,11 @@ const PhaseSchedule: React.FC = () => {
     return (saved && SHIFT_OPTIONS.includes(saved as ShiftKey) ? saved : '5/8') as ShiftKey;
   });
   useEffect(() => { localStorage.setItem('phaseSchedule_shift', shift); }, [shift]);
+  const [period, setPeriod] = useState<Period>(() => {
+    const saved = localStorage.getItem('phaseSchedule_period');
+    return (saved && (PERIOD_OPTIONS as readonly string[]).includes(saved) ? saved : 'month') as Period;
+  });
+  useEffect(() => { localStorage.setItem('phaseSchedule_period', period); }, [period]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -3175,7 +3235,7 @@ const PhaseSchedule: React.FC = () => {
     return ids;
   }, [scheduleItems]);
 
-  const months = useMemo(() => {
+  const dateBounds = useMemo(() => {
     let earliest: Date | null = null;
     let latest: Date | null = null;
     scheduleItems.forEach(item => {
@@ -3184,9 +3244,26 @@ const PhaseSchedule: React.FC = () => {
       const e = ymdToDate(item.end_date);
       if (e && (!latest || e > latest)) latest = e;
     });
-    if (!earliest || !latest) return [];
-    return generateMonths(addMonths(earliest, -1), addMonths(latest, 1));
+    return { earliest, latest };
   }, [scheduleItems]);
+
+  // Monthly buckets — used by the Gantt view and the dashboard chart, which
+  // are not zoom-aware. Always monthly with a 1-month pad on each end.
+  const months = useMemo(() => {
+    if (!dateBounds.earliest || !dateBounds.latest) return [];
+    return generateMonths(addMonths(dateBounds.earliest, -1), addMonths(dateBounds.latest, 1));
+  }, [dateBounds]);
+
+  // Period buckets — used by the Grid distribution columns. Pads by one
+  // period on each end so cells near the boundary aren't visually clipped.
+  const periods = useMemo(() => {
+    if (!dateBounds.earliest || !dateBounds.latest) return [];
+    return generatePeriods(
+      addPeriod(dateBounds.earliest, -1, period),
+      addPeriod(dateBounds.latest, 1, period),
+      period
+    );
+  }, [dateBounds, period]);
 
   const totalEstCost = useMemo(() => scheduleItems.reduce((s, i) => s + parseNum(i.total_est_cost), 0), [scheduleItems]);
   const totalJtdCost = useMemo(() => scheduleItems.reduce((s, i) => s + parseNum(i.total_jtd_cost), 0), [scheduleItems]);
@@ -3342,107 +3419,108 @@ const PhaseSchedule: React.FC = () => {
     setBulkEditValues({ start_date: '', end_date: '', duration: '', contour_type: '' });
   }, []);
 
-  // Chart data for manpower curve and cashflow S-curve
+  // Chart data — buckets follow the grid's period zoom, headcount uses the
+  // selected shift's hrs-per-worker-per-period. Same math as the grid so the
+  // chart and the on-screen Manpower column agree at every zoom level.
   const chartData = useMemo(() => {
-    if (months.length === 0) return null;
+    if (periods.length === 0) return null;
 
-    const headcount: number[] = new Array(months.length).fill(0);
-    const monthlyCost: number[] = new Array(months.length).fill(0);
-    const monthlyEstQty: number[] = new Array(months.length).fill(0);
-    const monthlyEstHrs: number[] = new Array(months.length).fill(0);
+    const headcount: number[] = new Array(periods.length).fill(0);
+    const periodCost: number[] = new Array(periods.length).fill(0);
+    const periodEstQty: number[] = new Array(periods.length).fill(0);
+    const periodEstHrs: number[] = new Array(periods.length).fill(0);
 
-    // Parse date string as local date (avoids UTC timezone shift)
     const parseLocalDate = (d: string): Date => {
       const parts = d.substring(0, 10).split('-');
       return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     };
 
+    const hpwp = hoursPerWorkerPerPeriod(shift, period);
+
     scheduleItems.forEach(item => {
       if (!item.start_date || !item.end_date) return;
       const itemStart = parseLocalDate(item.start_date);
       const itemEnd = parseLocalDate(item.end_date);
-      const startDate = startOfMonth(itemStart);
-      const endDate = startOfMonth(itemEnd);
-      const itemMonths = months.filter(m => m >= startDate && m <= endDate);
-      if (itemMonths.length === 0) return;
+      const startBucket = startOfPeriod(itemStart, period);
+      const endBucket = startOfPeriod(itemEnd, period);
+      const itemPeriods = periods.filter(p => p >= startBucket && p <= endBucket);
+      if (itemPeriods.length === 0) return;
 
-      const multipliers = getContourMultipliers(itemMonths.length, (item.contour_type || 'flat') as ContourType);
+      const multipliers = getContourMultipliers(itemPeriods.length, (item.contour_type || 'flat') as ContourType);
       const isLabor = item.cost_types?.[0] === 1;
 
-      // Distribute est cost across months
       const estCost = parseNum(item.total_est_cost);
       if (estCost > 0) {
-        const perMonthCost = estCost / itemMonths.length;
-        itemMonths.forEach((m, i) => {
-          const idx = months.findIndex(mm => mm.getTime() === m.getTime());
-          if (idx >= 0) monthlyCost[idx] += perMonthCost * multipliers[i];
+        const perPeriodCost = estCost / itemPeriods.length;
+        itemPeriods.forEach((p, i) => {
+          const idx = periods.findIndex(pp => pp.getTime() === p.getTime());
+          if (idx >= 0) periodCost[idx] += perPeriodCost * multipliers[i];
         });
       }
 
-      // Convert labor hours to headcount per month (cost type 1 only)
       if (isLabor) {
         const estHrs = parseNum(item.total_est_hours);
         const estQty = parseNum(item.quantity);
-
-        if (estHrs > 0) {
-          // Count total working days across the item's full duration
-          const totalWorkingDays = eachDayOfInterval({ start: itemStart, end: itemEnd })
-            .filter(d => !isWeekend(d)).length;
-          if (totalWorkingDays === 0) return;
-
-          // Base workers = total hours / total working days / 8 hrs per day
-          const baseWorkers = estHrs / totalWorkingDays / 8;
-
-          // Distribute hours and quantity monthly for PI computation
-          const perMonthHrs = estHrs / itemMonths.length;
-          const perMonthQty = estQty / itemMonths.length;
-          itemMonths.forEach((m, i) => {
-            const idx = months.findIndex(mm => mm.getTime() === m.getTime());
+        // Headcount uses REMAINING hours (projected − JTD) to mirror the grid's
+        // Manpower column — work already done shouldn't add to future crew.
+        const jtdHrsItem = parseNum(item.total_jtd_hours);
+        const remHrsItem = Math.max(0, computeProjHrs(item) - jtdHrsItem);
+        if (remHrsItem > 0) {
+          const perPeriodRemHrs = remHrsItem / itemPeriods.length;
+          itemPeriods.forEach((p, i) => {
+            const idx = periods.findIndex(pp => pp.getTime() === p.getTime());
             if (idx >= 0) {
-              headcount[idx] += baseWorkers * multipliers[i];
-              monthlyEstHrs[idx] += perMonthHrs * multipliers[i];
-              if (estQty > 0) monthlyEstQty[idx] += perMonthQty * multipliers[i];
+              headcount[idx] += (perPeriodRemHrs * multipliers[i]) / hpwp;
+            }
+          });
+        }
+        // PI baseline still uses the FULL estimate (estPi is a planning baseline,
+        // not a forward-looking remaining-work figure).
+        if (estHrs > 0) {
+          const perPeriodHrs = estHrs / itemPeriods.length;
+          const perPeriodQty = estQty / itemPeriods.length;
+          itemPeriods.forEach((p, i) => {
+            const idx = periods.findIndex(pp => pp.getTime() === p.getTime());
+            if (idx >= 0) {
+              periodEstHrs[idx] += perPeriodHrs * multipliers[i];
+              if (estQty > 0) periodEstQty[idx] += perPeriodQty * multipliers[i];
             }
           });
         }
       }
     });
 
-    // Cumulative cost for S-curve
     const cumulativeCost: number[] = [];
     let running = 0;
-    monthlyCost.forEach(v => { running += v; cumulativeCost.push(running); });
+    periodCost.forEach(v => { running += v; cumulativeCost.push(running); });
 
-    // Cumulative PI: estimated baseline (labor items: cumulative qty / cumulative hrs)
     const estPiLine: (number | null)[] = [];
     let cumQty = 0, cumHrs = 0;
-    months.forEach((_m, i) => {
-      cumQty += monthlyEstQty[i];
-      cumHrs += monthlyEstHrs[i];
+    periods.forEach((_p, i) => {
+      cumQty += periodEstQty[i];
+      cumHrs += periodEstHrs[i];
       estPiLine.push(cumHrs > 0 ? cumQty / cumHrs : null);
     });
 
-    // Actual JTD PI - flat line up to current month
-    const today = startOfMonth(new Date());
-    const todayIdx = months.findIndex(m => m >= today);
+    const today = startOfPeriod(new Date(), period);
+    const todayIdx = periods.findIndex(p => p >= today);
     const laborItems = scheduleItems.filter(i => i.cost_types?.[0] === 1);
     const totalJtdQtyVal = laborItems.reduce((s, i) => s + parseNum(i.quantity_installed), 0);
     const totalJtdHrsVal = laborItems.reduce((s, i) => s + parseNum(i.total_jtd_hours), 0);
     const actualPi = totalJtdHrsVal > 0 ? totalJtdQtyVal / totalJtdHrsVal : null;
-    const actualPiLine: (number | null)[] = months.map((_m, i) => {
+    const actualPiLine: (number | null)[] = periods.map((_p, i) => {
       if (todayIdx >= 0 && i <= todayIdx && actualPi !== null) return actualPi;
       return null;
     });
 
-    // Actual JTD cost line - flat up to current month
-    const jtdLine: (number | null)[] = months.map((_m, i) => {
+    const jtdLine: (number | null)[] = periods.map((_p, i) => {
       if (todayIdx >= 0 && i <= todayIdx) return totalJtdCost;
       return null;
     });
 
-    const labels = months.map(m => format(m, 'MMM yy'));
+    const labels = periods.map(p => periodLabel(p, period));
     return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine };
-  }, [scheduleItems, months, totalJtdCost]);
+  }, [scheduleItems, periods, period, shift, totalJtdCost]);
 
   const handleAdd = (ids: number[], groupBy: string) => {
     createMutation.mutate({ projectId: Number(projectId), phaseCodeIds: ids, groupBy });
@@ -3586,101 +3664,10 @@ const PhaseSchedule: React.FC = () => {
 
   return (
     <div>
-      {/* Header: title+stats+buttons on left, charts on right */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem', alignItems: 'stretch' }}>
-        {/* Left: title, stats, buttons */}
-        <div style={{ flexShrink: 0, minWidth: '280px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <Link to={`/projects/${projectId}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>&larr; Back to Project</Link>
-            <h1 style={{ margin: '0.25rem 0 0.15rem', fontSize: '1.3rem' }}>Phase Schedule</h1>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>{project?.name || 'Project'}</div>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 1rem', marginBottom: '0.5rem' }}>
-            {[
-              { label: 'Est', value: fmtCompact(totalEstCost), color: '#1e293b' },
-              { label: 'JTD', value: fmtCompact(totalJtdCost), color: '#3b82f6' },
-              { label: 'Rem', value: fmtCompact(totalEstCost - totalJtdCost), color: '#10b981' },
-              { label: 'Items', value: String(scheduleItems.length), color: '#64748b' },
-            ].map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-                <span style={{ fontSize: '0.6rem', color: '#94a3b8', textTransform: 'uppercase' }}>{s.label}</span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: s.color }}>{s.value}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-            <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-              <button onClick={() => setViewMode('gantt')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: viewMode === 'gantt' ? '#3b82f6' : 'white', color: viewMode === 'gantt' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Gantt</button>
-              <button onClick={() => setViewMode('grid')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: viewMode === 'grid' ? '#3b82f6' : 'white', color: viewMode === 'grid' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Grid</button>
-            </div>
-            {viewMode === 'grid' && (
-              <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-                <button onClick={() => setGridMode('cost')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: gridMode === 'cost' ? '#10b981' : 'white', color: gridMode === 'cost' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Cost</button>
-                <button onClick={() => setGridMode('qty')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'qty' ? '#10b981' : 'white', color: gridMode === 'qty' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Qty</button>
-                <button onClick={() => setGridMode('manpower')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'manpower' ? '#10b981' : 'white', color: gridMode === 'manpower' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Manpower</button>
-                <button onClick={() => setGridMode('billable')} title="Customer billing forecast using labor rates + cost-type markup %" style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'billable' ? '#db2777' : 'white', color: gridMode === 'billable' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Billable</button>
-              </div>
-            )}
-            {viewMode === 'grid' && gridMode === 'manpower' && (
-              <div title="Work shift — days per week / hours per day" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Shift</span>
-                <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-                  {SHIFT_OPTIONS.map((s, i) => (
-                    <button key={s} onClick={() => setShift(s)} title={`${s} — ${SHIFT_HRS_PER_MONTH[s].toFixed(0)} hr/worker/mo`}
-                      style={{ padding: '0.3rem 0.5rem', border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #e2e8f0',
-                        backgroundColor: shift === s ? '#7c3aed' : 'white',
-                        color: shift === s ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.72rem' }}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
-            <button
-              onClick={() => setShowBillingModal(true)}
-              title="Configure billable labor rates and markup % by cost type"
-              style={{
-                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
-                border: '1px solid #e2e8f0', borderRadius: '6px',
-                backgroundColor: 'white', color: '#1e293b', cursor: 'pointer',
-              }}
-            >
-              💲 Billing Rates
-            </button>
-            <button
-              onClick={handleStratusSync}
-              disabled={stratusSyncing || scheduleItems.length === 0}
-              title="Sync LF / EA quantities from the latest Stratus import"
-              style={{
-                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
-                border: '1px solid #e2e8f0', borderRadius: '6px',
-                backgroundColor: stratusSyncing ? '#f1f5f9' : 'white',
-                color: stratusSyncing ? '#94a3b8' : '#1e293b',
-                cursor: stratusSyncing || scheduleItems.length === 0 ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.3rem'
-              }}
-            >
-              {stratusSyncing ? 'Syncing...' : '☁ Sync Qty from Stratus'}
-            </button>
-            <button
-              onClick={() => setShowExportModal(true)}
-              disabled={scheduleItems.length === 0}
-              style={{
-                padding: '0.3rem 0.75rem', fontSize: '0.75rem',
-                border: '1px solid #e2e8f0', borderRadius: '6px',
-                backgroundColor: 'white', color: '#1e293b',
-                cursor: scheduleItems.length === 0 ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.3rem'
-              }}
-            >
-              ↓ Export
-            </button>
-          </div>
-        </div>
-        {/* Right: charts side by side */}
-        {chartData && <>
-          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+      {/* Header: charts on top, then title+stats+buttons below */}
+      {chartData && (
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.6rem', alignItems: 'stretch' }}>
+          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
             <div style={{ height: '110px' }}>
               <Line
@@ -3696,7 +3683,7 @@ const PhaseSchedule: React.FC = () => {
               />
             </div>
           </div>
-          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Cashflow (Cumulative)</div>
             <div style={{ height: '110px' }}>
               <Line
@@ -3718,7 +3705,7 @@ const PhaseSchedule: React.FC = () => {
               />
             </div>
           </div>
-          <div style={{ flex: '0 1 28%', minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
+          <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Productivity Index (Labor)</div>
             <div style={{ height: '110px' }}>
               <Line
@@ -3740,7 +3727,112 @@ const PhaseSchedule: React.FC = () => {
               />
             </div>
           </div>
-        </>}
+        </div>
+      )}
+      {/* Single horizontal toolbar: title · stats · view/mode/shift/zoom · spacer · actions */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ flexShrink: 0 }}>
+          <Link to={`/projects/${projectId}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.72rem' }}>&larr; Back to Project</Link>
+          <h1 style={{ margin: '0.1rem 0 0', fontSize: '1.15rem', lineHeight: 1.1 }}>Phase Schedule</h1>
+          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{project?.name || 'Project'}</div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.9rem', flexShrink: 0 }}>
+          {[
+            { label: 'Est', value: fmtCompact(totalEstCost), color: '#1e293b' },
+            { label: 'JTD', value: fmtCompact(totalJtdCost), color: '#3b82f6' },
+            { label: 'Rem', value: fmtCompact(totalEstCost - totalJtdCost), color: '#10b981' },
+            { label: 'Items', value: String(scheduleItems.length), color: '#64748b' },
+          ].map(s => (
+            <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.6rem', color: '#94a3b8', textTransform: 'uppercase' }}>{s.label}</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: s.color }}>{s.value}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+          <button onClick={() => setViewMode('gantt')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: viewMode === 'gantt' ? '#3b82f6' : 'white', color: viewMode === 'gantt' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Gantt</button>
+          <button onClick={() => setViewMode('grid')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: viewMode === 'grid' ? '#3b82f6' : 'white', color: viewMode === 'grid' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Grid</button>
+        </div>
+        {viewMode === 'grid' && (
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+            <button onClick={() => setGridMode('cost')} style={{ padding: '0.3rem 0.6rem', border: 'none', backgroundColor: gridMode === 'cost' ? '#10b981' : 'white', color: gridMode === 'cost' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Cost</button>
+            <button onClick={() => setGridMode('qty')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'qty' ? '#10b981' : 'white', color: gridMode === 'qty' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Qty</button>
+            <button onClick={() => setGridMode('manpower')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'manpower' ? '#10b981' : 'white', color: gridMode === 'manpower' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Manpower</button>
+            <button onClick={() => setGridMode('billable')} title="Customer billing forecast using labor rates + cost-type markup %" style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'billable' ? '#db2777' : 'white', color: gridMode === 'billable' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Billable</button>
+          </div>
+        )}
+        {viewMode === 'grid' && gridMode === 'manpower' && (
+          <div title="Work shift — days per week / hours per day" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Shift</span>
+            <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+              {SHIFT_OPTIONS.map((s, i) => (
+                <button key={s} onClick={() => setShift(s)} title={`${s} — ${SHIFT_HRS_PER_MONTH[s].toFixed(0)} hr/worker/mo`}
+                  style={{ padding: '0.3rem 0.5rem', border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #e2e8f0',
+                    backgroundColor: shift === s ? '#7c3aed' : 'white',
+                    color: shift === s ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.72rem' }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {viewMode === 'grid' && (
+          <div title="Distribution zoom — bucket size for the distribution columns" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Zoom</span>
+            <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+              {(['week', 'month', 'quarter'] as Period[]).map((p, i) => (
+                <button key={p} onClick={() => setPeriod(p)}
+                  title={p === 'week' ? 'Weekly buckets' : p === 'quarter' ? 'Quarterly buckets' : 'Monthly buckets'}
+                  style={{ padding: '0.3rem 0.55rem', border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #e2e8f0',
+                    backgroundColor: period === p ? '#8b5cf6' : 'white',
+                    color: period === p ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.72rem', textTransform: 'capitalize' }}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }} />
+        <button className="btn btn-primary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }} onClick={() => setShowAddModal(true)}>Add Phase Codes</button>
+        <button
+          onClick={() => setShowBillingModal(true)}
+          title="Configure billable labor rates and markup % by cost type"
+          style={{
+            padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+            border: '1px solid #e2e8f0', borderRadius: '6px',
+            backgroundColor: 'white', color: '#1e293b', cursor: 'pointer',
+          }}
+        >
+          💲 Billing Rates
+        </button>
+        <button
+          onClick={handleStratusSync}
+          disabled={stratusSyncing || scheduleItems.length === 0}
+          title="Sync LF / EA quantities from the latest Stratus import"
+          style={{
+            padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+            border: '1px solid #e2e8f0', borderRadius: '6px',
+            backgroundColor: stratusSyncing ? '#f1f5f9' : 'white',
+            color: stratusSyncing ? '#94a3b8' : '#1e293b',
+            cursor: stratusSyncing || scheduleItems.length === 0 ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: '0.3rem'
+          }}
+        >
+          {stratusSyncing ? 'Syncing...' : '☁ Sync Qty from Stratus'}
+        </button>
+        <button
+          onClick={() => setShowExportModal(true)}
+          disabled={scheduleItems.length === 0}
+          style={{
+            padding: '0.3rem 0.75rem', fontSize: '0.75rem',
+            border: '1px solid #e2e8f0', borderRadius: '6px',
+            backgroundColor: 'white', color: '#1e293b',
+            cursor: scheduleItems.length === 0 ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: '0.3rem'
+          }}
+        >
+          ↓ Export
+        </button>
       </div>
 
       {/* Bulk edit bar (shared across Gantt and Grid views) */}
@@ -3778,7 +3870,7 @@ const PhaseSchedule: React.FC = () => {
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
               ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
               availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
-          : <GridView items={filteredItems} allItems={scheduleItems} months={months} mode={gridMode} shift={shift} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          : <GridView items={filteredItems} allItems={scheduleItems} months={periods} mode={gridMode} shift={shift} period={period} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
