@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
   const [viewScope, setViewScope] = useState<ViewScope>('my');
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const { layout, defaultViewScope, save, reset, isSaving } = useDashboardLayout();
+  const { layout, defaultViewScope, isLoading: layoutLoading, save, reset, isSaving } = useDashboardLayout();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -29,13 +29,10 @@ const Dashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!scopeInitialized && defaultViewScope) {
-      setViewScope(defaultViewScope);
-      setScopeInitialized(true);
-    } else if (!scopeInitialized && defaultViewScope === null) {
-      setScopeInitialized(true);
-    }
-  }, [defaultViewScope, scopeInitialized]);
+    if (scopeInitialized || layoutLoading) return;
+    if (defaultViewScope) setViewScope(defaultViewScope);
+    setScopeInitialized(true);
+  }, [defaultViewScope, scopeInitialized, layoutLoading]);
 
   const { data: currentEmployeeResponse } = useQuery({
     queryKey: ['current-employee', user?.id],

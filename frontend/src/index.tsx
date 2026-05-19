@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { TitanFeedbackProvider } from './context/TitanFeedbackContext';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -33,16 +32,12 @@ root.render(
   </React.StrictMode>
 );
 
-// Register service worker for PWA functionality and auto-updates
-serviceWorkerRegistration.register({
-  onUpdate: (registration) => {
-    console.log('New version available! Reloading...');
-    // Automatically reload when update is available
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }
-  },
-  onSuccess: (registration) => {
-    console.log('Service Worker registered successfully');
-  },
-});
+// Clean up any service worker installed by previous builds. Cache-busting
+// is now handled by Cache-Control headers on index.html (no-cache) plus
+// CRA's hashed asset filenames. Safe to remove once all active users have
+// loaded the site at least once after this change.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((registration) => registration.unregister());
+  });
+}
