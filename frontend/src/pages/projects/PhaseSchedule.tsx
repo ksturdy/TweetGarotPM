@@ -2093,7 +2093,11 @@ const GridView: React.FC<{
               if (vPC <= 0) return s;
               const jC = parseNum(i.total_jtd_cost);
               const jH = parseNum(i.total_jtd_hours);
-              const rate = jH > 0 ? jC / jH : 0;
+              const eC = parseNum(i.total_est_cost);
+              const eH = parseNum(i.total_est_hours);
+              const jtdRate = jH > 0 ? jC / jH : 0;
+              const estRate = eH > 0 ? eC / eH : 0;
+              const rate = jtdRate > 0 ? jtdRate : estRate;
               if (rate <= 0) return s;
               const remC = Math.max(0, vPC - jC);
               return s + remC / rate;
@@ -2353,10 +2357,13 @@ const GridRow: React.FC<{
   // Vista projection: ERP value (0 if not available)
   const projCostVista = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost) : 0;
   // Remaining (only meaningful when Vista projection exists): cost = ProjVista − JTD;
-  // hours = Remaining cost ÷ JTD labor rate (JTD $ / JTD hrs); qty = ProjQty − JTD qty.
+  // hours = Remaining cost ÷ labor rate (JTD $ / JTD hrs, falling back to Est $ / Est hrs
+  // when no JTD hours have posted yet); qty = ProjQty − JTD qty.
   const remCost = projCostVista > 0 ? Math.max(0, projCostVista - jtdCost) : 0;
   const jtdLaborRate = jtdHrs > 0 ? jtdCost / jtdHrs : 0;
-  const remHrs = jtdLaborRate > 0 ? remCost / jtdLaborRate : 0;
+  const estLaborRate = estHrs > 0 ? estCost / estHrs : 0;
+  const effLaborRate = jtdLaborRate > 0 ? jtdLaborRate : estLaborRate;
+  const remHrs = effLaborRate > 0 ? remCost / effLaborRate : 0;
   const remQty = Math.max(0, projQty - jtdQty);
   // Excel-style conditional shading: 1% tolerance to avoid false positives from rounding
   const costStyle = (proj: number, baseline: number): { background: string; color: string } => {
@@ -2779,6 +2786,7 @@ const EXPORT_GROUPS = [
   { key: 'proj',    label: 'Projected' },
   { key: 'rem',     label: 'Remaining' },
   { key: 'sched',   label: 'Schedule' },
+  { key: 'bill',    label: 'Billing' },
   { key: 'monthly', label: 'Monthly Distribution' },
 ] as const;
 
@@ -3274,7 +3282,11 @@ const PhaseSchedule: React.FC = () => {
         if (vPC <= 0) return s;
         const jC = parseNum(i.total_jtd_cost);
         const jH = parseNum(i.total_jtd_hours);
-        const rate = jH > 0 ? jC / jH : 0;
+        const eC = parseNum(i.total_est_cost);
+        const eH = parseNum(i.total_est_hours);
+        const jtdRate = jH > 0 ? jC / jH : 0;
+        const estRate = eH > 0 ? eC / eH : 0;
+        const rate = jtdRate > 0 ? jtdRate : estRate;
         if (rate <= 0) return s;
         return s + Math.max(0, vPC - jC) / rate;
       }, 0);
