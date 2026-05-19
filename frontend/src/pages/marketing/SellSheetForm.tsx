@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sellSheetsApi, SellSheet, SellSheetImage } from '../../services/sellSheets';
+import { sellSheetTemplatesApi } from '../../services/sellSheetTemplates';
 import { RichTextEditor } from '../../components/shared/RichTextEditor';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
@@ -36,6 +37,7 @@ const SellSheetForm: React.FC = () => {
     title: '',
     subtitle: '',
     layout_style: 'full_width' as 'full_width' | 'two_column',
+    template_id: '' as string,
     overview: '',
     content: '',
     sidebar_content: '',
@@ -48,14 +50,20 @@ const SellSheetForm: React.FC = () => {
   const [imageUploading, setImageUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Load existing sell sheet if editing
+  // Load existing service offering if editing
   const { data: sellSheet } = useQuery({
     queryKey: ['sellSheet', id],
     queryFn: () => sellSheetsApi.getById(parseInt(id!)).then(res => res.data),
     enabled: isEditMode,
   });
 
-  // Populate form from existing sell sheet
+  // Load available templates
+  const { data: templates = [] } = useQuery({
+    queryKey: ['sellSheetTemplates', 'active'],
+    queryFn: () => sellSheetTemplatesApi.getAll({ is_active: true }).then(res => res.data),
+  });
+
+  // Populate form from existing service offering
   useEffect(() => {
     if (sellSheet) {
       setFormData({
@@ -63,6 +71,7 @@ const SellSheetForm: React.FC = () => {
         title: sellSheet.title || '',
         subtitle: sellSheet.subtitle || '',
         layout_style: sellSheet.layout_style || 'full_width',
+        template_id: sellSheet.template_id != null ? String(sellSheet.template_id) : '',
         overview: sellSheet.overview || '',
         content: sellSheet.content || '',
         sidebar_content: sellSheet.sidebar_content || '',
@@ -115,6 +124,7 @@ const SellSheetForm: React.FC = () => {
       title: formData.title || formData.service_name,
       subtitle: formData.subtitle || undefined,
       layout_style: formData.layout_style,
+      template_id: formData.template_id ? parseInt(formData.template_id, 10) : null,
       overview: formData.overview || undefined,
       content: formData.content || undefined,
       sidebar_content: formData.layout_style === 'two_column' ? (formData.sidebar_content || undefined) : undefined,
@@ -135,6 +145,21 @@ const SellSheetForm: React.FC = () => {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+  };
+
+  const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newTemplateId = e.target.value;
+    setFormData(prev => {
+      const next: typeof prev = { ...prev, template_id: newTemplateId };
+      if (newTemplateId) {
+        const tpl = templates.find(t => String(t.id) === newTemplateId);
+        const layoutFromTpl = tpl?.layout_config?.layout_style;
+        if (layoutFromTpl === 'full_width' || layoutFromTpl === 'two_column') {
+          next.layout_style = layoutFromTpl;
+        }
+      }
+      return next;
+    });
   };
 
   // Image management handlers
@@ -201,10 +226,10 @@ const SellSheetForm: React.FC = () => {
         <div className="sales-page-title">
           <div>
             <Link to="/sell-sheets" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Sell Sheets
+              &larr; Back to Service Offerings
             </Link>
-            <h1>{isEditMode ? 'Edit Sell Sheet' : 'Create Sell Sheet'}</h1>
-            <div className="sales-subtitle">{isEditMode ? 'Update sell sheet content' : 'Create a new service sell sheet'}</div>
+            <h1>{isEditMode ? 'Edit Service Offering' : 'Create Service Offering'}</h1>
+            <div className="sales-subtitle">{isEditMode ? 'Update service offering content' : 'Create a new service offering'}</div>
           </div>
         </div>
       </div>
@@ -243,6 +268,35 @@ const SellSheetForm: React.FC = () => {
             {errors.service_name && (
               <div className="error-message" style={{ marginTop: '0.25rem' }}>
                 {errors.service_name}
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Template</label>
+            <select
+              name="template_id"
+              className="form-input"
+              value={formData.template_id}
+              onChange={handleTemplateChange}
+            >
+              <option value="">— None (custom) —</option>
+              {templates.map(tpl => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                  {tpl.is_default ? ' (Default)' : ''}
+                  {tpl.category ? ` · ${tpl.category}` : ''}
+                </option>
+              ))}
+            </select>
+            {templates.length === 0 && (
+              <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                No templates yet. <Link to="/sell-sheet-templates/create" style={{ color: '#2563eb' }}>Create one</Link> to standardize the layout.
+              </div>
+            )}
+            {formData.template_id && (
+              <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                Selecting a template adopts its layout style. You can still override fields below.
               </div>
             )}
           </div>
@@ -378,7 +432,7 @@ const SellSheetForm: React.FC = () => {
               Images
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: 0, marginBottom: '1rem' }}>
-              Upload images to include in the sell sheet. Set one as the hero image for the header banner.
+              Upload images to include in the service offering. Set one as the hero image for the header banner.
             </p>
 
             {images.length > 0 && (
@@ -504,14 +558,14 @@ const SellSheetForm: React.FC = () => {
             {createMutation.isPending || updateMutation.isPending
               ? 'Saving...'
               : isEditMode
-              ? 'Update Sell Sheet'
-              : 'Create Sell Sheet'}
+              ? 'Update Service Offering'
+              : 'Create Service Offering'}
           </button>
         </div>
 
         {(createMutation.isError || updateMutation.isError) && (
           <div className="error-message" style={{ marginTop: '1rem' }}>
-            Failed to save sell sheet. Please try again.
+            Failed to save service offering. Please try again.
           </div>
         )}
       </form>

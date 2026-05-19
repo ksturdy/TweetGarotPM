@@ -96,7 +96,7 @@ const SellSheetPreviewModal: React.FC<SellSheetPreviewModalProps> = ({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontWeight: 600 }}>Sell Sheet Preview</span>
+        <span style={{ fontWeight: 600 }}>Service Offering Preview</span>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={handlePrint}

@@ -65,11 +65,11 @@ const SellSheetList: React.FC = () => {
   };
 
   if (isLoading) {
-    return <div className="loading">Loading sell sheets...</div>;
+    return <div className="loading">Loading service offerings...</div>;
   }
 
   if (error) {
-    return <div className="error-message">Error loading sell sheets</div>;
+    return <div className="error-message">Error loading service offerings</div>;
   }
 
   return (
@@ -80,13 +80,13 @@ const SellSheetList: React.FC = () => {
             <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Marketing
             </Link>
-            <h1>Sell Sheets</h1>
-            <div className="sales-subtitle">{filteredSellSheets.length} sell sheets</div>
+            <h1>Service Offerings</h1>
+            <div className="sales-subtitle">{filteredSellSheets.length} service offerings</div>
           </div>
         </div>
         <div className="sales-header-actions">
           <Link to="/sell-sheets/create" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-            + Create Sell Sheet
+            + Create Service Offering
           </Link>
         </div>
       </div>
@@ -145,7 +145,7 @@ const SellSheetList: React.FC = () => {
         </div>
       </div>
 
-      {/* Sell Sheets Grid */}
+      {/* Service Offerings Grid */}
       {filteredSellSheets.length > 0 ? (
         <div
           style={{
@@ -271,13 +271,13 @@ const SellSheetList: React.FC = () => {
           }}
         >
           <p style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>
-            No sell sheets found
+            No service offerings found
           </p>
           <button
             className="btn btn-primary"
             onClick={() => navigate('/sell-sheets/create')}
           >
-            Create Your First Sell Sheet
+            Create Your First Service Offering
           </button>
         </div>
       )}

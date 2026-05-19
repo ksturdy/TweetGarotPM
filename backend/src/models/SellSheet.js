@@ -3,20 +3,20 @@ const db = require('../config/database');
 const SellSheet = {
   async create(data, tenantId) {
     const {
-      service_name, title, subtitle, layout_style,
+      service_name, title, subtitle, layout_style, template_id,
       overview, content, sidebar_content, page2_content, footer_content,
       created_by
     } = data;
 
     const result = await db.query(
       `INSERT INTO sell_sheets (
-        service_name, title, subtitle, layout_style,
+        service_name, title, subtitle, layout_style, template_id,
         overview, content, sidebar_content, page2_content, footer_content,
         created_by, tenant_id, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
-        service_name, title || service_name, subtitle, layout_style || 'full_width',
+        service_name, title || service_name, subtitle, layout_style || 'full_width', template_id || null,
         overview, content, sidebar_content, page2_content, footer_content,
         created_by, tenantId, 'draft'
       ]
@@ -72,7 +72,7 @@ const SellSheet = {
 
   async update(id, data, tenantId) {
     const {
-      service_name, title, subtitle, layout_style,
+      service_name, title, subtitle, layout_style, template_id,
       overview, content, sidebar_content, page2_content, footer_content,
       featured, display_order
     } = data;
@@ -83,19 +83,21 @@ const SellSheet = {
         title = COALESCE($2, title),
         subtitle = $3,
         layout_style = COALESCE($4, layout_style),
-        overview = $5,
-        content = $6,
-        sidebar_content = $7,
-        page2_content = $8,
-        footer_content = $9,
-        featured = COALESCE($10, featured),
-        display_order = COALESCE($11, display_order),
+        template_id = $5,
+        overview = $6,
+        content = $7,
+        sidebar_content = $8,
+        page2_content = $9,
+        footer_content = $10,
+        featured = COALESCE($11, featured),
+        display_order = COALESCE($12, display_order),
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $12 AND tenant_id = $13
+       WHERE id = $13 AND tenant_id = $14
        RETURNING *`,
       [
         service_name, title, subtitle !== undefined ? subtitle : null,
         layout_style,
+        template_id !== undefined ? template_id : null,
         overview !== undefined ? overview : null,
         content !== undefined ? content : null,
         sidebar_content !== undefined ? sidebar_content : null,

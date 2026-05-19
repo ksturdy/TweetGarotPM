@@ -7,6 +7,7 @@ export interface SellSheet {
   title?: string;
   subtitle?: string;
   layout_style: 'full_width' | 'two_column';
+  template_id?: number | null;
   overview?: string;
   content?: string;
   sidebar_content?: string;

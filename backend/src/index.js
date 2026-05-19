@@ -97,6 +97,7 @@ const sheetMetalFittingOrderRoutes = require('./routes/sheetMetalFittingOrders')
 const safetyJsaRoutes = require('./routes/safetyJsa');
 const nearMissReportRoutes = require('./routes/nearMissReports');
 const sellSheetRoutes = require('./routes/sellSheets');
+const sellSheetTemplateRoutes = require('./routes/sellSheetTemplates');
 const fieldFavoriteVendorRoutes = require('./routes/fieldFavoriteVendors');
 const projectAssignmentRoutes = require('./routes/projectAssignments');
 const fieldIssueRoutes = require('./routes/fieldIssues');
@@ -257,6 +258,7 @@ app.use('/api/sheet-metal-fitting-orders', sheetMetalFittingOrderRoutes);
 app.use('/api/safety-jsa', safetyJsaRoutes);
 app.use('/api/near-miss-reports', nearMissReportRoutes);
 app.use('/api/sell-sheets', sellSheetRoutes);
+app.use('/api/sell-sheet-templates', sellSheetTemplateRoutes);
 app.use('/api/field-favorite-vendors', fieldFavoriteVendorRoutes);
 app.use('/api/project-assignments', projectAssignmentRoutes);
 app.use('/api/field-issues', fieldIssueRoutes);

@@ -41,6 +41,8 @@ import CaseStudyTemplateForm from './pages/marketing/CaseStudyTemplateForm';
 import SellSheetList from './pages/marketing/SellSheetList';
 import SellSheetForm from './pages/marketing/SellSheetForm';
 import SellSheetDetail from './pages/marketing/SellSheetDetail';
+import SellSheetTemplateList from './pages/marketing/SellSheetTemplateList';
+import SellSheetTemplateForm from './pages/marketing/SellSheetTemplateForm';
 import ServiceOfferingList from './pages/settings/ServiceOfferingList';
 import EmployeeResumeList from './pages/hr/EmployeeResumeList';
 import EmployeeResumeForm from './pages/hr/EmployeeResumeForm';
@@ -400,6 +402,9 @@ const App: React.FC = () => {
                 <Route path="/sell-sheets/create" element={<SellSheetForm />} />
                 <Route path="/sell-sheets/:id" element={<SellSheetDetail />} />
                 <Route path="/sell-sheets/:id/edit" element={<SellSheetForm />} />
+                <Route path="/sell-sheet-templates" element={<SellSheetTemplateList />} />
+                <Route path="/sell-sheet-templates/create" element={<SellSheetTemplateForm />} />
+                <Route path="/sell-sheet-templates/:id" element={<SellSheetTemplateForm />} />
                 <Route path="/case-study-templates" element={<CaseStudyTemplateList />} />
                 <Route path="/case-study-templates/create" element={<CaseStudyTemplateForm />} />
                 <Route path="/case-study-templates/:id" element={<CaseStudyTemplateForm />} />

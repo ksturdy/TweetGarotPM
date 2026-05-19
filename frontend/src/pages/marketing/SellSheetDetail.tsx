@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { sellSheetsApi } from '../../services/sellSheets';
+import { sellSheetTemplatesApi } from '../../services/sellSheetTemplates';
 import SellSheetPreviewModal from '../../components/sellSheets/SellSheetPreviewModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
@@ -28,6 +29,12 @@ const SellSheetDetail: React.FC = () => {
     queryKey: ['sellSheet', id],
     queryFn: () => sellSheetsApi.getById(parseInt(id!)).then(res => res.data),
     enabled: !!id,
+  });
+
+  const { data: template } = useQuery({
+    queryKey: ['sellSheetTemplate', sellSheet?.template_id],
+    queryFn: () => sellSheetTemplatesApi.getById(sellSheet!.template_id!).then(res => res.data),
+    enabled: !!sellSheet?.template_id,
   });
 
   // Workflow mutations
@@ -72,9 +79,9 @@ const SellSheetDetail: React.FC = () => {
 
   const handleWorkflowAction = async (action: string) => {
     const labels: Record<string, string> = {
-      publish: 'publish this sell sheet',
-      archive: 'archive this sell sheet',
-      unarchive: 'un-archive this sell sheet (moves back to draft)',
+      publish: 'publish this service offering',
+      archive: 'archive this service offering',
+      unarchive: 'un-archive this service offering (moves back to draft)',
     };
     const ok = await confirm(`Are you sure you want to ${labels[action]}?`);
     if (ok) {
@@ -85,7 +92,7 @@ const SellSheetDetail: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    const ok = await confirm({ message: 'Are you sure you want to delete this sell sheet? This action cannot be undone.', danger: true });
+    const ok = await confirm({ message: 'Are you sure you want to delete this service offering? This action cannot be undone.', danger: true });
     if (ok) {
       deleteMutation.mutate();
     }
@@ -152,13 +159,13 @@ const SellSheetDetail: React.FC = () => {
   };
 
   if (isLoading) {
-    return <div className="loading">Loading sell sheet...</div>;
+    return <div className="loading">Loading service offering...</div>;
   }
 
   if (error || !sellSheet) {
     return (
       <div className="container">
-        <div className="error-message">Sell sheet not found</div>
+        <div className="error-message">Service offering not found</div>
       </div>
     );
   }
@@ -171,7 +178,7 @@ const SellSheetDetail: React.FC = () => {
           <div>
             <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
               <Link to="/sell-sheets" style={{ color: '#6b7280', textDecoration: 'none' }}>
-                &larr; Back to Sell Sheets
+                &larr; Back to Service Offerings
               </Link>
             </div>
             <h1>{sellSheet.service_name}</h1>
@@ -190,7 +197,7 @@ const SellSheetDetail: React.FC = () => {
               <>
                 <button
                   className="btn"
-                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#10b981', color: 'white', border: 'none' }}
                   onClick={() => handleWorkflowAction('publish')}
                   disabled={publishMutation.isPending}
                 >
@@ -198,7 +205,6 @@ const SellSheetDetail: React.FC = () => {
                 </button>
                 <button
                   className="btn btn-secondary"
-                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
                   onClick={() => handleWorkflowAction('archive')}
                   disabled={archiveMutation.isPending}
                 >
@@ -209,7 +215,6 @@ const SellSheetDetail: React.FC = () => {
             {sellSheet.status === 'published' && (
               <button
                 className="btn btn-secondary"
-                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
                 onClick={() => handleWorkflowAction('archive')}
                 disabled={archiveMutation.isPending}
               >
@@ -219,7 +224,6 @@ const SellSheetDetail: React.FC = () => {
             {sellSheet.status === 'archived' && (
               <button
                 className="btn btn-primary"
-                style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
                 onClick={() => handleWorkflowAction('unarchive')}
                 disabled={unarchiveMutation.isPending}
               >
@@ -238,21 +242,12 @@ const SellSheetDetail: React.FC = () => {
             <button
               className="btn btn-secondary"
               onClick={handleDownloadPdf}
-              style={{ padding: '0.25rem 0.75rem', fontSize: '0.8125rem' }}
             >
               Download PDF
             </button>
             <button
               className="btn"
-              style={{
-                padding: '0.25rem 0.75rem',
-                fontSize: '0.8125rem',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
+              style={{ backgroundColor: '#ef4444', color: 'white', border: 'none' }}
               onClick={handleDelete}
               disabled={deleteMutation.isPending}
             >
@@ -293,6 +288,18 @@ const SellSheetDetail: React.FC = () => {
           <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Layout Style</div>
           <div style={{ fontWeight: 600 }}>{formatLayoutStyle(sellSheet.layout_style)}</div>
         </div>
+        <div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Template</div>
+          <div style={{ fontWeight: 600 }}>
+            {template ? (
+              <Link to={`/sell-sheet-templates/${template.id}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                {template.name}
+              </Link>
+            ) : (
+              <span style={{ color: '#9ca3af', fontWeight: 400 }}>None</span>
+            )}
+          </div>
+        </div>
         {sellSheet.display_order != null && (
           <div>
             <div style={{ fontSize: '0.875rem', color: 'var(--secondary)' }}>Display Order</div>
@@ -320,7 +327,7 @@ const SellSheetDetail: React.FC = () => {
           <div>
             <h3 style={{ margin: 0 }}>Images</h3>
             <div style={{ fontSize: '0.8rem', color: 'var(--secondary)', marginTop: '0.25rem' }}>
-              Upload images for the sell sheet layout (1 hero + supporting photos)
+              Upload images for the service offering layout (1 hero + supporting photos)
             </div>
           </div>
           <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
@@ -355,7 +362,7 @@ const SellSheetDetail: React.FC = () => {
               >
                 <img
                   src={image.image_url || getImageUrl(image.file_path)}
-                  alt={image.caption || 'Sell sheet image'}
+                  alt={image.caption || 'Service offering image'}
                   style={{
                     width: '100%',
                     height: '200px',

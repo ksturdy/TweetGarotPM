@@ -69,7 +69,7 @@ const MarketingList: React.FC = () => {
       name: 'Service Offerings',
       icon: '📑',
       path: '/sell-sheets',
-      desc: 'Service line sell sheets & PDFs',
+      desc: 'Service line offerings & PDFs',
       color: '#f59e0b',
       ready: true,
       inDev: false,

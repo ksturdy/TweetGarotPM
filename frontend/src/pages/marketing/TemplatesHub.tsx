@@ -16,7 +16,7 @@ interface TemplateCategory {
 const TemplatesHub: React.FC = () => {
   const templates: TemplateCategory[] = [
     {
-      name: 'Case Study Templates',
+      name: 'Case Studies',
       icon: '📋',
       path: '/case-study-templates',
       desc: 'Layout templates for case studies',
@@ -25,7 +25,7 @@ const TemplatesHub: React.FC = () => {
       inDev: false,
     },
     {
-      name: 'Proposal Templates',
+      name: 'Proposals',
       icon: '📄',
       path: '/proposal-templates',
       desc: 'Reusable proposal templates',
@@ -33,7 +33,7 @@ const TemplatesHub: React.FC = () => {
       ready: true,
     },
     {
-      name: 'Resume Templates',
+      name: 'Resumes',
       icon: '📑',
       path: '/resume-templates',
       desc: 'Layout templates for employee resumes',
@@ -42,15 +42,16 @@ const TemplatesHub: React.FC = () => {
       inDev: false,
     },
     {
-      name: 'Sell Sheet Templates',
+      name: 'Service Offerings',
       icon: '📰',
       path: '/sell-sheet-templates',
-      desc: 'Layout templates for sell sheets',
+      desc: 'Layout templates for service offering sell sheets',
       color: '#f59e0b',
-      ready: false,
+      ready: true,
+      inDev: false,
     },
     {
-      name: 'Org Chart Templates',
+      name: 'Org Charts',
       icon: '🏗️',
       path: '/org-chart-templates',
       desc: 'Layout templates for project org charts',
@@ -58,7 +59,7 @@ const TemplatesHub: React.FC = () => {
       ready: false,
     },
     {
-      name: 'Email Templates',
+      name: 'Emails',
       icon: '📧',
       path: '/email-templates',
       desc: 'Reusable email & newsletter templates',
