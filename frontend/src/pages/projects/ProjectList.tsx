@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Wheat, Stethoscope, Factory, Warehouse, Newspaper, Mountain, GraduationCap,
+  Building2, Briefcase, Zap, BedDouble, Church, Shield, Truck,
+  RadioTower, TreePine, Recycle, Construction, Droplets, Home,
+  Building, ShoppingBag, Landmark, Server, HardHat, ClipboardList,
+  CircleCheck, CirclePause, CircleX, FileText,
+  type LucideIcon,
+} from 'lucide-react';
 import { projectsApi, Project, BacklogSnapshot } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
@@ -210,40 +218,40 @@ const ProjectList: React.FC = () => {
   const uniqueDepartments = [...new Set((projects || []).map(p => p.department_number).filter(Boolean))].sort();
   const uniqueMarkets = [...new Set((projects || []).map(p => p.market).filter(Boolean))].sort();
 
-  // Helper function to get market icon (VP Markets)
-  const getMarketIcon = (market?: string): string => {
-    const marketIcons: { [key: string]: string } = {
-      // VP Markets
-      'MFG-Food': '🍔',
-      'Health Care': '🏥',
-      'MFG-Other': '🏭',
-      'MFG-Paper': '📄',
-      'Amusement/Recreation': '🎢',
-      'Educational': '🏫',
-      'Manufacturing': '🏭',
-      'Commercial': '🏢',
-      'Office': '🏢',
-      'Power': '⚡',
-      'Lodging': '🏨',
-      'Religious': '⛪',
-      'Public Safety': '🚔',
-      'Transportation': '🚚',
-      'Communication': '📡',
-      'Conservation/Development': '🌲',
-      'Sewage/Waste Disposal': '♻️',
-      'Highway/Street': '🛣️',
-      'Water Supply': '💧',
-      'Residential': '🏠',
-      // Legacy mappings
-      'Healthcare': '🏥',
-      'Education': '🏫',
-      'Industrial': '🏭',
-      'Retail': '🏬',
-      'Government': '🏛️',
-      'Hospitality': '🏨',
-      'Data Center': '💾'
-    };
-    return marketIcons[market || ''] || '🏢';
+  const marketIconMap: { [key: string]: LucideIcon } = {
+    'MFG-Food': Wheat,
+    'Health Care': Stethoscope,
+    'MFG-Other': Warehouse,
+    'MFG-Paper': Newspaper,
+    'Amusement/Recreation': Mountain,
+    'Educational': GraduationCap,
+    'Manufacturing': Factory,
+    'Commercial': Building2,
+    'Office': Briefcase,
+    'Power': Zap,
+    'Lodging': BedDouble,
+    'Religious': Church,
+    'Public Safety': Shield,
+    'Transportation': Truck,
+    'Communication': RadioTower,
+    'Conservation/Development': TreePine,
+    'Sewage/Waste Disposal': Recycle,
+    'Highway/Street': Construction,
+    'Water Supply': Droplets,
+    'Residential': Home,
+    // Legacy mappings
+    'Healthcare': Stethoscope,
+    'Education': GraduationCap,
+    'Industrial': Factory,
+    'Retail': ShoppingBag,
+    'Government': Landmark,
+    'Hospitality': BedDouble,
+    'Data Center': Server,
+  };
+
+  const renderMarketIcon = (market?: string) => {
+    const Icon = marketIconMap[market || ''] || Building;
+    return <Icon size={16} color="white" strokeWidth={2} />;
   };
 
   // Helper function to get market gradient (VP Markets)
@@ -298,20 +306,19 @@ const ProjectList: React.FC = () => {
     return colors[status] || '#6b7280';
   };
 
-  // Helper function to get project icon based on status
-  const getProjectIcon = (status: string): string => {
-    const icons: { [key: string]: string } = {
-      // Vista statuses
-      'Open': '🏗️',
-      'Soft-Closed': '📋',
-      'Hard-Closed': '✅',
-      // Legacy statuses
-      active: '🏗️',
-      on_hold: '⏸️',
-      completed: '✅',
-      cancelled: '❌'
-    };
-    return icons[status] || '📋';
+  const statusIconMap: { [key: string]: LucideIcon } = {
+    'Open': HardHat,
+    'Soft-Closed': ClipboardList,
+    'Hard-Closed': CircleCheck,
+    active: HardHat,
+    on_hold: CirclePause,
+    completed: CircleCheck,
+    cancelled: CircleX,
+  };
+
+  const renderProjectIcon = (status: string) => {
+    const Icon = statusIconMap[status] || FileText;
+    return <Icon size={16} color="white" strokeWidth={2} />;
   };
 
   // Helper function to get project gradient based on status
@@ -1161,7 +1168,7 @@ const ProjectList: React.FC = () => {
                   <td>
                     <div className="sales-project-cell">
                       <div className="sales-project-icon" style={{ background: project.market ? getMarketGradient(project.market) : getProjectGradient(project.status) }}>
-                        {project.market ? getMarketIcon(project.market) : getProjectIcon(project.status)}
+                        {project.market ? renderMarketIcon(project.market) : renderProjectIcon(project.status)}
                       </div>
                       <div className="sales-project-info">
                         <h4>{project.name}</h4>
