@@ -36,15 +36,15 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<File[]>([]);
+  const [pasteFlash, setPasteFlash] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || []);
-    if (selected.length === 0) return;
+  const addFiles = (incoming: File[]) => {
+    if (incoming.length === 0) return;
 
     const accepted: File[] = [];
     const rejected: string[] = [];
-    for (const file of selected) {
+    for (const file of incoming) {
       if (!ALLOWED_TYPES.includes(file.type)) {
         rejected.push(`${file.name} (unsupported type)`);
         continue;
@@ -56,7 +56,9 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
       accepted.push(file);
     }
 
-    setFiles(prev => [...prev, ...accepted]);
+    if (accepted.length > 0) {
+      setFiles(prev => [...prev, ...accepted]);
+    }
 
     if (rejected.length > 0) {
       setErrors(prev => ({ ...prev, files: `Skipped: ${rejected.join(', ')}` }));
@@ -67,10 +69,40 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
         return next;
       });
     }
+  };
 
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    addFiles(selected);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLFormElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    const pasted: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind !== 'file') continue;
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      // Clipboard images arrive with generic names like "image.png" — make them unique.
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      const name = blob.name && blob.name !== 'image.png'
+        ? blob.name
+        : `pasted-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+      pasted.push(new File([blob], name, { type: blob.type }));
+    }
+
+    if (pasted.length === 0) return;
+
+    e.preventDefault();
+    addFiles(pasted);
+    setPasteFlash(true);
+    window.setTimeout(() => setPasteFlash(false), 600);
   };
 
   const removeFile = (index: number) => {
@@ -158,7 +190,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
         Help us improve Titan by sharing your ideas, reporting bugs, or suggesting enhancements.
       </p>
 
-      <form onSubmit={handleSubmit} className="feedback-form">
+      <form onSubmit={handleSubmit} onPaste={handlePaste} className="feedback-form">
         <div className="form-row form-row-4">
           <div className="form-group">
             <label htmlFor="type">Type *</label>
@@ -254,7 +286,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
           </div>
         </div>
 
-        <div className="form-group">
+        <div className={`form-group feedback-attachments-zone${pasteFlash ? ' is-pasted' : ''}`}>
           <label htmlFor="feedback-attachments">Attachments</label>
           <input
             ref={fileInputRef}
@@ -266,7 +298,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
             className="form-control feedback-file-input"
           />
           <div className="feedback-file-hint">
-            Images or PDFs, up to 20 MB each.
+            Images or PDFs, up to 20 MB each. Tip: paste a screenshot here with Ctrl+V.
           </div>
           {files.length > 0 && (
             <ul className="feedback-file-list">
