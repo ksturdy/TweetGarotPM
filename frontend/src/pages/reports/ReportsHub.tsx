@@ -9,6 +9,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GroupsIcon from '@mui/icons-material/Groups';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
@@ -76,6 +77,14 @@ const reports = [
     desc: 'Capacity health and overload signals by project manager',
     color: '#dc2626',
     bg: '#fef2f2',
+  },
+  {
+    name: 'Project Manager Report',
+    Icon: HealthAndSafetyIcon,
+    path: '/reports/pm-report',
+    desc: 'Open job health, financial trends, and AI-generated PM assessments',
+    color: '#7c3aed',
+    bg: '#f5f3ff',
   },
   {
     name: 'Scheduled Reports',

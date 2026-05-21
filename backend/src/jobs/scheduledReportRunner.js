@@ -243,6 +243,27 @@ const REPORT_HANDLERS = {
     };
   },
 
+  async pm_report(report) {
+    const { buildPMReportData } = require('../routes/pmReport');
+    const { generatePMReportPdfBuffer } = require('../utils/pmReportPdfBuffer');
+
+    const filters = report.filters || {};
+    const data = await buildPMReportData(report.tenant_id, filters);
+    const pdfBuffer = await generatePMReportPdfBuffer(data, report.name);
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    const pmLabel = filters.pm_keys?.length
+      ? `${filters.pm_keys.length} selected PM${filters.pm_keys.length === 1 ? '' : 's'}`
+      : `${data.meta.pmCount} PM${data.meta.pmCount === 1 ? '' : 's'}`;
+
+    return {
+      pdfBuffer,
+      filename: `Project-Manager-Report-${dateStr}.pdf`,
+      subject: `Project Manager Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Project Manager Report covering ${pmLabel} and ${data.meta.activeJobsCounted} open job${data.meta.activeJobsCounted === 1 ? '' : 's'}.`,
+    };
+  },
+
   async cash_flow(report) {
     const { buildCashFlowData, buildCashFlowMetrics } = require('../routes/cashFlowReport');
     const { generateCashFlowReportPdfBuffer } = require('../utils/cashFlowReportPdfBuffer');

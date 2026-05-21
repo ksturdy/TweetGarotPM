@@ -13,6 +13,8 @@ import { vistaDataService } from '../../services/vistaData';
 import { teamsApi, Team } from '../../services/teams';
 import { getCampaigns, Campaign } from '../../services/campaigns';
 import recurringSearchesService, { RecurringSearch } from '../../services/recurringSearches';
+import { pmReportApi } from '../../services/pmReport';
+import SearchableMultiSelect from '../../components/SearchableMultiSelect';
 import '../../styles/SalesPipeline.css';
 
 const REPORT_TYPES: { value: string; label: string }[] = [
@@ -25,6 +27,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'campaign', label: 'Campaign Report' },
   { value: 'opportunity_search', label: 'Opportunity Search' },
   { value: 'weekly_sales', label: 'Weekly Sales Report' },
+  { value: 'pm_report', label: 'Project Manager Report' },
 ];
 
 const LOCATION_GROUP_OPTIONS = [
@@ -212,6 +215,34 @@ const ScheduledReports: React.FC = () => {
     queryFn: () => executiveReportApi.getReport(),
     enabled: dialogOpen && form.report_type === 'executive_report',
   });
+
+  // Fetch PM Report data so the dialog can show a multi-select of PMs + departments
+  const { data: pmReportResponse } = useQuery({
+    queryKey: ['pmReportForScheduling'],
+    queryFn: () => pmReportApi.getReport().then(res => res.data),
+    enabled: dialogOpen && form.report_type === 'pm_report',
+  });
+  const pmReportPmOptions = useMemo(() => {
+    if (!pmReportResponse) return [];
+    return pmReportResponse.pms.map(p => ({
+      value: p.key,
+      label: p.pmName,
+      subtitle: p.departmentName
+        ? `${p.departmentName} · ${p.totals.activeJobs} open job${p.totals.activeJobs === 1 ? '' : 's'}`
+        : `${p.totals.activeJobs} open job${p.totals.activeJobs === 1 ? '' : 's'}`,
+    }));
+  }, [pmReportResponse]);
+  const pmReportDeptOptions = useMemo(() => {
+    if (!pmReportResponse) return [];
+    const counts = new Map<string, number>();
+    for (const p of pmReportResponse.pms) {
+      const k = p.departmentName || '(Unassigned)';
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, n]) => ({ value: name, label: name, subtitle: `${n} PM${n === 1 ? '' : 's'}` }));
+  }, [pmReportResponse]);
   const availableSnapshotDates: string[] = useMemo(() => {
     const data = (execReportResponse as any)?.data || execReportResponse || {};
     return data.availableDates || [];
@@ -834,6 +865,49 @@ const ScheduledReports: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Filters (for PM Report) */}
+              {form.report_type === 'pm_report' && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>Filters (Optional)</label>
+                  <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>
+                    Leave both empty to include every PM in the scheduled email. Selections narrow the report.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Project Managers</label>
+                      <SearchableMultiSelect
+                        options={pmReportPmOptions}
+                        values={(form.filters.pm_keys as string[]) || []}
+                        onChange={(vals) => setForm(f => ({ ...f, filters: { ...f.filters, pm_keys: vals.length ? vals : undefined } }))}
+                        placeholder="All PMs — type to filter..."
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Departments</label>
+                      <SearchableMultiSelect
+                        options={pmReportDeptOptions}
+                        values={(form.filters.departments as string[]) || []}
+                        onChange={(vals) => setForm(f => ({ ...f, filters: { ...f.filters, departments: vals.length ? vals : undefined } }))}
+                        placeholder="All departments — type to filter..."
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.5rem', maxWidth: '240px' }}>
+                    <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Health Level</label>
+                    <select
+                      style={selectStyle}
+                      value={(form.filters.health as string) || ''}
+                      onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, health: e.target.value || undefined } }))}
+                    >
+                      <option value="">All Health Levels</option>
+                      <option value="red">At Risk Only</option>
+                      <option value="yellow">Watch Only</option>
+                      <option value="green">Healthy Only</option>
+                    </select>
+                  </div>
                 </div>
               )}
 

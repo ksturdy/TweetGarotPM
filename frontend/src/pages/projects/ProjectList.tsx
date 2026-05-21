@@ -24,16 +24,42 @@ const ProjectList: React.FC = () => {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const FILTERS_STORAGE_KEY = 'projectList_filters';
+  const locationState = location.state as { myItemsOnly?: boolean } | null;
+  const savedFilters = (() => {
+    try {
+      const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) as {
+        searchTerm?: string;
+        statusFilter?: string;
+        departmentFilter?: string;
+        marketFilter?: string;
+        projectManagerFilter?: string;
+        myProjectsOnly?: boolean;
+        myTeamOnly?: boolean;
+      } : {};
+    } catch { return {}; }
+  })();
+
+  const [searchTerm, setSearchTerm] = useState<string>(savedFilters.searchTerm ?? '');
   const [sortColumn, setSortColumn] = useState<string>('number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [hasUserSorted, setHasUserSorted] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>('Open');
-  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const [marketFilter, setMarketFilter] = useState<string>('all');
-  const locationState = location.state as { myItemsOnly?: boolean } | null;
-  const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? false);
-  const [myTeamOnly, setMyTeamOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>(savedFilters.statusFilter ?? 'Open');
+  const [departmentFilter, setDepartmentFilter] = useState<string>(savedFilters.departmentFilter ?? 'all');
+  const [marketFilter, setMarketFilter] = useState<string>(savedFilters.marketFilter ?? 'all');
+  const [projectManagerFilter, setProjectManagerFilter] = useState<string>(savedFilters.projectManagerFilter ?? '');
+  const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? savedFilters.myProjectsOnly ?? false);
+  const [myTeamOnly, setMyTeamOnly] = useState(savedFilters.myTeamOnly ?? false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+        searchTerm, statusFilter, departmentFilter, marketFilter,
+        projectManagerFilter, myProjectsOnly, myTeamOnly,
+      }));
+    } catch {}
+  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly]);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -217,6 +243,15 @@ const ProjectList: React.FC = () => {
   const uniqueStatuses = [...new Set((projects || []).map(p => p.status).filter(Boolean))].sort();
   const uniqueDepartments = [...new Set((projects || []).map(p => p.department_number).filter(Boolean))].sort();
   const uniqueMarkets = [...new Set((projects || []).map(p => p.market).filter(Boolean))].sort();
+  const uniqueProjectManagers = useMemo(() => {
+    const map = new Map<number, string>();
+    (projects || []).forEach(p => {
+      if (p.manager_id && p.manager_name) map.set(p.manager_id, p.manager_name);
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ value: String(id), label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [projects]);
 
   const marketIconMap: { [key: string]: LucideIcon } = {
     'MFG-Food': Wheat,
@@ -377,6 +412,7 @@ const ProjectList: React.FC = () => {
     if (statusFilter !== 'all' && project.status !== statusFilter) return false;
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
+    if (projectManagerFilter && project.manager_id !== Number(projectManagerFilter)) return false;
     if (myProjectsOnly && project.manager_id !== currentEmployeeId) return false;
     if (myTeamOnly && teamMemberEmployeeIds.size > 0 && !teamMemberEmployeeIds.has(project.manager_id)) return false;
 
@@ -870,6 +906,16 @@ const ProjectList: React.FC = () => {
             My Team
           </button>
         </div>
+        <div style={{ minWidth: '200px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project Manager</label>
+          <SearchableSelect
+            options={uniqueProjectManagers}
+            value={projectManagerFilter}
+            onChange={setProjectManagerFilter}
+            placeholder="All PMs"
+            style={{ width: '100%' }}
+          />
+        </div>
         <div style={{ minWidth: '180px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Market</label>
           <select
@@ -932,13 +978,14 @@ const ProjectList: React.FC = () => {
           </div>
         </div>
 
-        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || myProjectsOnly || myTeamOnly || searchTerm) && (
+        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || searchTerm) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
               setStatusFilter('all');
               setDepartmentFilter('all');
               setMarketFilter('all');
+              setProjectManagerFilter('');
               setMyProjectsOnly(false);
               setMyTeamOnly(false);
               setSearchTerm('');
