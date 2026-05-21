@@ -479,6 +479,7 @@ const ProjectFinancials: React.FC = () => {
                     <th style={thStyle}>Projected @ Compl</th>
                     <th style={thStyle}>Variance</th>
                     <th style={thStyle}>Rem Spend</th>
+                    <th style={thStyle}>Wk Change</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,6 +487,7 @@ const ProjectFinancials: React.FC = () => {
                     const jtdVariance = row.est_cost - row.jtd_cost;
                     const projVariance = row.est_cost - row.projected;
                     const remSpend = row.projected - row.committed - row.jtd_cost;
+                    const wkChange = row.jtd_cost - row.prev_wk;
                     return (
                       <tr
                         key={row.costType}
@@ -512,6 +514,7 @@ const ProjectFinancials: React.FC = () => {
                         <td style={{ ...tdStyle, color: getProjectedColor(row.projected, row.est_cost), fontWeight: 600 }}>{fmt(row.projected)}</td>
                         <td style={{ ...tdStyle, color: getVarianceColor(projVariance), fontWeight: 500 }}>{fmt(projVariance)}</td>
                         <td style={{ ...tdStyle, fontWeight: 500, color: remSpend > 0 ? '#3b82f6' : remSpend < 0 ? '#ef4444' : undefined }}>{fmt(remSpend)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500, color: wkChange > 0 ? '#3b82f6' : undefined }}>{fmt(wkChange)}</td>
                       </tr>
                     );
                   })}
@@ -530,6 +533,9 @@ const ProjectFinancials: React.FC = () => {
                     <td style={{ ...tfStyle, color: getVarianceColor(totals.est_cost - totals.projected) }}>{fmt(totals.est_cost - totals.projected)}</td>
                     {(() => { const totalRemSpend = totals.projected - totals.committed - totals.jtd_cost; return (
                       <td style={{ ...tfStyle, color: totalRemSpend > 0 ? '#3b82f6' : totalRemSpend < 0 ? '#ef4444' : undefined }}>{fmt(totalRemSpend)}</td>
+                    ); })()}
+                    {(() => { const totalWkChange = totals.jtd_cost - totals.prev_wk; return (
+                      <td style={{ ...tfStyle, color: totalWkChange > 0 ? '#3b82f6' : undefined }}>{fmt(totalWkChange)}</td>
                     ); })()}
                   </tr>
                 </tfoot>

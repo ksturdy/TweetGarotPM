@@ -202,10 +202,19 @@ const ProjectDetail: React.FC = () => {
   const projectShopField = useMemo(() => {
     if (!vistaContract || !shopFieldHours.length) return null;
     const rows = shopFieldHours.filter(h => h.contract_number === vistaContract.contract_number);
-    const shopHours = rows.filter(r => r.location === 'shop').reduce((s, r) => s + (r.jtd_hours || 0), 0);
-    const fieldHours = rows.filter(r => r.location === 'field').reduce((s, r) => s + (r.jtd_hours || 0), 0);
+    const sumHours = (rs: typeof rows) => rs.reduce((s, r) => s + Number(r.jtd_hours || 0), 0);
+    const shopHours = sumHours(rows.filter(r => r.location === 'shop'));
+    const fieldHours = sumHours(rows.filter(r => r.location === 'field'));
     const totalHours = shopHours + fieldHours;
-    return { shopHours, fieldHours, totalHours, shopPct: totalHours > 0 ? shopHours / totalHours : 0 };
+    const TRADE_LABELS: Record<'pf' | 'sm' | 'pl', string> = { pf: 'PF', sm: 'SM', pl: 'PL' };
+    const byTrade = (['pf', 'sm', 'pl'] as const).map(trade => {
+      const tradeRows = rows.filter(r => r.trade === trade);
+      const shop = sumHours(tradeRows.filter(r => r.location === 'shop'));
+      const field = sumHours(tradeRows.filter(r => r.location === 'field'));
+      const total = shop + field;
+      return { trade, label: TRADE_LABELS[trade], shop, field, total, shopPct: total > 0 ? shop / total : 0 };
+    }).filter(t => t.total > 0);
+    return { shopHours, fieldHours, totalHours, shopPct: totalHours > 0 ? shopHours / totalHours : 0, byTrade };
   }, [vistaContract, shopFieldHours]);
 
   const cashFlowPctOfCv = useMemo(() => {
@@ -371,12 +380,29 @@ const ProjectDetail: React.FC = () => {
               ? `${(projectShopField.shopPct * 100).toFixed(0)}% / ${((1 - projectShopField.shopPct) * 100).toFixed(0)}%`
               : '-'
           }
+          table={
+            projectShopField && projectShopField.byTrade.length > 0
+              ? {
+                  headers: ['Trade', 'Shop', 'Field', '% Shop'],
+                  rows: projectShopField.byTrade.map(t => [
+                    t.label,
+                    Math.round(t.shop).toLocaleString(),
+                    Math.round(t.field).toLocaleString(),
+                    `${(t.shopPct * 100).toFixed(0)}%`,
+                  ]),
+                  footer: [
+                    'Total',
+                    Math.round(projectShopField.shopHours).toLocaleString(),
+                    Math.round(projectShopField.fieldHours).toLocaleString(),
+                    `${(projectShopField.shopPct * 100).toFixed(0)}%`,
+                  ],
+                }
+              : undefined
+          }
           subValue={
             goals?.shop_hours_goal_pct != null
               ? `Goal: ${(goals.shop_hours_goal_pct * 100).toFixed(0)}% shop`
-              : projectShopField && projectShopField.totalHours > 0
-                ? `${projectShopField.shopHours.toLocaleString()} shop / ${projectShopField.fieldHours.toLocaleString()} field`
-                : undefined
+              : undefined
           }
           status={shopFieldStatus}
         />

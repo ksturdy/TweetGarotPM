@@ -9,6 +9,7 @@ interface KpiCardProps {
   status: KpiStatus;
   icon?: string;
   progressBar?: number; // 0-100
+  table?: { headers: string[]; rows: string[][]; footer?: string[] };
 }
 
 const STATUS_COLORS: Record<KpiStatus, { bg: string; accent: string; text: string }> = {
@@ -18,7 +19,7 @@ const STATUS_COLORS: Record<KpiStatus, { bg: string; accent: string; text: strin
   neutral: { bg: '#f1f5f9', accent: '#94a3b8', text: '#475569' },
 };
 
-const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, status, icon, progressBar }) => {
+const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, status, icon, progressBar, table }) => {
   const colors = STATUS_COLORS[status];
 
   return (
@@ -61,18 +62,31 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, status, icon,
         }}>
           {label}
         </span>
+        {table && (
+          <span style={{
+            marginLeft: 'auto',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            color: colors.text,
+            lineHeight: 1.1,
+          }}>
+            {value}
+          </span>
+        )}
       </div>
 
-      {/* Value */}
-      <div style={{
-        fontSize: '1.25rem',
-        fontWeight: 700,
-        color: colors.text,
-        lineHeight: 1.2,
-        marginTop: '0.25rem',
-      }}>
-        {value}
-      </div>
+      {/* Value (standalone — hidden when inlined next to label via table) */}
+      {!table && (
+        <div style={{
+          fontSize: '1.25rem',
+          fontWeight: 700,
+          color: colors.text,
+          lineHeight: 1.2,
+          marginTop: '0.25rem',
+        }}>
+          {value}
+        </div>
+      )}
 
       {/* Progress bar */}
       {progressBar !== undefined && (
@@ -90,6 +104,52 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, subValue, status, icon,
             borderRadius: '2px',
             transition: 'width 0.5s ease',
           }} />
+        </div>
+      )}
+
+      {/* Compact table with headers */}
+      {table && table.rows.length > 0 && (
+        <div style={{
+          marginTop: '0.4rem',
+          display: 'grid',
+          gridTemplateColumns: `auto repeat(${table.headers.length - 1}, 1fr)`,
+          columnGap: '0.65rem',
+          rowGap: '2px',
+          fontSize: '0.62rem',
+          color: colors.text,
+          lineHeight: 1.3,
+        }}>
+          {table.headers.map((h, i) => (
+            <div key={`h-${i}`} style={{
+              textAlign: i === 0 ? 'left' : 'right',
+              fontWeight: 700,
+              fontSize: '0.55rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              opacity: 0.6,
+              borderBottom: `1px solid ${colors.accent}60`,
+              paddingBottom: '2px',
+              marginBottom: '1px',
+            }}>{h}</div>
+          ))}
+          {table.rows.flatMap((row, ri) => row.map((cell, ci) => (
+            <div key={`c-${ri}-${ci}`} style={{
+              textAlign: ci === 0 ? 'left' : 'right',
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: ci === 0 ? 700 : 500,
+              opacity: 0.92,
+            }}>{cell}</div>
+          )))}
+          {table.footer && table.footer.map((cell, ci) => (
+            <div key={`f-${ci}`} style={{
+              textAlign: ci === 0 ? 'left' : 'right',
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: 700,
+              borderTop: `1px solid ${colors.accent}60`,
+              paddingTop: '2px',
+              marginTop: '1px',
+            }}>{cell}</div>
+          ))}
         </div>
       )}
 

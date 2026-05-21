@@ -37,14 +37,17 @@ const ProjectList: React.FC = () => {
         projectManagerFilter?: string;
         myProjectsOnly?: boolean;
         myTeamOnly?: boolean;
+        sortColumn?: string;
+        sortDirection?: 'asc' | 'desc';
+        hasUserSorted?: boolean;
       } : {};
     } catch { return {}; }
   })();
 
   const [searchTerm, setSearchTerm] = useState<string>(savedFilters.searchTerm ?? '');
-  const [sortColumn, setSortColumn] = useState<string>('number');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [hasUserSorted, setHasUserSorted] = useState(false);
+  const [sortColumn, setSortColumn] = useState<string>(savedFilters.sortColumn ?? 'number');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(savedFilters.sortDirection ?? 'desc');
+  const [hasUserSorted, setHasUserSorted] = useState(savedFilters.hasUserSorted ?? false);
   const [statusFilter, setStatusFilter] = useState<string>(savedFilters.statusFilter ?? 'Open');
   const [departmentFilter, setDepartmentFilter] = useState<string>(savedFilters.departmentFilter ?? 'all');
   const [marketFilter, setMarketFilter] = useState<string>(savedFilters.marketFilter ?? 'all');
@@ -57,9 +60,10 @@ const ProjectList: React.FC = () => {
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
         searchTerm, statusFilter, departmentFilter, marketFilter,
         projectManagerFilter, myProjectsOnly, myTeamOnly,
+        sortColumn, sortDirection, hasUserSorted,
       }));
     } catch {}
-  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly]);
+  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, sortColumn, sortDirection, hasUserSorted]);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
