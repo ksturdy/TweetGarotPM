@@ -10,6 +10,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
@@ -85,6 +86,14 @@ const reports = [
     desc: 'Open job health, financial trends, and AI-generated PM assessments',
     color: '#7c3aed',
     bg: '#f5f3ff',
+  },
+  {
+    name: 'Monthly Projections',
+    Icon: CompareArrowsIcon,
+    path: '/reports/projections-report',
+    desc: 'Snapshot-to-snapshot deltas, notes, tasks, and gain/fade per project',
+    color: '#0891b2',
+    bg: '#ecfeff',
   },
   {
     name: 'Scheduled Reports',

@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
+import { projectionNotesApi } from '../../services/projectionNotes';
 import { format } from 'date-fns';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import ProjectionNotesDrawer from '../../components/projects/ProjectionNotesDrawer';
 
 const fmt = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
@@ -127,6 +129,18 @@ const ProjectFinancials: React.FC = () => {
   const [marginOverride, setMarginOverride] = useState('');
   const [marginPctOverride, setMarginPctOverride] = useState('');
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
+  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+
+  const { data: noteCounts = [] } = useQuery({
+    queryKey: ['projectionNoteCounts', projectId],
+    queryFn: () => projectionNotesApi.counts(Number(projectId)).then(r => r.data),
+    enabled: !!projectId,
+  });
+
+  const totalNoteCount = noteCounts.reduce((s, c) => s + c.count, 0);
+  const openHomeworkCount = noteCounts.reduce((s, c) => s + (c.open_homework || 0), 0);
+  const countsByCostType = (ct: number) =>
+    noteCounts.filter(c => c.cost_type === ct).reduce((s, c) => s + c.count, 0);
 
   const toggleJob = (job: string) => {
     setSelectedJobs(prev => {
@@ -338,6 +352,19 @@ const ProjectFinancials: React.FC = () => {
           {c && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
+                onClick={() => setNotesDrawerOpen(true)}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', position: 'relative' }}
+              >
+                Notes
+                {totalNoteCount > 0 && (
+                  <span style={{
+                    marginLeft: '0.35rem', background: openHomeworkCount > 0 ? '#ef4444' : '#94a3b8',
+                    color: '#fff', borderRadius: '999px', padding: '0.05rem 0.4rem', fontSize: '0.65rem',
+                  }}>{totalNoteCount}</span>
+                )}
+              </button>
+              <button
                 onClick={() => captureSnapshotMutation.mutate()}
                 className="btn btn-secondary"
                 style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
@@ -503,6 +530,17 @@ const ProjectFinancials: React.FC = () => {
                             backgroundColor: costTypeColors[i], color: '#fff', fontSize: '0.65rem', fontWeight: 700,
                           }}>{row.num}</span>
                           {row.label}
+                          {countsByCostType(row.costType) > 0 && (
+                            <span
+                              onClick={(e) => { e.stopPropagation(); setNotesDrawerOpen(true); }}
+                              title={`${countsByCostType(row.costType)} note(s) on ${row.label}`}
+                              style={{
+                                marginLeft: '0.4rem', fontSize: '0.65rem', color: '#2563eb',
+                                background: '#eff6ff', border: '1px solid #bfdbfe',
+                                borderRadius: '999px', padding: '0.05rem 0.4rem', cursor: 'pointer',
+                              }}
+                            >💬 {countsByCostType(row.costType)}</span>
+                          )}
                         </td>
                         <td style={tdStyle}>{row.est_hours ? fmtNum(row.est_hours) : '-'}</td>
                         <td style={tdStyle}>{fmt(row.est_cost)}</td>
@@ -754,6 +792,12 @@ const ProjectFinancials: React.FC = () => {
           )}
         </>
       )}
+
+      <ProjectionNotesDrawer
+        projectId={Number(projectId)}
+        open={notesDrawerOpen}
+        onClose={() => setNotesDrawerOpen(false)}
+      />
     </div>
   );
 };

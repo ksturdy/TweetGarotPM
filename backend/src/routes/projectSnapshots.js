@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const ProjectSnapshot = require('../models/ProjectSnapshot');
+const ProjectionNote = require('../models/ProjectionNote');
 const Project = require('../models/Project');
 const VistaData = require('../models/VistaData');
 const { authenticate } = require('../middleware/auth');
@@ -139,10 +140,19 @@ router.post('/:projectId/snapshots', async (req, res) => {
         total_hours_estimate: vistaContract.total_hours_estimate,
         total_hours_jtd: vistaContract.total_hours_jtd,
         total_hours_projected: vistaContract.total_hours_projected,
+
+        // PM / Department (captured for historical accuracy on Projections Report)
+        pm_name: vistaContract.project_manager_name,
+        pm_employee_no: vistaContract.employee_number,
+        department_code: vistaContract.department_code,
+        department_name: vistaContract.linked_department_name,
       }
     };
 
     const snapshot = await ProjectSnapshot.create(snapshotData);
+
+    // Freeze any unattached projection notes into this snapshot
+    await ProjectionNote.attachUnattachedToSnapshot(Number(projectId), tenantId, snapshot.id);
 
     res.status(201).json(snapshot);
   } catch (error) {

@@ -131,6 +131,7 @@ import ReportsHub from './pages/reports/ReportsHub';
 import WeeklySalesReport from './pages/reports/WeeklySalesReport';
 import PMWorkloadReport from './pages/reports/PMWorkloadReport';
 import PMReport from './pages/reports/PMReport';
+import ProjectionsReport from './pages/reports/ProjectionsReport';
 import TenantSettings from './pages/TenantSettings';
 // Field module
 import FieldLayout from './components/field/FieldLayout';
@@ -480,6 +481,7 @@ const App: React.FC = () => {
                 <Route path="/reports/weekly-sales" element={<WeeklySalesReport />} />
                 <Route path="/reports/pm-workload" element={<PMWorkloadReport />} />
                 <Route path="/reports/pm-report" element={<PMReport />} />
+                <Route path="/reports/projections-report" element={<ProjectionsReport />} />
                 <Route path="/executive-report" element={<Navigate to="/reports/executive-report" />} />
                 <Route path="/risk-management/contract-reviews" element={<ContractReviewList />} />
                 <Route path="/risk-management/contract-reviews/upload" element={<ContractReviewUpload />} />

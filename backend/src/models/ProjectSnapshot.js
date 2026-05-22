@@ -31,6 +31,7 @@ const ProjectSnapshot = {
         sm_hours_estimate, sm_hours_jtd, sm_hours_projected,
         pl_hours_estimate, pl_hours_jtd, pl_hours_projected,
         total_hours_estimate, total_hours_jtd, total_hours_projected,
+        pm_name, pm_employee_no, department_code, department_name,
         created_by
       ) VALUES (
         $1, $2, $3,
@@ -48,7 +49,8 @@ const ProjectSnapshot = {
         $43, $44, $45,
         $46, $47, $48,
         $49, $50, $51,
-        $52
+        $52, $53, $54, $55,
+        $56
       )
       ON CONFLICT (project_id, snapshot_date)
       DO UPDATE SET
@@ -99,7 +101,11 @@ const ProjectSnapshot = {
         pl_hours_projected = EXCLUDED.pl_hours_projected,
         total_hours_estimate = EXCLUDED.total_hours_estimate,
         total_hours_jtd = EXCLUDED.total_hours_jtd,
-        total_hours_projected = EXCLUDED.total_hours_projected
+        total_hours_projected = EXCLUDED.total_hours_projected,
+        pm_name = EXCLUDED.pm_name,
+        pm_employee_no = EXCLUDED.pm_employee_no,
+        department_code = EXCLUDED.department_code,
+        department_name = EXCLUDED.department_name
       RETURNING *`,
       [
         projectId, tenantId, snapshotDate,
@@ -120,6 +126,8 @@ const ProjectSnapshot = {
         vistaData.sm_hours_estimate, vistaData.sm_hours_jtd, vistaData.sm_hours_projected,
         vistaData.pl_hours_estimate, vistaData.pl_hours_jtd, vistaData.pl_hours_projected,
         vistaData.total_hours_estimate, vistaData.total_hours_jtd, vistaData.total_hours_projected,
+        vistaData.pm_name || null, vistaData.pm_employee_no || null,
+        vistaData.department_code || null, vistaData.department_name || null,
         createdBy
       ]
     );
