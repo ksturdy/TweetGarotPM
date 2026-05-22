@@ -183,8 +183,10 @@ const ProjectedRevenue: React.FC = () => {
   ) => {
     try {
       await vistaDataService.updateProjectionOverrides(contractId, overrides);
-      // Invalidate both projected revenue and labor forecast caches so they stay in sync
+      // Invalidate all-contracts caches and the single-contract cache used by the
+      // Contract Status Drilldown so its projection strip stays in sync.
       queryClient.invalidateQueries({ queryKey: ['vpContracts'] });
+      queryClient.invalidateQueries({ queryKey: ['vpContract'] });
     } catch (err) {
       console.error('Failed to save projection override:', err);
     }

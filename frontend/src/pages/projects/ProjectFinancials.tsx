@@ -8,6 +8,7 @@ import { projectionNotesApi } from '../../services/projectionNotes';
 import { format } from 'date-fns';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ProjectionNotesDrawer from '../../components/projects/ProjectionNotesDrawer';
+import ContractProjectionStrip from '../../components/projects/ContractProjectionStrip';
 
 const fmt = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
@@ -488,6 +489,9 @@ const ProjectFinancials: React.FC = () => {
               <SRow label="Backlog" value={fmt(c.backlog)} />
             </div>
           </div>
+
+          {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
+          <ContractProjectionStrip contract={c} />
 
           {/* ===== COST TYPE TABLE ===== */}
           <div className="card" style={{ padding: 0, overflow: 'auto', marginBottom: '0.75rem' }}>
