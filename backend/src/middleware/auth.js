@@ -31,6 +31,10 @@ const authenticate = async (req, res, next) => {
   try {
     decoded = jwt.verify(token, config.jwt.secret);
   } catch (error) {
+    console.warn('[Auth] 401 jwt-verify-failed', {
+      reason: error.message,
+      path: req.originalUrl,
+    });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
@@ -42,13 +46,27 @@ const authenticate = async (req, res, next) => {
     );
     row = result.rows[0];
   } catch (err) {
+    console.warn('[Auth] user-lookup-failed', {
+      decodedId: decoded.id,
+      path: req.originalUrl,
+      err: err.message,
+    });
     return next(err);
   }
 
   if (!row) {
+    console.warn('[Auth] 401 user-not-found', {
+      decodedId: decoded.id,
+      path: req.originalUrl,
+      ua: req.headers['user-agent'],
+    });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   if (row.is_active === false) {
+    console.warn('[Auth] 401 user-inactive', {
+      userId: row.id,
+      path: req.originalUrl,
+    });
     return res.status(401).json({ error: 'Account is inactive' });
   }
 
