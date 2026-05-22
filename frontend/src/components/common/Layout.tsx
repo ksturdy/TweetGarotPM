@@ -108,10 +108,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
           <div className="header-right">
             {lastVistaSync && (
-              <Link to="/vista" className="vista-sync-indicator" title={`Last Vista sync: ${lastVistaSync}`}>
+              <span className="vista-sync-indicator" title={`Last Vista sync: ${lastVistaSync}`}>
                 <SyncIcon fontSize="small" />
                 <span className="vista-sync-text">Vista: {lastVistaSync}</span>
-              </Link>
+              </span>
             )}
             <ChatButton onClick={() => setChatOpen(prev => !prev)} isOpen={chatOpen} />
             <NotificationBell />

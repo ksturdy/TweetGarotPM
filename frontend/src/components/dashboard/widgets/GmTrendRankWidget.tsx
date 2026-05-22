@@ -24,7 +24,14 @@ const fmtSignedPctPoints = (v: number | null | undefined, digits = 1) => {
   if (v == null || Number.isNaN(Number(v))) return '-';
   const pts = Number(v) * 100;
   const sign = pts > 0 ? '+' : '';
-  return `${sign}${pts.toFixed(digits)} pts`;
+  return `${sign}${pts.toFixed(digits)}%`;
+};
+
+const fmtDate = (d: string | null | undefined) => {
+  if (!d) return '-';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return String(d);
+  return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 export interface GmTrendRankConfig {
@@ -108,15 +115,15 @@ const GmTrendRankWidget: React.FC<Props> = ({
           label: (ctx: any) => {
             const pts = Number(ctx.parsed.x);
             const sign = pts > 0 ? '+' : '';
-            return `${sign}${pts.toFixed(1)} pts`;
+            return `${sign}${pts.toFixed(1)}%`;
           },
           afterLabel: (ctx: any) => {
             const p = ranked[ctx.dataIndex];
             if (!p) return '';
             const lines: string[] = [];
             if (p.manager_name) lines.push(`PM: ${p.manager_name}`);
-            lines.push(`Latest GM: ${fmtPct(p.latest_gm_percent)} (${p.latest_date})`);
-            lines.push(`Prior GM: ${fmtPct(p.prior_gm_percent)} (${p.prior_date})`);
+            lines.push(`Latest GM: ${fmtPct(p.latest_gm_percent)} (${fmtDate(p.latest_date)})`);
+            lines.push(`Prior GM: ${fmtPct(p.prior_gm_percent)} (${fmtDate(p.prior_date)})`);
             lines.push(`Change: ${fmtSignedPctPoints(p.gm_delta)}`);
             return lines.join('\n');
           },
