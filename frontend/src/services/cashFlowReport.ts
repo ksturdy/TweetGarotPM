@@ -41,9 +41,13 @@ export interface GmTrendProject {
   manager_name?: string;
   latest_date: string;
   latest_gm_percent: number;
+  latest_gm_dollars?: number | null;
+  contract_value?: number | null;
   prior_date: string;
   prior_gm_percent: number;
+  prior_gm_dollars?: number | null;
   gm_delta: number;
+  gm_dollar_delta?: number | null;
 }
 
 export interface CashFlowMetrics {

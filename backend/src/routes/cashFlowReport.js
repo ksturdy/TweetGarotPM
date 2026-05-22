@@ -293,7 +293,9 @@ async function buildGmTrend(tenantId, options = {}) {
        SELECT DISTINCT ON (ps.project_id)
          ps.project_id,
          ps.snapshot_date AS latest_date,
-         ps.gross_profit_percent AS latest_gm
+         ps.gross_profit_percent AS latest_gm,
+         ps.gross_profit_dollars AS latest_gm_dollars,
+         ps.contract_amount AS latest_contract_amount
        FROM project_snapshots ps
        WHERE ps.tenant_id = $1
          AND ps.gross_profit_percent IS NOT NULL
@@ -303,7 +305,8 @@ async function buildGmTrend(tenantId, options = {}) {
        SELECT DISTINCT ON (ps.project_id)
          ps.project_id,
          ps.snapshot_date AS prior_date,
-         ps.gross_profit_percent AS prior_gm
+         ps.gross_profit_percent AS prior_gm,
+         ps.gross_profit_dollars AS prior_gm_dollars
        FROM project_snapshots ps
        JOIN latest l ON l.project_id = ps.project_id
        WHERE ps.tenant_id = $1
@@ -321,9 +324,13 @@ async function buildGmTrend(tenantId, options = {}) {
        e.first_name || ' ' || e.last_name AS manager_name,
        l.latest_date,
        l.latest_gm  AS latest_gm_percent,
+       l.latest_gm_dollars,
+       l.latest_contract_amount AS contract_value,
        pr.prior_date,
        pr.prior_gm  AS prior_gm_percent,
-       (l.latest_gm - pr.prior_gm) AS gm_delta
+       pr.prior_gm_dollars,
+       (l.latest_gm - pr.prior_gm) AS gm_delta,
+       (l.latest_gm_dollars - pr.prior_gm_dollars) AS gm_dollar_delta
      FROM projects p
      JOIN latest l ON l.project_id = p.id
      JOIN prior pr ON pr.project_id = p.id

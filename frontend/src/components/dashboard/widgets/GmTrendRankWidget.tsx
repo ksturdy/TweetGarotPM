@@ -34,6 +34,22 @@ const fmtDate = (d: string | null | undefined) => {
   return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+const fmtMoney = (v: number | null | undefined) => {
+  if (v == null || Number.isNaN(Number(v))) return '-';
+  const n = Math.round(Number(v));
+  const abs = Math.abs(n).toLocaleString('en-US');
+  return n < 0 ? `-$${abs}` : `$${abs}`;
+};
+
+const fmtSignedMoney = (v: number | null | undefined) => {
+  if (v == null || Number.isNaN(Number(v))) return '-';
+  const n = Math.round(Number(v));
+  const abs = Math.abs(n).toLocaleString('en-US');
+  if (n > 0) return `+$${abs}`;
+  if (n < 0) return `-$${abs}`;
+  return `$${abs}`;
+};
+
 export interface GmTrendRankConfig {
   title: string;
   icon: React.ReactNode;
@@ -122,9 +138,10 @@ const GmTrendRankWidget: React.FC<Props> = ({
             if (!p) return '';
             const lines: string[] = [];
             if (p.manager_name) lines.push(`PM: ${p.manager_name}`);
+            lines.push(`Contract Value: ${fmtMoney(p.contract_value)}`);
             lines.push(`Latest GM: ${fmtPct(p.latest_gm_percent)} (${fmtDate(p.latest_date)})`);
             lines.push(`Prior GM: ${fmtPct(p.prior_gm_percent)} (${fmtDate(p.prior_date)})`);
-            lines.push(`Change: ${fmtSignedPctPoints(p.gm_delta)}`);
+            lines.push(`Change: ${fmtSignedPctPoints(p.gm_delta)} / ${fmtSignedMoney(p.gm_dollar_delta)}`);
             return lines.join('\n');
           },
         },
