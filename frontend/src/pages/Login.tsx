@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import './Login.css';
@@ -14,6 +14,12 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login, login2FA } = useAuth();
   const navigate = useNavigate();
+
+  // Any token sitting in localStorage when /login is reached is by definition
+  // stale — wipe it so the next login starts from a clean slate.
+  useEffect(() => {
+    localStorage.removeItem('token');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

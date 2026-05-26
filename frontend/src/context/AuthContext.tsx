@@ -106,6 +106,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
+      // Decode the JWT exp and bail early if it's already expired —
+      // saves a doomed /auth/me round-trip and prevents stale tokens
+      // from lingering through the global error interceptor.
+      let expSec: number | null = null;
+      try {
+        expSec = JSON.parse(atob(token.split('.')[1])).exp;
+      } catch (_) { /* malformed token */ }
+      if (expSec && expSec * 1000 < Date.now()) {
+        localStorage.removeItem('token');
+        setLoading(false);
+        return;
+      }
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       api.get('/auth/me')
         .then((res) => {
