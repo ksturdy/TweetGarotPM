@@ -31,9 +31,18 @@ const authenticate = async (req, res, next) => {
   try {
     decoded = jwt.verify(token, config.jwt.secret);
   } catch (error) {
+    let payload = null;
+    try { payload = jwt.decode(token); } catch (_) { /* ignore */ }
+    const nowS = Math.floor(Date.now() / 1000);
     console.warn('[Auth] 401 jwt-verify-failed', {
       reason: error.message,
       path: req.originalUrl,
+      iat: payload && payload.iat,
+      exp: payload && payload.exp,
+      nowS,
+      ageS: payload && payload.iat ? nowS - payload.iat : null,
+      expiredAgoS: payload && payload.exp ? nowS - payload.exp : null,
+      userId: payload && payload.id,
     });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
