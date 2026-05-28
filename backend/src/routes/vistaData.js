@@ -27,6 +27,21 @@ const parseNumber = (value) => {
   return isNaN(num) ? null : num;
 };
 
+// Look up a column by name, tolerating leading/trailing whitespace and case.
+// Vista's exports vary: some headers are wrapped in spaces (' Est Cost '), some
+// aren't, and casing has drifted between exports.
+const pickColumn = (row, ...candidates) => {
+  for (const name of candidates) {
+    if (row[name] !== undefined) return row[name];
+  }
+  const norm = s => String(s).replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = candidates.map(norm);
+  for (const key of Object.keys(row)) {
+    if (wanted.includes(norm(key))) return row[key];
+  }
+  return undefined;
+};
+
 // Configure multer for Excel file uploads - use disk storage to avoid memory issues
 const upload = multer({
   storage: multer.diskStorage({
@@ -576,7 +591,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             projected_cost: parseNumber(row[' Projected At Completion Cost '] ?? row['Projected At Completion Cost']),
             percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete ']),
             prior_week_cost: parseNumber(row['Previous Week Cost'] ?? row[' Previous Week Cost ']),
-            change_from_last_projection: parseNumber(row['Change From Last Projection'] ?? row[' Change From Last Projection '])
+            change_from_last_projection: parseNumber(pickColumn(row, 'Change From Last Projection'))
           };
 
           if (!phaseData.job || !phaseData.phase) continue;
