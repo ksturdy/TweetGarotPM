@@ -67,14 +67,10 @@ async function buildProjectionsReport({
   const params = [tenantId];
   const where = ['tenant_id = $1'];
 
-  if (startDate) {
-    params.push(startDate);
-    where.push(`snapshot_date >= $${params.length}`);
-  }
-  if (endDate) {
-    params.push(endDate);
-    where.push(`snapshot_date <= $${params.length}`);
-  }
+  // snapshot_date is intentionally NOT filtered in SQL: anchor dates snap to
+  // the nearest snapshot per project below, which may sit just outside the
+  // literal window.
+
   if (pmEmployeeNos && pmEmployeeNos.length > 0) {
     params.push(pmEmployeeNos);
     where.push(`pm_employee_no = ANY($${params.length}::text[])`);
@@ -97,12 +93,40 @@ async function buildProjectionsReport({
     params
   );
 
-  // Group by project; keep top 2 (current + prior).
+  // With anchor dates, snap each anchor to the nearest snapshot per project
+  // by absolute date distance. Projection days are Thursdays as a rule but
+  // can vary across projects, so a single anchor maps to different real
+  // snapshot dates per project. Without anchors, keep the latest two
+  // snapshots overall (most recent projection cycle).
+  const hasAnchors = !!(startDate || endDate);
   const byProject = new Map();
   for (const s of snapshotsRes.rows) {
     if (!byProject.has(s.project_id)) byProject.set(s.project_id, []);
-    const arr = byProject.get(s.project_id);
-    if (arr.length < 2) arr.push(s);
+    byProject.get(s.project_id).push(s);
+  }
+  const findNearest = (arr, target) => {
+    const t = new Date(target).getTime();
+    let best = null, bestDist = Infinity;
+    for (const s of arr) {
+      const d = Math.abs(new Date(s.snapshot_date).getTime() - t);
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return best;
+  };
+  for (const [pid, arr] of byProject.entries()) {
+    if (hasAnchors) {
+      const current = endDate ? findNearest(arr, endDate) : arr[0];
+      const prior = startDate ? findNearest(arr, startDate) : null;
+      const picks = [];
+      if (current) picks.push(current);
+      if (prior && current && prior.id !== current.id &&
+          new Date(prior.snapshot_date) < new Date(current.snapshot_date)) {
+        picks.push(prior);
+      }
+      byProject.set(pid, picks);
+    } else {
+      byProject.set(pid, arr.slice(0, 2));
+    }
   }
 
   const projectIds = Array.from(byProject.keys());

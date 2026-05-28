@@ -225,13 +225,16 @@ const ProjectionsReport: React.FC = () => {
             />
           </div>
           <div>
-            <div style={filterLabel}>Date Range</div>
+            <div style={filterLabel}>Compare Snapshots</div>
             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                style={dateInputStyle} />
+                style={dateInputStyle} title="Prior — snaps to nearest snapshot" />
               <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>to</span>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                style={dateInputStyle} />
+                style={dateInputStyle} title="Current — snaps to nearest snapshot" />
+            </div>
+            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+              Dates snap to the nearest snapshot per project.
             </div>
           </div>
         </div>
