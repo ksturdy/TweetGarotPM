@@ -1,12 +1,21 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
 const config = require('../config');
 const { authenticate } = require('../middleware/auth');
 const { getTenantById } = require('../middleware/tenant');
 const { sendEmail, generatePasswordResetEmailHtml, generatePasswordResetEmailText } = require('../utils/emailService');
 const { passwordValidationRules } = require('../utils/passwordValidator');
+
+// Fingerprint of the JWT secret as seen by THIS module (loaded once). Logged
+// on every /auth/login sign-up so we can directly compare against the
+// fingerprint logged by the verifying side in middleware/auth.js. If the two
+// fingerprints differ, the signing and verifying processes are using
+// different secrets even though they're "the same service."
+const SIGN_SECRET_FP = crypto.createHash('sha256').update(String(config.jwt.secret)).digest('hex').slice(0, 12);
+console.log(`[Auth] auth-route init pid=${process.pid} signSecretFp=${SIGN_SECRET_FP}`);
 
 const router = express.Router();
 
@@ -135,6 +144,9 @@ router.post(
       }, config.jwt.secret, {
         expiresIn: config.jwt.expiresIn,
       });
+
+      const tokenIat = jwt.decode(token)?.iat;
+      console.log(`[Auth] login-sign pid=${process.pid} signSecretFp=${SIGN_SECRET_FP} userId=${user.id} tokenIat=${tokenIat} nowS=${Math.floor(Date.now() / 1000)}`);
 
       res.json({
         user: {
