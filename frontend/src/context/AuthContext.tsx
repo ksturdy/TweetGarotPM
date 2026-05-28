@@ -175,8 +175,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Normal login (no 2FA)
     const tokenPreview = res.data.token ? `${res.data.token.slice(0, 24)}…(len=${res.data.token.length})` : '<missing>';
-    console.log('[auth-debug] login: POST /auth/login OK', { token: tokenPreview, userId: res.data.user?.id, tenantId: res.data.user?.tenantId ?? res.data.tenant?.id });
+    let receivedIat: number | undefined;
+    try {
+      receivedIat = JSON.parse(atob(res.data.token.split('.')[1])).iat;
+    } catch (_) { /* ignore */ }
+    console.log('[auth-debug] login: POST /auth/login OK', {
+      token: tokenPreview,
+      receivedIat,
+      receivedAgeS: receivedIat ? Math.floor(Date.now() / 1000) - receivedIat : null,
+      userId: res.data.user?.id,
+      tenantId: res.data.user?.tenantId ?? res.data.tenant?.id,
+    });
     localStorage.setItem('token', res.data.token);
+    // Read back what we just wrote to confirm nothing is overwriting it.
+    const verifyWrite = localStorage.getItem('token');
+    let storedIat: number | undefined;
+    try {
+      storedIat = verifyWrite ? JSON.parse(atob(verifyWrite.split('.')[1])).iat : undefined;
+    } catch (_) { /* ignore */ }
+    console.log('[auth-debug] login: localStorage read-back', {
+      stored: verifyWrite ? `${verifyWrite.slice(0, 24)}…(len=${verifyWrite.length})` : '<missing>',
+      storedIat,
+      matchesReceived: verifyWrite === res.data.token,
+    });
     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     setUser(res.data.user);
     setTenant(res.data.tenant);
