@@ -184,7 +184,7 @@ const ProjectFinancials: React.FC = () => {
   });
 
   const getTradeSummary = (trade: string) => {
-    if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 };
+    if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 };
     const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === trade);
     return {
       est_hours: rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0),
@@ -194,6 +194,7 @@ const ProjectFinancials: React.FC = () => {
       committed_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + (r.committed_cost || 0), 0),
       projected_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0),
       prior_week_cost: rows.reduce((s: number, r: LaborTradeSummary) => s + (r.prior_week_cost || 0), 0),
+      change_from_last_projection: rows.reduce((s: number, r: LaborTradeSummary) => s + (r.change_from_last_projection || 0), 0),
     };
   };
 
@@ -315,12 +316,12 @@ const ProjectFinancials: React.FC = () => {
     const lt = costSummary.labor_totals;
     const cs = costSummary.costs;
     return [
-      { label: 'Labor', num: 1, costType: 1, est_hours: lt.est_hours, est_cost: lt.est_cost, prev_wk: lt.prior_week_cost, jtd_hours: lt.jtd_hours, jtd_cost: lt.jtd_cost, committed: lt.committed_cost, projected: lt.projected_cost },
-      { label: 'Material', num: 2, costType: 2, est_hours: 0, est_cost: cs.material.est_cost, prev_wk: cs.material.prior_week_cost, jtd_hours: 0, jtd_cost: cs.material.jtd_cost, committed: cs.material.committed_cost, projected: cs.material.projected_cost },
-      { label: 'Subcontracts', num: 3, costType: 3, est_hours: 0, est_cost: cs.subcontracts.est_cost, prev_wk: cs.subcontracts.prior_week_cost, jtd_hours: 0, jtd_cost: cs.subcontracts.jtd_cost, committed: cs.subcontracts.committed_cost, projected: cs.subcontracts.projected_cost },
-      { label: 'Rentals', num: 4, costType: 4, est_hours: 0, est_cost: cs.rentals.est_cost, prev_wk: cs.rentals.prior_week_cost, jtd_hours: 0, jtd_cost: cs.rentals.jtd_cost, committed: cs.rentals.committed_cost, projected: cs.rentals.projected_cost },
-      { label: 'MEP Equipment', num: 5, costType: 5, est_hours: 0, est_cost: cs.mep_equipment.est_cost, prev_wk: cs.mep_equipment.prior_week_cost, jtd_hours: 0, jtd_cost: cs.mep_equipment.jtd_cost, committed: cs.mep_equipment.committed_cost, projected: cs.mep_equipment.projected_cost },
-      { label: 'General Conditions', num: 6, costType: 6, est_hours: 0, est_cost: cs.general_conditions.est_cost, prev_wk: cs.general_conditions.prior_week_cost, jtd_hours: 0, jtd_cost: cs.general_conditions.jtd_cost, committed: cs.general_conditions.committed_cost, projected: cs.general_conditions.projected_cost },
+      { label: 'Labor', num: 1, costType: 1, est_hours: lt.est_hours, est_cost: lt.est_cost, prev_wk: lt.prior_week_cost, jtd_hours: lt.jtd_hours, jtd_cost: lt.jtd_cost, committed: lt.committed_cost, projected: lt.projected_cost, change_from_last_projection: lt.change_from_last_projection },
+      { label: 'Material', num: 2, costType: 2, est_hours: 0, est_cost: cs.material.est_cost, prev_wk: cs.material.prior_week_cost, jtd_hours: 0, jtd_cost: cs.material.jtd_cost, committed: cs.material.committed_cost, projected: cs.material.projected_cost, change_from_last_projection: cs.material.change_from_last_projection },
+      { label: 'Subcontracts', num: 3, costType: 3, est_hours: 0, est_cost: cs.subcontracts.est_cost, prev_wk: cs.subcontracts.prior_week_cost, jtd_hours: 0, jtd_cost: cs.subcontracts.jtd_cost, committed: cs.subcontracts.committed_cost, projected: cs.subcontracts.projected_cost, change_from_last_projection: cs.subcontracts.change_from_last_projection },
+      { label: 'Rentals', num: 4, costType: 4, est_hours: 0, est_cost: cs.rentals.est_cost, prev_wk: cs.rentals.prior_week_cost, jtd_hours: 0, jtd_cost: cs.rentals.jtd_cost, committed: cs.rentals.committed_cost, projected: cs.rentals.projected_cost, change_from_last_projection: cs.rentals.change_from_last_projection },
+      { label: 'MEP Equipment', num: 5, costType: 5, est_hours: 0, est_cost: cs.mep_equipment.est_cost, prev_wk: cs.mep_equipment.prior_week_cost, jtd_hours: 0, jtd_cost: cs.mep_equipment.jtd_cost, committed: cs.mep_equipment.committed_cost, projected: cs.mep_equipment.projected_cost, change_from_last_projection: cs.mep_equipment.change_from_last_projection },
+      { label: 'General Conditions', num: 6, costType: 6, est_hours: 0, est_cost: cs.general_conditions.est_cost, prev_wk: cs.general_conditions.prior_week_cost, jtd_hours: 0, jtd_cost: cs.general_conditions.jtd_cost, committed: cs.general_conditions.committed_cost, projected: cs.general_conditions.projected_cost, change_from_last_projection: cs.general_conditions.change_from_last_projection },
     ];
   };
 
@@ -335,7 +336,8 @@ const ProjectFinancials: React.FC = () => {
     jtd_cost: acc.jtd_cost + r.jtd_cost,
     committed: acc.committed + r.committed,
     projected: acc.projected + r.projected,
-  }), { est_hours: 0, est_cost: 0, prev_wk: 0, jtd_hours: 0, jtd_cost: 0, committed: 0, projected: 0 }) : null;
+    change_from_last_projection: acc.change_from_last_projection + (r.change_from_last_projection || 0),
+  }), { est_hours: 0, est_cost: 0, prev_wk: 0, jtd_hours: 0, jtd_cost: 0, committed: 0, projected: 0, change_from_last_projection: 0 }) : null;
 
   // Cost type colors for the numbered badges (matching Vista's color coding)
   const costTypeColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
@@ -510,7 +512,7 @@ const ProjectFinancials: React.FC = () => {
                     <th style={thStyle}>Projected @ Compl</th>
                     <th style={thStyle}>Variance</th>
                     <th style={thStyle}>Rem Spend</th>
-                    <th style={thStyle}>Wk Change</th>
+                    <th style={thStyle}>Change Since Last Projection</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -518,7 +520,7 @@ const ProjectFinancials: React.FC = () => {
                     const jtdVariance = row.est_cost - row.jtd_cost;
                     const projVariance = row.est_cost - row.projected;
                     const remSpend = row.projected - row.committed - row.jtd_cost;
-                    const wkChange = row.jtd_cost - row.prev_wk;
+                    const changeFromLastProj = row.change_from_last_projection || 0;
                     return (
                       <tr
                         key={row.costType}
@@ -556,7 +558,7 @@ const ProjectFinancials: React.FC = () => {
                         <td style={{ ...tdStyle, color: getProjectedColor(row.projected, row.est_cost), fontWeight: 600 }}>{fmt(row.projected)}</td>
                         <td style={{ ...tdStyle, color: getVarianceColor(projVariance), fontWeight: 500 }}>{fmt(projVariance)}</td>
                         <td style={{ ...tdStyle, fontWeight: 500, color: remSpend > 0 ? '#3b82f6' : remSpend < 0 ? '#ef4444' : undefined }}>{fmt(remSpend)}</td>
-                        <td style={{ ...tdStyle, fontWeight: 500, color: wkChange > 0 ? '#3b82f6' : undefined }}>{fmt(wkChange)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500, color: changeFromLastProj > 0 ? '#ef4444' : changeFromLastProj < 0 ? '#10b981' : undefined }}>{fmt(changeFromLastProj)}</td>
                       </tr>
                     );
                   })}
@@ -576,8 +578,8 @@ const ProjectFinancials: React.FC = () => {
                     {(() => { const totalRemSpend = totals.projected - totals.committed - totals.jtd_cost; return (
                       <td style={{ ...tfStyle, color: totalRemSpend > 0 ? '#3b82f6' : totalRemSpend < 0 ? '#ef4444' : undefined }}>{fmt(totalRemSpend)}</td>
                     ); })()}
-                    {(() => { const totalWkChange = totals.jtd_cost - totals.prev_wk; return (
-                      <td style={{ ...tfStyle, color: totalWkChange > 0 ? '#3b82f6' : undefined }}>{fmt(totalWkChange)}</td>
+                    {(() => { const totalChange = totals.change_from_last_projection; return (
+                      <td style={{ ...tfStyle, color: totalChange > 0 ? '#ef4444' : totalChange < 0 ? '#10b981' : undefined }}>{fmt(totalChange)}</td>
                     ); })()}
                   </tr>
                 </tfoot>

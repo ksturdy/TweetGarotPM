@@ -3244,7 +3244,8 @@ const VistaData = {
     const existing = await db.query(
       `SELECT id, is_provisional, contract, job_description, phase_description,
               est_hours, est_cost, jtd_hours, jtd_cost,
-              committed_cost, projected_cost, percent_complete, prior_week_cost
+              committed_cost, projected_cost, percent_complete, prior_week_cost,
+              change_from_last_projection
        FROM vp_phase_codes
        WHERE tenant_id = $1 AND job = $2 AND cost_type = $3 AND phase = $4`,
       [tenantId, data.job, data.cost_type, data.phase]
@@ -3257,14 +3258,16 @@ const VistaData = {
           contract = $1, job_description = $2, phase_description = $3,
           est_hours = $4, est_cost = $5, jtd_hours = $6, jtd_cost = $7,
           committed_cost = $8, projected_cost = $9, percent_complete = $10,
-          import_batch_id = $11, prior_week_cost = $13, updated_at = CURRENT_TIMESTAMP
+          import_batch_id = $11, prior_week_cost = $13,
+          change_from_last_projection = $14, updated_at = CURRENT_TIMESTAMP
         WHERE id = $12
         RETURNING *`,
         [
           data.contract, data.job_description, data.phase_description,
           data.est_hours, data.est_cost, data.jtd_hours, data.jtd_cost,
           data.committed_cost, data.projected_cost, data.percent_complete,
-          batchId, before.id, data.prior_week_cost || 0
+          batchId, before.id, data.prior_week_cost || 0,
+          data.change_from_last_projection || 0
         ]
       );
 
@@ -3289,6 +3292,7 @@ const VistaData = {
           projected_cost: before.projected_cost,
           percent_complete: before.percent_complete,
           prior_week_cost: before.prior_week_cost,
+          change_from_last_projection: before.change_from_last_projection,
         };
         const ins = await db.query(
           `INSERT INTO pending_phase_code_reconciliations
@@ -3309,14 +3313,15 @@ const VistaData = {
         `INSERT INTO vp_phase_codes (
           tenant_id, contract, job, job_description, cost_type, phase, phase_description,
           est_hours, est_cost, jtd_hours, jtd_cost, committed_cost, projected_cost,
-          percent_complete, import_batch_id, prior_week_cost
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          percent_complete, import_batch_id, prior_week_cost, change_from_last_projection
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING *`,
         [
           tenantId, data.contract, data.job, data.job_description, data.cost_type,
           data.phase, data.phase_description, data.est_hours, data.est_cost,
           data.jtd_hours, data.jtd_cost, data.committed_cost, data.projected_cost,
-          data.percent_complete, batchId, data.prior_week_cost || 0
+          data.percent_complete, batchId, data.prior_week_cost || 0,
+          data.change_from_last_projection || 0
         ]
       );
       return { row: result.rows[0], isNew: true };
@@ -3413,7 +3418,8 @@ const VistaData = {
          COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
          COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
          COALESCE(SUM(pc.projected_cost), 0) AS projected_cost,
-         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost
+         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost,
+         COALESCE(SUM(pc.change_from_last_projection), 0) AS change_from_last_projection
        FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
          AND pc.cost_type IN (2, 3, 4, 5, 6)
@@ -3443,7 +3449,8 @@ const VistaData = {
          COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
          COALESCE(SUM(pc.committed_cost), 0) AS committed_cost,
          COALESCE(SUM(pc.projected_cost), 0) AS projected_cost,
-         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost
+         COALESCE(SUM(pc.prior_week_cost), 0) AS prior_week_cost,
+         COALESCE(SUM(pc.change_from_last_projection), 0) AS change_from_last_projection
        FROM vp_phase_codes pc
        WHERE pc.tenant_id = $1 AND pc.linked_project_id = $2${jobFilter}
          AND pc.cost_type = 1
@@ -3454,7 +3461,7 @@ const VistaData = {
 
     // Map cost rows to named categories
     const costMap = { 2: 'material', 3: 'subcontracts', 4: 'rentals', 5: 'mep_equipment', 6: 'general_conditions' };
-    const zeroCost = { est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 };
+    const zeroCost = { est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 };
     const costs = {};
     Object.values(costMap).forEach(name => { costs[name] = { ...zeroCost }; });
     costResult.rows.forEach(row => {
@@ -3466,6 +3473,7 @@ const VistaData = {
           committed_cost: parseFloat(row.committed_cost),
           projected_cost: parseFloat(row.projected_cost),
           prior_week_cost: parseFloat(row.prior_week_cost),
+          change_from_last_projection: parseFloat(row.change_from_last_projection),
         };
       }
     });
@@ -3481,6 +3489,7 @@ const VistaData = {
       committed_cost: parseFloat(r.committed_cost),
       projected_cost: parseFloat(r.projected_cost),
       prior_week_cost: parseFloat(r.prior_week_cost),
+      change_from_last_projection: parseFloat(r.change_from_last_projection),
     }));
 
     const labor_totals = labor.reduce((acc, r) => ({
@@ -3491,7 +3500,8 @@ const VistaData = {
       committed_cost: acc.committed_cost + r.committed_cost,
       projected_cost: acc.projected_cost + r.projected_cost,
       prior_week_cost: acc.prior_week_cost + r.prior_week_cost,
-    }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 });
+      change_from_last_projection: acc.change_from_last_projection + r.change_from_last_projection,
+    }), { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 });
 
     return { costs, labor, labor_totals };
   },
@@ -3532,7 +3542,7 @@ const VistaData = {
       `SELECT pc.id, pc.job, pc.phase, pc.phase_description,
               pc.est_hours, pc.est_cost, pc.jtd_hours, pc.jtd_cost,
               pc.committed_cost, pc.projected_cost, pc.percent_complete,
-              pc.prior_week_cost
+              pc.prior_week_cost, pc.change_from_last_projection
        FROM vp_phase_codes pc
        WHERE ${conditions.join(' AND ')}
        ORDER BY pc.phase, pc.job`,

@@ -49,6 +49,7 @@ function buildRow(r) {
     projected_cost: parseNumber(r[' Projected At Completion Cost '] ?? r['Projected At Completion Cost']),
     percent_complete: parseNumber(r['Percent Complete'] ?? r[' Percent Complete ']),
     prior_week_cost: parseNumber(r['Previous Week Cost'] ?? r[' Previous Week Cost ']) || 0,
+    change_from_last_projection: parseNumber(r['Change From Last Projection'] ?? r[' Change From Last Projection ']) || 0,
   };
 }
 
@@ -78,7 +79,7 @@ async function run() {
     'tenant_id', 'contract', 'job', 'job_description', 'cost_type', 'phase',
     'phase_description', 'est_hours', 'est_cost', 'jtd_hours', 'jtd_cost',
     'committed_cost', 'projected_cost', 'percent_complete', 'import_batch_id',
-    'prior_week_cost',
+    'prior_week_cost', 'change_from_last_projection',
   ];
   const PARAMS_PER_ROW = COLS.length;
 
@@ -100,7 +101,7 @@ async function run() {
         TENANT_ID, row.contract, row.job, row.job_description, row.cost_type, row.phase,
         row.phase_description, row.est_hours, row.est_cost, row.jtd_hours, row.jtd_cost,
         row.committed_cost, row.projected_cost, row.percent_complete, batch.id,
-        row.prior_week_cost,
+        row.prior_week_cost, row.change_from_last_projection,
       );
     });
 
@@ -120,6 +121,7 @@ async function run() {
         percent_complete = EXCLUDED.percent_complete,
         import_batch_id = EXCLUDED.import_batch_id,
         prior_week_cost = EXCLUDED.prior_week_cost,
+        change_from_last_projection = EXCLUDED.change_from_last_projection,
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;

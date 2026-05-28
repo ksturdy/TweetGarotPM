@@ -120,6 +120,7 @@ export interface CostCategorySummary {
   committed_cost: number;
   projected_cost: number;
   prior_week_cost: number;
+  change_from_last_projection: number;
 }
 
 export interface LaborTradeSummary {
@@ -132,6 +133,7 @@ export interface LaborTradeSummary {
   committed_cost: number;
   projected_cost: number;
   prior_week_cost: number;
+  change_from_last_projection: number;
 }
 
 export interface PhaseCodeCostSummary {
@@ -151,6 +153,7 @@ export interface PhaseCodeCostSummary {
     committed_cost: number;
     projected_cost: number;
     prior_week_cost: number;
+    change_from_last_projection: number;
   };
 }
 
@@ -172,6 +175,7 @@ export interface PhaseCodeDetailRow {
   projected_cost: number;
   percent_complete: number;
   prior_week_cost: number;
+  change_from_last_projection: number;
 }
 
 export interface VPWorkOrder {

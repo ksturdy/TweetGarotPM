@@ -53,7 +53,7 @@ const getVarianceColor = (projected: number, estimate: number): string | undefin
 };
 
 type SortKey = 'phase' | 'phase_description' | 'job' | 'est_hours' | 'jtd_hours' | 'est_cost' |
-  'prior_week_cost' | 'jtd_cost' | 'wk_change' | 'committed_cost' | 'projected_cost' |
+  'prior_week_cost' | 'jtd_cost' | 'change_from_last_projection' | 'committed_cost' | 'projected_cost' |
   'remaining_spend' | 'variance' | 'percent_complete';
 type SortDir = 'asc' | 'desc';
 
@@ -108,7 +108,7 @@ const CostDrillIn: React.FC = () => {
       case 'est_cost': return Number(row.est_cost || 0);
       case 'prior_week_cost': return Number(row.prior_week_cost || 0);
       case 'jtd_cost': return Number(row.jtd_cost || 0);
-      case 'wk_change': return Number(row.jtd_cost || 0) - Number(row.prior_week_cost || 0);
+      case 'change_from_last_projection': return Number(row.change_from_last_projection || 0);
       case 'committed_cost': return Number(row.committed_cost || 0);
       case 'projected_cost': return Number(row.projected_cost || 0);
       case 'remaining_spend': return Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
@@ -183,8 +183,9 @@ const CostDrillIn: React.FC = () => {
       committed_cost: acc.committed_cost + Number(row.committed_cost || 0),
       projected_cost: acc.projected_cost + Number(row.projected_cost || 0),
       prior_week_cost: acc.prior_week_cost + Number(row.prior_week_cost || 0),
+      change_from_last_projection: acc.change_from_last_projection + Number(row.change_from_last_projection || 0),
     }),
-    { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0 }
+    { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 }
   );
 
   const totalRemainingSpend = totals.projected_cost - totals.committed_cost - totals.jtd_cost;
@@ -220,8 +221,8 @@ const CostDrillIn: React.FC = () => {
           <SummaryCard label="Est Cost" value={fmt(totals.est_cost)} />
           <SummaryCard label="JTD Cost" value={fmt(totals.jtd_cost)} />
           <SummaryCard label="Prev Week" value={fmt(totals.prior_week_cost)} />
-          <SummaryCard label="Wk Change" value={fmt(totals.jtd_cost - totals.prior_week_cost)}
-            color={(totals.jtd_cost - totals.prior_week_cost) > 0 ? '#3b82f6' : undefined} />
+          <SummaryCard label="Change Since Last Projection" value={fmt(totals.change_from_last_projection)}
+            color={totals.change_from_last_projection > 0 ? '#ef4444' : totals.change_from_last_projection < 0 ? '#10b981' : undefined} />
           <SummaryCard label="Committed" value={fmt(totals.committed_cost)} />
           <SummaryCard label="Projected" value={fmt(totals.projected_cost)} color={getVarianceColor(totals.projected_cost, totals.est_cost)} />
         </div>
@@ -304,7 +305,7 @@ const CostDrillIn: React.FC = () => {
                 <SortTh sortKey="est_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Cost</SortTh>
                 <SortTh sortKey="prior_week_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Prev Wk</SortTh>
                 <SortTh sortKey="jtd_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Cost</SortTh>
-                <SortTh sortKey="wk_change" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Wk Chg</SortTh>
+                <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Chg Since Last Proj</SortTh>
                 <SortTh sortKey="committed_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Committed</SortTh>
                 <SortTh sortKey="projected_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Projected</SortTh>
                 <SortTh sortKey="remaining_spend" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Spend</SortTh>
@@ -316,7 +317,7 @@ const CostDrillIn: React.FC = () => {
               {processedRows.map((row: PhaseCodeDetailRow) => {
                 const variance = Number(row.est_cost || 0) - Number(row.projected_cost || 0);
                 const varianceColor = variance > 0 ? '#10b981' : variance < 0 ? '#ef4444' : undefined;
-                const weeklyChange = Number(row.jtd_cost || 0) - Number(row.prior_week_cost || 0);
+                const changeSinceLastProj = Number(row.change_from_last_projection || 0);
                 const remainingSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
                 return (
                   <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -328,8 +329,8 @@ const CostDrillIn: React.FC = () => {
                     <Td align="right">{fmt(row.est_cost)}</Td>
                     <Td align="right">{fmt(row.prior_week_cost)}</Td>
                     <Td align="right">{fmt(row.jtd_cost)}</Td>
-                    <Td align="right" style={{ color: weeklyChange > 0 ? '#3b82f6' : weeklyChange < 0 ? '#10b981' : undefined, fontWeight: 500 }}>
-                      {fmt(weeklyChange)}
+                    <Td align="right" style={{ color: changeSinceLastProj > 0 ? '#ef4444' : changeSinceLastProj < 0 ? '#10b981' : undefined, fontWeight: 500 }}>
+                      {fmt(changeSinceLastProj)}
                     </Td>
                     <Td align="right">{fmt(row.committed_cost)}</Td>
                     <Td align="right" style={{ color: getVarianceColor(Number(row.projected_cost), Number(row.est_cost)), fontWeight: 600 }}>
@@ -358,8 +359,8 @@ const CostDrillIn: React.FC = () => {
                 <Td align="right">{fmt(totals.est_cost)}</Td>
                 <Td align="right">{fmt(totals.prior_week_cost)}</Td>
                 <Td align="right">{fmt(totals.jtd_cost)}</Td>
-                <Td align="right" style={{ color: (totals.jtd_cost - totals.prior_week_cost) > 0 ? '#3b82f6' : undefined, fontWeight: 700 }}>
-                  {fmt(totals.jtd_cost - totals.prior_week_cost)}
+                <Td align="right" style={{ color: totals.change_from_last_projection > 0 ? '#ef4444' : totals.change_from_last_projection < 0 ? '#10b981' : undefined, fontWeight: 700 }}>
+                  {fmt(totals.change_from_last_projection)}
                 </Td>
                 <Td align="right">{fmt(totals.committed_cost)}</Td>
                 <Td align="right" style={{ color: getVarianceColor(totals.projected_cost, totals.est_cost), fontWeight: 700 }}>

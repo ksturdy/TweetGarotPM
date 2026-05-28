@@ -575,7 +575,8 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             committed_cost: parseNumber(row[' Committed Cost '] ?? row['Committed Cost']),
             projected_cost: parseNumber(row[' Projected At Completion Cost '] ?? row['Projected At Completion Cost']),
             percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete ']),
-            prior_week_cost: parseNumber(row['Previous Week Cost'] ?? row[' Previous Week Cost '])
+            prior_week_cost: parseNumber(row['Previous Week Cost'] ?? row[' Previous Week Cost ']),
+            change_from_last_projection: parseNumber(row['Change From Last Projection'] ?? row[' Change From Last Projection '])
           };
 
           if (!phaseData.job || !phaseData.phase) continue;
