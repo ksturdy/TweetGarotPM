@@ -104,51 +104,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [passwordExpiresInDays, setPasswordExpiresInDays] = useState<number | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Decode the JWT exp and bail early if it's already expired —
-      // saves a doomed /auth/me round-trip and prevents stale tokens
-      // from lingering through the global error interceptor.
-      let expSec: number | null = null;
-      try {
-        expSec = JSON.parse(atob(token.split('.')[1])).exp;
-      } catch (_) { /* malformed token */ }
-      if (expSec && expSec * 1000 < Date.now()) {
-        localStorage.removeItem('token');
-        setLoading(false);
-        return;
-      }
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      api.get('/auth/me')
-        .then((res) => {
-          setUser({
-            id: res.data.id,
-            email: res.data.email,
-            firstName: res.data.first_name,
-            lastName: res.data.last_name,
-            role: res.data.role,
-            hrAccess: res.data.hr_access,
-            forcePasswordChange: res.data.force_password_change,
-            twoFactorEnabled: res.data.two_factor_enabled,
-            tenantId: res.data.tenant_id,
-            isPlatformAdmin: res.data.is_platform_admin || false,
-          });
-          // Set tenant from response
-          if (res.data.tenant) {
-            setTenant(res.data.tenant);
-          }
-        })
-        .catch((error) => {
-          console.error('Auth check failed:', error);
-          localStorage.removeItem('token');
-          delete api.defaults.headers.common['Authorization'];
-          setUser(null);
-          setTenant(null);
-        })
-        .finally(() => setLoading(false));
-    } else {
+    const initialToken = localStorage.getItem('token');
+    if (!initialToken) {
       setLoading(false);
+      return;
     }
+
+    // Bail early if the JWT exp is already in the past — saves a doomed
+    // /auth/me round-trip on a token the client already knows is dead.
+    let expSec: number | null = null;
+    try {
+      expSec = JSON.parse(atob(initialToken.split('.')[1])).exp;
+    } catch (_) { /* malformed token */ }
+    if (expSec && expSec * 1000 < Date.now()) {
+      localStorage.removeItem('token');
+      setLoading(false);
+      return;
+    }
+
+    api.defaults.headers.common['Authorization'] = `Bearer ${initialToken}`;
+    api.get('/auth/me')
+      .then((res) => {
+        // If a fresh login replaced the token while /auth/me was in flight
+        // on the old one, the login's user state is the source of truth.
+        if (localStorage.getItem('token') !== initialToken) return;
+        setUser({
+          id: res.data.id,
+          email: res.data.email,
+          firstName: res.data.first_name,
+          lastName: res.data.last_name,
+          role: res.data.role,
+          hrAccess: res.data.hr_access,
+          forcePasswordChange: res.data.force_password_change,
+          twoFactorEnabled: res.data.two_factor_enabled,
+          tenantId: res.data.tenant_id,
+          isPlatformAdmin: res.data.is_platform_admin || false,
+        });
+        if (res.data.tenant) {
+          setTenant(res.data.tenant);
+        }
+      })
+      .catch((error) => {
+        // CRITICAL: don't stomp a fresh login. If localStorage changed since
+        // the request started, the user successfully re-authenticated while
+        // we were waiting on this doomed call against the old token. Wiping
+        // here was the root cause of the "kicked out at login" loop.
+        if (localStorage.getItem('token') !== initialToken) return;
+        console.error('Auth check failed:', error);
+        localStorage.removeItem('token');
+        delete api.defaults.headers.common['Authorization'];
+        setUser(null);
+        setTenant(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

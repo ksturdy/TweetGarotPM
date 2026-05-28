@@ -12,14 +12,18 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [lockedMinutes, setLockedMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login, login2FA } = useAuth();
+  const { user, loading: authLoading, login, login2FA } = useAuth();
   const navigate = useNavigate();
 
-  // Any token sitting in localStorage when /login is reached is by definition
-  // stale — wipe it so the next login starts from a clean slate.
+  // If the user lands here already authenticated (typo, stale bookmark, etc.),
+  // send them home instead of sitting on the form. Do NOT wipe localStorage
+  // here — that was the previous behavior and it killed valid tokens for
+  // logged-in users who happened to visit /login.
   useEffect(() => {
-    localStorage.removeItem('token');
-  }, []);
+    if (!authLoading && user) {
+      navigate('/', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
