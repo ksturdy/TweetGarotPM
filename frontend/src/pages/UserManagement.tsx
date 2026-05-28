@@ -14,7 +14,7 @@ const UserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchName, setSearchName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
-  const [sortField, setSortField] = useState<'name' | 'last_active' | 'created'>('name');
+  const [sortField, setSortField] = useState<'name' | 'last_active' | 'password_age' | 'created'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UpdateUserData>({
     email: '',
@@ -38,6 +38,7 @@ const UserManagement: React.FC = () => {
     twoFa: 110,
     status: 100,
     lastActive: 120,
+    passwordAge: 140,
     created: 110,
     actions: 200,
   };
@@ -231,6 +232,35 @@ const UserManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const PASSWORD_MAX_AGE_DAYS = 90;
+  const PASSWORD_WARNING_DAYS = 7;
+
+  const formatPasswordAge = (dateString?: string): { text: string; color: string; title: string } => {
+    if (!dateString) {
+      return { text: 'Unknown', color: '#9ca3af', title: 'No password change on record' };
+    }
+    const changedAt = new Date(dateString);
+    const ageDays = Math.floor((Date.now() - changedAt.getTime()) / 86400000);
+    const daysUntilExpiry = PASSWORD_MAX_AGE_DAYS - ageDays;
+    const changedOn = changedAt.toLocaleDateString();
+
+    let color = 'var(--text-primary)';
+    let suffix = '';
+    if (daysUntilExpiry <= 0) {
+      color = '#dc2626';
+      suffix = ' (expired)';
+    } else if (daysUntilExpiry <= PASSWORD_WARNING_DAYS) {
+      color = '#d97706';
+      suffix = ` (expires in ${daysUntilExpiry}d)`;
+    }
+    const ageText = ageDays === 0 ? 'Today' : ageDays === 1 ? '1 day ago' : `${ageDays} days ago`;
+    return {
+      text: ageText + suffix,
+      color,
+      title: `Last changed ${changedOn} • Policy: ${PASSWORD_MAX_AGE_DAYS}-day max age`,
+    };
+  };
+
   const formatLastActive = (dateString?: string) => {
     if (!dateString) return 'Never';
     const date = new Date(dateString);
@@ -287,12 +317,12 @@ const UserManagement: React.FC = () => {
     });
   }, [users, deferredSearch, statusFilter]);
 
-  const handleSort = (field: 'name' | 'last_active' | 'created') => {
+  const handleSort = (field: 'name' | 'last_active' | 'password_age' | 'created') => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection(field === 'last_active' ? 'desc' : 'asc');
+      setSortDirection(field === 'last_active' || field === 'password_age' ? 'desc' : 'asc');
     }
   };
 
@@ -309,6 +339,11 @@ const UserManagement: React.FC = () => {
         const dateB = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0;
         return (dateA - dateB) * dir;
       }
+      case 'password_age': {
+        const dateA = a.password_changed_at ? new Date(a.password_changed_at).getTime() : 0;
+        const dateB = b.password_changed_at ? new Date(b.password_changed_at).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
       case 'created': {
         const dateA = new Date(a.created_at).getTime();
         const dateB = new Date(b.created_at).getTime();
@@ -319,7 +354,7 @@ const UserManagement: React.FC = () => {
     }
   }), [filteredUsers, sortField, sortDirection]);
 
-  const getSortIndicator = (field: 'name' | 'last_active' | 'created') => {
+  const getSortIndicator = (field: 'name' | 'last_active' | 'password_age' | 'created') => {
     if (sortField !== field) return ' ↕';
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   };
@@ -487,6 +522,10 @@ const UserManagement: React.FC = () => {
                   Last Active{getSortIndicator('last_active')}
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('lastActive', e)} />
                 </th>
+                <th onClick={() => handleSort('password_age')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Passwords expire after 90 days; users are warned 7 days before expiry">
+                  Password Age{getSortIndicator('password_age')}
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('passwordAge', e)} />
+                </th>
                 <th onClick={() => handleSort('created')} style={{ cursor: 'pointer', userSelect: 'none' }}>
                   Created{getSortIndicator('created')}
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('created', e)} />
@@ -568,6 +607,12 @@ const UserManagement: React.FC = () => {
                         </select>
                       </td>
                       <td>{formatLastActive(user.last_seen_at)}</td>
+                      <td>
+                        {(() => {
+                          const pw = formatPasswordAge(user.password_changed_at);
+                          return <span style={{ color: pw.color }} title={pw.title}>{pw.text}</span>;
+                        })()}
+                      </td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div className="sales-actions-cell">
@@ -618,6 +663,12 @@ const UserManagement: React.FC = () => {
                         </span>
                       </td>
                       <td>{formatLastActive(user.last_seen_at)}</td>
+                      <td>
+                        {(() => {
+                          const pw = formatPasswordAge(user.password_changed_at);
+                          return <span style={{ color: pw.color }} title={pw.title}>{pw.text}</span>;
+                        })()}
+                      </td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
                         <div className="sales-actions-cell">

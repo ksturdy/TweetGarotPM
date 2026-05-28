@@ -12,6 +12,7 @@ export interface User {
   last_login_at?: string;
   last_seen_at?: string;
   two_factor_enabled?: boolean;
+  password_changed_at?: string;
 }
 
 export interface UpdateUserData {

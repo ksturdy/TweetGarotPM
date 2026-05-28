@@ -4,8 +4,8 @@ const { body } = require('express-validator');
 const PASSWORD_POLICY = {
   minLength: 8,
   maxHistoryCount: 5,
-  maxAgeDays: 180,
-  warningDays: 30,
+  maxAgeDays: 90,
+  warningDays: 7,
   maxFailedAttempts: 5,
   lockoutMinutes: 15,
 };
