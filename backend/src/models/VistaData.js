@@ -85,6 +85,8 @@ const VistaData = {
           actual_labor_rate = $60, estimated_labor_rate = $61, current_est_labor_cost = $62,
           ttl_labor_projected = $63, start_month = $64, month_closed = $65,
           ship_address = $66,
+          prev_gross_profit_dollars = $67, prev_gross_profit_percent = $68,
+          prev_projected_revenue = $69,
           imported_at = CURRENT_TIMESTAMP
         WHERE id = $32
         RETURNING *`,
@@ -110,7 +112,9 @@ const VistaData = {
           data.original_estimated_margin, data.original_estimated_margin_pct,
           data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
           data.ttl_labor_projected, data.start_month, data.month_closed,
-          data.ship_address
+          data.ship_address,
+          data.prev_gross_profit_dollars, data.prev_gross_profit_percent,
+          data.prev_projected_revenue
         ]
       );
       return { record: result.rows[0], isNew: false };
@@ -135,8 +139,10 @@ const VistaData = {
           pending_change_orders, approved_changes, change_order_count,
           original_estimated_margin, original_estimated_margin_pct,
           actual_labor_rate, estimated_labor_rate, current_est_labor_cost,
-          ttl_labor_projected, start_month, month_closed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67)
+          ttl_labor_projected, start_month, month_closed,
+          prev_gross_profit_dollars, prev_gross_profit_percent,
+          prev_projected_revenue
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70)
         RETURNING *`,
         [
           tenantId, data.contract_number, data.description, data.status, data.employee_number,
@@ -156,7 +162,9 @@ const VistaData = {
           data.pending_change_orders, data.approved_changes, data.change_order_count,
           data.original_estimated_margin, data.original_estimated_margin_pct,
           data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
-          data.ttl_labor_projected, data.start_month, data.month_closed
+          data.ttl_labor_projected, data.start_month, data.month_closed,
+          data.prev_gross_profit_dollars, data.prev_gross_profit_percent,
+          data.prev_projected_revenue
         ]
       );
       return { record: result.rows[0], isNew: true };

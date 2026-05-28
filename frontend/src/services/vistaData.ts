@@ -17,6 +17,7 @@ export interface VPContract {
   received_amount: number | null;
   backlog: number | null;
   projected_revenue: number | null;
+  prev_projected_revenue: number | null;
   gross_profit_percent: number | null;
   earned_revenue: number | null;
   actual_cost: number | null;
@@ -50,6 +51,8 @@ export interface VPContract {
   // Financial metrics
   cash_flow: number | null;
   gross_profit_dollars: number | null;
+  prev_gross_profit_dollars: number | null;
+  prev_gross_profit_percent: number | null;
   open_receivables: number | null;
   current_est_cost: number | null;
   // Change orders

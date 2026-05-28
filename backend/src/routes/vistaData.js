@@ -253,6 +253,9 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             // Financial metrics
             cash_flow: parseNumber(row[' Cash Flow '] ?? row['Cash Flow']),
             gross_profit_dollars: parseNumber(row['Gross Profit'] ?? row[' Gross Profit ']),
+            prev_gross_profit_dollars: parseNumber(row['Previous Gross Profit'] ?? row[' Previous Gross Profit ']),
+            prev_gross_profit_percent: parseNumber(row['Previous Gross Profit Margin'] ?? row[' Previous Gross Profit Margin ']),
+            prev_projected_revenue: parseNumber(row['Previous Projected Revenue'] ?? row[' Previous Projected Revenue ']),
             open_receivables: parseNumber(row[' Open Receivables '] ?? row['Open Receivables']),
             current_est_cost: parseNumber(row['Current Est Cost'] ?? row[' Current Est Cost ']),
             // Change orders
