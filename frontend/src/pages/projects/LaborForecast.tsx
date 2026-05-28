@@ -1527,9 +1527,9 @@ const LaborForecast: React.FC = () => {
   }
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 112px)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexShrink: 0 }}>
         <div>
           <Link to="/projects" style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>&larr; Projects</Link>
           <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Labor Forecast</h2>
@@ -1588,7 +1588,7 @@ const LaborForecast: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="card" style={{ padding: '0.75rem', marginBottom: '1rem' }}>
+      <div className="card" style={{ padding: '0.75rem', marginBottom: '1rem', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Search</label>
@@ -1849,6 +1849,7 @@ const LaborForecast: React.FC = () => {
         background: oppMode !== 'off' ? '#fffbeb' : '#f8fafc',
         border: `1px solid ${oppMode !== 'off' ? '#fcd34d' : '#e2e8f0'}`,
         borderRadius: '8px',
+        flexShrink: 0,
       }}>
         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: oppMode !== 'off' ? '#92400e' : '#64748b' }}>
           Pipeline Opportunities
@@ -1906,7 +1907,7 @@ const LaborForecast: React.FC = () => {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="card" style={{ padding: '1rem', marginBottom: '1rem', background: '#fffbeb', border: '1px solid #fcd34d' }}>
+        <div className="card" style={{ padding: '1rem', marginBottom: '1rem', background: '#fffbeb', border: '1px solid #fcd34d', flexShrink: 0, overflow: 'auto', maxHeight: '40vh' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: '#92400e', margin: 0 }}>Settings</h3>
             <button onClick={() => { setDurationRules(defaultDurationRules); setHoursPerPersonPerMonth(173); }}
@@ -1971,7 +1972,7 @@ const LaborForecast: React.FC = () => {
       {/* ─── TABLE VIEW ─── */}
       {viewMode === 'table' && (
         <>
-          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          <div className="card" style={{ padding: 0, overflow: 'auto', flex: 1, minHeight: 0 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
               <thead>
                 <tr style={{ background: '#f8fafc' }}>
@@ -1985,6 +1986,8 @@ const LaborForecast: React.FC = () => {
                           borderBottom: '2px solid #e2e8f0',
                           position: 'sticky',
                           left: 0,
+                          top: 0,
+                          zIndex: 3,
                           background: '#f8fafc',
                           minWidth: '200px',
                           cursor: 'pointer',
@@ -1999,6 +2002,10 @@ const LaborForecast: React.FC = () => {
                           padding: '0.5rem',
                           textAlign: 'right',
                           borderBottom: '2px solid #e2e8f0',
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 2,
+                          background: '#f8fafc',
                           minWidth: '80px',
                           cursor: 'pointer',
                           userSelect: 'none'
@@ -2006,13 +2013,17 @@ const LaborForecast: React.FC = () => {
                       >
                         Rem. Hours<SortIndicator column="hours" />
                       </th>
-                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '110px' }}>PF / SM / PL</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', minWidth: '110px' }}>PF / SM / PL</th>
                       <th
                         onClick={() => handleSort('completion')}
                         style={{
                           padding: '0.5rem',
                           textAlign: 'right',
                           borderBottom: '2px solid #e2e8f0',
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 2,
+                          background: '#f8fafc',
                           minWidth: '50px',
                           cursor: 'pointer',
                           userSelect: 'none'
@@ -2020,19 +2031,20 @@ const LaborForecast: React.FC = () => {
                       >
                         % Comp<SortIndicator column="completion" />
                       </th>
-                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>Start</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '60px' }}>End</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', minWidth: '80px' }}>Contour</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', minWidth: '60px' }}>Start</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', minWidth: '60px' }}>End</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', minWidth: '80px' }}>Contour</th>
                     </>
                   ) : (
                     <>
-                      <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', left: 0, background: '#f8fafc', minWidth: '140px' }}>Trade</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', minWidth: '90px' }}>Total Remaining</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', left: 0, top: 0, zIndex: 3, background: '#f8fafc', minWidth: '140px' }}>Trade</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc', minWidth: '90px' }}>Total Remaining</th>
                     </>
                   )}
                   {displayColumns.map(col => (
                     <th key={col.key} style={{
                       padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0',
+                      position: 'sticky', top: 0, zIndex: 2,
                       minWidth: granularity === 'weekly' ? '40px' : '55px', background: '#f8fafc',
                       fontSize: granularity === 'weekly' ? '0.6rem' : '0.75rem',
                     }}>
@@ -2359,7 +2371,7 @@ const LaborForecast: React.FC = () => {
           </div>
 
           {/* Legend */}
-          <div style={{ marginTop: '1rem', fontSize: '0.7rem', color: '#64748b' }}>
+          <div style={{ marginTop: '1rem', fontSize: '0.7rem', color: '#64748b', flexShrink: 0 }}>
             <strong>How it works:</strong> Remaining hours per trade (Projected - JTD) are distributed using the same contour and end date as revenue projections.
             Headcount = Monthly Hours &divide; {hoursPerPersonPerMonth} hrs/person/month.
             <br />
@@ -2378,7 +2390,7 @@ const LaborForecast: React.FC = () => {
 
       {/* ─── GRAPH VIEW ─── */}
       {viewMode === 'graph' && (
-        <div className="card" style={{ padding: '1rem' }}>
+        <div className="card" style={{ padding: '1rem', flex: 1, minHeight: 0, overflow: 'auto' }}>
           {/* Stacked bar chart */}
           <div style={{ marginBottom: '2rem' }}>
             <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '1rem', color: '#1e293b' }}>
