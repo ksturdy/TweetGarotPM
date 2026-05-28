@@ -1,10 +1,19 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const config = require('../config');
 const db = require('../config/database');
 
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 const TOKEN_REFRESH_AGE_S = 10 * 60;
 const lastSeenWrites = new Map();
+
+// Fingerprint of the JWT secret in use by THIS process. If multiple backend
+// processes are running with different secrets, their fingerprints will
+// differ and the [Auth] log lines will reveal it.
+const SECRET_FP = crypto.createHash('sha256').update(String(config.jwt.secret)).digest('hex').slice(0, 12);
+const SECRET_LEN = String(config.jwt.secret).length;
+const SECRET_IS_FALLBACK = config.jwt.secret === 'dev-secret-change-in-production';
+console.log(`[Auth] init pid=${process.pid} secretFp=${SECRET_FP} secretLen=${SECRET_LEN} fallback=${SECRET_IS_FALLBACK} nodeEnv=${config.nodeEnv}`);
 
 /**
  * Authenticate user via JWT token.
@@ -43,6 +52,8 @@ const authenticate = async (req, res, next) => {
       ageS: payload && payload.iat ? nowS - payload.iat : null,
       expiredAgoS: payload && payload.exp ? nowS - payload.exp : null,
       userId: payload && payload.id,
+      pid: process.pid,
+      secretFp: SECRET_FP,
     });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
