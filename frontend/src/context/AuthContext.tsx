@@ -105,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initialToken = localStorage.getItem('token');
+    console.log('[auth-debug] AuthProvider mount', { hasToken: !!initialToken });
     if (!initialToken) {
       setLoading(false);
       return;
@@ -164,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check if 2FA is required
     if (res.data.requires2FA) {
+      console.log('[auth-debug] login: 2FA required');
       return {
         requires2FA: true,
         userId: res.data.userId,
@@ -172,6 +174,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Normal login (no 2FA)
+    const tokenPreview = res.data.token ? `${res.data.token.slice(0, 24)}…(len=${res.data.token.length})` : '<missing>';
+    console.log('[auth-debug] login: POST /auth/login OK', { token: tokenPreview, userId: res.data.user?.id, tenantId: res.data.user?.tenantId ?? res.data.tenant?.id });
     localStorage.setItem('token', res.data.token);
     api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
     setUser(res.data.user);

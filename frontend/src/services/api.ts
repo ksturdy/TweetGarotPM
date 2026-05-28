@@ -27,8 +27,14 @@ const verifySession = (): Promise<boolean> => {
   if (sessionCheck) return sessionCheck;
   sessionCheck = api
     .get('/auth/me')
-    .then(() => true)
-    .catch(() => false)
+    .then(() => {
+      console.log('[auth-debug] verifySession: /auth/me OK');
+      return true;
+    })
+    .catch((err) => {
+      console.log('[auth-debug] verifySession: /auth/me FAILED', err.response?.status, err.response?.data);
+      return false;
+    })
     .finally(() => {
       sessionCheck = null;
     });
@@ -47,6 +53,10 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url: string = error.config?.url || '';
 
+    if (status === 401) {
+      console.log('[auth-debug] 401 received', { url, body: error.response?.data });
+    }
+
     // /auth/me failures are handled by AuthContext — don't loop.
     if (status === 401 && url.includes('/auth/me')) {
       return Promise.reject(error);
@@ -57,8 +67,10 @@ api.interceptors.response.use(
     if (status === 401) {
       const sessionValid = await verifySession();
       if (sessionValid) {
+        console.log('[auth-debug] 401 on', url, 'but session is still valid — keeping token');
         return Promise.reject(error);
       }
+      console.log('[auth-debug] session dead — wiping token and redirecting to /login');
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
