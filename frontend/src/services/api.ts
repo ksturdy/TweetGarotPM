@@ -45,19 +45,38 @@ api.interceptors.response.use(
   (response) => {
     const refreshed = response.headers?.['x-new-token'];
     if (refreshed) {
+      // Critical defense: cached/304 responses can carry an X-New-Token
+      // header from when they were first served, sometimes signed with a
+      // secret that's since been rotated. Only accept the refresh if its
+      // iat is newer than what we already have. This prevents browser
+      // HTTP caching from regressing a fresh login back to a stale token.
       let refreshedIat: number | undefined;
       try {
         refreshedIat = JSON.parse(atob(refreshed.split('.')[1])).iat;
-      } catch (_) { /* ignore */ }
+      } catch (_) { /* malformed refresh — ignore */ }
+
       const prior = localStorage.getItem('token');
-      console.log('[auth-debug] X-New-Token received — overwriting localStorage', {
-        url: response.config?.url,
-        refreshedIat,
-        refreshedAgeS: refreshedIat ? Math.floor(Date.now() / 1000) - refreshedIat : null,
-        priorLen: prior?.length,
-        refreshedLen: refreshed.length,
-      });
-      localStorage.setItem('token', refreshed);
+      let priorIat: number | undefined;
+      if (prior) {
+        try {
+          priorIat = JSON.parse(atob(prior.split('.')[1])).iat;
+        } catch (_) { /* ignore */ }
+      }
+
+      if (refreshedIat && priorIat && refreshedIat <= priorIat) {
+        console.log('[auth-debug] X-New-Token IGNORED — older than current token', {
+          url: response.config?.url,
+          refreshedIat,
+          priorIat,
+        });
+      } else {
+        console.log('[auth-debug] X-New-Token accepted — overwriting localStorage', {
+          url: response.config?.url,
+          refreshedIat,
+          priorIat,
+        });
+        localStorage.setItem('token', refreshed);
+      }
     }
     return response;
   },
