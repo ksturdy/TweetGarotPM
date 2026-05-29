@@ -208,6 +208,8 @@ function parseSpreadsheet(buffer, filename) {
       responsible: String(get('responsible') || '').trim() || null,
       is_milestone: false,
       is_summary: false,
+      outline_level: 0,
+      parent_summary_order: null,
       raw,
       display_order: activities.length,
     });
@@ -284,6 +286,8 @@ function parseXER(buffer) {
       responsible: null,
       is_milestone: t.task_type === 'TT_Mile' || t.task_type === 'TT_FinMile',
       is_summary: t.task_type === 'TT_WBS',
+      outline_level: t.task_type === 'TT_WBS' ? 1 : 0,
+      parent_summary_order: null,
       raw: t,
       display_order: activities.length,
     });

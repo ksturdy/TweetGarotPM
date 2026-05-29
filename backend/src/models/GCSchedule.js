@@ -78,6 +78,7 @@ const GCSchedule = {
         const placeholders = chunk.map((a, rowIdx) => {
           const row = [versionId, ...ACTIVITY_COLUMNS.map((c) => {
             if (c === 'raw') return a.raw ? JSON.stringify(a.raw) : null;
+            if (c === 'outline_level') return a.outline_level == null ? (a.is_summary ? 1 : 0) : a.outline_level;
             return a[c] === undefined ? null : a[c];
           })];
           const start = rowIdx * baseCols.length;
