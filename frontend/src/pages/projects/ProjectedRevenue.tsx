@@ -10,6 +10,7 @@ import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import { format, differenceInMonths, addMonths, startOfMonth, parseISO, isBefore } from 'date-fns';
 import '../../styles/SalesPipeline.css';
+import '../../components/modals/Modal.css';
 
 // Formatting helpers
 const fmt = (value: number | null | undefined): string => {
@@ -96,6 +97,19 @@ const getOppDurationForValue = (value: number, rules: ForecastDurationRule[]): n
   return 24;
 };
 
+// Virtual stage label that breaks Awarded into sub-categories by awarded_status.
+// "Not in Vista" = the awarded opp is not yet booked in Vista as a contract.
+const getOppStageLabel = (opp: OpportunityWithEstimate): string => {
+  if (opp.stage_name === 'Awarded') {
+    const status = opp.awarded_status && opp.awarded_status.trim() ? opp.awarded_status : 'Not in Vista';
+    return `Awarded — ${status}`;
+  }
+  return opp.stage_name || 'Unknown';
+};
+
+const isInVistaAwardedLabel = (label: string): boolean =>
+  label === 'Awarded — In Progress' || label === 'Awarded — Completed';
+
 interface OpportunityRevenueProjection {
   opportunity: OpportunityWithEstimate;
   projectedStart: Date;
@@ -159,12 +173,26 @@ const ProjectedRevenue: React.FC = () => {
   const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
   const [oppWeighted, setOppWeighted] = useState(true);
   const [oppTeamFilter, setOppTeamFilter] = useState<string>('');
+  const [oppStageFilter, setOppStageFilter] = useState<string[]>([]);
 
   const { data: opportunitiesWithEstimates } = useQuery({
     queryKey: ['opportunities', 'withEstimates'],
     queryFn: () => opportunitiesService.getWithEstimates(),
     enabled: oppMode !== 'off',
   });
+
+  // Default the stage filter to all stages EXCEPT Awarded-in-Vista ones,
+  // since those are already booked as contracts and would double-count.
+  const [oppStageFilterInitialized, setOppStageFilterInitialized] = useState(false);
+  useEffect(() => {
+    if (!oppStageFilterInitialized && opportunitiesWithEstimates && opportunitiesWithEstimates.length > 0) {
+      const stages = new Set<string>();
+      opportunitiesWithEstimates.forEach(o => stages.add(getOppStageLabel(o)));
+      const safe = Array.from(stages).filter(s => !isInVistaAwardedLabel(s));
+      setOppStageFilter(safe);
+      setOppStageFilterInitialized(true);
+    }
+  }, [opportunitiesWithEstimates, oppStageFilterInitialized]);
 
   const { data: forecastRules } = useQuery({
     queryKey: ['forecastRules'],
@@ -638,9 +666,14 @@ const ProjectedRevenue: React.FC = () => {
     const workRules = forecastRules?.workDurationRules || defaultWorkDurationRules;
 
     const filtered = opportunitiesWithEstimates.filter(opp => {
-      if (oppMode === 'select' && !selectedOppIds.includes(opp.id)) return false;
+      // Select mode: when individual opps are picked, restrict to those.
+      // When no individuals are picked, fall back to all matching the team/stage filters.
+      if (oppMode === 'select' && selectedOppIds.length > 0 && !selectedOppIds.includes(opp.id)) return false;
       if (oppTeamFilter && oppTeamMemberEmployeeIds.size > 0) {
         if (!opp.assigned_to || !oppTeamMemberEmployeeIds.has(opp.assigned_to)) return false;
+      }
+      if (oppStageFilter.length > 0) {
+        if (!oppStageFilter.includes(getOppStageLabel(opp))) return false;
       }
       // Reuse the same dept/market filters so the overlay tracks the page filters
       if (departmentFilter.length > 0) {
@@ -657,9 +690,25 @@ const ProjectedRevenue: React.FC = () => {
       if (estimatedValue <= 0) continue;
 
       const qualitativeProbMap: Record<string, number> = { High: 75, Medium: 50, Low: 25 };
-      const probability = opp.probability && qualitativeProbMap[opp.probability]
-        ? qualitativeProbMap[opp.probability]
-        : (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) || 0;
+      const tryNumericProb = (v: string | number | null | undefined): number | null => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = typeof v === 'number' ? v : parseFloat(String(v).replace('%', ''));
+        return isNaN(n) ? null : n;
+      };
+      // Resolution order:
+      //  1) Awarded opps are always 100% (work is awarded).
+      //  2) Explicit High/Medium/Low → 75/50/25.
+      //  3) Numeric percentage in opp.probability or opp.stage_probability.
+      let probability: number;
+      if (opp.stage_name === 'Awarded') {
+        probability = 100;
+      } else if (opp.probability && qualitativeProbMap[opp.probability]) {
+        probability = qualitativeProbMap[opp.probability];
+      } else if (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) {
+        probability = qualitativeProbMap[opp.stage_probability as string];
+      } else {
+        probability = tryNumericProb(opp.probability) ?? tryNumericProb(opp.stage_probability) ?? 0;
+      }
       const probFactor = oppWeighted ? (probability > 0 ? probability / 100 : 0) : 1;
       const weightedRevenue = estimatedValue * probFactor;
       if (weightedRevenue <= 0) continue;
@@ -714,7 +763,7 @@ const ProjectedRevenue: React.FC = () => {
       });
     }
     return results;
-  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, oppTeamFilter, oppTeamMemberEmployeeIds, oppWeighted, forecastRules, departmentFilter, marketFilter]);
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, oppTeamFilter, oppTeamMemberEmployeeIds, oppStageFilter, oppWeighted, forecastRules, departmentFilter, marketFilter]);
 
   const oppColumnTotals = useMemo(() => {
     const totals = new Map<string, number>();
@@ -733,6 +782,49 @@ const ProjectedRevenue: React.FC = () => {
     opportunityProjections.forEach(p => { total += p.weightedRevenue; });
     return total;
   }, [opportunityProjections]);
+
+  // Per-month opp totals for ALL 36 months (the table's column map only covers
+  // the first 12 months individually + 3 year buckets, so we need a separate
+  // monthly map for the chart bars and yearly/quarterly aggregation).
+  const oppMonthlyTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    if (oppMode === 'off') return totals;
+    const now = startOfMonth(new Date());
+    for (let i = 0; i < 36; i++) {
+      const monthDate = addMonths(now, i);
+      const key = format(monthDate, 'yyyy-MM');
+      let total = 0;
+      opportunityProjections.forEach(p => {
+        total += p.monthlyRevenue.get(key) || 0;
+      });
+      totals.set(key, total);
+    }
+    return totals;
+  }, [opportunityProjections, oppMode]);
+
+  // Drill-down: clicking a bar in the monthly graph opens this column
+  const [drillDownCol, setDrillDownCol] = useState<{ key: string; label: string } | null>(null);
+
+  const drillDownProjects = useMemo(() => {
+    if (!drillDownCol) return [];
+    return projections
+      .map(p => ({ projection: p, revenue: p.monthlyRevenue.get(drillDownCol.key) || 0 }))
+      .filter(d => d.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [drillDownCol, projections]);
+
+  const drillDownOpps = useMemo(() => {
+    if (oppMode === 'off' || !drillDownCol) return [];
+    return opportunityProjections
+      .map(p => ({ projection: p, revenue: p.monthlyRevenue.get(drillDownCol.key) || 0 }))
+      .filter(d => d.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [drillDownCol, opportunityProjections, oppMode]);
+
+  // Close drill-down when key filters change
+  useEffect(() => {
+    setDrillDownCol(null);
+  }, [departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, teamFilter, oppMode, oppStageFilter, oppTeamFilter, oppWeighted]);
 
   if (isLoading) {
     return <div className="loading">Loading contracts...</div>;
@@ -1018,10 +1110,11 @@ const ProjectedRevenue: React.FC = () => {
           <MultiSearchableSelect
             options={opportunitiesWithEstimates
               .filter(o => !oppTeamFilter || (o.assigned_to != null && oppTeamMemberEmployeeIds.has(o.assigned_to)))
+              .filter(o => oppStageFilter.length === 0 || oppStageFilter.includes(getOppStageLabel(o)))
               .map(o => ({
                 value: String(o.id),
-                label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
-                searchText: `${o.title} ${o.customer_name || ''} ${o.assigned_to_name || ''} ${o.stage_name || ''}`,
+                label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))}) [${getOppStageLabel(o)}]`,
+                searchText: `${o.title} ${o.customer_name || ''} ${o.assigned_to_name || ''} ${getOppStageLabel(o)}`,
               }))}
             value={selectedOppIds.map(String)}
             onChange={(vals: string[]) => setSelectedOppIds(vals.map(Number))}
@@ -1043,6 +1136,22 @@ const ProjectedRevenue: React.FC = () => {
                 <option key={t.id} value={String(t.id)}>{t.name}</option>
               ))}
             </select>
+          </div>
+        )}
+        {oppMode !== 'off' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#92400e' }}>Stages:</label>
+            <MultiSearchableSelect
+              options={(() => {
+                const stages = new Set<string>();
+                (opportunitiesWithEstimates || []).forEach(o => stages.add(getOppStageLabel(o)));
+                return Array.from(stages).sort().map(s => ({ value: s, label: s }));
+              })()}
+              value={oppStageFilter}
+              onChange={setOppStageFilter}
+              placeholder="All Stages"
+              style={{ minWidth: '180px', fontSize: '0.75rem' }}
+            />
           </div>
         )}
         {oppMode !== 'off' && (
@@ -1576,7 +1685,7 @@ const ProjectedRevenue: React.FC = () => {
                     value: total,
                     key
                   });
-                  const oppForKey = oppMode !== 'off' ? (oppColumnTotals.get(key) || 0) : 0;
+                  const oppForKey = oppMode !== 'off' ? (oppMonthlyTotals.get(key) || 0) : 0;
                   const combined = total + oppForKey;
                   if (combined > maxValue) maxValue = combined;
                 }
@@ -1657,9 +1766,14 @@ const ProjectedRevenue: React.FC = () => {
                         const showMonth = i % 3 === 0; // Show every 3rd month
                         const isOverBudget = showBudget && d.value > monthlyBudget;
                         const isUnderBudget = showBudget && d.value < monthlyBudget;
+                        const oppValForBar = oppMode !== 'off' ? (oppMonthlyTotals.get(d.key) || 0) : 0;
+                        const clickableValue = d.value + oppValForBar;
 
                         return (
-                          <g key={d.key}>
+                          <g key={d.key}
+                            onClick={() => clickableValue > 0 && setDrillDownCol({ key: d.key, label: d.label })}
+                            style={{ cursor: clickableValue > 0 ? 'pointer' : 'default' }}
+                          >
                             {/* Budget bar (background) */}
                             {showBudget && (
                               <rect
@@ -1686,7 +1800,7 @@ const ProjectedRevenue: React.FC = () => {
                             </rect>
                             {/* Opportunity overlay */}
                             {oppMode !== 'off' && (() => {
-                              const oppVal = oppColumnTotals.get(d.key) || 0;
+                              const oppVal = oppMonthlyTotals.get(d.key) || 0;
                               const oppH = maxValue > 0 ? (oppVal / maxValue) * chartHeight : 0;
                               if (oppH <= 0.5) return null;
                               return (
@@ -1823,7 +1937,7 @@ const ProjectedRevenue: React.FC = () => {
                         yearTotal += p.monthlyRevenue.get(key) || 0;
                       });
                       if (oppMode !== 'off') {
-                        yearOpp += oppColumnTotals.get(key) || 0;
+                        yearOpp += oppMonthlyTotals.get(key) || 0;
                       }
                     }
                   }
@@ -1991,7 +2105,7 @@ const ProjectedRevenue: React.FC = () => {
                       total += p.monthlyRevenue.get(key) || 0;
                     });
                     if (oppMode !== 'off') {
-                      opp += oppColumnTotals.get(key) || 0;
+                      opp += oppMonthlyTotals.get(key) || 0;
                     }
                   }
                   const qStart = addMonths(now, startMonth);
@@ -2021,6 +2135,135 @@ const ProjectedRevenue: React.FC = () => {
                   </div>
                 ));
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── DRILL-DOWN MODAL ─── */}
+      {drillDownCol && (
+        <div className="modal-overlay" onClick={() => setDrillDownCol(null)}>
+          <div className="modal-container" style={{ maxWidth: '950px', width: '95%' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ fontSize: '1.25rem' }}>{drillDownCol.label} — Revenue Breakdown</h2>
+              <button className="modal-close" onClick={() => setDrillDownCol(null)}>&times;</button>
+            </div>
+            <div className="modal-subtitle">
+              {(() => {
+                const ct = drillDownProjects.reduce((s, d) => s + d.revenue, 0);
+                const ot = drillDownOpps.reduce((s, d) => s + d.revenue, 0);
+                return (
+                  <>
+                    <strong>{fmtCompact(ct)}</strong> contract revenue
+                    <span style={{ color: '#64748b' }}> — {drillDownProjects.length} projects</span>
+                    {drillDownOpps.length > 0 && (
+                      <span style={{ color: '#f59e0b' }}> + {fmtCompact(ot)} from {drillDownOpps.length} opportunities{oppWeighted ? ' (weighted)' : ''}</span>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="modal-body" style={{ padding: '0 1rem 1rem', maxHeight: '60vh', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>Contract</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>Description</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>PM</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc' }}>Backlog</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right', borderBottom: '2px solid #e2e8f0', position: 'sticky', top: 0, background: '#f8fafc', fontWeight: 700 }}>This Month</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drillDownProjects.map(({ projection: p, revenue }) => (
+                    <tr key={p.contract.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.4rem 0.5rem', whiteSpace: 'nowrap' }}>
+                        {p.contract.linked_project_id ? (
+                          <Link to={`/projects/${p.contract.linked_project_id}`} style={{ color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
+                            {p.contract.contract_number}
+                          </Link>
+                        ) : (
+                          <span style={{ fontWeight: 500 }}>{p.contract.contract_number}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#475569' }}>
+                        {p.contract.description || p.contract.customer_name || '-'}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                        {p.contract.project_manager_name || '-'}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#475569' }}>
+                        {fmtCompact(parseNum(p.contract.backlog))}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600 }}>
+                        {fmtCompact(revenue)}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Projects subtotal */}
+                  {drillDownProjects.length > 0 && (
+                    <tr style={{ background: '#f1f5f9', fontWeight: 600, color: '#1e293b' }}>
+                      <td colSpan={4} style={{ padding: '0.5rem' }}>
+                        Projects subtotal ({drillDownProjects.length})
+                      </td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                        {fmtCompact(drillDownProjects.reduce((s, d) => s + d.revenue, 0))}
+                      </td>
+                    </tr>
+                  )}
+                  {drillDownOpps.length > 0 && (
+                    <>
+                      <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
+                        <td colSpan={5} style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontWeight: 600, fontSize: '0.7rem' }}>
+                          Opportunities ({oppWeighted ? 'probability-weighted' : 'actual'})
+                        </td>
+                      </tr>
+                      {drillDownOpps.map(({ projection: p, revenue }) => (
+                        <tr key={`opp-${p.opportunity.id}`} style={{ borderBottom: '1px solid #fde68a', background: '#fffbeb' }}>
+                          <td style={{ padding: '0.4rem 0.5rem', whiteSpace: 'nowrap' }}>
+                            <span style={{ background: '#f59e0b', color: '#fff', fontSize: '0.55rem', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, marginRight: '0.25rem' }}>OPP</span>
+                            <span style={{ fontWeight: 500, color: '#92400e' }}>{p.opportunity.title}</span>
+                          </td>
+                          <td style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontSize: '0.7rem' }}>
+                            {fmtCompact(parseNum(p.opportunity.estimated_value))} | {p.probability}%
+                          </td>
+                          <td style={{ padding: '0.4rem 0.5rem', color: '#b45309', fontSize: '0.7rem' }}>
+                            {p.opportunity.assigned_to_name || '-'}
+                          </td>
+                          <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#b45309' }}>
+                            {fmtCompact(p.weightedRevenue)}
+                          </td>
+                          <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600, color: '#92400e' }}>
+                            {fmtCompact(revenue)}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Opportunities subtotal */}
+                      <tr style={{ background: '#fef3c7', fontWeight: 600, color: '#92400e' }}>
+                        <td colSpan={4} style={{ padding: '0.5rem' }}>
+                          Opportunities subtotal ({drillDownOpps.length}{oppWeighted ? ', weighted' : ''})
+                        </td>
+                        <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                          {fmtCompact(drillDownOpps.reduce((s, d) => s + d.revenue, 0))}
+                        </td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#e2e8f0', fontWeight: 700, color: '#0f172a' }}>
+                    <td colSpan={4} style={{ padding: '0.5rem' }}>
+                      MONTH TOTAL (projects + opportunities)
+                    </td>
+                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                      {fmtCompact(
+                        drillDownProjects.reduce((s, d) => s + d.revenue, 0)
+                        + drillDownOpps.reduce((s, d) => s + d.revenue, 0)
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>

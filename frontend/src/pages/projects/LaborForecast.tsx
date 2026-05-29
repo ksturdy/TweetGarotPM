@@ -252,6 +252,19 @@ const getOppDurationForValue = (value: number, rules: ForecastDurationRule[]): n
   return 24;
 };
 
+// Virtual stage label that breaks Awarded into sub-categories by awarded_status.
+// "Not in Vista" = the awarded opp is not yet booked in Vista as a contract.
+const getOppStageLabel = (opp: OpportunityWithEstimate): string => {
+  if (opp.stage_name === 'Awarded') {
+    const status = opp.awarded_status && opp.awarded_status.trim() ? opp.awarded_status : 'Not in Vista';
+    return `Awarded — ${status}`;
+  }
+  return opp.stage_name || 'Unknown';
+};
+
+const isInVistaAwardedLabel = (label: string): boolean =>
+  label === 'Awarded — In Progress' || label === 'Awarded — Completed';
+
 // ═══════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════
@@ -301,6 +314,7 @@ const LaborForecast: React.FC = () => {
   const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
   const [oppWeighted, setOppWeighted] = useState(true);
   const [oppTeamFilter, setOppTeamFilter] = useState<string>('');
+  const [oppStageFilter, setOppStageFilter] = useState<string[]>([]);
 
   // Teams list for opportunity team filter dropdown
   const { data: oppTeamsList } = useQuery({
@@ -387,6 +401,19 @@ const LaborForecast: React.FC = () => {
     queryFn: () => opportunitiesService.getWithEstimates(),
     enabled: oppMode !== 'off',
   });
+
+  // Default the stage filter to all stages EXCEPT Awarded-in-Vista ones,
+  // since those are already booked as contracts and would double-count.
+  const [oppStageFilterInitialized, setOppStageFilterInitialized] = useState(false);
+  useEffect(() => {
+    if (!oppStageFilterInitialized && opportunitiesWithEstimates && opportunitiesWithEstimates.length > 0) {
+      const stages = new Set<string>();
+      opportunitiesWithEstimates.forEach(o => stages.add(getOppStageLabel(o)));
+      const safe = Array.from(stages).filter(s => !isInVistaAwardedLabel(s));
+      setOppStageFilter(safe);
+      setOppStageFilterInitialized(true);
+    }
+  }, [opportunitiesWithEstimates, oppStageFilterInitialized]);
 
   const { data: forecastRules } = useQuery({
     queryKey: ['forecastRules'],
@@ -796,12 +823,17 @@ const LaborForecast: React.FC = () => {
     const results: OpportunityLaborProjection[] = [];
 
     const filtered = opportunitiesWithEstimates.filter(opp => {
-      if (oppMode === 'select' && !selectedOppIds.includes(opp.id)) return false;
+      // Select mode: when individual opps are picked, restrict to those.
+      // When no individuals are picked, fall back to all matching the team/stage filters.
+      if (oppMode === 'select' && selectedOppIds.length > 0 && !selectedOppIds.includes(opp.id)) return false;
       if (locationGroupFilter.length > 0) {
         if (!opp.location_group || !locationGroupFilter.includes(opp.location_group)) return false;
       }
       if (oppTeamFilter && oppTeamMemberEmployeeIds.size > 0) {
         if (!opp.assigned_to || !oppTeamMemberEmployeeIds.has(opp.assigned_to)) return false;
+      }
+      if (oppStageFilter.length > 0) {
+        if (!oppStageFilter.includes(getOppStageLabel(opp))) return false;
       }
       if (!opp.labor_pct || parseNum(opp.labor_pct) <= 0) return false;
       return true;
@@ -836,9 +868,21 @@ const LaborForecast: React.FC = () => {
 
       // Apply probability weighting (stage_probability is 'Low'/'Medium'/'High' text)
       const qualitativeProbMap: Record<string, number> = { 'High': 75, 'Medium': 50, 'Low': 25 };
-      const probability = opp.probability && qualitativeProbMap[opp.probability]
-        ? qualitativeProbMap[opp.probability]
-        : (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) || 0;
+      const tryNumericProb = (v: string | number | null | undefined): number | null => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = typeof v === 'number' ? v : parseFloat(String(v).replace('%', ''));
+        return isNaN(n) ? null : n;
+      };
+      let probability: number;
+      if (opp.stage_name === 'Awarded') {
+        probability = 100;
+      } else if (opp.probability && qualitativeProbMap[opp.probability]) {
+        probability = qualitativeProbMap[opp.probability];
+      } else if (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) {
+        probability = qualitativeProbMap[opp.stage_probability as string];
+      } else {
+        probability = tryNumericProb(opp.probability) ?? tryNumericProb(opp.stage_probability) ?? 0;
+      }
       const probFactor = oppWeighted ? (probability > 0 ? probability / 100 : 0) : 1;
 
       const weightedPf = filteredPf * probFactor;
@@ -913,7 +957,7 @@ const LaborForecast: React.FC = () => {
     }
 
     return results;
-  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules, oppWeighted, oppTeamFilter, oppTeamMemberEmployeeIds]);
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules, oppWeighted, oppTeamFilter, oppTeamMemberEmployeeIds, oppStageFilter]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -1902,10 +1946,11 @@ const LaborForecast: React.FC = () => {
             options={opportunitiesWithEstimates
               .filter(o => locationGroupFilter.length === 0 || (o.location_group && locationGroupFilter.includes(o.location_group)))
               .filter(o => !oppTeamFilter || (o.assigned_to != null && oppTeamMemberEmployeeIds.has(o.assigned_to)))
+              .filter(o => oppStageFilter.length === 0 || oppStageFilter.includes(getOppStageLabel(o)))
               .map(o => ({
               value: String(o.id),
-              label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
-              searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''} ${o.stage_name || ''}`,
+              label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))}) [${getOppStageLabel(o)}]`,
+              searchText: `${o.title} ${o.customer_name || ''} ${o.location_group || ''} ${getOppStageLabel(o)}`,
             }))}
             value={selectedOppIds.map(String)}
             onChange={(vals: string[]) => setSelectedOppIds(vals.map(Number))}
@@ -1927,6 +1972,22 @@ const LaborForecast: React.FC = () => {
                 <option key={t.id} value={String(t.id)}>{t.name}</option>
               ))}
             </select>
+          </div>
+        )}
+        {oppMode !== 'off' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#92400e' }}>Stages:</label>
+            <MultiSearchableSelect
+              options={(() => {
+                const stages = new Set<string>();
+                (opportunitiesWithEstimates || []).forEach(o => stages.add(getOppStageLabel(o)));
+                return Array.from(stages).sort().map(s => ({ value: s, label: s }));
+              })()}
+              value={oppStageFilter}
+              onChange={setOppStageFilter}
+              placeholder="All Stages"
+              style={{ minWidth: '180px', fontSize: '0.75rem' }}
+            />
           </div>
         )}
         {oppMode !== 'off' && (
