@@ -300,6 +300,28 @@ const LaborForecast: React.FC = () => {
   const [oppMode, setOppMode] = useState<'off' | 'all' | 'select'>('off');
   const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
   const [oppWeighted, setOppWeighted] = useState(true);
+  const [oppTeamFilter, setOppTeamFilter] = useState<string>('');
+
+  // Teams list for opportunity team filter dropdown
+  const { data: oppTeamsList } = useQuery({
+    queryKey: ['teams', 'active'],
+    queryFn: () => teamsApi.getAll().then(r => r.data.data.filter(t => t.is_active)),
+  });
+
+  // Members of the selected opportunity team (filter opps by assigned_to user id)
+  const { data: oppTeamMembersResponse } = useQuery({
+    queryKey: ['teamMembers', oppTeamFilter],
+    queryFn: () => teamsApi.getMembers(Number(oppTeamFilter)),
+    enabled: !!oppTeamFilter,
+  });
+  const oppTeamMemberEmployeeIds = useMemo(() => {
+    const members = (oppTeamMembersResponse?.data as any)?.data || [];
+    return new Set<number>(
+      members
+        .map((m: any) => m.employee_id)
+        .filter((id: any) => id != null) as number[]
+    );
+  }, [oppTeamMembersResponse]);
 
   // Overrides (shared with revenue page)
   const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
@@ -778,6 +800,9 @@ const LaborForecast: React.FC = () => {
       if (locationGroupFilter.length > 0) {
         if (!opp.location_group || !locationGroupFilter.includes(opp.location_group)) return false;
       }
+      if (oppTeamFilter && oppTeamMemberEmployeeIds.size > 0) {
+        if (!opp.assigned_to || !oppTeamMemberEmployeeIds.has(opp.assigned_to)) return false;
+      }
       if (!opp.labor_pct || parseNum(opp.labor_pct) <= 0) return false;
       return true;
     });
@@ -888,7 +913,7 @@ const LaborForecast: React.FC = () => {
     }
 
     return results;
-  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules, oppWeighted]);
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, locationGroupFilter, locationFilter, forecastRules, oppWeighted, oppTeamFilter, oppTeamMemberEmployeeIds]);
 
   // ─── Aggregations ────────────────────────────────────────
 
@@ -1876,6 +1901,7 @@ const LaborForecast: React.FC = () => {
           <MultiSearchableSelect
             options={opportunitiesWithEstimates
               .filter(o => locationGroupFilter.length === 0 || (o.location_group && locationGroupFilter.includes(o.location_group)))
+              .filter(o => !oppTeamFilter || (o.assigned_to != null && oppTeamMemberEmployeeIds.has(o.assigned_to)))
               .map(o => ({
               value: String(o.id),
               label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
@@ -1886,6 +1912,22 @@ const LaborForecast: React.FC = () => {
             placeholder="Select opportunities..."
             style={{ minWidth: '280px', fontSize: '0.75rem' }}
           />
+        )}
+        {oppMode !== 'off' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#92400e' }}>Team:</label>
+            <select
+              value={oppTeamFilter}
+              onChange={(e) => setOppTeamFilter(e.target.value)}
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem', border: '1px solid #fcd34d', borderRadius: '4px', background: '#fff', minWidth: '140px' }}
+              title="Filter opportunities to those assigned to members of the selected team"
+            >
+              <option value="">All Teams</option>
+              {(oppTeamsList || []).map(t => (
+                <option key={t.id} value={String(t.id)}>{t.name}</option>
+              ))}
+            </select>
+          </div>
         )}
         {oppMode !== 'off' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.75rem', color: '#92400e' }}>

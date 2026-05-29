@@ -2,11 +2,13 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract } from '../../services/vistaData';
+import opportunitiesService, { OpportunityWithEstimate } from '../../services/opportunities';
+import { getForecastRules, ForecastDurationRule } from '../../services/tenant';
 import { useAuth } from '../../context/AuthContext';
 import { teamsApi } from '../../services/teams';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
-import { format, differenceInMonths, addMonths, startOfMonth } from 'date-fns';
+import { format, differenceInMonths, addMonths, startOfMonth, parseISO, isBefore } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 
 // Formatting helpers
@@ -69,6 +71,41 @@ const defaultDurationRules: DurationRule[] = [
   { minValue: 10000000, maxValue: Infinity, months: 24, label: '$10M+' },
 ];
 
+// Pursuit-to-award rules (how long from now until opportunity becomes a contract)
+const defaultPursuitRules: ForecastDurationRule[] = [
+  { minValue: 0, maxValue: 500000, months: 2, label: '$0 - $500K' },
+  { minValue: 500000, maxValue: 2000000, months: 4, label: '$500K - $2M' },
+  { minValue: 2000000, maxValue: 5000000, months: 6, label: '$2M - $5M' },
+  { minValue: 5000000, maxValue: 10000000, months: 9, label: '$5M - $10M' },
+  { minValue: 10000000, maxValue: Infinity, months: 12, label: '$10M+' },
+];
+
+// Work duration rules for opportunities (how long the mechanical work takes once awarded)
+const defaultWorkDurationRules: ForecastDurationRule[] = [
+  { minValue: 0, maxValue: 500000, months: 3, label: '$0 - $500K' },
+  { minValue: 500000, maxValue: 2000000, months: 6, label: '$500K - $2M' },
+  { minValue: 2000000, maxValue: 5000000, months: 8, label: '$2M - $5M' },
+  { minValue: 5000000, maxValue: 10000000, months: 12, label: '$5M - $10M' },
+  { minValue: 10000000, maxValue: Infinity, months: 24, label: '$10M+' },
+];
+
+const getOppDurationForValue = (value: number, rules: ForecastDurationRule[]): number => {
+  for (const rule of rules) {
+    if (value >= rule.minValue && value < rule.maxValue) return rule.months;
+  }
+  return 24;
+};
+
+interface OpportunityRevenueProjection {
+  opportunity: OpportunityWithEstimate;
+  projectedStart: Date;
+  workDurationMonths: number;
+  contour: ContourType;
+  probability: number;
+  weightedRevenue: number;
+  monthlyRevenue: Map<string, number>; // 'YYYY-MM' or 'YYYY'
+}
+
 const ProjectedRevenue: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -116,6 +153,39 @@ const ProjectedRevenue: React.FC = () => {
         .filter((n: string) => n.length > 0)
     );
   }, [teamMembersResponse]);
+
+  // Pipeline Opportunities overlay state
+  const [oppMode, setOppMode] = useState<'off' | 'all' | 'select'>('off');
+  const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
+  const [oppWeighted, setOppWeighted] = useState(true);
+  const [oppTeamFilter, setOppTeamFilter] = useState<string>('');
+
+  const { data: opportunitiesWithEstimates } = useQuery({
+    queryKey: ['opportunities', 'withEstimates'],
+    queryFn: () => opportunitiesService.getWithEstimates(),
+    enabled: oppMode !== 'off',
+  });
+
+  const { data: forecastRules } = useQuery({
+    queryKey: ['forecastRules'],
+    queryFn: getForecastRules,
+    enabled: oppMode !== 'off',
+  });
+
+  // Members of the selected opportunity team (for filtering opps by assigned_to employee id)
+  const { data: oppTeamMembersResponse } = useQuery({
+    queryKey: ['teamMembers', oppTeamFilter],
+    queryFn: () => teamsApi.getMembers(Number(oppTeamFilter)),
+    enabled: !!oppTeamFilter,
+  });
+  const oppTeamMemberEmployeeIds = useMemo(() => {
+    const members = (oppTeamMembersResponse?.data as any)?.data || [];
+    return new Set<number>(
+      members
+        .map((m: any) => m.employee_id)
+        .filter((id: any) => id != null) as number[]
+    );
+  }, [oppTeamMembersResponse]);
 
   // Match a Vista PM name ("Last, First M") against a set of "First Last" names
   const pmMatchesTeamNames = useCallback((pmName: string | null | undefined, names: Set<string>): boolean => {
@@ -558,6 +628,112 @@ const ProjectedRevenue: React.FC = () => {
     return total;
   }, [projections]);
 
+  // Opportunity revenue projections (overlay)
+  const opportunityProjections = useMemo((): OpportunityRevenueProjection[] => {
+    if (oppMode === 'off' || !opportunitiesWithEstimates) return [];
+
+    const now = startOfMonth(new Date());
+    const twelveMonthsOut = addMonths(now, 11);
+    const pursuitRules = forecastRules?.pursuitRules || defaultPursuitRules;
+    const workRules = forecastRules?.workDurationRules || defaultWorkDurationRules;
+
+    const filtered = opportunitiesWithEstimates.filter(opp => {
+      if (oppMode === 'select' && !selectedOppIds.includes(opp.id)) return false;
+      if (oppTeamFilter && oppTeamMemberEmployeeIds.size > 0) {
+        if (!opp.assigned_to || !oppTeamMemberEmployeeIds.has(opp.assigned_to)) return false;
+      }
+      // Reuse the same dept/market filters so the overlay tracks the page filters
+      if (departmentFilter.length > 0) {
+        // Opportunities don't have a Vista department_code; skip when this filter is active
+        // and we can't map. (Best-effort: keep all when no mapping.)
+      }
+      if (marketFilter && opp.market && opp.market !== marketFilter) return false;
+      return true;
+    });
+
+    const results: OpportunityRevenueProjection[] = [];
+    for (const opp of filtered) {
+      const estimatedValue = parseNum(opp.estimated_value);
+      if (estimatedValue <= 0) continue;
+
+      const qualitativeProbMap: Record<string, number> = { High: 75, Medium: 50, Low: 25 };
+      const probability = opp.probability && qualitativeProbMap[opp.probability]
+        ? qualitativeProbMap[opp.probability]
+        : (opp.stage_probability && qualitativeProbMap[opp.stage_probability as string]) || 0;
+      const probFactor = oppWeighted ? (probability > 0 ? probability / 100 : 0) : 1;
+      const weightedRevenue = estimatedValue * probFactor;
+      if (weightedRevenue <= 0) continue;
+
+      // Projected start date
+      let projectedStart: Date;
+      if (opp.user_adjusted_start_date) {
+        projectedStart = startOfMonth(parseISO(opp.user_adjusted_start_date));
+      } else if (opp.estimated_start_date && !isBefore(parseISO(opp.estimated_start_date), now)) {
+        projectedStart = startOfMonth(parseISO(opp.estimated_start_date));
+      } else {
+        const pursuitMonths = getOppDurationForValue(estimatedValue, pursuitRules);
+        projectedStart = addMonths(now, pursuitMonths);
+      }
+
+      // Work duration
+      let workDurationMonths: number;
+      if (opp.user_adjusted_duration_months != null) {
+        workDurationMonths = opp.user_adjusted_duration_months;
+      } else if (opp.estimated_end_date && opp.estimated_start_date) {
+        workDurationMonths = Math.max(1, differenceInMonths(parseISO(opp.estimated_end_date), projectedStart));
+      } else {
+        workDurationMonths = getOppDurationForValue(estimatedValue, workRules);
+      }
+      workDurationMonths = Math.max(1, Math.min(36, workDurationMonths));
+
+      const contour: ContourType = (opp.contour_type as ContourType) || 'scurve';
+      const multipliers = getContourMultipliers(workDurationMonths, contour);
+      const monthsUntilStart = Math.max(0, differenceInMonths(projectedStart, now));
+
+      const monthlyRevenue = new Map<string, number>();
+      const baseMonthly = weightedRevenue / workDurationMonths;
+      for (let i = 0; i < workDurationMonths; i++) {
+        const monthDate = addMonths(now, monthsUntilStart + i);
+        const monthKey = format(monthDate, 'yyyy-MM');
+        const yearKey = String(monthDate.getFullYear());
+        const monthRevenue = baseMonthly * multipliers[i];
+        monthlyRevenue.set(monthKey, (monthlyRevenue.get(monthKey) || 0) + monthRevenue);
+        if (monthDate > twelveMonthsOut) {
+          monthlyRevenue.set(yearKey, (monthlyRevenue.get(yearKey) || 0) + monthRevenue);
+        }
+      }
+
+      results.push({
+        opportunity: opp,
+        projectedStart,
+        workDurationMonths,
+        contour,
+        probability,
+        weightedRevenue,
+        monthlyRevenue,
+      });
+    }
+    return results;
+  }, [oppMode, opportunitiesWithEstimates, selectedOppIds, oppTeamFilter, oppTeamMemberEmployeeIds, oppWeighted, forecastRules, departmentFilter, marketFilter]);
+
+  const oppColumnTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    columns.forEach(col => {
+      let total = 0;
+      opportunityProjections.forEach(p => {
+        total += p.monthlyRevenue.get(col.key) || 0;
+      });
+      totals.set(col.key, total);
+    });
+    return totals;
+  }, [opportunityProjections, columns]);
+
+  const oppGrandTotalRevenue = useMemo(() => {
+    let total = 0;
+    opportunityProjections.forEach(p => { total += p.weightedRevenue; });
+    return total;
+  }, [opportunityProjections]);
+
   if (isLoading) {
     return <div className="loading">Loading contracts...</div>;
   }
@@ -570,6 +746,11 @@ const ProjectedRevenue: React.FC = () => {
           <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Projected Revenue</h2>
           <div style={{ color: '#64748b', fontSize: '0.8rem' }}>
             {projections.length} projects | Total Backlog: {fmt(grandTotal)}
+            {oppMode !== 'off' && opportunityProjections.length > 0 && (
+              <span style={{ color: '#f59e0b', fontWeight: 500 }}>
+                {' '}| +{opportunityProjections.length} opportunities ({fmtCompact(oppGrandTotalRevenue)}{oppWeighted ? ' weighted' : ''})
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -801,6 +982,85 @@ const ProjectedRevenue: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Pipeline Opportunities Overlay Toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '1rem',
+        padding: '0.5rem 1rem', marginBottom: '1rem',
+        background: oppMode !== 'off' ? '#fffbeb' : '#f8fafc',
+        border: `1px solid ${oppMode !== 'off' ? '#fcd34d' : '#e2e8f0'}`,
+        borderRadius: '8px',
+        flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: oppMode !== 'off' ? '#92400e' : '#64748b' }}>
+          Pipeline Opportunities
+        </span>
+        <div style={{ display: 'flex', gap: '0' }}>
+          {(['off', 'all', 'select'] as const).map((mode, i, arr) => (
+            <button
+              key={mode}
+              onClick={() => { setOppMode(mode); if (mode === 'off') setSelectedOppIds([]); }}
+              style={{
+                padding: '0.35rem 0.75rem', fontSize: '0.75rem',
+                background: oppMode === mode ? '#f59e0b' : '#fff',
+                color: oppMode === mode ? '#fff' : '#64748b',
+                border: '1px solid #e2e8f0',
+                borderRadius: i === 0 ? '4px 0 0 4px' : i === arr.length - 1 ? '0 4px 4px 0' : '0',
+                cursor: 'pointer', fontWeight: oppMode === mode ? 600 : 400,
+              }}
+            >
+              {mode === 'off' ? 'Off' : mode === 'all' ? 'All Opps' : 'Select...'}
+            </button>
+          ))}
+        </div>
+        {oppMode === 'select' && opportunitiesWithEstimates && (
+          <MultiSearchableSelect
+            options={opportunitiesWithEstimates
+              .filter(o => !oppTeamFilter || (o.assigned_to != null && oppTeamMemberEmployeeIds.has(o.assigned_to)))
+              .map(o => ({
+                value: String(o.id),
+                label: `${o.title} (${fmtCompact(parseNum(o.estimated_value))})${o.stage_name === 'Awarded' ? ' [Awarded]' : ''}`,
+                searchText: `${o.title} ${o.customer_name || ''} ${o.assigned_to_name || ''} ${o.stage_name || ''}`,
+              }))}
+            value={selectedOppIds.map(String)}
+            onChange={(vals: string[]) => setSelectedOppIds(vals.map(Number))}
+            placeholder="Select opportunities..."
+            style={{ minWidth: '280px', fontSize: '0.75rem' }}
+          />
+        )}
+        {oppMode !== 'off' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#92400e' }}>Team:</label>
+            <select
+              value={oppTeamFilter}
+              onChange={(e) => setOppTeamFilter(e.target.value)}
+              style={{ padding: '0.3rem 0.5rem', fontSize: '0.75rem', border: '1px solid #fcd34d', borderRadius: '4px', background: '#fff', minWidth: '140px' }}
+              title="Filter opportunities to those assigned to members of the selected team"
+            >
+              <option value="">All Teams</option>
+              {(teamsList || []).map(t => (
+                <option key={t.id} value={String(t.id)}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {oppMode !== 'off' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.75rem', color: '#92400e' }}>
+            <input
+              type="checkbox"
+              checked={oppWeighted}
+              onChange={(e) => setOppWeighted(e.target.checked)}
+              style={{ accentColor: '#f59e0b' }}
+            />
+            Probability weighted
+          </label>
+        )}
+        {oppMode !== 'off' && opportunityProjections.length > 0 && (
+          <span style={{ fontSize: '0.75rem', color: '#92400e', marginLeft: 'auto' }}>
+            {opportunityProjections.length} opportunities | {fmtCompact(oppGrandTotalRevenue)} {oppWeighted ? 'weighted' : 'actual'}
+          </span>
+        )}
       </div>
 
       {/* Duration Rules Settings Panel */}
@@ -1134,6 +1394,7 @@ const ProjectedRevenue: React.FC = () => {
               <td style={{ padding: '0.5rem', textAlign: 'right' }}>-</td>
               <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
               <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
+              <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
               {columns.map(col => (
                 <td
                   key={col.key}
@@ -1147,6 +1408,33 @@ const ProjectedRevenue: React.FC = () => {
                 </td>
               ))}
             </tr>
+            {oppMode !== 'off' && opportunityProjections.length > 0 && (
+              <tr style={{ background: '#fffbeb', fontWeight: 600, color: '#92400e' }}>
+                <td style={{ padding: '0.5rem', position: 'sticky', left: 0, background: '#fffbeb' }}>
+                  + Opportunities ({opportunityProjections.length}{oppWeighted ? ', weighted' : ''})
+                </td>
+                <td style={{ padding: '0.5rem', textAlign: 'right' }}>{fmtCompact(oppGrandTotalRevenue)}</td>
+                <td style={{ padding: '0.5rem', textAlign: 'right' }}>-</td>
+                <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
+                <td style={{ padding: '0.5rem', textAlign: 'center' }}>-</td>
+                {columns.map(col => {
+                  const v = oppColumnTotals.get(col.key) || 0;
+                  return (
+                    <td
+                      key={col.key}
+                      style={{
+                        padding: '0.5rem',
+                        textAlign: 'right',
+                        background: col.isYear ? '#fef3c7' : '#fffbeb',
+                      }}
+                    >
+                      {v > 0 ? fmtCompact(v) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
           </tfoot>
         </table>
       </div>
@@ -1288,7 +1576,9 @@ const ProjectedRevenue: React.FC = () => {
                     value: total,
                     key
                   });
-                  if (total > maxValue) maxValue = total;
+                  const oppForKey = oppMode !== 'off' ? (oppColumnTotals.get(key) || 0) : 0;
+                  const combined = total + oppForKey;
+                  if (combined > maxValue) maxValue = combined;
                 }
 
                 // If showing budget, make sure max value includes it
@@ -1309,6 +1599,13 @@ const ProjectedRevenue: React.FC = () => {
 
                 return (
                   <svg width="100%" height={chartHeight + 50} style={{ overflow: 'visible' }}>
+                    {oppMode !== 'off' && (
+                      <defs>
+                        <pattern id="opp-hatch-rev" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)">
+                          <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(245,158,11,0.7)" strokeWidth="2" />
+                        </pattern>
+                      </defs>
+                    )}
                     {/* Y-axis labels */}
                     <text x="0" y="10" fontSize="10" fill="#64748b">{fmtCompact(maxValue)}</text>
                     <text x="0" y={chartHeight / 2} fontSize="10" fill="#64748b">{fmtCompact(maxValue / 2)}</text>
@@ -1387,6 +1684,27 @@ const ProjectedRevenue: React.FC = () => {
                             >
                               <title>{d.label}: {fmtCompact(d.value)}{showBudget ? ` (Budget: ${fmtCompact(monthlyBudget)})` : ''}</title>
                             </rect>
+                            {/* Opportunity overlay */}
+                            {oppMode !== 'off' && (() => {
+                              const oppVal = oppColumnTotals.get(d.key) || 0;
+                              const oppH = maxValue > 0 ? (oppVal / maxValue) * chartHeight : 0;
+                              if (oppH <= 0.5) return null;
+                              return (
+                                <rect
+                                  x={`${xPercent}%`}
+                                  y={chartHeight - barHeight - oppH}
+                                  width={`${barWidth * 0.8}%`}
+                                  height={oppH}
+                                  fill="url(#opp-hatch-rev)"
+                                  stroke="#f59e0b"
+                                  strokeWidth="0.5"
+                                  opacity="0.85"
+                                  rx="1"
+                                >
+                                  <title>{d.label}: +{fmtCompact(oppVal)} from opportunities{oppWeighted ? ' (weighted)' : ''}</title>
+                                </rect>
+                              );
+                            })()}
                             {/* Month labels - every 3 months */}
                             {showMonth && (
                               <text
@@ -1441,6 +1759,19 @@ const ProjectedRevenue: React.FC = () => {
                 );
               })()}
             </div>
+            {/* Opportunity legend when overlay is enabled */}
+            {oppMode !== 'off' && (
+              <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{
+                    display: 'inline-block', width: '12px', height: '12px',
+                    background: 'repeating-linear-gradient(45deg, #f59e0b, #f59e0b 1px, transparent 1px, transparent 3px)',
+                    border: '1px solid #f59e0b', borderRadius: '2px'
+                  }} />
+                  Opportunities ({oppWeighted ? 'weighted' : 'actual'})
+                </span>
+              </div>
+            )}
             {/* Budget legend when 10-30 is selected */}
             {departmentFilter.length === 1 && departmentFilter[0] === '10-30' && (
               <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem', flexWrap: 'wrap' }}>
@@ -1473,13 +1804,14 @@ const ProjectedRevenue: React.FC = () => {
               {(() => {
                 const now = startOfMonth(new Date());
                 const currentYear = now.getFullYear();
-                const yearTotals: { year: number; total: number }[] = [];
+                const yearTotals: { year: number; total: number; opp: number }[] = [];
                 let maxYearValue = 0;
 
                 // Calculate totals for each year (current year + next 3 years)
                 for (let y = 0; y < 4; y++) {
                   const year = currentYear + y;
                   let yearTotal = 0;
+                  let yearOpp = 0;
 
                   // Sum all months in this year
                   for (let m = 0; m < 12; m++) {
@@ -1490,31 +1822,53 @@ const ProjectedRevenue: React.FC = () => {
                       projections.forEach(p => {
                         yearTotal += p.monthlyRevenue.get(key) || 0;
                       });
+                      if (oppMode !== 'off') {
+                        yearOpp += oppColumnTotals.get(key) || 0;
+                      }
                     }
                   }
 
-                  yearTotals.push({ year, total: yearTotal });
-                  if (yearTotal > maxYearValue) maxYearValue = yearTotal;
+                  yearTotals.push({ year, total: yearTotal, opp: yearOpp });
+                  if (yearTotal + yearOpp > maxYearValue) maxYearValue = yearTotal + yearOpp;
                 }
 
                 return yearTotals.map((yd, i) => {
                   const barHeight = maxYearValue > 0 ? (yd.total / maxYearValue) * 160 : 0;
+                  const oppHeight = maxYearValue > 0 ? (yd.opp / maxYearValue) * 160 : 0;
                   const colors = ['#1e40af', '#3b82f6', '#60a5fa', '#93c5fd'];
                   return (
                     <div key={yd.year} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#1e293b', marginBottom: '0.5rem' }}>
                         {fmtCompact(yd.total)}
+                        {oppMode !== 'off' && yd.opp > 0 && (
+                          <span style={{ color: '#92400e', fontWeight: 500, marginLeft: '0.35rem', fontSize: '0.7rem' }}>
+                            +{fmtCompact(yd.opp)}
+                          </span>
+                        )}
                       </div>
-                      <div
-                        style={{
-                          width: '60%',
-                          height: `${barHeight}px`,
-                          background: colors[i],
-                          borderRadius: '4px 4px 0 0',
-                          minHeight: yd.total > 0 ? '4px' : '0'
-                        }}
-                        title={`${yd.year}: ${fmt(yd.total)}`}
-                      />
+                      <div style={{ width: '60%', display: 'flex', flexDirection: 'column-reverse' }}>
+                        <div
+                          style={{
+                            height: `${barHeight}px`,
+                            background: colors[i],
+                            borderRadius: oppHeight > 0 ? '0' : '4px 4px 0 0',
+                            minHeight: yd.total > 0 ? '4px' : '0'
+                          }}
+                          title={`${yd.year}: ${fmt(yd.total)}`}
+                        />
+                        {oppMode !== 'off' && oppHeight > 0.5 && (
+                          <div
+                            style={{
+                              height: `${oppHeight}px`,
+                              background: 'repeating-linear-gradient(45deg, rgba(245,158,11,0.85), rgba(245,158,11,0.85) 2px, transparent 2px, transparent 6px)',
+                              border: '1px solid #f59e0b',
+                              borderBottom: barHeight > 0 ? 'none' : '1px solid #f59e0b',
+                              borderRadius: '4px 4px 0 0',
+                            }}
+                            title={`${yd.year}: +${fmt(yd.opp)} from opportunities${oppWeighted ? ' (weighted)' : ''}`}
+                          />
+                        )}
+                      </div>
                       <div style={{
                         fontSize: '0.75rem',
                         fontWeight: 500,
@@ -1624,22 +1978,26 @@ const ProjectedRevenue: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
               {(() => {
                 const now = startOfMonth(new Date());
-                const quarters: { label: string; total: number }[] = [];
+                const quarters: { label: string; total: number; opp: number }[] = [];
 
                 for (let q = 0; q < 12; q++) {
                   const startMonth = q * 3;
                   let total = 0;
+                  let opp = 0;
                   for (let m = 0; m < 3; m++) {
                     const monthDate = addMonths(now, startMonth + m);
                     const key = format(monthDate, 'yyyy-MM');
                     projections.forEach(p => {
                       total += p.monthlyRevenue.get(key) || 0;
                     });
+                    if (oppMode !== 'off') {
+                      opp += oppColumnTotals.get(key) || 0;
+                    }
                   }
                   const qStart = addMonths(now, startMonth);
                   const year = qStart.getFullYear();
                   const qNum = Math.floor(qStart.getMonth() / 3) + 1;
-                  quarters.push({ label: `Q${qNum} ${year}`, total });
+                  quarters.push({ label: `Q${qNum} ${year}`, total, opp });
                 }
 
                 return quarters.map((q, i) => (
@@ -1655,6 +2013,11 @@ const ProjectedRevenue: React.FC = () => {
                   >
                     <div style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.25rem' }}>{q.label}</div>
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1e293b' }}>{fmtCompact(q.total)}</div>
+                    {oppMode !== 'off' && q.opp > 0 && (
+                      <div style={{ fontSize: '0.7rem', color: '#92400e', marginTop: '0.15rem' }}>
+                        + {fmtCompact(q.opp)} opp
+                      </div>
+                    )}
                   </div>
                 ));
               })()}

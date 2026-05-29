@@ -73,9 +73,12 @@ const SalesPipeline: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedLocationGroup, setSelectedLocationGroup] = useState<string>('');
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
+  const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [myOpportunitiesOnly, setMyOpportunitiesOnly] = useState(locationState?.myItemsOnly ?? false);
   const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
+  // Awarded sub-status filter: values are the raw awarded_status string ('' = Not in Vista)
+  const [excludedAwardedStatuses, setExcludedAwardedStatuses] = useState<Set<string>>(new Set());
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +128,27 @@ const SalesPipeline: React.FC = () => {
     const names = (myTeamResponse?.data as any)?.data?.names || [];
     return new Set<string>(names);
   }, [myTeamResponse]);
+
+  // Teams list for the Team filter dropdown
+  const { data: teamsList } = useQuery({
+    queryKey: ['teams', 'active'],
+    queryFn: () => teamsApi.getAll().then(r => r.data.data.filter(t => t.is_active)),
+  });
+
+  // Members of the selected team (used to filter opps by assigned_to employee id)
+  const { data: selectedTeamMembersResponse } = useQuery({
+    queryKey: ['teamMembers', selectedTeam],
+    queryFn: () => teamsApi.getMembers(Number(selectedTeam)),
+    enabled: !!selectedTeam,
+  });
+  const selectedTeamEmployeeIds = useMemo(() => {
+    const members = (selectedTeamMembersResponse?.data as any)?.data || [];
+    return new Set<number>(
+      members
+        .map((m: any) => m.employee_id)
+        .filter((id: any) => id != null) as number[]
+    );
+  }, [selectedTeamMembersResponse]);
 
   // Mutation for quick updates from table
   const updateOpportunityMutation = useMutation({
@@ -241,9 +265,22 @@ const SalesPipeline: React.FC = () => {
         return false;
       }
 
+      // Filter by Awarded sub-status when stage is Awarded
+      if (opp.stage_name === 'Awarded' && excludedAwardedStatuses.size > 0) {
+        const status = opp.awarded_status || '';
+        if (excludedAwardedStatuses.has(status)) return false;
+      }
+
       // Filter by salesperson
       if (selectedSalesperson !== 'all' && opp.assigned_to_name !== selectedSalesperson) {
         return false;
+      }
+
+      // Filter by team (matches opportunities whose assigned_to is a member of the team)
+      if (selectedTeam && selectedTeamEmployeeIds.size > 0) {
+        if (!opp.assigned_to || !selectedTeamEmployeeIds.has(opp.assigned_to)) {
+          return false;
+        }
       }
 
       // Filter by location group
@@ -253,7 +290,7 @@ const SalesPipeline: React.FC = () => {
 
       return true;
     });
-  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages, myOpportunitiesOnly, myTeamOnly, teamMemberNames, currentUserName]);
+  }, [apiOpportunities, selectedSalesperson, selectedLocationGroup, excludedStages, excludedAwardedStatuses, myOpportunitiesOnly, myTeamOnly, teamMemberNames, currentUserName, selectedTeam, selectedTeamEmployeeIds]);
 
   // Fallback sample data for demo purposes (only used if no real data exists)
   const sampleOpportunities: SalesOpportunity[] = [
@@ -784,6 +821,21 @@ const SalesPipeline: React.FC = () => {
     });
   };
 
+  const AWARDED_SUB_STATUSES: { value: string; label: string; color: string }[] = [
+    { value: '', label: 'Not in Vista', color: '#ef4444' },
+    { value: 'In Progress', label: 'In Progress', color: '#f59e0b' },
+    { value: 'Completed', label: 'Completed', color: '#16a34a' },
+  ];
+
+  const toggleAwardedStatusFilter = (status: string) => {
+    setExcludedAwardedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
   const handleExportPdf = () => {
     const fmtCurrency = (v: number) => {
       if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
@@ -797,9 +849,19 @@ const SalesPipeline: React.FC = () => {
       if (loc) filters.push(`Location: ${loc.longLabel}`);
     }
     if (selectedSalesperson !== 'all') filters.push(`Salesperson: ${selectedSalesperson}`);
+    if (selectedTeam) {
+      const teamName = (teamsList || []).find(t => String(t.id) === selectedTeam)?.name;
+      if (teamName) filters.push(`Team: ${teamName}`);
+    }
     if (excludedStages.size > 0) {
       const included = pipelineStages.filter(s => !excludedStages.has(s.name)).map(s => s.name);
       if (included.length < pipelineStages.length) filters.push(`Stages: ${included.join(', ')}`);
+    }
+    if (!excludedStages.has('Awarded') && excludedAwardedStatuses.size > 0) {
+      const includedSubs = AWARDED_SUB_STATUSES
+        .filter(s => !excludedAwardedStatuses.has(s.value))
+        .map(s => s.label);
+      if (includedSubs.length < AWARDED_SUB_STATUSES.length) filters.push(`Awarded: ${includedSubs.join(', ')}`);
     }
     if (searchTerm) filters.push(`Search: "${searchTerm}"`);
 
@@ -1114,6 +1176,23 @@ const SalesPipeline: React.FC = () => {
                 ))}
               </select>
               <select
+                value={selectedTeam}
+                onChange={(e) => setSelectedTeam(e.target.value)}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  fontSize: '12px',
+                  minWidth: '120px'
+                }}
+                title="Filter to opportunities assigned to members of the selected team"
+              >
+                <option value="">All Teams</option>
+                {(teamsList || []).map(t => (
+                  <option key={t.id} value={String(t.id)}>{t.name}</option>
+                ))}
+              </select>
+              <select
                 value={selectedSalesperson}
                 onChange={(e) => setSelectedSalesperson(e.target.value)}
                 style={{
@@ -1142,22 +1221,42 @@ const SalesPipeline: React.FC = () => {
                 {stageFilterOpen && (
                   <div className="sales-stage-filter-dropdown">
                     <div className="sales-stage-filter-actions">
-                      <button onClick={() => setExcludedStages(new Set())}>Select All</button>
-                      <button onClick={() => setExcludedStages(new Set(pipelineStages.map(s => s.name)))}>Clear All</button>
+                      <button onClick={() => { setExcludedStages(new Set()); setExcludedAwardedStatuses(new Set()); }}>Select All</button>
+                      <button onClick={() => { setExcludedStages(new Set(pipelineStages.map(s => s.name))); setExcludedAwardedStatuses(new Set(AWARDED_SUB_STATUSES.map(s => s.value))); }}>Clear All</button>
                     </div>
                     {pipelineStages.map(stage => (
-                      <label key={stage.id} className="sales-stage-filter-item">
-                        <input
-                          type="checkbox"
-                          checked={!excludedStages.has(stage.name)}
-                          onChange={() => toggleStageFilter(stage.name)}
-                        />
-                        <span
-                          className="sales-stage-filter-dot"
-                          style={{ background: stage.color }}
-                        />
-                        {stage.name}
-                      </label>
+                      <React.Fragment key={stage.id}>
+                        <label className="sales-stage-filter-item">
+                          <input
+                            type="checkbox"
+                            checked={!excludedStages.has(stage.name)}
+                            onChange={() => toggleStageFilter(stage.name)}
+                          />
+                          <span
+                            className="sales-stage-filter-dot"
+                            style={{ background: stage.color }}
+                          />
+                          {stage.name}
+                        </label>
+                        {stage.name === 'Awarded' && !excludedStages.has('Awarded') && (
+                          <div style={{ paddingLeft: '20px', borderLeft: '2px solid #e5e7eb', marginLeft: '8px' }}>
+                            {AWARDED_SUB_STATUSES.map(sub => (
+                              <label key={sub.value || 'not_in_vista'} className="sales-stage-filter-item">
+                                <input
+                                  type="checkbox"
+                                  checked={!excludedAwardedStatuses.has(sub.value)}
+                                  onChange={() => toggleAwardedStatusFilter(sub.value)}
+                                />
+                                <span
+                                  className="sales-stage-filter-dot"
+                                  style={{ background: sub.color }}
+                                />
+                                {sub.label}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
                 )}
