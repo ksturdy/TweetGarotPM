@@ -94,6 +94,43 @@ const ProjectedRevenue: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'Open', 'Soft-Closed'
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string>('');
+
+  // Teams list for filter dropdown
+  const { data: teamsList } = useQuery({
+    queryKey: ['teams', 'active'],
+    queryFn: () => teamsApi.getAll().then(r => r.data.data.filter(t => t.is_active)),
+  });
+
+  // Members of the selected team (used to filter contracts by PM name)
+  const { data: teamMembersResponse } = useQuery({
+    queryKey: ['teamMembers', teamFilter],
+    queryFn: () => teamsApi.getMembers(Number(teamFilter)),
+    enabled: !!teamFilter,
+  });
+  const selectedTeamMemberNames = useMemo(() => {
+    const members = (teamMembersResponse?.data as any)?.data || [];
+    return new Set(
+      members
+        .map((m: any) => `${m.first_name || ''} ${m.last_name || ''}`.trim().toLowerCase())
+        .filter((n: string) => n.length > 0)
+    );
+  }, [teamMembersResponse]);
+
+  // Match a Vista PM name ("Last, First M") against a set of "First Last" names
+  const pmMatchesTeamNames = useCallback((pmName: string | null | undefined, names: Set<string>): boolean => {
+    if (!pmName || names.size === 0) return false;
+    const lower = pmName.toLowerCase();
+    for (const name of names) {
+      const parts = (name as string).split(' ');
+      if (parts.length >= 2) {
+        const reversed = `${parts[parts.length - 1]}, ${parts[0]}`;
+        if (lower.startsWith(reversed)) return true;
+      }
+      if (lower === name) return true;
+    }
+    return false;
+  }, []);
 
   // User-adjusted start/end months per contract (contractId -> number of months from now)
   const [adjustedStartMonths, setAdjustedStartMonths] = useState<Record<number, number>>({});
@@ -229,6 +266,7 @@ const ProjectedRevenue: React.FC = () => {
         if (departmentFilter.length > 0 && (!c.department_code || !departmentFilter.includes(c.department_code))) return false;
         if (marketFilter && c.primary_market !== marketFilter) return false;
         if (pmFilter && c.project_manager_name !== pmFilter) return false;
+        if (teamFilter && !pmMatchesTeamNames(c.project_manager_name, selectedTeamMemberNames as Set<string>)) return false;
         if (myProjectsOnly && user) {
           if (!c.project_manager_name) return false;
           const pmName = c.project_manager_name.toLowerCase();
@@ -264,7 +302,7 @@ const ProjectedRevenue: React.FC = () => {
         searchText: `${c.contract_number} ${c.description || ''} ${c.customer_name || ''} ${c.project_manager_name || ''}`,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [contracts, statusFilter, departmentFilter, marketFilter, pmFilter, searchFilter, myProjectsOnly, myTeamOnly, user, teamMemberNames]);
+  }, [contracts, statusFilter, departmentFilter, marketFilter, pmFilter, searchFilter, myProjectsOnly, myTeamOnly, user, teamMemberNames, teamFilter, selectedTeamMemberNames, pmMatchesTeamNames]);
 
   // Clear project filter selections that are no longer in the filtered list
   useEffect(() => {
@@ -337,6 +375,11 @@ const ProjectedRevenue: React.FC = () => {
 
       // PM filter
       if (pmFilter && c.project_manager_name !== pmFilter) return false;
+
+      // Team filter — match contracts whose PM is in the selected team
+      if (teamFilter) {
+        if (!pmMatchesTeamNames(c.project_manager_name, selectedTeamMemberNames as Set<string>)) return false;
+      }
 
       // My Projects filter — Vista PM names are "Last, First M" format
       if (myProjectsOnly && user) {
@@ -489,7 +532,7 @@ const ProjectedRevenue: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, myProjectsOnly, myTeamOnly, user, teamMemberNames]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, myProjectsOnly, myTeamOnly, user, teamMemberNames, teamFilter, selectedTeamMemberNames, pmMatchesTeamNames]);
 
   // Calculate column totals
   const columnTotals = useMemo(() => {
@@ -633,6 +676,21 @@ const ProjectedRevenue: React.FC = () => {
               style={{ minWidth: '180px', fontSize: '0.8rem' }}
             />
           </div>
+
+          <div>
+            <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Team</label>
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: '4px', minWidth: '140px' }}
+            >
+              <option value="">All Teams</option>
+              {(teamsList || []).map(t => (
+                <option key={t.id} value={String(t.id)}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Project</label>
             <MultiSearchableSelect
@@ -644,13 +702,14 @@ const ProjectedRevenue: React.FC = () => {
             />
           </div>
 
-          {(searchFilter || departmentFilter.length > 0 || marketFilter || pmFilter || projectFilter.length > 0 || statusFilter !== 'all' || myProjectsOnly || myTeamOnly) && (
+          {(searchFilter || departmentFilter.length > 0 || marketFilter || pmFilter || teamFilter || projectFilter.length > 0 || statusFilter !== 'all' || myProjectsOnly || myTeamOnly) && (
             <button
               onClick={() => {
                 setSearchFilter('');
                 setDepartmentFilter([]);
                 setMarketFilter('');
                 setPmFilter('');
+                setTeamFilter('');
                 setProjectFilter([]);
                 setStatusFilter('all');
                 setMyProjectsOnly(false);
