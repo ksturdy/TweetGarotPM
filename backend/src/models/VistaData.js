@@ -330,17 +330,17 @@ const VistaData = {
     const values = [];
     let paramIndex = 1;
 
-    if ('user_adjusted_end_months' in overrides) {
-      setClauses.push(`user_adjusted_end_months = $${paramIndex++}`);
-      values.push(overrides.user_adjusted_end_months ?? null);
+    if ('user_adjusted_end_date' in overrides) {
+      setClauses.push(`user_adjusted_end_date = $${paramIndex++}`);
+      values.push(overrides.user_adjusted_end_date ?? null);
     }
     if ('user_selected_contour' in overrides) {
       setClauses.push(`user_selected_contour = $${paramIndex++}`);
       values.push(overrides.user_selected_contour ?? null);
     }
-    if ('user_adjusted_start_months' in overrides) {
-      setClauses.push(`user_adjusted_start_months = $${paramIndex++}`);
-      values.push(overrides.user_adjusted_start_months ?? null);
+    if ('user_adjusted_start_date' in overrides) {
+      setClauses.push(`user_adjusted_start_date = $${paramIndex++}`);
+      values.push(overrides.user_adjusted_start_date ?? null);
     }
 
     if (setClauses.length === 0) return null;

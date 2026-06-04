@@ -20,6 +20,13 @@ import opportunitiesService, { Opportunity } from '../../services/opportunities'
 import { vistaDataService, VPContract } from '../../services/vistaData';
 import { format, addMonths, startOfMonth, differenceInMonths, parseISO, isBefore } from 'date-fns';
 import { ContourType, getContourMultipliers, getDefaultContour } from '../../utils/contours';
+
+const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr.slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
+};
 import { getBacklogFitSettings, saveBacklogFitSettings, BacklogFitSettings, RegionTarget } from '../../services/tenant';
 import api from '../../services/api';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
@@ -269,8 +276,9 @@ const BacklogFitAnalysis: React.FC = () => {
       const contractValue = parseNum(c.contract_amount) || projectedRevenue;
 
       let remainingMonths: number;
-      if (c.user_adjusted_end_months != null) {
-        remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+      const endOff = dateToMonthOffset(c.user_adjusted_end_date);
+      if (endOff != null) {
+        remainingMonths = Math.max(1, Math.min(36, endOff));
       } else {
         const totalDuration = getDurationForValue(contractValue, projectDurationRules);
         const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -320,8 +328,9 @@ const BacklogFitAnalysis: React.FC = () => {
       const backlog = parseNum(c.backlog);
 
       let remainingMonths: number;
-      if (c.user_adjusted_end_months != null) {
-        remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+      const endOff = dateToMonthOffset(c.user_adjusted_end_date);
+      if (endOff != null) {
+        remainingMonths = Math.max(1, Math.min(36, endOff));
       } else if (backlog > 0) {
         const totalDuration = getDurationForValue(contractValue, projectDurationRules);
         const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;

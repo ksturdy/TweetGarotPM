@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { format, addMonths, startOfMonth, differenceInMonths, parseISO } from 'date-fns';
 import { vistaDataService, VPContract } from '../../services/vistaData';
 import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, ContourVisual } from '../../utils/contours';
+
+const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr.slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
+};
+
+const monthOffsetToDateString = (offset: number): string =>
+  format(addMonths(startOfMonth(new Date()), offset), 'yyyy-MM-dd');
 
 const parseNum = (value: number | string | null | undefined): number => {
   if (value === null || value === undefined || value === '') return 0;
@@ -32,17 +42,21 @@ interface Props {
 const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
   const queryClient = useQueryClient();
 
-  const [startMonths, setStartMonths] = useState<number | null>(contract.user_adjusted_start_months ?? null);
-  const [endMonths, setEndMonths] = useState<number | null>(contract.user_adjusted_end_months ?? null);
+  const initialStart = dateToMonthOffset(contract.user_adjusted_start_date);
+  const initialEnd = dateToMonthOffset(contract.user_adjusted_end_date);
+  const [startMonths, setStartMonths] = useState<number | null>(initialStart === null ? null : Math.max(0, initialStart));
+  const [endMonths, setEndMonths] = useState<number | null>(initialEnd === null ? null : Math.max(1, initialEnd));
   const [contourOverride, setContourOverride] = useState<ContourType | null>(
     (contract.user_selected_contour as ContourType) ?? null
   );
 
   useEffect(() => {
-    setStartMonths(contract.user_adjusted_start_months ?? null);
-    setEndMonths(contract.user_adjusted_end_months ?? null);
+    const s = dateToMonthOffset(contract.user_adjusted_start_date);
+    setStartMonths(s === null ? null : Math.max(0, s));
+    const e = dateToMonthOffset(contract.user_adjusted_end_date);
+    setEndMonths(e === null ? null : Math.max(1, e));
     setContourOverride((contract.user_selected_contour as ContourType) ?? null);
-  }, [contract.id, contract.user_adjusted_start_months, contract.user_adjusted_end_months, contract.user_selected_contour]);
+  }, [contract.id, contract.user_adjusted_start_date, contract.user_adjusted_end_date, contract.user_selected_contour]);
 
   const save = useCallback(async (overrides: {
     user_adjusted_start_months?: number | null;
@@ -50,7 +64,19 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
     user_selected_contour?: string | null;
   }) => {
     try {
-      await vistaDataService.updateProjectionOverrides(contract.id, overrides);
+      const payload: { user_adjusted_start_date?: string | null; user_adjusted_end_date?: string | null; user_selected_contour?: string | null } = {};
+      if ('user_adjusted_start_months' in overrides) {
+        payload.user_adjusted_start_date = overrides.user_adjusted_start_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_start_months);
+      }
+      if ('user_adjusted_end_months' in overrides) {
+        payload.user_adjusted_end_date = overrides.user_adjusted_end_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_end_months);
+      }
+      if ('user_selected_contour' in overrides) payload.user_selected_contour = overrides.user_selected_contour;
+      await vistaDataService.updateProjectionOverrides(contract.id, payload);
       // Bilateral sync: refresh both the single-contract cache (this page)
       // and the all-contracts cache (Projected Revenue page).
       queryClient.invalidateQueries({ queryKey: ['vpContract'] });

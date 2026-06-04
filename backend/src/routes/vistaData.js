@@ -1185,9 +1185,9 @@ router.patch('/contracts/:id/projection', async (req, res, next) => {
   try {
     // Only pass fields that were explicitly sent in the request body
     const overrides = {};
-    if ('user_adjusted_end_months' in req.body) overrides.user_adjusted_end_months = req.body.user_adjusted_end_months;
+    if ('user_adjusted_end_date' in req.body) overrides.user_adjusted_end_date = req.body.user_adjusted_end_date;
     if ('user_selected_contour' in req.body) overrides.user_selected_contour = req.body.user_selected_contour;
-    if ('user_adjusted_start_months' in req.body) overrides.user_adjusted_start_months = req.body.user_adjusted_start_months;
+    if ('user_adjusted_start_date' in req.body) overrides.user_adjusted_start_date = req.body.user_adjusted_start_date;
     const result = await VistaData.updateProjectionOverrides(
       req.params.id,
       overrides,

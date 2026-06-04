@@ -71,6 +71,19 @@ function formatYYYYMM(date) {
   return `${y}-${m}`;
 }
 
+function parseDateString(s) {
+  if (!s) return null;
+  const str = typeof s === 'string' ? s : s.toISOString().slice(0, 10);
+  const d = new Date(str.slice(0, 10) + 'T12:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function dateToMonthOffset(dateStr, now) {
+  const d = parseDateString(dateStr);
+  if (!d) return null;
+  return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+}
+
 function formatMonthLabel(date) {
   const m = date.toLocaleDateString('en-US', { month: 'short' });
   const y = String(date.getFullYear()).slice(2);
@@ -273,8 +286,9 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
     const totalRemainingHours = tradeHours.reduce((s, t) => s + t.remaining, 0);
     if (totalRemainingHours <= 0) continue;
 
-    const startOffset = parseNum(contract.user_adjusted_start_months) || 0;
-    const userEnd = contract.user_adjusted_end_months;
+    const rawStart = dateToMonthOffset(contract.user_adjusted_start_date, now);
+    const startOffset = Math.max(0, rawStart ?? 0);
+    const userEnd = dateToMonthOffset(contract.user_adjusted_end_date, now);
     let endOffset;
     if (userEnd != null) {
       endOffset = Math.max(startOffset + 1, Math.min(36, userEnd));
@@ -367,8 +381,9 @@ function buildRevenueProjections(contracts, filters, opts) {
     const backlog = parseNum(contract.backlog);
     const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
 
-    const startOffset = parseNum(contract.user_adjusted_start_months) || 0;
-    const userEnd = contract.user_adjusted_end_months;
+    const rawStart = dateToMonthOffset(contract.user_adjusted_start_date, now);
+    const startOffset = Math.max(0, rawStart ?? 0);
+    const userEnd = dateToMonthOffset(contract.user_adjusted_end_date, now);
 
     let remainingMonths = 0;
     let monthlyBurnRate = 0;

@@ -9,6 +9,20 @@ import { teamsApi } from '../../services/teams';
 import SearchableSelect from '../../components/SearchableSelect';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import { format, differenceInMonths, addMonths, startOfMonth, parseISO, isBefore } from 'date-fns';
+
+// Convert an absolute YYYY-MM-DD date string to a month offset from the current month.
+// Returns null if input is null/invalid. Caller decides whether to clamp negatives.
+const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr.slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
+};
+
+// Convert a month offset (relative to current month) into a YYYY-MM-DD date string
+// at the first of that month, for persistence.
+const monthOffsetToDateString = (offset: number): string =>
+  format(addMonths(startOfMonth(new Date()), offset), 'yyyy-MM-dd');
 import '../../styles/SalesPipeline.css';
 import '../../components/modals/Modal.css';
 
@@ -247,6 +261,17 @@ const ProjectedRevenue: React.FC = () => {
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Annual budget for the 10-30 department, persisted to localStorage.
+  // Currently only this one department uses a budget overlay on the monthly chart.
+  const [annualBudget1030, setAnnualBudget1030] = useState<number>(() => {
+    const stored = localStorage.getItem('projectedRevenue.annualBudget.10-30');
+    const n = stored ? parseFloat(stored) : NaN;
+    return isNaN(n) || n <= 0 ? 115000000 : n;
+  });
+  useEffect(() => {
+    localStorage.setItem('projectedRevenue.annualBudget.10-30', String(annualBudget1030));
+  }, [annualBudget1030]);
+
   // Sorting state
   const [sortColumn, setSortColumn] = useState<'project' | 'backlog' | 'completion'>('backlog');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -293,11 +318,13 @@ const ProjectedRevenue: React.FC = () => {
       const contours: Record<number, ContourType> = {};
 
       contracts.forEach(c => {
-        if (c.user_adjusted_start_months != null) {
-          startMonths[c.id] = c.user_adjusted_start_months;
+        const sOff = dateToMonthOffset(c.user_adjusted_start_date);
+        if (sOff !== null) {
+          startMonths[c.id] = Math.max(0, sOff);
         }
-        if (c.user_adjusted_end_months != null) {
-          endMonths[c.id] = c.user_adjusted_end_months;
+        const eOff = dateToMonthOffset(c.user_adjusted_end_date);
+        if (eOff !== null) {
+          endMonths[c.id] = Math.max(1, eOff);
         }
         if (c.user_selected_contour) {
           contours[c.id] = c.user_selected_contour as ContourType;
@@ -317,7 +344,19 @@ const ProjectedRevenue: React.FC = () => {
     overrides: { user_adjusted_start_months?: number | null; user_adjusted_end_months?: number | null; user_selected_contour?: string | null }
   ) => {
     try {
-      await vistaDataService.updateProjectionOverrides(contractId, overrides);
+      const payload: { user_adjusted_start_date?: string | null; user_adjusted_end_date?: string | null; user_selected_contour?: string | null } = {};
+      if ('user_adjusted_start_months' in overrides) {
+        payload.user_adjusted_start_date = overrides.user_adjusted_start_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_start_months);
+      }
+      if ('user_adjusted_end_months' in overrides) {
+        payload.user_adjusted_end_date = overrides.user_adjusted_end_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_end_months);
+      }
+      if ('user_selected_contour' in overrides) payload.user_selected_contour = overrides.user_selected_contour;
+      await vistaDataService.updateProjectionOverrides(contractId, payload);
       // Invalidate all-contracts caches and the single-contract cache used by the
       // Contract Status Drilldown so its projection strip stays in sync.
       queryClient.invalidateQueries({ queryKey: ['vpContracts'] });
@@ -1242,6 +1281,51 @@ const ProjectedRevenue: React.FC = () => {
               </div>
             ))}
           </div>
+
+          {/* Annual budget for 10-30 (used as the budget overlay on the monthly chart) */}
+          <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px dashed #fcd34d', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#1e293b' }}>
+              Annual Budget (Department 10-30):
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>$</span>
+              <input
+                type="number"
+                min="0"
+                step="1000000"
+                value={annualBudget1030}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  if (!isNaN(n) && n >= 0) setAnnualBudget1030(n);
+                }}
+                style={{
+                  width: '140px',
+                  padding: '0.25rem 0.35rem',
+                  fontSize: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '4px',
+                  textAlign: 'right',
+                }}
+              />
+            </div>
+            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+              = {fmtCompact(annualBudget1030 / 12)}/mo · only displayed when Department filter is set to <strong>10-30</strong>
+            </span>
+            <button
+              onClick={() => setAnnualBudget1030(115000000)}
+              style={{
+                padding: '0.2rem 0.5rem',
+                fontSize: '0.65rem',
+                background: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                color: '#92400e',
+              }}
+            >
+              Reset to $115M
+            </button>
+          </div>
         </div>
       )}
 
@@ -1668,8 +1752,8 @@ const ProjectedRevenue: React.FC = () => {
                 const monthlyData: { label: string; value: number; key: string }[] = [];
                 let maxValue = 0;
 
-                // Budget for 10-30 department: $115M/year = ~$9.58M/month
-                const annualBudget = 115000000;
+                // Budget overlay (currently only the 10-30 department).
+                const annualBudget = annualBudget1030;
                 const monthlyBudget = annualBudget / 12;
                 const showBudget = departmentFilter.length === 1 && departmentFilter[0] === '10-30';
 
@@ -1727,7 +1811,7 @@ const ProjectedRevenue: React.FC = () => {
                         y1={chartHeight - (monthlyBudget / maxValue) * chartHeight}
                         x2="100%"
                         y2={chartHeight - (monthlyBudget / maxValue) * chartHeight}
-                        stroke="#f59e0b"
+                        stroke="#a855f7"
                         strokeWidth="2"
                         strokeDasharray="6,3"
                       />
@@ -1781,7 +1865,7 @@ const ProjectedRevenue: React.FC = () => {
                                 y={chartHeight - budgetHeight}
                                 width={`${barWidth * 0.8}%`}
                                 height={budgetHeight}
-                                fill="#fef3c7"
+                                fill="#f3e8ff"
                                 rx="1"
                               >
                                 <title>Budget: {fmtCompact(monthlyBudget)}</title>
@@ -1890,8 +1974,8 @@ const ProjectedRevenue: React.FC = () => {
             {departmentFilter.length === 1 && departmentFilter[0] === '10-30' && (
               <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', color: '#64748b', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '2px' }}></span>
-                  Budget ($9.58M/mo)
+                  <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#f3e8ff', border: '1px solid #c084fc', borderRadius: '2px' }}></span>
+                  Budget ({fmtCompact(annualBudget1030 / 12)}/mo)
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></span>
@@ -1902,7 +1986,7 @@ const ProjectedRevenue: React.FC = () => {
                   Over Budget
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <span style={{ display: 'inline-block', width: '16px', height: '2px', background: '#f59e0b', borderRadius: '1px' }}></span>
+                  <span style={{ display: 'inline-block', width: '16px', height: '2px', background: '#a855f7', borderRadius: '1px' }}></span>
                   Budget Line
                 </span>
               </div>

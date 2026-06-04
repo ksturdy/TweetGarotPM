@@ -11,6 +11,20 @@ import MultiSearchableSelect from '../../components/MultiSearchableSelect';
 import '../../components/modals/Modal.css';
 import '../../styles/SalesPipeline.css';
 import { format, addMonths, addWeeks, startOfMonth, startOfWeek, differenceInMonths, parseISO, isBefore } from 'date-fns';
+
+// Convert an absolute YYYY-MM-DD date string to a month offset from the current month.
+// Returns null if input is null/invalid. Caller decides whether to clamp negatives.
+const dateToMonthOffset = (dateStr: string | null | undefined): number | null => {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr.slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
+};
+
+// Convert a month offset (relative to current month) into a YYYY-MM-DD date string
+// at the first of that month, for persistence.
+const monthOffsetToDateString = (offset: number): string =>
+  format(addMonths(startOfMonth(new Date()), offset), 'yyyy-MM-dd');
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -446,8 +460,10 @@ const LaborForecast: React.FC = () => {
       const endMonths: Record<number, number> = {};
       const contours: Record<number, ContourType> = {};
       contracts.forEach(c => {
-        if (c.user_adjusted_start_months != null) startMonths[c.id] = c.user_adjusted_start_months;
-        if (c.user_adjusted_end_months != null) endMonths[c.id] = c.user_adjusted_end_months;
+        const sOff = dateToMonthOffset(c.user_adjusted_start_date);
+        if (sOff !== null) startMonths[c.id] = Math.max(0, sOff);
+        const eOff = dateToMonthOffset(c.user_adjusted_end_date);
+        if (eOff !== null) endMonths[c.id] = Math.max(1, eOff);
         if (c.user_selected_contour) contours[c.id] = c.user_selected_contour as ContourType;
       });
       setAdjustedStartMonths(startMonths);
@@ -462,7 +478,19 @@ const LaborForecast: React.FC = () => {
     overrides: { user_adjusted_end_months?: number | null; user_selected_contour?: string | null; user_adjusted_start_months?: number | null }
   ) => {
     try {
-      await vistaDataService.updateProjectionOverrides(contractId, overrides);
+      const payload: { user_adjusted_end_date?: string | null; user_selected_contour?: string | null; user_adjusted_start_date?: string | null } = {};
+      if ('user_adjusted_start_months' in overrides) {
+        payload.user_adjusted_start_date = overrides.user_adjusted_start_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_start_months);
+      }
+      if ('user_adjusted_end_months' in overrides) {
+        payload.user_adjusted_end_date = overrides.user_adjusted_end_months == null
+          ? null
+          : monthOffsetToDateString(overrides.user_adjusted_end_months);
+      }
+      if ('user_selected_contour' in overrides) payload.user_selected_contour = overrides.user_selected_contour;
+      await vistaDataService.updateProjectionOverrides(contractId, payload);
       // Invalidate both labor forecast and projected revenue caches so they stay in sync
       queryClient.invalidateQueries({ queryKey: ['vpContracts'] });
     } catch (err) {

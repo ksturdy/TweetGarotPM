@@ -36,6 +36,12 @@ function isBefore(a, b) {
   return a.getTime() < b.getTime();
 }
 
+function dateToMonthOffset(dateStr, now) {
+  const d = parseISO(typeof dateStr === 'string' ? dateStr.slice(0, 10) : null);
+  if (!d) return null;
+  return differenceInMonths(startOfMonth(d), now);
+}
+
 // ─── Contour System (port of frontend/src/utils/contours.ts) ───
 
 function getContourMultipliers(months, contour) {
@@ -195,8 +201,9 @@ function calcProjectMonthlyRevenue(contracts, stateFilter, regionFilter) {
     const contractValue = parseNum(c.contract_amount) || projectedRevenue;
 
     let remainingMonths;
-    if (c.user_adjusted_end_months != null) {
-      remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+    const endOff = dateToMonthOffset(c.user_adjusted_end_date, now);
+    if (endOff != null) {
+      remainingMonths = Math.max(1, Math.min(36, endOff));
     } else {
       const totalDuration = getDurationForValue(contractValue, projectDurationRules);
       const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -230,6 +237,7 @@ function calcBacklogSnapshot(contracts, gmOverrideMap) {
   const result = { backlog_6mo: 0, backlog_6mo_gm_pct: null, backlog_12mo: 0, backlog_12mo_gm_pct: null };
   if (!contracts) return result;
   const overrides = gmOverrideMap || {};
+  const now = startOfMonth(new Date());
 
   let rem6 = 0, gmNum6 = 0, gmDen6 = 0;
   let rem12 = 0, gmNum12 = 0, gmDen12 = 0;
@@ -254,8 +262,9 @@ function calcBacklogSnapshot(contracts, gmOverrideMap) {
     const contractValue = parseNum(c.contract_amount) || projectedRevenue;
 
     let remainingMonths;
-    if (c.user_adjusted_end_months != null) {
-      remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+    const endOff = dateToMonthOffset(c.user_adjusted_end_date, now);
+    if (endOff != null) {
+      remainingMonths = Math.max(1, Math.min(36, endOff));
     } else {
       const totalDuration = getDurationForValue(contractValue, projectDurationRules);
       const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -322,8 +331,9 @@ function calcProjectMonthlyLabor(contracts, stateFilter, regionFilter) {
     const backlog = parseNum(c.backlog);
 
     let remainingMonths;
-    if (c.user_adjusted_end_months != null) {
-      remainingMonths = Math.max(1, Math.min(36, c.user_adjusted_end_months));
+    const endOff = dateToMonthOffset(c.user_adjusted_end_date, now);
+    if (endOff != null) {
+      remainingMonths = Math.max(1, Math.min(36, endOff));
     } else if (backlog > 0) {
       const totalDuration = getDurationForValue(contractValue, projectDurationRules);
       const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
