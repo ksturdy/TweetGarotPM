@@ -301,8 +301,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="opportunity-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="opportunity-modal">
         {/* Modal Header */}
         <div className="modal-header">
           <h2>{isEditMode ? 'Edit Opportunity' : 'New Opportunity'}</h2>
