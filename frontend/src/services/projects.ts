@@ -160,8 +160,13 @@ export const projectsApi = {
   // Use the new per-user favorites system
   toggleFavorite: (id: number) => favoritesService.toggle('project', id),
 
-  getBacklogSnapshot: (): Promise<BacklogSnapshot> =>
-    api.get<BacklogSnapshot>('/projects/backlog-snapshot').then(r => r.data),
+  getBacklogSnapshot: (params?: { managerIds?: number[] }): Promise<BacklogSnapshot> => {
+    const query: Record<string, string> = {};
+    if (params?.managerIds && params.managerIds.length > 0) {
+      query.managerIds = params.managerIds.join(',');
+    }
+    return api.get<BacklogSnapshot>('/projects/backlog-snapshot', { params: query }).then(r => r.data);
+  },
 
   // GM Override
   applyGmOverride: (percent: number) =>

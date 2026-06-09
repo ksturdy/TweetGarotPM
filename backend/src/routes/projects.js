@@ -315,11 +315,21 @@ router.get('/gm-override/count', async (req, res, next) => {
 });
 
 // GET /api/projects/backlog-snapshot — backlog totals, 6/12mo projections, and weighted GM%
+// Optional ?managerIds=1,2,3 scopes the result to projects assigned to those PMs.
 router.get('/backlog-snapshot', async (req, res, next) => {
   try {
     const db = require('../config/database');
     const VistaData = require('../models/VistaData');
     const { calcBacklogSnapshot } = require('../utils/backlogFitCalculator');
+
+    let managerIds = null;
+    if (req.query.managerIds) {
+      const parsed = String(req.query.managerIds)
+        .split(',')
+        .map(s => parseInt(s, 10))
+        .filter(n => Number.isFinite(n));
+      if (parsed.length > 0) managerIds = parsed;
+    }
 
     // Use effective GM%: apply override when real GM is ~100%
     const GM_EXPR = `CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
@@ -327,7 +337,14 @@ router.get('/backlog-snapshot', async (req, res, next) => {
                      THEN p.override_gm_percent
                      ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) END`;
 
-    const [backlogResult, contracts] = await Promise.all([
+    const backlogParams = [req.tenantId];
+    let managerFilter = '';
+    if (managerIds) {
+      backlogParams.push(managerIds);
+      managerFilter = ` AND p.manager_id = ANY($${backlogParams.length}::int[])`;
+    }
+
+    const [backlogResult, contracts, scopedProjectsResult] = await Promise.all([
       db.query(`
         SELECT
           COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0)::numeric AS total_backlog,
@@ -348,29 +365,47 @@ router.get('/backlog-snapshot', async (req, res, next) => {
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
         WHERE p.tenant_id = $1
           AND COALESCE(vc.backlog, p.backlog) > 0
-          AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
-      `, [req.tenantId]),
+          AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')${managerFilter}
+      `, backlogParams),
       VistaData.getAllContracts({ status: '' }, req.tenantId),
+      managerIds
+        ? db.query(
+            `SELECT id FROM projects WHERE tenant_id = $1 AND manager_id = ANY($2::int[])`,
+            [req.tenantId, managerIds]
+          )
+        : Promise.resolve(null),
     ]);
 
     const backlogRow = backlogResult.rows[0] || {};
     const totalBacklog = parseFloat(backlogRow.total_backlog) || 0;
 
     // Fetch GM overrides for linked projects so calcBacklogSnapshot can apply them
+    const overrideParams = [req.tenantId];
+    let overrideManagerFilter = '';
+    if (managerIds) {
+      overrideParams.push(managerIds);
+      overrideManagerFilter = ` AND p.manager_id = ANY($${overrideParams.length}::int[])`;
+    }
     const overrideRows = await db.query(`
       SELECT vc.id AS contract_id, p.override_gm_percent
       FROM projects p
       JOIN vp_contracts vc ON vc.linked_project_id = p.id
-      WHERE p.tenant_id = $1 AND p.override_gm_percent IS NOT NULL
-    `, [req.tenantId]);
+      WHERE p.tenant_id = $1 AND p.override_gm_percent IS NOT NULL${overrideManagerFilter}
+    `, overrideParams);
     const overrideMap = {};
     for (const r of overrideRows.rows) {
       overrideMap[r.contract_id] = parseFloat(r.override_gm_percent);
     }
 
-    const snapshot = calcBacklogSnapshot(contracts, overrideMap);
+    let scopedContracts = contracts;
+    if (managerIds && scopedProjectsResult) {
+      const scopedProjectIds = new Set(scopedProjectsResult.rows.map(r => r.id));
+      scopedContracts = contracts.filter(c => c.linked_project_id != null && scopedProjectIds.has(c.linked_project_id));
+    }
 
-    const nonVpBacklog = Math.max(0, totalBacklog - contracts.reduce((s, c) => {
+    const snapshot = calcBacklogSnapshot(scopedContracts, overrideMap);
+
+    const nonVpBacklog = Math.max(0, totalBacklog - scopedContracts.reduce((s, c) => {
       const st = (c.status || '').toLowerCase();
       if (!st.includes('open') && !st.includes('soft')) return s;
       return s + (parseFloat(c.backlog) || 0);

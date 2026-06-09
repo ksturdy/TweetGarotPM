@@ -43,6 +43,18 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
     queryFn: () => cashFlowReportApi.getData(),
   });
 
+  const backlogManagerIds = React.useMemo<number[] | undefined>(() => {
+    if (viewScope === 'my') return currentEmployeeId != null ? [Number(currentEmployeeId)] : [];
+    if (viewScope === 'team') return teamMemberEmployeeIds.map(Number);
+    return undefined; // company → no manager filter
+  }, [viewScope, currentEmployeeId, teamMemberEmployeeIds]);
+
+  const { data: backlogSnapshot } = useQuery({
+    queryKey: ['projects', 'backlog-snapshot', viewScope, backlogManagerIds ? [...backlogManagerIds].sort() : 'all'],
+    queryFn: () => projectsApi.getBacklogSnapshot(backlogManagerIds ? { managerIds: backlogManagerIds } : undefined),
+    enabled: viewScope === 'company' || (backlogManagerIds != null && backlogManagerIds.length > 0),
+  });
+
   const projects = React.useMemo(() => {
     if (!allProjects) return [];
     switch (viewScope) {
@@ -70,7 +82,7 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
   }, [allOpportunities, viewScope, currentEmployeeId, teamMemberEmployeeIds]);
 
   const cashFlowMetrics = React.useMemo(() => {
-    if (!cashFlowData) return { backlog: 0, gmPercent: null as number | null, totalCashFlow: 0 };
+    if (!cashFlowData) return { totalCashFlow: 0 };
 
     const teamIds = teamMemberEmployeeIds.map(Number);
     const scoped = cashFlowData.filter((p) => {
@@ -85,24 +97,12 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
       }
     }).filter((p) => p.status === 'Open' || p.status === 'Soft-Closed');
 
-    let totalBacklog = 0;
-    let weightedGm = 0;
     let totalCashFlow = 0;
     for (const p of scoped) {
-      const backlog = Number(p.backlog ?? 0);
-      if (!Number.isNaN(backlog)) {
-        totalBacklog += backlog;
-        const gm = Number(p.gross_profit_percent);
-        if (!Number.isNaN(gm) && backlog > 0) {
-          weightedGm += gm * backlog;
-        }
-      }
       const cf = Number(p.cash_flow ?? 0);
       if (!Number.isNaN(cf)) totalCashFlow += cf;
     }
-
-    const gmPercent = totalBacklog > 0 ? weightedGm / totalBacklog : null;
-    return { backlog: totalBacklog, gmPercent, totalCashFlow };
+    return { totalCashFlow };
   }, [cashFlowData, viewScope, currentEmployeeId, teamMemberEmployeeIds]);
 
   const activeProjects = projects?.filter((p: any) =>
@@ -123,8 +123,9 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
     return stageName !== 'won' && stageName !== 'lost';
   }).length || 0;
 
-  const gmPct = cashFlowMetrics.gmPercent;
-  const gmDisplay = gmPct == null ? '—' : `${(gmPct * 100).toFixed(1)}%`;
+  const backlogTotal = backlogSnapshot?.total_backlog ?? 0;
+  const gmPct = backlogSnapshot?.weighted_gm_pct ?? null;
+  const gmDisplay = gmPct == null ? '—' : `${gmPct.toFixed(1)}%`;
   const cashFlowClass =
     cashFlowMetrics.totalCashFlow > 0 ? 'kpi-icon-green' :
     cashFlowMetrics.totalCashFlow < 0 ? 'kpi-icon-red' :
@@ -184,18 +185,18 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
         </Link>
       </div>
 
-      <div className="kpi-card" title="Open + Soft-Closed projects. Weighted average GM% by backlog.">
+      <div className="kpi-card" title="Backlog and backlog-weighted GM% from Projects → Total Backlog (positive backlog, GM override applied).">
         <div className="kpi-icon kpi-icon-teal">
           <Inventory2Icon />
         </div>
         <div className="kpi-content">
           <div className="kpi-value">
-            {formatCurrency(cashFlowMetrics.backlog)}
+            {formatCurrency(backlogTotal)}
             <span className="kpi-subvalue"> / {gmDisplay}</span>
           </div>
           <div className="kpi-label">Backlog $ / GM%</div>
         </div>
-        <Link to="/reports/cash-flow" className="kpi-link">
+        <Link to="/projects" className="kpi-link">
           <ArrowForwardIcon fontSize="small" />
         </Link>
       </div>
