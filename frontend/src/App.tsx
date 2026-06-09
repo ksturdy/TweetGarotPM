@@ -90,6 +90,10 @@ import EmployeeDetail from './pages/hr/EmployeeDetail';
 import EmployeeForm from './pages/hr/EmployeeForm';
 import DepartmentList from './pages/hr/DepartmentList';
 import LocationList from './pages/hr/LocationList';
+import LaborBoard from './pages/labor/LaborBoard';
+import LaborEmployeeDetail from './pages/labor/LaborEmployeeDetail';
+import LaborCalendar from './pages/labor/LaborCalendar';
+import LaborAssignments from './pages/labor/LaborAssignments';
 import UserManagement from './pages/UserManagement';
 import RolesPermissions from './pages/RolesPermissions';
 import SecuritySettings from './pages/SecuritySettings';
@@ -452,6 +456,10 @@ const App: React.FC = () => {
                 <Route path="/hr/employees/:id/edit" element={<EmployeeDetail />} />
                 <Route path="/hr/departments" element={<DepartmentList />} />
                 <Route path="/hr/locations" element={<LocationList />} />
+                <Route path="/labor" element={<LaborBoard />} />
+                <Route path="/labor/calendar" element={<LaborCalendar />} />
+                <Route path="/labor/assignments" element={<LaborAssignments />} />
+                <Route path="/labor/employee/:id" element={<LaborEmployeeDetail />} />
                 <Route path="/safety" element={<SafetyDashboard />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/roles" element={<RolesPermissions />} />

@@ -123,16 +123,22 @@ class Employee {
       hire_date,
       employment_status,
       notes,
-      role
+      role,
+      trade,
+      employee_group,
+      title,
+      profile_type,
     } = data;
 
     const result = await db.query(`
       INSERT INTO employees (
         user_id, first_name, last_name, email, phone, mobile_phone,
         department_id, office_location_id, job_title, hire_date,
-        employment_status, notes, role, tenant_id
+        employment_status, notes, role, tenant_id,
+        trade, employee_group, title, profile_type
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+              $15, $16, $17, $18)
       RETURNING *
     `, [
       user_id || null,
@@ -148,7 +154,11 @@ class Employee {
       employment_status || 'active',
       notes,
       role || 'user',
-      tenantId
+      tenantId,
+      trade || null,
+      employee_group || null,
+      title || null,
+      profile_type || null,
     ]);
     return result.rows[0];
   }
@@ -170,7 +180,11 @@ class Employee {
       hire_date,
       employment_status,
       notes,
-      role
+      role,
+      trade,
+      employee_group,
+      title,
+      profile_type,
     } = data;
 
     const result = await db.query(`
@@ -178,8 +192,9 @@ class Employee {
       SET user_id = $1, first_name = $2, last_name = $3, email = $4,
           phone = $5, mobile_phone = $6, department_id = $7,
           office_location_id = $8, job_title = $9, hire_date = $10,
-          employment_status = $11, notes = $12, role = $13
-      WHERE id = $14 AND tenant_id = $15
+          employment_status = $11, notes = $12, role = $13,
+          trade = $14, employee_group = $15, title = $16, profile_type = $17
+      WHERE id = $18 AND tenant_id = $19
       RETURNING *
     `, [
       user_id || null,
@@ -195,8 +210,12 @@ class Employee {
       employment_status,
       notes,
       role || 'user',
+      trade || null,
+      employee_group || null,
+      title || null,
+      profile_type || null,
       id,
-      tenantId
+      tenantId,
     ]);
     return result.rows[0];
   }

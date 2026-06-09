@@ -24,6 +24,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ConstructionIcon from '@mui/icons-material/Construction';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import EngineeringIcon from '@mui/icons-material/Engineering';
 import './Sidebar.css';
 
 interface NavItem {
@@ -33,6 +34,7 @@ interface NavItem {
   children?: { label: string; path: string }[];
   adminOnly?: boolean;
   hrOnly?: boolean;
+  managerOrAdmin?: boolean;
 }
 
 const STORAGE_KEY = 'sidebar-expanded-sections';
@@ -68,6 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
   }, [expandedSections]);
 
   const isAdmin = user?.role === 'admin';
+  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
   const hasHRAccess = user?.role === 'admin' || (user?.hrAccess && user.hrAccess !== 'none');
 
   const navItems: NavItem[] = [
@@ -117,6 +120,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
       label: 'Field',
       path: '/field',
       icon: <ConstructionIcon />,
+    },
+    {
+      label: 'Labor',
+      icon: <EngineeringIcon />,
+      managerOrAdmin: true,
+      children: [
+        { label: 'Board', path: '/labor' },
+        { label: 'Calendar', path: '/labor/calendar' },
+        { label: 'Assignments', path: '/labor/assignments' },
+      ],
     },
     {
       label: 'Safety',
@@ -227,6 +240,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
   const renderNavItem = (item: NavItem) => {
     if (item.adminOnly && !isAdmin) return null;
     if (item.hrOnly && !hasHRAccess) return null;
+    if (item.managerOrAdmin && !isManagerOrAdmin) return null;
 
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = expandedSections.includes(item.label);

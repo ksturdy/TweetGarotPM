@@ -340,6 +340,82 @@ If you didn't request a password reset, please contact your administrator.
   `.trim();
 };
 
+const formatDate = (d) => {
+  if (!d) return null;
+  return new Date(d).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+};
+
+const formatTime = (t) => {
+  if (!t) return null;
+  const [h, m] = String(t).split(':');
+  const hour = parseInt(h, 10);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const h12 = ((hour + 11) % 12) + 1;
+  return `${h12}:${m || '00'} ${suffix}`;
+};
+
+const formatAddress = (a) => {
+  const parts = [a.project_address, a.project_city, a.project_state, a.project_zip].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+};
+
+const generateAssignmentLines = (a, customMessage) => {
+  const lines = [];
+  const greeting = a.first_name ? `Hi ${a.first_name},` : 'Hi,';
+  lines.push(greeting, '');
+  lines.push(`You have been assigned to ${a.project_name}${a.project_number ? ` (#${a.project_number})` : ''}.`);
+  lines.push('');
+  if (a.role) lines.push(`Role: ${a.role}${a.trade ? ` (${a.trade})` : ''}`);
+  if (a.start_date) lines.push(`Start: ${formatDate(a.start_date)}`);
+  if (a.end_date) lines.push(`End: ${formatDate(a.end_date)}`);
+  const shift = [a.shift_pattern, a.shift_start_time && formatTime(a.shift_start_time),
+                 a.shift_end_time && `to ${formatTime(a.shift_end_time)}`].filter(Boolean).join(' ');
+  if (shift) lines.push(`Shift: ${shift}`);
+  const addr = formatAddress(a);
+  if (addr) lines.push(`Job Site: ${addr}`);
+  if (a.notes) {
+    lines.push('');
+    lines.push(`Notes: ${a.notes}`);
+  }
+  if (customMessage) {
+    lines.push('');
+    lines.push(customMessage);
+  }
+  return lines;
+};
+
+const generateAssignmentEmailText = (a, customMessage) => {
+  return generateAssignmentLines(a, customMessage).join('\n') + '\n\n— Tweet Garot Mechanical';
+};
+
+const generateAssignmentSmsText = (a, customMessage) => {
+  const parts = [];
+  parts.push(`${a.project_name}${a.project_number ? ` (#${a.project_number})` : ''}`);
+  if (a.role) parts.push(`Role: ${a.role}${a.trade ? ` / ${a.trade}` : ''}`);
+  if (a.start_date) parts.push(`Start ${formatDate(a.start_date)}`);
+  if (a.shift_start_time) parts.push(`${formatTime(a.shift_start_time)}${a.shift_pattern ? ' ' + a.shift_pattern : ''}`);
+  const addr = formatAddress(a);
+  if (addr) parts.push(addr);
+  if (customMessage) parts.push(customMessage);
+  return `Tweet Garot: ${parts.join(' | ')}`;
+};
+
+const generateAssignmentEmailHtml = (a, customMessage) => {
+  const lines = generateAssignmentLines(a, customMessage)
+    .map((l) => (l === '' ? '<br/>' : `<p style="margin:4px 0;">${l.replace(/</g, '&lt;')}</p>`))
+    .join('\n');
+  return `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1f2937;">
+  <div style="background:linear-gradient(135deg,#002356,#004080);color:#fff;padding:16px 20px;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;font-size:20px;">New Project Assignment</h2>
+  </div>
+  <div style="background:#f9fafb;border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+    ${lines}
+  </div>
+</body></html>`;
+};
+
 module.exports = {
   isEmailConfigured,
   sendEmail,
@@ -347,4 +423,7 @@ module.exports = {
   generateRFIEmailText,
   generatePasswordResetEmailHtml,
   generatePasswordResetEmailText,
+  generateAssignmentEmailHtml,
+  generateAssignmentEmailText,
+  generateAssignmentSmsText,
 };

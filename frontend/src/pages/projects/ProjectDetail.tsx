@@ -3,11 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
-import { projectAssignmentsApi, FOREMAN_TRADES } from '../../services/projectAssignments';
+import { projectAssignmentsApi } from '../../services/projectAssignments';
+import AssignDialog from '../../components/labor/AssignDialog';
+import NotifyDialog from '../../components/labor/NotifyDialog';
+import { AssignmentRecord } from '../../services/labor';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
 import { projectGoalsApi, ProjectGoals } from '../../services/projectGoals';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
 import SearchableSelect from '../../components/SearchableSelect';
 import KpiCard, { getKpiStatus, KpiStatus } from '../../components/projects/KpiCard';
 import SetGoalsDialog from '../../components/projects/SetGoalsDialog';
@@ -81,8 +83,9 @@ const ProjectDetail: React.FC = () => {
 
   const [showGoalsDialog, setShowGoalsDialog] = useState(false);
   const [isEditingTitan, setIsEditingTitan] = useState(false);
-  const [foremanSearch, setForemanSearch] = useState('');
-  const [selectedTrade, setSelectedTrade] = useState('');
+  const [crewAssignOpen, setCrewAssignOpen] = useState(false);
+  const [editingCrewAssignment, setEditingCrewAssignment] = useState<AssignmentRecord | null>(null);
+  const [notifyCrewAssignment, setNotifyCrewAssignment] = useState<AssignmentRecord | null>(null);
 
   // ── Data queries ───────────────────────────────────────────────────
 
@@ -122,42 +125,12 @@ const ProjectDetail: React.FC = () => {
     enabled: isAdminOrManager,
   });
 
-  const { data: employeeSearchResults = [] } = useQuery({
-    queryKey: ['employee-search', foremanSearch],
-    queryFn: () => api.get(`/project-assignments/search-employees?q=${encodeURIComponent(foremanSearch)}`).then(res => res.data),
-    enabled: isAdminOrManager && foremanSearch.length >= 2,
-  });
-
-  const assignedEmployeeIds = projectAssignments.map((a: any) => a.employee_id);
-  const filteredResults = (employeeSearchResults as any[]).filter(
-    (e: any) => !assignedEmployeeIds.includes(e.id)
-  );
-
-  // ── Mutations ──────────────────────────────────────────────────────
-
-  const addForemanMutation = useMutation({
-    mutationFn: ({ employeeId, trade }: { employeeId: number; trade?: string }) =>
-      projectAssignmentsApi.addToProject(Number(id), employeeId, trade),
+  const removeCrewMutation = useMutation({
+    mutationFn: (assignmentId: number) =>
+      projectAssignmentsApi.deleteAssignment(assignmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
-      setForemanSearch('');
-      setSelectedTrade('');
-    },
-  });
-
-  const removeForemanMutation = useMutation({
-    mutationFn: (employeeId: number) =>
-      projectAssignmentsApi.removeFromProject(Number(id), employeeId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
-    },
-  });
-
-  const updateTradeMutation = useMutation({
-    mutationFn: ({ employeeId, trade }: { employeeId: number; trade: string }) =>
-      projectAssignmentsApi.updateTrade(Number(id), employeeId, trade),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
+      queryClient.invalidateQueries({ queryKey: ['labor-board'] });
     },
   });
 
@@ -718,114 +691,91 @@ const ProjectDetail: React.FC = () => {
             </div>
           )}
 
-          {/* Field Foremen Assignment */}
+          {/* Project Crew */}
           {isAdminOrManager && (
             <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
                 <span style={{ fontSize: '0.9rem' }}>👷</span>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Field Foremen</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Project Crew</span>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '0.15rem' }}>
                   ({projectAssignments.length})
                 </span>
-              </div>
-
-              <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
-                <div style={{ display: 'flex', gap: '0.3rem' }}>
-                  <input
-                    type="text"
-                    placeholder="Search employees to add..."
-                    value={foremanSearch}
-                    onChange={(e) => setForemanSearch(e.target.value)}
-                    style={{
-                      flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.8rem',
-                      border: '1px solid var(--border)', borderRadius: '5px', background: 'var(--bg-dark)',
-                    }}
-                  />
-                  <select
-                    value={selectedTrade}
-                    onChange={(e) => setSelectedTrade(e.target.value)}
-                    style={{
-                      padding: '0.35rem 0.4rem', fontSize: '0.75rem',
-                      border: '1px solid var(--border)', borderRadius: '5px', background: 'var(--bg-dark)',
-                      color: selectedTrade ? 'inherit' : '#94a3b8',
-                    }}
-                  >
-                    <option value="">Trade</option>
-                    {FOREMAN_TRADES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-
-                {foremanSearch.length >= 2 && filteredResults.length > 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0,
-                    background: 'white', border: '1px solid var(--border)', borderRadius: '5px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflowY: 'auto',
-                  }}>
-                    {filteredResults.slice(0, 10).map((emp: any) => (
-                      <div
-                        key={emp.id}
-                        onClick={() => addForemanMutation.mutate({ employeeId: emp.id, trade: selectedTrade || undefined })}
-                        style={{
-                          padding: '0.4rem 0.6rem', cursor: 'pointer', fontSize: '0.8rem',
-                          borderBottom: '1px solid #f1f5f9', display: 'flex',
-                          justifyContent: 'space-between', alignItems: 'center',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
-                      >
-                        <span style={{ fontWeight: 500 }}>{emp.first_name} {emp.last_name}</span>
-                        <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{emp.job_title || emp.email}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {foremanSearch.length >= 2 && filteredResults.length === 0 && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0,
-                    background: 'white', border: '1px solid var(--border)', borderRadius: '5px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10,
-                    padding: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center',
-                  }}>
-                    No matching employees found
-                  </div>
-                )}
+                <button
+                  onClick={() => { setEditingCrewAssignment(null); setCrewAssignOpen(true); }}
+                  style={{
+                    marginLeft: 'auto', background: '#16a34a', color: 'white', border: 'none',
+                    padding: '0.25rem 0.65rem', borderRadius: 5, fontSize: '0.75rem',
+                    fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  + Add Crew
+                </button>
               </div>
 
               {projectAssignments.length === 0 ? (
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No foremen assigned yet</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No crew assigned yet. Click + Add Crew to start.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   {projectAssignments.map((a: any) => (
-                    <div key={a.employee_id} style={{
+                    <div key={a.id} style={{
                       display: 'flex', alignItems: 'center', gap: '0.4rem',
-                      padding: '0.25rem 0.4rem', background: '#f8fafc', borderRadius: '5px', fontSize: '0.8rem',
+                      padding: '0.35rem 0.5rem', background: '#f8fafc', borderRadius: 5, fontSize: '0.8rem',
                     }}>
-                      <span style={{ fontWeight: 500, flex: 1 }}>{a.first_name} {a.last_name}</span>
-                      <select
-                        value={a.trade || ''}
-                        onChange={(e) => updateTradeMutation.mutate({ employeeId: a.employee_id, trade: e.target.value })}
-                        style={{
-                          padding: '0.15rem 0.3rem', fontSize: '0.7rem',
-                          border: '1px solid var(--border)', borderRadius: '4px', background: 'white',
-                          color: a.trade ? 'inherit' : '#94a3b8',
-                        }}
-                      >
-                        <option value="">Trade</option>
-                        {FOREMAN_TRADES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Link
+                          to={`/labor/employee/${a.employee_id}`}
+                          style={{ fontWeight: 500, color: '#1e293b', textDecoration: 'none' }}
+                        >
+                          {a.first_name} {a.last_name}
+                        </Link>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                          {a.role || 'Crew'}{a.trade ? ` · ${a.trade}` : ''}
+                          {a.start_date ? ` · ${new Date(a.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                          {a.end_date ? ` – ${new Date(a.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                        </div>
+                      </div>
                       <button
-                        onClick={() => removeForemanMutation.mutate(a.employee_id)}
+                        onClick={() => setNotifyCrewAssignment(a as AssignmentRecord)}
+                        title="Send notification"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem' }}
+                      >📤</button>
+                      <button
+                        onClick={() => { setEditingCrewAssignment(a as AssignmentRecord); setCrewAssignOpen(true); }}
+                        title="Edit"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem' }}
+                      >✏️</button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Remove ${a.first_name} ${a.last_name} from this project?`)) {
+                            removeCrewMutation.mutate(a.id);
+                          }
+                        }}
                         style={{
                           background: 'none', border: 'none', color: '#ef4444',
-                          cursor: 'pointer', fontSize: '0.85rem', padding: '0 0.2rem', lineHeight: 1,
+                          cursor: 'pointer', fontSize: '0.95rem', padding: '0 0.2rem', lineHeight: 1,
                         }}
                         title="Remove"
-                      >
-                        &times;
-                      </button>
+                      >×</button>
                     </div>
                   ))}
                 </div>
+              )}
+
+              <AssignDialog
+                open={crewAssignOpen}
+                onClose={() => { setCrewAssignOpen(false); setEditingCrewAssignment(null); }}
+                lockedProjectId={editingCrewAssignment ? undefined : Number(id)}
+                lockedProjectName={project?.name}
+                editing={editingCrewAssignment}
+                invalidateKeys={[['project-assignments', id || ''], ['labor-board'], ['labor-summary']]}
+              />
+
+              {notifyCrewAssignment && (
+                <NotifyDialog
+                  open={!!notifyCrewAssignment}
+                  onClose={() => setNotifyCrewAssignment(null)}
+                  assignment={notifyCrewAssignment}
+                />
               )}
             </div>
           )}

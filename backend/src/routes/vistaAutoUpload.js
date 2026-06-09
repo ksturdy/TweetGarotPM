@@ -351,6 +351,10 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
         let updatedCount = 0;
 
         for (const row of data) {
+          // When the Vista TGPREmployees sheet is extended with Trade / Group /
+          // Title / Profile Type columns, map them in here and pass them through
+          // VistaData.upsertEmployee + into the employees table (cols added in
+          // migration 236_extend_employees_for_labor.sql).
           const empData = {
             employee_number: parseInt(row['Employee']) || null,
             first_name: row['First Name'] || '',
