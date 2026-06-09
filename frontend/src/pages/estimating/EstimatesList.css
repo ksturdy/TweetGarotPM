@@ -366,19 +366,23 @@
 
 /* Column widths for fixed layout */
 .est-table th:nth-child(1),
-.est-table td:nth-child(1) { width: 7%; }   /* Activity */
+.est-table td:nth-child(1) { width: 6%; }   /* Activity */
 .est-table th:nth-child(2),
-.est-table td:nth-child(2) { width: 10%; }  /* Est # */
+.est-table td:nth-child(2) { width: 9%; }   /* Est # */
 .est-table th:nth-child(3),
-.est-table td:nth-child(3) { width: 22%; }  /* Project */
+.est-table td:nth-child(3) { width: 20%; }  /* Project */
 .est-table th:nth-child(4),
-.est-table td:nth-child(4) { width: 18%; }  /* Customer */
+.est-table td:nth-child(4) { width: 15%; }  /* Customer */
 .est-table th:nth-child(5),
-.est-table td:nth-child(5) { width: 11%; }  /* Value */
+.est-table td:nth-child(5) { width: 9%; }   /* Value */
 .est-table th:nth-child(6),
-.est-table td:nth-child(6) { width: 11%; }  /* Status */
+.est-table td:nth-child(6) { width: 8%; }   /* Sq Ft */
 .est-table th:nth-child(7),
-.est-table td:nth-child(7) { width: 21%; }  /* Estimator */
+.est-table td:nth-child(7) { width: 8%; }   /* Cost/SF */
+.est-table th:nth-child(8),
+.est-table td:nth-child(8) { width: 10%; }  /* Status */
+.est-table th:nth-child(9),
+.est-table td:nth-child(9) { width: 15%; }  /* Estimator */
 
 /* Date cell */
 .est-date-cell {

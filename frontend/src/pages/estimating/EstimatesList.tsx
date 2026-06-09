@@ -2,6 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
+  Wheat, Stethoscope, Factory, Warehouse, Newspaper, Mountain, GraduationCap,
+  Building2, Briefcase, Zap, BedDouble, Church, Shield, Truck,
+  RadioTower, TreePine, Recycle, Construction, Droplets, Home,
+  Building, ShoppingBag, Landmark, Server,
+  type LucideIcon,
+} from 'lucide-react';
+import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
@@ -125,30 +132,75 @@ const EstimatesList: React.FC = () => {
     return colors[Math.abs(hash) % colors.length];
   };
 
-  // Project icon helpers
-  const getProjectGradient = (name?: string): string => {
-    const gradients = [
-      'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-      'linear-gradient(135deg, #10b981, #06b6d4)',
-      'linear-gradient(135deg, #f59e0b, #f43f5e)',
-      'linear-gradient(135deg, #8b5cf6, #ec4899)',
-      'linear-gradient(135deg, #06b6d4, #3b82f6)',
-    ];
-    if (!name) return gradients[0];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return gradients[Math.abs(hash) % gradients.length];
+  // Market icon + gradient helpers (matches ProjectList)
+  const marketIconMap: { [key: string]: LucideIcon } = {
+    'MFG-Food': Wheat,
+    'Health Care': Stethoscope,
+    'MFG-Other': Warehouse,
+    'MFG-Paper': Newspaper,
+    'Amusement/Recreation': Mountain,
+    'Educational': GraduationCap,
+    'Manufacturing': Factory,
+    'Commercial': Building2,
+    'Office': Briefcase,
+    'Power': Zap,
+    'Lodging': BedDouble,
+    'Religious': Church,
+    'Public Safety': Shield,
+    'Transportation': Truck,
+    'Communication': RadioTower,
+    'Conservation/Development': TreePine,
+    'Sewage/Waste Disposal': Recycle,
+    'Highway/Street': Construction,
+    'Water Supply': Droplets,
+    'Residential': Home,
+    // Legacy mappings
+    'Healthcare': Stethoscope,
+    'Education': GraduationCap,
+    'Industrial': Factory,
+    'Retail': ShoppingBag,
+    'Government': Landmark,
+    'Hospitality': BedDouble,
+    'Data Center': Server,
   };
 
-  const getBuildingTypeIcon = (type?: string): string => {
-    const icons: Record<string, string> = {
-      'Healthcare': '🏥', 'Education': '🏫', 'Commercial': '🏢',
-      'Industrial': '🏭', 'Retail': '🏬', 'Government': '🏛️',
-      'Hospitality': '🏨', 'Data Center': '💾', 'Residential': '🏠',
+  const renderMarketIcon = (market?: string) => {
+    const Icon = marketIconMap[market || ''] || Building;
+    return <Icon size={16} color="white" strokeWidth={2} />;
+  };
+
+  const getMarketGradient = (market?: string): string => {
+    const marketGradients: { [key: string]: string } = {
+      'MFG-Food': 'linear-gradient(135deg, #f97316, #eab308)',
+      'Health Care': 'linear-gradient(135deg, #10b981, #06b6d4)',
+      'MFG-Other': 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+      'MFG-Paper': 'linear-gradient(135deg, #64748b, #94a3b8)',
+      'Amusement/Recreation': 'linear-gradient(135deg, #ec4899, #f43f5e)',
+      'Educational': 'linear-gradient(135deg, #f59e0b, #f97316)',
+      'Manufacturing': 'linear-gradient(135deg, #6366f1, #3b82f6)',
+      'Commercial': 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+      'Office': 'linear-gradient(135deg, #3b82f6, #06b6d4)',
+      'Power': 'linear-gradient(135deg, #eab308, #f59e0b)',
+      'Lodging': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
+      'Religious': 'linear-gradient(135deg, #8b5cf6, #a855f7)',
+      'Public Safety': 'linear-gradient(135deg, #ef4444, #f97316)',
+      'Transportation': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+      'Communication': 'linear-gradient(135deg, #14b8a6, #06b6d4)',
+      'Conservation/Development': 'linear-gradient(135deg, #22c55e, #10b981)',
+      'Sewage/Waste Disposal': 'linear-gradient(135deg, #84cc16, #22c55e)',
+      'Highway/Street': 'linear-gradient(135deg, #64748b, #475569)',
+      'Water Supply': 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
+      'Residential': 'linear-gradient(135deg, #a855f7, #ec4899)',
+      // Legacy mappings
+      'Healthcare': 'linear-gradient(135deg, #10b981, #06b6d4)',
+      'Education': 'linear-gradient(135deg, #f59e0b, #f43f5e)',
+      'Industrial': 'linear-gradient(135deg, #06b6d4, #10b981)',
+      'Retail': 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+      'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+      'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
+      'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
     };
-    return icons[type || ''] || '🏗️';
+    return marketGradients[market || ''] || 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
   };
 
   // KPI calculations
@@ -305,6 +357,14 @@ const EstimatesList: React.FC = () => {
       case 'total_cost':
         aValue = Number(a.total_cost || 0);
         bValue = Number(b.total_cost || 0);
+        break;
+      case 'square_footage':
+        aValue = Number(a.square_footage || 0);
+        bValue = Number(b.square_footage || 0);
+        break;
+      case 'cost_per_sqft':
+        aValue = Number(a.square_footage) > 0 ? Number(a.total_cost || 0) / Number(a.square_footage) : 0;
+        bValue = Number(b.square_footage) > 0 ? Number(b.total_cost || 0) / Number(b.square_footage) : 0;
         break;
       case 'status':
         aValue = (a.status || '').toLowerCase();
@@ -507,6 +567,12 @@ const EstimatesList: React.FC = () => {
               <th className="est-sortable" onClick={() => handleSort('total_cost')}>
                 Value <span className="est-sort-icon">{sortColumn === 'total_cost' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
+              <th className="est-sortable" onClick={() => handleSort('square_footage')}>
+                Sq Ft <span className="est-sort-icon">{sortColumn === 'square_footage' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
+              <th className="est-sortable" onClick={() => handleSort('cost_per_sqft')}>
+                Cost/SF <span className="est-sort-icon">{sortColumn === 'cost_per_sqft' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+              </th>
               <th className="est-sortable" onClick={() => handleSort('status')}>
                 Status <span className="est-sort-icon">{sortColumn === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
@@ -535,9 +601,9 @@ const EstimatesList: React.FC = () => {
                     <div className="est-project-cell">
                       <div
                         className="est-project-icon"
-                        style={{ background: getProjectGradient(estimate.project_name) }}
+                        style={{ background: getMarketGradient(estimate.building_type) }}
                       >
-                        {getBuildingTypeIcon(estimate.building_type)}
+                        {renderMarketIcon(estimate.building_type)}
                       </div>
                       <span className="est-project-name">{estimate.project_name || 'Untitled'}</span>
                     </div>
@@ -545,6 +611,16 @@ const EstimatesList: React.FC = () => {
                   <td>{estimate.customer_name || estimate.customer_owner || '-'}</td>
                   <td className="est-value-cell">
                     {formatCurrency(Number(estimate.total_cost || 0))}
+                  </td>
+                  <td className="est-value-cell">
+                    {Number(estimate.square_footage) > 0
+                      ? Number(estimate.square_footage).toLocaleString()
+                      : '-'}
+                  </td>
+                  <td className="est-value-cell">
+                    {Number(estimate.square_footage) > 0
+                      ? `$${(Number(estimate.total_cost || 0) / Number(estimate.square_footage)).toFixed(2)}`
+                      : '-'}
                   </td>
                   <td>
                     <span className={`est-stage-badge ${getStatusBadgeClass(estimate.status)}`}>
@@ -571,7 +647,7 @@ const EstimatesList: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={9}>
                   <div className="est-empty-state">
                     <h3>No estimates found</h3>
                     <p>{searchQuery || statusFilter ? 'Try adjusting your filters' : 'Get started by creating your first estimate'}</p>
