@@ -725,6 +725,25 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
       });
     }
 
+    // Sync already-linked contracts/WOs (propagates PM, status, dept, etc. changes from Vista)
+    if (results.contracts.total > 0) {
+      await safeRun('Sync contracts', async () => {
+        console.log('[Vista Auto-Import] Syncing linked contracts...');
+        const r = await VistaData.syncLinkedContractData(req.tenantId);
+        autoImport.contractSync = r;
+        console.log(`[Vista Auto-Import] Synced ${r.synced} linked contracts (${r.total_linked} total linked)`);
+      });
+    }
+
+    if (results.workOrders.total > 0) {
+      await safeRun('Sync work orders', async () => {
+        console.log('[Vista Auto-Import] Syncing linked work orders...');
+        const r = await VistaData.syncLinkedWorkOrderData(req.tenantId);
+        autoImport.workOrderSync = r;
+        console.log(`[Vista Auto-Import] Synced ${r.synced} linked work orders (${r.total_linked} total linked)`);
+      });
+    }
+
     // Auto-import contracts as projects (only those NOT already linked)
     if (results.contracts.total > 0) {
       await safeRun('Import contracts', async () => {
