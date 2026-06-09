@@ -43,9 +43,9 @@ export interface GmTrendProject {
   latest_gm_percent: number;
   latest_gm_dollars?: number | null;
   contract_value?: number | null;
-  prior_date: string;
-  prior_gm_percent: number;
-  prior_gm_dollars?: number | null;
+  window_start_date: string;
+  window_end_date: string;
+  point_count: number;
   gm_delta: number;
   gm_dollar_delta?: number | null;
 }
@@ -75,9 +75,9 @@ export const cashFlowReportApi = {
     api.get<CashFlowProject[]>('/reports/cash-flow').then(res => res.data),
   getMetrics: () =>
     api.get<CashFlowMetrics>('/reports/cash-flow/metrics').then(res => res.data),
-  getGmTrend: (minGapDays?: number) =>
+  getGmTrend: (windowDays?: number) =>
     api.get<GmTrendProject[]>('/reports/cash-flow/gm-trend', {
-      params: minGapDays != null ? { minGapDays } : undefined,
+      params: windowDays != null ? { windowDays } : undefined,
     }).then(res => res.data),
   downloadPdf: async (filters: CashFlowPdfFilters = {}) => {
     const params = new URLSearchParams();

@@ -278,14 +278,15 @@ router.get('/metrics', async (req, res) => {
 });
 
 /**
- * Build GM% trend per project by comparing latest snapshot to a prior one.
- * The prior snapshot is the most recent snapshot that is at least `minGapDays`
- * older than the latest snapshot. Projects without enough snapshot history
- * (or a zero delta) are excluded.
+ * Build GM% trend per project by fitting a least-squares regression line to
+ * all snapshots within the last `windowDays` days. The reported `gm_delta` is
+ * the slope (GM% per day) multiplied by `windowDays`, i.e. the fitted change
+ * across the window. Projects with fewer than 2 snapshots in the window or a
+ * zero slope are excluded.
  */
 async function buildGmTrend(tenantId, options = {}) {
-  const minGapDays = Number.isFinite(Number(options.minGapDays))
-    ? Number(options.minGapDays)
+  const windowDays = Number.isFinite(Number(options.windowDays))
+    ? Number(options.windowDays)
     : 7;
 
   const result = await db.query(
@@ -301,18 +302,32 @@ async function buildGmTrend(tenantId, options = {}) {
          AND ps.gross_profit_percent IS NOT NULL
        ORDER BY ps.project_id, ps.snapshot_date DESC
      ),
-     prior AS (
-       SELECT DISTINCT ON (ps.project_id)
+     window_points AS (
+       SELECT
          ps.project_id,
-         ps.snapshot_date AS prior_date,
-         ps.gross_profit_percent AS prior_gm,
-         ps.gross_profit_dollars AS prior_gm_dollars
+         ps.snapshot_date,
+         ps.gross_profit_percent,
+         ps.gross_profit_dollars,
+         EXTRACT(EPOCH FROM ps.snapshot_date) / 86400.0 AS day_num
        FROM project_snapshots ps
        JOIN latest l ON l.project_id = ps.project_id
        WHERE ps.tenant_id = $1
          AND ps.gross_profit_percent IS NOT NULL
-         AND ps.snapshot_date <= l.latest_date - ($2::int * INTERVAL '1 day')
-       ORDER BY ps.project_id, ps.snapshot_date DESC
+         AND ps.snapshot_date >= l.latest_date - ($2::int * INTERVAL '1 day')
+         AND ps.snapshot_date <= l.latest_date
+     ),
+     fit AS (
+       SELECT
+         project_id,
+         COUNT(*) AS point_count,
+         MIN(snapshot_date) AS window_start_date,
+         MAX(snapshot_date) AS window_end_date,
+         regr_slope(gross_profit_percent, day_num) AS gm_slope_per_day,
+         regr_slope(gross_profit_dollars, day_num) AS gm_dollars_slope_per_day
+       FROM window_points
+       GROUP BY project_id
+       HAVING COUNT(*) >= 2
+         AND regr_slope(gross_profit_percent, day_num) IS NOT NULL
      )
      SELECT
        p.id,
@@ -326,18 +341,18 @@ async function buildGmTrend(tenantId, options = {}) {
        l.latest_gm  AS latest_gm_percent,
        l.latest_gm_dollars,
        l.latest_contract_amount AS contract_value,
-       pr.prior_date,
-       pr.prior_gm  AS prior_gm_percent,
-       pr.prior_gm_dollars,
-       (l.latest_gm - pr.prior_gm) AS gm_delta,
-       (l.latest_gm_dollars - pr.prior_gm_dollars) AS gm_dollar_delta
+       f.window_start_date,
+       f.window_end_date,
+       f.point_count,
+       (f.gm_slope_per_day * $2::int) AS gm_delta,
+       (f.gm_dollars_slope_per_day * $2::int) AS gm_dollar_delta
      FROM projects p
      JOIN latest l ON l.project_id = p.id
-     JOIN prior pr ON pr.project_id = p.id
+     JOIN fit f ON f.project_id = p.id
      LEFT JOIN employees e ON p.manager_id = e.id
      WHERE p.tenant_id = $1
-       AND (l.latest_gm - pr.prior_gm) <> 0`,
-    [tenantId, minGapDays]
+       AND (f.gm_slope_per_day * $2::int) <> 0`,
+    [tenantId, windowDays]
   );
 
   return result.rows;
@@ -346,14 +361,15 @@ async function buildGmTrend(tenantId, options = {}) {
 /**
  * GET /api/reports/cash-flow/gm-trend
  * Returns per-project GM% trend computed from weekly snapshots.
- * Query params: minGapDays (default 7) — minimum days between compared snapshots.
+ * Query params: windowDays (default 7) — fits a regression line across all
+ * snapshots within this many days of the latest one. Trend = slope × windowDays.
  */
 router.get('/gm-trend', async (req, res) => {
   try {
-    const minGapDays = req.query.minGapDays
-      ? Number(req.query.minGapDays)
+    const windowDays = req.query.windowDays
+      ? Number(req.query.windowDays)
       : 7;
-    const rows = await buildGmTrend(req.tenantId, { minGapDays });
+    const rows = await buildGmTrend(req.tenantId, { windowDays });
     res.json(rows);
   } catch (error) {
     console.error('GM trend report error:', error);

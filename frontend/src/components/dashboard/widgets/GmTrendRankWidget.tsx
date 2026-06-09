@@ -63,6 +63,13 @@ interface Props extends WidgetProps {
   config: GmTrendRankConfig;
 }
 
+const WINDOW_OPTIONS: { label: string; days: number }[] = [
+  { label: 'Week over week', days: 7 },
+  { label: '4 weeks', days: 28 },
+  { label: '8 weeks', days: 56 },
+  { label: '12 weeks', days: 84 },
+];
+
 const GmTrendRankWidget: React.FC<Props> = ({
   viewScope,
   currentEmployeeId,
@@ -70,10 +77,11 @@ const GmTrendRankWidget: React.FC<Props> = ({
   config,
 }) => {
   const navigate = useNavigate();
+  const [windowDays, setWindowDays] = React.useState<number>(7);
 
   const { data: allProjects, isLoading } = useQuery({
-    queryKey: ['gm-trend-report'],
-    queryFn: () => cashFlowReportApi.getGmTrend(),
+    queryKey: ['gm-trend-report', windowDays],
+    queryFn: () => cashFlowReportApi.getGmTrend(windowDays),
   });
 
   const ranked = React.useMemo(() => {
@@ -136,12 +144,13 @@ const GmTrendRankWidget: React.FC<Props> = ({
           afterLabel: (ctx: any) => {
             const p = ranked[ctx.dataIndex];
             if (!p) return '';
+            const windowLabel = WINDOW_OPTIONS.find((o) => o.days === windowDays)?.label ?? `${windowDays} days`;
             const lines: string[] = [];
             if (p.manager_name) lines.push(`PM: ${p.manager_name}`);
             lines.push(`Contract Value: ${fmtMoney(p.contract_value)}`);
             lines.push(`Latest GM: ${fmtPct(p.latest_gm_percent)} (${fmtDate(p.latest_date)})`);
-            lines.push(`Prior GM: ${fmtPct(p.prior_gm_percent)} (${fmtDate(p.prior_date)})`);
-            lines.push(`Change: ${fmtSignedPctPoints(p.gm_delta)} / ${fmtSignedMoney(p.gm_dollar_delta)}`);
+            lines.push(`Trend (${windowLabel}): ${fmtSignedPctPoints(p.gm_delta)} / ${fmtSignedMoney(p.gm_dollar_delta)}`);
+            lines.push(`Based on: ${p.point_count} snapshots, ${fmtDate(p.window_start_date)} → ${fmtDate(p.window_end_date)}`);
             return lines.join('\n');
           },
         },
@@ -177,7 +186,7 @@ const GmTrendRankWidget: React.FC<Props> = ({
       const project = ranked[idx];
       if (project) navigate(`/projects/${project.id}`);
     },
-  }), [ranked, navigate]);
+  }), [ranked, navigate, windowDays]);
 
   const chartHeight = Math.max(160, ranked.length * 20 + 30);
 
@@ -188,11 +197,30 @@ const GmTrendRankWidget: React.FC<Props> = ({
 
   return (
     <div className="dashboard-card">
-      <div className="card-header">
+      <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
         <h2 className="card-title">
           {config.icon}
           {config.title}
         </h2>
+        <select
+          value={windowDays}
+          onChange={(e) => setWindowDays(Number(e.target.value))}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            fontSize: '0.75rem',
+            padding: '0.2rem 0.4rem',
+            border: '1px solid #d1d5db',
+            borderRadius: 4,
+            background: '#fff',
+            color: '#374151',
+            cursor: 'pointer',
+          }}
+          aria-label="Trend window"
+        >
+          {WINDOW_OPTIONS.map((opt) => (
+            <option key={opt.days} value={opt.days}>{opt.label}</option>
+          ))}
+        </select>
       </div>
       <div className="dashboard-scrollable" style={{ padding: '0.5rem 0' }}>
         {isLoading ? (
