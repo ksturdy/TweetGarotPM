@@ -52,6 +52,7 @@ export interface Estimate {
   project_name: string;
   customer_id: number | null;
   customer_name?: string;
+  customer_contact_id?: number | null;
   building_type?: string;
   square_footage?: number;
   location?: string;
@@ -68,6 +69,15 @@ export interface Estimate {
   facility_name?: string;
   facility_location_id?: number | null;
   send_estimate_to?: number | null;
+  // Multi-party: customers we're bidding to (any GCs/owners we'd be contracted with)
+  customer_ids?: number[];
+  // Multi-party: general contractors involved (optional)
+  gc_customer_ids?: number[];
+  // Which customer from customer_ids the proposal letter is addressed to
+  proposal_recipient_customer_id?: number | null;
+  // Free-text override when the recipient/contact isn't a saved record
+  proposal_recipient_name?: string | null;
+  proposal_recipient_contact_name?: string | null;
   // Linked customer fields (from JOIN) — legacy; prefer customer_name
   customer_facility?: string;
   customer_owner?: string;
@@ -122,6 +132,54 @@ export interface BidFormDownload {
   filename: string;
   uploadedAt: string;
   version: number;
+}
+
+export interface CostTabImportItem {
+  sourceRow: number;
+  phaseCode: string;
+  description: string;
+  hours: number;
+  cost: number;
+}
+
+export interface CostTabImportSection {
+  costType: number;
+  name: string;
+  totalCost: number;
+  totalHours: number;
+  itemCount: number;
+  items: CostTabImportItem[];
+}
+
+export interface CostTabImportPreview {
+  filename: string;
+  projectInfo: {
+    projectName: string;
+    estimatorNames: string;
+    bidDate: string | null;
+    startDate: string | null;
+    completionDate: string | null;
+    hubNumber: string;
+    squareFootage: number;
+    totalFixtures: number;
+  };
+  summary: {
+    laborCost: number;
+    materialCost: number;
+    equipmentCost: number;
+    rentalCost: number;
+    generalConditions: number;
+    subcontractCost: number;
+    subtotal: number;
+    markupPercentage: number;
+    markupAmount: number;
+    bondPercentage: number;
+    bondAmount: number;
+    taxPercentage: number;
+    totalCost: number;
+  };
+  sections: CostTabImportSection[];
+  mappedEstimate: Partial<Estimate>;
 }
 
 export interface BidFormPreview {
@@ -228,6 +286,23 @@ export const estimatesApi = {
     const formData = new FormData();
     formData.append('bidForm', file);
     return api.post<BidFormPreview>(`/estimates/${estimateId}/bid-form/preview`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  // Import a Master Cost Tabulation Excel file as a new estimate
+  previewImport: (file: File) => {
+    const formData = new FormData();
+    formData.append('estimateFile', file);
+    return api.post<CostTabImportPreview>('/estimates/import/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  createFromImport: (file: File) => {
+    const formData = new FormData();
+    formData.append('estimateFile', file);
+    return api.post<Estimate>('/estimates/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },

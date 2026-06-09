@@ -4,7 +4,7 @@ const Estimate = {
   async create(data, tenantId) {
     const result = await db.query(
       `INSERT INTO estimates (
-        estimate_number, project_name, customer_id, customer_name,
+        estimate_number, project_name, customer_id, customer_name, customer_contact_id,
         building_type, square_footage, location, bid_date,
         project_start_date, project_duration,
         estimator_id, estimator_name, status,
@@ -12,11 +12,13 @@ const Estimate = {
         scope_of_work, exclusions, assumptions, notes,
         created_by, tenant_id,
         owner, general_contractor, gc_customer_id, facility_name, facility_location_id, send_estimate_to,
-        campaign_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        campaign_id,
+        customer_ids, gc_customer_ids, proposal_recipient_customer_id,
+        proposal_recipient_name, proposal_recipient_contact_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
       RETURNING *`,
       [
-        data.estimate_number, data.project_name, data.customer_id, data.customer_name,
+        data.estimate_number, data.project_name, data.customer_id, data.customer_name, data.customer_contact_id || null,
         data.building_type, data.square_footage, data.location, data.bid_date,
         data.project_start_date, data.project_duration,
         data.estimator_id, data.estimator_name, data.status || 'in progress',
@@ -25,7 +27,12 @@ const Estimate = {
         data.scope_of_work, data.exclusions, data.assumptions, data.notes,
         data.created_by, tenantId,
         data.owner, data.general_contractor, data.gc_customer_id, data.facility_name, data.facility_location_id, data.send_estimate_to,
-        data.campaign_id || null
+        data.campaign_id || null,
+        Array.isArray(data.customer_ids) ? data.customer_ids : [],
+        Array.isArray(data.gc_customer_ids) ? data.gc_customer_ids : [],
+        data.proposal_recipient_customer_id || null,
+        data.proposal_recipient_name || null,
+        data.proposal_recipient_contact_name || null,
       ]
     );
     return result.rows[0];
@@ -116,7 +123,7 @@ const Estimate = {
     let paramCount = 1;
 
     const allowedFields = [
-      'project_name', 'customer_id', 'customer_name', 'building_type',
+      'project_name', 'customer_id', 'customer_name', 'customer_contact_id', 'building_type',
       'square_footage', 'location', 'bid_date', 'project_start_date',
       'project_duration', 'estimator_id', 'estimator_name', 'status',
       'overhead_percentage', 'profit_percentage', 'contingency_percentage',
@@ -131,7 +138,11 @@ const Estimate = {
       // Gross margin fields (from Excel bid form AF211/AH211)
       'gross_margin_dollars', 'gross_margin_percentage',
       // Project participants fields
-      'owner', 'general_contractor', 'gc_customer_id', 'facility_name', 'facility_location_id', 'send_estimate_to'
+      'owner', 'general_contractor', 'gc_customer_id', 'facility_name', 'facility_location_id', 'send_estimate_to',
+      // Multi-party fields
+      'customer_ids', 'gc_customer_ids', 'proposal_recipient_customer_id',
+      // Manual-entry overrides when recipient/contact aren't on file
+      'proposal_recipient_name', 'proposal_recipient_contact_name'
     ];
 
     Object.keys(data).forEach((key) => {

@@ -4,10 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
 import { takeoffsApi, Takeoff } from '../../services/takeoffs';
 import { customersApi, Customer } from '../../services/customers';
+import { contactsApi } from '../../services/contacts';
 import { employeesApi } from '../../services/employees';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
 import BidFormUpload from '../../components/estimates/BidFormUpload';
 import CompanyPicker from '../../components/CompanyPicker';
+import CompanyMultiPicker from '../../components/CompanyMultiPicker';
+import RecipientContactPicker from '../../components/estimates/RecipientContactPicker';
+import SendProposalToPicker from '../../components/estimates/SendProposalToPicker';
 import LocationPicker from '../../components/LocationPicker';
 import SearchableSelect from '../../components/SearchableSelect';
 import './EstimateNew.css';
@@ -64,6 +68,7 @@ const EstimateDetail: React.FC = () => {
     project_name: '',
     customer_id: null,
     customer_name: '',
+    customer_contact_id: null,
     building_type: 'Commercial',
     square_footage: undefined,
     location: '',
@@ -88,10 +93,14 @@ const EstimateDetail: React.FC = () => {
     facility_name: '',
     facility_location_id: null as number | null,
     send_estimate_to: null,
+    customer_ids: [] as number[],
+    gc_customer_ids: [] as number[],
+    proposal_recipient_customer_id: null,
+    proposal_recipient_name: '',
+    proposal_recipient_contact_name: '',
   });
 
   const [customerSearch, setCustomerSearch] = useState('');
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [sections, setSections] = useState<EstimateSection[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [showBidFormSection, setShowBidFormSection] = useState(false);
@@ -114,6 +123,30 @@ const EstimateDetail: React.FC = () => {
     return Array.from(companyMap.values());
   }, [customers]);
 
+  // Contacts of the Send Proposal To recipient
+  const { data: proposalRecipientContacts } = useQuery({
+    queryKey: ['contacts', 'company', formData.proposal_recipient_customer_id],
+    queryFn: () =>
+      contactsApi.getByCompany(formData.proposal_recipient_customer_id as number).then((res) => res.data),
+    enabled: !!formData.proposal_recipient_customer_id,
+  });
+
+  // Keep Send Proposal To valid: if it's not in the customer_ids list anymore, clear it
+  useEffect(() => {
+    if (!formData.proposal_recipient_customer_id) return;
+    if (!formData.customer_ids?.includes(formData.proposal_recipient_customer_id)) {
+      setFormData((prev) => ({ ...prev, proposal_recipient_customer_id: null, customer_contact_id: null }));
+    }
+  }, [formData.customer_ids, formData.proposal_recipient_customer_id]);
+
+  // Clear contact when the recipient changes to a customer that doesn't have it
+  useEffect(() => {
+    if (!formData.customer_contact_id) return;
+    if (!proposalRecipientContacts) return;
+    const stillValid = proposalRecipientContacts.some((c) => c.id === formData.customer_contact_id);
+    if (!stillValid) setFormData((prev) => ({ ...prev, customer_contact_id: null }));
+  }, [proposalRecipientContacts, formData.customer_contact_id]);
+
   // Clear facility/location when company changes (locations are scoped to company)
   const prevCustomerId = useRef(formData.customer_id);
   useEffect(() => {
@@ -130,6 +163,7 @@ const EstimateDetail: React.FC = () => {
         project_name: estimate.project_name || '',
         customer_id: estimate.customer_id || null,
         customer_name: estimate.customer_name || '',
+        customer_contact_id: estimate.customer_contact_id ?? null,
         building_type: estimate.building_type || 'Commercial',
         square_footage: estimate.square_footage || undefined,
         location: estimate.location || '',
@@ -154,6 +188,11 @@ const EstimateDetail: React.FC = () => {
         facility_name: estimate.facility_name || '',
         facility_location_id: estimate.facility_location_id || null,
         send_estimate_to: estimate.send_estimate_to || null,
+        customer_ids: Array.isArray(estimate.customer_ids) ? estimate.customer_ids : [],
+        gc_customer_ids: Array.isArray(estimate.gc_customer_ids) ? estimate.gc_customer_ids : [],
+        proposal_recipient_customer_id: estimate.proposal_recipient_customer_id ?? null,
+        proposal_recipient_name: estimate.proposal_recipient_name || '',
+        proposal_recipient_contact_name: estimate.proposal_recipient_contact_name || '',
       });
 
       if (estimate.customer_name) {
@@ -224,23 +263,6 @@ const EstimateDetail: React.FC = () => {
       [name]: value,
     }));
   };
-
-  const handleCustomerSelect = (customer: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      customer_id: customer.id,
-      customer_name: customer.name,
-    }));
-    setCustomerSearch(customer.name);
-    setShowCustomerDropdown(false);
-  };
-
-  const filteredCustomers = customers?.filter((c: any) =>
-    customerSearch
-      ? c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-        c.city?.toLowerCase().includes(customerSearch.toLowerCase())
-      : true
-  ).slice(0, 10);
 
   const employees = employeesData?.data?.data || [];
   const estimatorOptions = employees.map((emp: any) => ({
@@ -503,6 +525,26 @@ const EstimateDetail: React.FC = () => {
   const totals = calculateTotals();
 
   const handleSaveChanges = () => {
+    // Required fields. Facility/Location is intentionally optional.
+    const missing: string[] = [];
+    if (!formData.project_name?.trim()) missing.push('Project Name');
+    if (!formData.estimator_id) missing.push('Estimator');
+    if (!formData.building_type) missing.push('Building Type');
+    if (!formData.location?.trim()) missing.push('Location');
+    if (!formData.square_footage) missing.push('Sq Ft');
+    if (!formData.bid_date) missing.push('Bid Date');
+    if (!formData.project_start_date) missing.push('Project Start Date');
+    if (!formData.project_duration) missing.push('Duration');
+    if (!formData.customer_id && !formData.owner?.trim()) missing.push('Owner');
+    if (!formData.customer_ids?.length) missing.push('Customer(s)');
+    if (!formData.proposal_recipient_customer_id && !formData.proposal_recipient_name?.trim()) missing.push('Send Proposal To');
+    if (!formData.customer_contact_id && !formData.proposal_recipient_contact_name?.trim()) missing.push('Recipient Contact');
+
+    if (missing.length) {
+      toast.warning(`Please fill in: ${missing.join(', ')}`);
+      return;
+    }
+
     const estimateData = {
       ...formData,
       bid_date: formData.bid_date || undefined,
@@ -669,8 +711,8 @@ const EstimateDetail: React.FC = () => {
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ margin: '0 0 1rem 0' }}>Estimate Information</h2>
 
-          {/* Row 1: Est#, Project Name, Customer, Estimator, Building Type */}
-          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+          {/* Row 1: Est#, Project Name, Estimator, Building Type */}
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Est #</label>
               <input
@@ -696,78 +738,8 @@ const EstimateDetail: React.FC = () => {
               />
             </div>
 
-            <div className="form-group" style={{ position: 'relative', marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Customer</label>
-              <input
-                type="text"
-                className="form-input"
-                value={customerSearch}
-                onChange={(e) => {
-                  setCustomerSearch(e.target.value);
-                  setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="Search customer..."
-                style={{ padding: '0.5rem' }}
-              />
-              {showCustomerDropdown && filteredCustomers && filteredCustomers.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    maxHeight: '250px',
-                    overflowY: 'auto',
-                    backgroundColor: 'white',
-                    border: '1px solid var(--border)',
-                    borderRadius: '0.375rem',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    zIndex: 1000,
-                    marginTop: '0.25rem',
-                  }}
-                >
-                  {filteredCustomers.map((customer: any) => (
-                    <div
-                      key={customer.id}
-                      onClick={() => handleCustomerSelect(customer)}
-                      style={{
-                        padding: '0.5rem 0.75rem',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--background)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{customer.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>
-                        {customer.city && `${customer.city}, ${customer.state}`}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showCustomerDropdown && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    zIndex: 999,
-                  }}
-                  onClick={() => setShowCustomerDropdown(false)}
-                />
-              )}
-            </div>
-
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Estimator *</label>
               <SearchableSelect
                 options={estimatorOptions}
                 value={formData.estimator_id?.toString() || ''}
@@ -784,8 +756,15 @@ const EstimateDetail: React.FC = () => {
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type</label>
-              <select name="building_type" className="form-input" value={formData.building_type} onChange={handleChange} style={{ padding: '0.5rem' }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Building Type *</label>
+              <select
+                name="building_type"
+                className="form-input"
+                value={formData.building_type}
+                onChange={handleChange}
+                required
+                style={{ padding: '0.5rem' }}
+              >
                 {MARKETS.map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
@@ -794,9 +773,9 @@ const EstimateDetail: React.FC = () => {
           </div>
 
           {/* Row 2: Location, Sq Ft, Bid Date, Start Date, Duration */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr 1fr 100px', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 1fr 1fr 100px', gap: '0.75rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Location</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Location *</label>
               <input
                 type="text"
                 name="location"
@@ -804,48 +783,59 @@ const EstimateDetail: React.FC = () => {
                 value={formData.location}
                 onChange={handleChange}
                 placeholder="City, State"
+                required
                 style={{ padding: '0.5rem' }}
               />
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Sq Ft</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Sq Ft *</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 name="square_footage"
                 className="form-input"
-                value={formData.square_footage || ''}
-                onChange={handleChange}
+                value={formData.square_footage ? formData.square_footage.toLocaleString('en-US') : ''}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^\d]/g, '');
+                  setFormData((prev) => ({
+                    ...prev,
+                    square_footage: digits ? Number(digits) : undefined,
+                  }));
+                }}
+                required
                 style={{ padding: '0.5rem' }}
               />
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bid Date</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bid Date *</label>
               <input
                 type="date"
                 name="bid_date"
                 className="form-input"
                 value={formData.bid_date}
                 onChange={handleChange}
+                required
                 style={{ padding: '0.5rem' }}
               />
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Project Start Date</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Project Start Date *</label>
               <input
                 type="date"
                 name="project_start_date"
                 className="form-input"
                 value={formData.project_start_date}
                 onChange={handleChange}
+                required
                 style={{ padding: '0.5rem' }}
               />
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Duration</label>
+              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Duration *</label>
               <input
                 type="number"
                 name="project_duration"
@@ -853,6 +843,7 @@ const EstimateDetail: React.FC = () => {
                 value={formData.project_duration || ''}
                 onChange={handleChange}
                 placeholder="months"
+                required
                 style={{ padding: '0.5rem' }}
               />
             </div>
@@ -860,16 +851,19 @@ const EstimateDetail: React.FC = () => {
 
           {/* Project Participants */}
           <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Project Participants</h3>
+            <h3 style={{ marginBottom: '0.25rem', fontSize: '1rem', fontWeight: 600 }}>Project Participants</h3>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: 'var(--secondary)' }}>
+              <strong>Owner</strong> funds the project. <strong>Customer(s)</strong> are who we'd be contracted with — pick the one to address the proposal to under "Send Proposal To".
+            </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-              {/* Company */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem 1.5rem' }}>
+              {/* Owner */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Company</label>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Owner *</label>
                 <CompanyPicker
                   companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
                   selectedId={formData.customer_id?.toString() || ''}
-                  textValue={formData.owner || ''}
+                  textValue={formData.owner || formData.customer_name || ''}
                   onSelectCompany={(id, name) => {
                     setFormData(prev => ({
                       ...prev,
@@ -879,32 +873,17 @@ const EstimateDetail: React.FC = () => {
                     }));
                     setCustomerSearch(name);
                   }}
-                  onManualEntry={(name) => setFormData(prev => ({ ...prev, customer_id: null, owner: name }))}
+                  onManualEntry={(name) => setFormData(prev => ({ ...prev, customer_id: null, owner: name, customer_name: name }))}
                   onClear={() => {
                     setFormData(prev => ({ ...prev, customer_id: null, owner: '', customer_name: '' }));
                     setCustomerSearch('');
                   }}
-                  placeholder="Search companies..."
+                  placeholder="Search owners..."
                   onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
                 />
               </div>
 
-              {/* General Contractor */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>General Contractor</label>
-                <CompanyPicker
-                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
-                  selectedId={formData.gc_customer_id?.toString() || ''}
-                  textValue={formData.general_contractor || ''}
-                  onSelectCompany={(id, name) => setFormData(prev => ({ ...prev, gc_customer_id: Number(id), general_contractor: name }))}
-                  onManualEntry={(name) => setFormData(prev => ({ ...prev, gc_customer_id: null, general_contractor: name }))}
-                  onClear={() => setFormData(prev => ({ ...prev, gc_customer_id: null, general_contractor: '' }))}
-                  placeholder="Search companies..."
-                  onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
-                />
-              </div>
-
-              {/* Facility/Location */}
+              {/* Facility/Location (optional) */}
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Facility/Location</label>
                 <LocationPicker
@@ -916,27 +895,80 @@ const EstimateDetail: React.FC = () => {
                   onClear={() => setFormData(prev => ({ ...prev, facility_location_id: null, facility_name: '' }))}
                 />
               </div>
-            </div>
-          </div>
 
-          {/* Send Estimate To */}
-          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <div className="form-group" style={{ marginBottom: 0, maxWidth: '400px' }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Send Estimate To:</label>
-              <select
-                name="send_estimate_to"
-                className="form-input"
-                value={formData.send_estimate_to || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, send_estimate_to: e.target.value ? Number(e.target.value) : null }))}
-                style={{ padding: '0.5rem' }}
-              >
-                <option value="">Select company...</option>
-                {uniqueCompanies.map((customer: Customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
-              </select>
+              {/* Customers (multi) */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Customer(s) *</label>
+                <CompanyMultiPicker
+                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
+                  selectedIds={formData.customer_ids || []}
+                  onChange={(ids) => setFormData(prev => ({ ...prev, customer_ids: ids }))}
+                  placeholder="Search customers..."
+                  addLabel="+ Add customer"
+                  onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
+                />
+              </div>
+
+              {/* General Contractors (multi, optional) */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>General Contractor(s)</label>
+                <CompanyMultiPicker
+                  companies={uniqueCompanies.map((c: Customer) => ({ id: c.id, name: c.name, customer_type: c.customer_type }))}
+                  selectedIds={formData.gc_customer_ids || []}
+                  onChange={(ids) => setFormData(prev => ({ ...prev, gc_customer_ids: ids }))}
+                  placeholder="Search GCs..."
+                  addLabel="+ Add GC"
+                  onProspectCreated={() => queryClient.invalidateQueries({ queryKey: ['customers'] })}
+                />
+              </div>
+
+              {/* Send Proposal To */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Send Proposal To *</label>
+                <SendProposalToPicker
+                  customers={(formData.customer_ids || []).map((id) => {
+                    const c = uniqueCompanies.find((x) => x.id === id);
+                    return { id, name: c?.name || `Customer #${id}` };
+                  })}
+                  selectedCustomerId={formData.proposal_recipient_customer_id}
+                  manualName={formData.proposal_recipient_name}
+                  onSelectCustomer={(id) => setFormData(prev => ({
+                    ...prev,
+                    proposal_recipient_customer_id: id,
+                    proposal_recipient_name: id ? '' : prev.proposal_recipient_name,
+                    customer_contact_id: null,
+                  }))}
+                  onManualNameChange={(name) => setFormData(prev => ({
+                    ...prev,
+                    proposal_recipient_name: name,
+                    proposal_recipient_customer_id: null,
+                    customer_contact_id: null,
+                  }))}
+                  required
+                />
+              </div>
+
+              {/* Recipient Contact */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Recipient Contact *</label>
+                <RecipientContactPicker
+                  customerId={formData.proposal_recipient_customer_id}
+                  customerName={uniqueCompanies.find((c) => c.id === formData.proposal_recipient_customer_id)?.name}
+                  selectedContactId={formData.customer_contact_id}
+                  onChange={(id) => setFormData((prev) => ({
+                    ...prev,
+                    customer_contact_id: id,
+                    proposal_recipient_contact_name: id ? '' : prev.proposal_recipient_contact_name,
+                  }))}
+                  manualName={formData.proposal_recipient_contact_name}
+                  onManualNameChange={(name) => setFormData((prev) => ({
+                    ...prev,
+                    proposal_recipient_contact_name: name,
+                    customer_contact_id: null,
+                  }))}
+                  required
+                />
+              </div>
             </div>
           </div>
         </div>

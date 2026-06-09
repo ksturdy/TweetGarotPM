@@ -7,6 +7,22 @@ interface EstimateProposalPreviewProps {
   onClose?: () => void;
 }
 
+// Format a date value that may come back from the API as either a plain
+// "YYYY-MM-DD" string or a full ISO datetime. Returns fallback if unparseable.
+const formatDate = (value: string | Date | null | undefined, pattern = 'MMM d, yyyy', fallback = ''): string => {
+  if (!value) return fallback;
+  let d: Date;
+  if (value instanceof Date) {
+    d = value;
+  } else if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // Pure date string — treat as local midnight to avoid TZ rollback to the prior day
+    d = new Date(value + 'T00:00:00');
+  } else {
+    d = new Date(value);
+  }
+  return Number.isNaN(d.getTime()) ? fallback : format(d, pattern);
+};
+
 const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estimate, onClose }) => {
   return (
     <div style={{
@@ -70,13 +86,13 @@ const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estim
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '2px', fontSize: '10pt' }}>Date</div>
           <div style={{ color: '#333' }}>
-            {estimate.created_at ? format(new Date(estimate.created_at), 'MMM d, yyyy') : ''}
+            {formatDate(estimate.created_at)}
           </div>
         </div>
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '2px', fontSize: '10pt' }}>Bid Date</div>
           <div style={{ color: '#333' }}>
-            {estimate.bid_date ? format(new Date(estimate.bid_date + 'T00:00:00'), 'MMM d, yyyy') : 'TBD'}
+            {formatDate(estimate.bid_date, 'MMM d, yyyy', 'TBD')}
           </div>
         </div>
         <div>
@@ -149,7 +165,7 @@ const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estim
                 Project Start Date
               </div>
               <div style={{ fontSize: '10pt', minHeight: '18px', borderBottom: '1px solid #ddd', padding: '2px 0' }}>
-                {estimate.project_start_date ? format(new Date(estimate.project_start_date + 'T00:00:00'), 'MMM d, yyyy') : ''}
+                {formatDate(estimate.project_start_date)}
               </div>
             </div>
             <div>
@@ -440,7 +456,7 @@ const EstimateProposalPreview: React.FC<EstimateProposalPreviewProps> = ({ estim
                 Date Prepared
               </div>
               <div style={{ fontSize: '10pt', minHeight: '18px', borderBottom: '1px solid #ddd', padding: '2px 0' }}>
-                {estimate.created_at ? format(new Date(estimate.created_at), 'MMM d, yyyy') : ''}
+                {formatDate(estimate.created_at)}
               </div>
             </div>
           </div>

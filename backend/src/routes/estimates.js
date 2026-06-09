@@ -4,9 +4,25 @@ const { tenantContext, requireFeature } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const { getPresignedUrl, deleteFile, getFileUrl } = require('../utils/fileStorage');
 const { parseBidForm, mapToEstimateFormat, getSheetNames } = require('../services/bidFormParser');
+const { parseCostTab, mapToEstimate: mapCostTabToEstimate } = require('../services/costTabParser');
 const Estimate = require('../models/Estimate');
 const EstimateSection = require('../models/EstimateSection');
 const EstimateLineItem = require('../models/EstimateLineItem');
+const Employee = require('../models/Employee');
+
+// estimates.estimator_id FKs to employees.id (see migration 125), but
+// req.user.id is the user id. This helper resolves a user to their
+// employee record so writes don't break the join in Estimate.findById.
+async function resolveEstimatorId(userId, tenantId, fallbackId = null) {
+  if (!userId) return fallbackId;
+  try {
+    const emp = await Employee.getByUserId(userId, tenantId);
+    return emp?.id || fallbackId;
+  } catch (err) {
+    console.warn('resolveEstimatorId failed:', err.message);
+    return fallbackId;
+  }
+}
 
 const router = express.Router();
 
@@ -97,10 +113,17 @@ router.get('/:id', async (req, res, next) => {
 // Create new estimate
 router.post('/', async (req, res, next) => {
   try {
+    // Allow caller to specify estimator_id (employee id). Fall back to the
+    // employee record linked to the current user, then to the user themself
+    // (rare — only if no employee row exists for that user).
+    const resolvedEstimatorId = req.body.estimator_id
+      ? Number(req.body.estimator_id)
+      : await resolveEstimatorId(req.user.id, req.tenantId);
+
     const estimateData = {
       ...req.body,
-      estimator_id: req.user.id,
-      estimator_name: `${req.user.firstName} ${req.user.lastName}`,
+      estimator_id: resolvedEstimatorId,
+      estimator_name: req.body.estimator_name || `${req.user.firstName} ${req.user.lastName}`,
       created_by: req.user.id,
     };
 
@@ -485,6 +508,152 @@ router.patch('/sections/:sectionId/items/reorder', async (req, res, next) => {
     await EstimateLineItem.reorder(req.params.sectionId, itemOrders);
     res.json({ message: 'Line items reordered successfully' });
   } catch (error) {
+    next(error);
+  }
+});
+
+// --- IMPORT (Master Cost Tabulation) ROUTES ---
+
+// Helper: read uploaded file buffer from R2 or local disk, then clean up
+async function readUploadedBuffer(file) {
+  const fs = require('fs');
+  const { getR2Client, isR2Enabled } = require('../config/r2Client');
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const config = require('../config');
+
+  if (isR2Enabled()) {
+    const r2Client = getR2Client();
+    const command = new GetObjectCommand({
+      Bucket: config.r2.bucketName,
+      Key: file.key,
+    });
+    const response = await r2Client.send(command);
+    const chunks = [];
+    for await (const chunk of response.Body) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+  return fs.readFileSync(file.path);
+}
+
+async function cleanupUpload(file) {
+  if (!file) return;
+  try {
+    const { isR2Enabled } = require('../config/r2Client');
+    if (isR2Enabled()) {
+      await deleteFile(file.key);
+    } else {
+      const fs = require('fs');
+      fs.unlinkSync(file.path);
+    }
+  } catch (err) {
+    console.warn('Cleanup upload failed:', err.message);
+  }
+}
+
+// Preview a Master Cost Tabulation Excel file (no DB writes)
+router.post('/import/preview', bidFormUpload.single('estimateFile'), async (req, res, next) => {
+  let cleanedUp = false;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileBuffer = await readUploadedBuffer(req.file);
+    await cleanupUpload(req.file);
+    cleanedUp = true;
+
+    const parsed = parseCostTab(fileBuffer);
+    const mapped = mapCostTabToEstimate(parsed);
+
+    res.json({
+      filename: req.file.originalname,
+      projectInfo: parsed.projectInfo,
+      summary: parsed.summary,
+      sections: parsed.sections.map((s) => ({
+        costType: s.costType,
+        name: s.name,
+        totalCost: s.totalCost,
+        totalHours: s.totalHours,
+        itemCount: s.items.length,
+        items: s.items,
+      })),
+      mappedEstimate: mapped.estimate,
+    });
+  } catch (error) {
+    if (!cleanedUp) await cleanupUpload(req.file);
+    if (error && /Cost Tab sheet not found/i.test(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
+    next(error);
+  }
+});
+
+// Create a new estimate from a Master Cost Tabulation Excel file
+router.post('/import', bidFormUpload.single('estimateFile'), async (req, res, next) => {
+  let cleanedUp = false;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const fileBuffer = await readUploadedBuffer(req.file);
+    const parsed = parseCostTab(fileBuffer);
+    const { estimate: estimateData, sections } = mapCostTabToEstimate(parsed);
+
+    // Header fields not supplied by the spreadsheet
+    estimateData.estimate_number = await Estimate.getNextEstimateNumber(req.tenantId);
+    estimateData.estimator_id = await resolveEstimatorId(req.user.id, req.tenantId);
+    if (!estimateData.estimator_name) {
+      estimateData.estimator_name = `${req.user.firstName} ${req.user.lastName}`;
+    }
+    estimateData.status = 'in progress';
+    estimateData.created_by = req.user.id;
+
+    const estimate = await Estimate.create(estimateData, req.tenantId);
+
+    // Set build_method (Estimate.create doesn't take it)
+    await Estimate.update(estimate.id, { build_method: 'excel_import' }, req.tenantId);
+
+    // Create sections + line items — the line-item trigger (migration 010)
+    // recomputes the estimate's labor/material/etc and total_cost from these
+    // rows combined with the markup percentages already on the estimate.
+    for (const section of sections) {
+      const createdSection = await EstimateSection.create({
+        estimate_id: estimate.id,
+        section_name: section.section_name,
+        section_order: section.section_order,
+        description: section.description,
+      });
+
+      for (const item of section.items) {
+        await EstimateLineItem.create({
+          estimate_id: estimate.id,
+          section_id: createdSection.id,
+          ...item,
+        });
+      }
+    }
+
+    await cleanupUpload(req.file);
+    cleanedUp = true;
+
+    const complete = await Estimate.findByIdAndTenant(estimate.id, req.tenantId);
+    const createdSections = await EstimateSection.findByEstimate(estimate.id);
+    const lineItems = await EstimateLineItem.findByEstimate(estimate.id);
+    const sectionsWithItems = createdSections.map((s) => ({
+      ...s,
+      items: lineItems.filter((it) => it.section_id === s.id),
+    }));
+
+    res.status(201).json({
+      ...complete,
+      sections: sectionsWithItems,
+    });
+  } catch (error) {
+    if (!cleanedUp) await cleanupUpload(req.file);
+    if (error && /Cost Tab sheet not found/i.test(error.message)) {
+      return res.status(400).json({ error: error.message });
+    }
     next(error);
   }
 });

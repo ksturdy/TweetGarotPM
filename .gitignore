@@ -44,10 +44,14 @@ coverage/
 *.pdf
 *.xlsx
 *.xls
+*.xlsm
 *.docx
 *.doc
 *.pptx
 *.ppt
+
+# Internal estimating templates — contain labor rates, markups, pricing
+Estimate Templates/
 
 # Allow public assets shipped with the frontend
 !frontend/public/*.pdf

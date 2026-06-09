@@ -16,6 +16,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate } from '../../services/estimates';
 import EstimateProposalPreviewModal from '../../components/estimates/EstimateProposalPreviewModal';
+import EstimateImportModal from '../../components/estimates/EstimateImportModal';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { useAuth } from '../../context/AuthContext';
 import '../../styles/SalesPipeline.css';
@@ -47,6 +48,7 @@ const EstimatesList: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [previewEstimate, setPreviewEstimate] = useState<Estimate | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   // Current user's full name for "My Estimates" filter
   const currentUserName = user ? `${user.firstName} ${user.lastName}` : '';
@@ -354,6 +356,13 @@ const EstimatesList: React.FC = () => {
           <button className="est-btn est-btn-secondary">
             Export
           </button>
+          <button
+            type="button"
+            className="est-btn est-btn-secondary"
+            onClick={() => setIsImportOpen(true)}
+          >
+            Import
+          </button>
           <Link to="/estimating/estimates/new" className="est-btn est-btn-primary">
             + New Estimate
           </Link>
@@ -588,6 +597,17 @@ const EstimatesList: React.FC = () => {
           }}
         />
       )}
+
+      {/* Import Modal */}
+      <EstimateImportModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onCreated={(created) => {
+          setIsImportOpen(false);
+          queryClient.invalidateQueries({ queryKey: ['estimates'] });
+          if (created?.id) navigate(`/estimating/estimates/${created.id}`);
+        }}
+      />
     </div>
   );
 };
