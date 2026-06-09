@@ -537,8 +537,6 @@ const EstimateDetail: React.FC = () => {
     if (!formData.project_duration) missing.push('Duration');
     if (!formData.customer_id && !formData.owner?.trim()) missing.push('Owner');
     if (!formData.customer_ids?.length) missing.push('Customer(s)');
-    if (!formData.proposal_recipient_customer_id && !formData.proposal_recipient_name?.trim()) missing.push('Send Proposal To');
-    if (!formData.customer_contact_id && !formData.proposal_recipient_contact_name?.trim()) missing.push('Recipient Contact');
 
     if (missing.length) {
       toast.warning(`Please fill in: ${missing.join(', ')}`);
@@ -924,7 +922,7 @@ const EstimateDetail: React.FC = () => {
 
               {/* Send Proposal To */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Send Proposal To *</label>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Send Proposal To</label>
                 <SendProposalToPicker
                   customers={(formData.customer_ids || []).map((id) => {
                     const c = uniqueCompanies.find((x) => x.id === id);
@@ -944,13 +942,12 @@ const EstimateDetail: React.FC = () => {
                     proposal_recipient_customer_id: null,
                     customer_contact_id: null,
                   }))}
-                  required
                 />
               </div>
 
               {/* Recipient Contact */}
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Recipient Contact *</label>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Recipient Contact</label>
                 <RecipientContactPicker
                   customerId={formData.proposal_recipient_customer_id}
                   customerName={uniqueCompanies.find((c) => c.id === formData.proposal_recipient_customer_id)?.name}
@@ -966,7 +963,6 @@ const EstimateDetail: React.FC = () => {
                     proposal_recipient_contact_name: name,
                     customer_contact_id: null,
                   }))}
-                  required
                 />
               </div>
             </div>
