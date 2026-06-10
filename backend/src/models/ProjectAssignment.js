@@ -19,7 +19,9 @@ const SELECT_WITH_JOINS = `
   p.address as project_address,
   NULL as project_city,
   NULL as project_state,
-  NULL as project_zip
+  NULL as project_zip,
+  p.start_date as project_start_date,
+  p.end_date as project_end_date
 `;
 
 const ProjectAssignment = {
@@ -88,10 +90,16 @@ const ProjectAssignment = {
 
   async findByDateRange(tenantId, fromDate, toDate) {
     const result = await db.query(
-      `SELECT ${SELECT_WITH_JOINS}
+      `SELECT ${SELECT_WITH_JOINS},
+              vc.user_adjusted_start_date  AS contract_start_override,
+              vc.user_adjusted_end_date    AS contract_end_override,
+              vc.contract_amount,
+              vc.projected_revenue,
+              vc.earned_revenue
        FROM project_assignments pa
        JOIN employees e ON e.id = pa.employee_id
        JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $1
        WHERE pa.tenant_id = $1
          AND pa.status NOT IN ('cancelled')
          AND COALESCE(pa.start_date, $2::date) <= $3::date

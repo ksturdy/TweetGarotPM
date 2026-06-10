@@ -47,8 +47,8 @@ const addMonths = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth()
 const daysBetween = (a: Date, b: Date) => Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; color: string }> = {
-  planned:   { bg: '#dbeafe', border: '#1d4ed8', color: '#1e3a8a' },
-  active:    { bg: '#dcfce7', border: '#15803d', color: '#14532d' },
+  planned:   { bg: '#ffedd5', border: '#ea580c', color: '#7c2d12' },
+  active:    { bg: '#dbeafe', border: '#1d4ed8', color: '#1e3a8a' },
   completed: { bg: '#e2e8f0', border: '#475569', color: '#1e293b' },
 };
 const STATUS_DEFAULT = STATUS_COLORS.planned;
@@ -382,7 +382,11 @@ const LaborCalendar: React.FC = () => {
                     {bars.map((a) => {
                       const pos = barPos(a);
                       if (!pos) return null;
-                      const colors = STATUS_COLORS[a.status || 'planned'] || STATUS_DEFAULT;
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const s = a.start_date ? new Date(a.start_date) : null;
+                      const e = a.end_date ? new Date(a.end_date) : null;
+                      const autoStatus = (s && e && s <= today && e >= today) ? 'active' : (a.status || 'planned');
+                      const colors = STATUS_COLORS[autoStatus] || STATUS_DEFAULT;
                       return (
                         <Link
                           key={a.id}

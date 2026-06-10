@@ -125,8 +125,14 @@ const LaborAssignments: React.FC = () => {
                       {a.project_number && (<div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>#{a.project_number}</div>)}
                     </td>
                     <td style={td}>{a.role || '—'}{a.trade ? <span style={{ color: '#94a3b8' }}> · {a.trade}</span> : null}</td>
-                    <td style={td}>{renderDateCell(a.start_date, a.start_date_overridden)}</td>
-                    <td style={td}>{renderDateCell(a.end_date, a.end_date_overridden)}</td>
+                    <td style={td}>
+                      {renderDateCell(a.start_date, a.start_date_overridden)}
+                      {a.project_start_date && <div style={projectDateStyle}>proj: {formatDate(a.project_start_date)}</div>}
+                    </td>
+                    <td style={td}>
+                      {renderDateCell(a.end_date, a.end_date_overridden)}
+                      {a.project_end_date && <div style={projectDateStyle}>proj: {formatDate(a.project_end_date)}</div>}
+                    </td>
                     <td style={td}>{[a.shift_pattern, a.shift_start_time].filter(Boolean).join(' ')}</td>
                     <td style={td}><StatusBadge status={a.status} /></td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -164,8 +170,8 @@ const LaborAssignments: React.FC = () => {
 const StatusBadge: React.FC<{ status: string | null }> = ({ status }) => {
   if (!status) return <span style={{ color: '#cbd5e1' }}>—</span>;
   const colors: Record<string, [string, string]> = {
-    planned: ['#fef3c7', '#92400e'],
-    active: ['#dcfce7', '#166534'],
+    planned: ['#ffedd5', '#7c2d12'],
+    active: ['#dbeafe', '#1e3a8a'],
     completed: ['#e2e8f0', '#475569'],
     cancelled: ['#fee2e2', '#991b1b'],
   };
@@ -195,6 +201,9 @@ const renderDateCell = (d: string | null, overridden?: boolean) => {
   );
 };
 
+const projectDateStyle: React.CSSProperties = {
+  fontSize: '0.68rem', color: '#94a3b8', marginTop: 2, fontStyle: 'italic',
+};
 const th: React.CSSProperties = {
   padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.7rem',
   textTransform: 'uppercase', color: '#475569', fontWeight: 600, letterSpacing: 0.4,

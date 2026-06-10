@@ -73,6 +73,47 @@ router.get('/calendar', async (req, res, next) => {
   }
 });
 
+const PROJECT_DURATION_RULES = [
+  { minValue: 0,        maxValue: 500000,   months: 3  },
+  { minValue: 500000,   maxValue: 2000000,  months: 6  },
+  { minValue: 2000000,  maxValue: 5000000,  months: 8  },
+  { minValue: 5000000,  maxValue: 10000000, months: 12 },
+  { minValue: 10000000, maxValue: Infinity,  months: 24 },
+];
+const parseNum = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const getDuration = (val) => (PROJECT_DURATION_RULES.find((r) => val >= r.minValue && val < r.maxValue) || { months: 24 }).months;
+const addMonths = (d, m) => { const r = new Date(d); r.setMonth(r.getMonth() + m); return r.toISOString().slice(0, 10); };
+
+function computeEffectiveDates(row) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const isoToday = today.toISOString().slice(0, 10);
+
+  // effective start
+  const project_start_date = row.contract_start_override
+    ? new Date(row.contract_start_override).toISOString().slice(0, 10)
+    : row.project_start_date
+      ? new Date(row.project_start_date).toISOString().slice(0, 10)
+      : isoToday;
+
+  // effective end
+  let project_end_date = null;
+  if (row.contract_end_override) {
+    project_end_date = new Date(row.contract_end_override).toISOString().slice(0, 10);
+  } else if (row.contract_amount) {
+    const contractValue = parseNum(row.contract_amount) || parseNum(row.projected_revenue);
+    if (contractValue > 0) {
+      const pct = parseNum(row.projected_revenue) > 0 ? parseNum(row.earned_revenue) / parseNum(row.projected_revenue) : 0;
+      const remaining = Math.max(1, Math.min(36, Math.ceil(getDuration(contractValue) * (1 - pct))));
+      project_end_date = addMonths(today, remaining);
+    }
+  }
+  if (!project_end_date && row.project_end_date) {
+    project_end_date = new Date(row.project_end_date).toISOString().slice(0, 10);
+  }
+
+  return { project_start_date, project_end_date };
+}
+
 // GET /api/labor/assignments?status=&search=&from=&to=&trade=&group=&title= — flat list
 router.get('/assignments', async (req, res, next) => {
   try {
@@ -93,7 +134,7 @@ router.get('/assignments', async (req, res, next) => {
           (r.role || '').toLowerCase().includes(s)
       );
     }
-    res.json(filtered);
+    res.json(filtered.map((r) => ({ ...r, ...computeEffectiveDates(r) })));
   } catch (error) {
     next(error);
   }

@@ -38,6 +38,8 @@ export interface AssignmentRecord {
   project_city?: string;
   project_state?: string;
   project_zip?: string;
+  project_start_date?: string | null;
+  project_end_date?: string | null;
 }
 
 export interface LaborBoardRow {
