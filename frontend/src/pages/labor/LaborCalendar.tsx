@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import TuneIcon from '@mui/icons-material/Tune';
 import { laborApi, AssignmentRecord, ASSIGNMENT_TRADES } from '../../services/labor';
 import PillFilter from '../../components/labor/PillFilter';
 import '../../styles/SalesPipeline.css';
+import '../Dashboard.css';
 
 // ── View definitions ───────────────────────────────────────────────────
 type ViewKey = '1w' | '2w' | '4w' | '1mo' | '3mo' | '6mo' | '1y' | '18mo' | '2y';
@@ -25,6 +27,20 @@ const VIEWS: Record<ViewKey, ViewDef> = {
   '1y':   { label: '1 year',    days: 365, unit: 'month', cellWidth: 80 },
   '18mo': { label: '18 months', days: 547, unit: 'month', cellWidth: 64 },
   '2y':   { label: '2 years',   days: 730, unit: 'month', cellWidth: 50 },
+};
+
+const PREFS_KEY = 'labor_calendar_prefs';
+
+interface CalendarPrefs {
+  defaultView: ViewKey;
+}
+
+const loadPrefs = (): CalendarPrefs => {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) return { defaultView: '6mo', ...JSON.parse(raw) };
+  } catch {}
+  return { defaultView: '6mo' };
 };
 
 const EMPLOYEE_COL_WIDTH = 200;
@@ -54,14 +70,19 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; color: string 
 const STATUS_DEFAULT = STATUS_COLORS.planned;
 
 const LaborCalendar: React.FC = () => {
-  const [view, setView] = useState<ViewKey>('2w');
+  const [view, setView] = useState<ViewKey>(() => loadPrefs().defaultView);
   const viewDef = VIEWS[view];
 
-  // Anchor is the START of the visible window. Default: start of this week.
-  const [anchor, setAnchor] = useState<Date>(startOfWeek(new Date()));
+  // Anchor is the START of the visible window. Default: start of current month for longer views.
+  const [anchor, setAnchor] = useState<Date>(() => {
+    const v = loadPrefs().defaultView;
+    return VIEWS[v].unit === 'day' ? startOfWeek(new Date()) : startOfMonth(new Date());
+  });
 
   const [trade, setTrade] = useState<string | undefined>();
   const [group, setGroup] = useState<string | undefined>();
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [draftView, setDraftView] = useState<ViewKey>('6mo');
 
   const viewStart = startOfDay(anchor);
   const viewEnd = addDays(viewStart, viewDef.days - 1);
@@ -253,7 +274,7 @@ const LaborCalendar: React.FC = () => {
             <div className="sales-subtitle">Multi-period crew coverage at a glance.</div>
           </div>
         </div>
-        <div className="sales-header-actions" style={{ gap: '0.5rem', display: 'flex' }}>
+        <div className="sales-header-actions" style={{ gap: '0.5rem', display: 'flex', alignItems: 'center' }}>
           <button className="sales-filter-btn" onClick={() => navigate(-1)}>← Prev</button>
           <button className="sales-filter-btn" onClick={() => navigate(0)}>Today</button>
           <button className="sales-filter-btn" onClick={() => navigate(1)}>Next →</button>
@@ -262,6 +283,14 @@ const LaborCalendar: React.FC = () => {
               <option key={k} value={k}>{VIEWS[k].label}</option>
             ))}
           </select>
+          <button
+            className="customize-button"
+            onClick={() => { setDraftView(loadPrefs().defaultView); setCustomizeOpen(true); }}
+            title="Customize calendar defaults"
+          >
+            <TuneIcon fontSize="small" />
+            <span>Customize</span>
+          </button>
         </div>
       </div>
 
@@ -437,6 +466,91 @@ const LaborCalendar: React.FC = () => {
           <span style={{ display: 'inline-block', width: 2, height: 14, background: '#ef4444' }} /> Today
         </span>
       </div>
+
+      {/* Customize drawer */}
+      {customizeOpen && (
+        <>
+          <div
+            onClick={() => setCustomizeOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 1000 }}
+          />
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 360,
+            background: 'white', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+            zIndex: 1001, display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Header */}
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TuneIcon style={{ color: '#6b7280', fontSize: '1.25rem' }} />
+                <span style={{ fontWeight: 700, fontSize: '1rem', color: '#111827' }}>Calendar Preferences</span>
+              </div>
+              <button
+                onClick={() => setCustomizeOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '1.25rem', lineHeight: 1 }}
+              >×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                  Default View
+                </div>
+                <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.75rem', marginTop: 0 }}>
+                  Choose which time span loads when you open the calendar.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {(Object.keys(VIEWS) as ViewKey[]).map((k) => (
+                    <label
+                      key={k}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                        padding: '0.5rem 0.75rem', borderRadius: 8, cursor: 'pointer',
+                        background: draftView === k ? '#eff6ff' : 'transparent',
+                        border: `1px solid ${draftView === k ? '#bfdbfe' : 'transparent'}`,
+                        fontSize: '0.875rem', color: draftView === k ? '#1d4ed8' : '#374151',
+                        fontWeight: draftView === k ? 600 : 400,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="defaultView"
+                        value={k}
+                        checked={draftView === k}
+                        onChange={() => setDraftView(k)}
+                        style={{ accentColor: '#1d4ed8' }}
+                      />
+                      {VIEWS[k].label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                onClick={() => setCustomizeOpen(false)}
+                style={{ padding: '0.5rem 1rem', border: '1px solid #d1d5db', borderRadius: 8, background: 'white', color: '#374151', cursor: 'pointer', fontSize: '0.875rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.setItem(PREFS_KEY, JSON.stringify({ defaultView: draftView }));
+                  setView(draftView);
+                  setAnchor(VIEWS[draftView].unit === 'day' ? startOfWeek(new Date()) : startOfMonth(new Date()));
+                  setCustomizeOpen(false);
+                }}
+                style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: 8, background: '#002356', color: 'white', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
