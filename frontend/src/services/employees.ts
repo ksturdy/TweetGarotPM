@@ -125,6 +125,8 @@ export const employeesApi = {
       profile_type: string | null;
       phone: string | null;
       mobile_phone: string | null;
+      hire_date: string | null;
+      employment_status: string | null;
     }>
   ) =>
     api.patch<{ data: { id: number } & Record<string, any> }>(

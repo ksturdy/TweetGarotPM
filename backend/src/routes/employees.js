@@ -205,7 +205,7 @@ router.put('/:id', authorizeHR('write'), async (req, res) => {
 // Labor module operates under those roles — does NOT need HR write access.
 router.patch('/:id/labor-fields', authorize('admin', 'manager'), async (req, res) => {
   try {
-    const ALLOWED = ['trade', 'employee_group', 'title', 'profile_type', 'phone', 'mobile_phone'];
+    const ALLOWED = ['trade', 'employee_group', 'title', 'profile_type', 'phone', 'mobile_phone', 'hire_date', 'employment_status'];
     const patch = {};
     for (const key of ALLOWED) {
       if (key in req.body) patch[key] = req.body[key] === '' ? null : req.body[key];
@@ -228,7 +228,7 @@ router.patch('/:id/labor-fields', authorize('admin', 'manager'), async (req, res
     const result = await db.query(
       `UPDATE employees SET ${sets.join(', ')}
        WHERE id = $${params.length - 1} AND tenant_id = $${params.length}
-       RETURNING id, trade, employee_group, title, profile_type, phone, mobile_phone`,
+       RETURNING id, trade, employee_group, title, profile_type, phone, mobile_phone, hire_date, employment_status`,
       params
     );
     res.json({ data: result.rows[0] });

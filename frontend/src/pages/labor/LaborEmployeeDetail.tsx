@@ -1,13 +1,24 @@
 import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { laborApi, AssignmentRecord } from '../../services/labor';
+import { laborApi, AssignmentRecord, ASSIGNMENT_TRADES } from '../../services/labor';
 import { employeesApi } from '../../services/employees';
 import AssignDialog from '../../components/labor/AssignDialog';
 import NotifyDialog from '../../components/labor/NotifyDialog';
 import '../../styles/SalesPipeline.css';
 
 type Tab = 'assignments' | 'experience' | 'details';
+
+interface DetailForm {
+  phone: string;
+  mobile_phone: string;
+  trade: string;
+  title: string;
+  employee_group: string;
+  profile_type: string;
+  hire_date: string;
+  employment_status: string;
+}
 
 const avatarColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
@@ -18,6 +29,11 @@ const LaborEmployeeDetail: React.FC = () => {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editing, setEditing] = useState<AssignmentRecord | null>(null);
   const [notifyAssignment, setNotifyAssignment] = useState<AssignmentRecord | null>(null);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailForm, setDetailForm] = useState<DetailForm>({
+    phone: '', mobile_phone: '', trade: '', title: '',
+    employee_group: '', profile_type: '', hire_date: '', employment_status: '',
+  });
   const qc = useQueryClient();
 
   const { data: employee } = useQuery({
@@ -47,6 +63,40 @@ const LaborEmployeeDetail: React.FC = () => {
       qc.invalidateQueries({ queryKey: ['labor-board'] });
     },
   });
+
+  const saveDetailsMutation = useMutation({
+    mutationFn: () =>
+      employeesApi.patchLaborFields(employeeId, {
+        phone: detailForm.phone || null,
+        mobile_phone: detailForm.mobile_phone || null,
+        trade: detailForm.trade || null,
+        title: detailForm.title || null,
+        employee_group: detailForm.employee_group || null,
+        profile_type: detailForm.profile_type || null,
+        hire_date: detailForm.hire_date || null,
+        employment_status: detailForm.employment_status || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employee', employeeId] });
+      qc.invalidateQueries({ queryKey: ['labor-board'] });
+      setEditingDetails(false);
+    },
+  });
+
+  const startEditingDetails = () => {
+    if (!employee) return;
+    setDetailForm({
+      phone: employee.phone || '',
+      mobile_phone: employee.mobile_phone || '',
+      trade: (employee as any).trade || '',
+      title: (employee as any).title || '',
+      employee_group: (employee as any).employee_group || '',
+      profile_type: (employee as any).profile_type || '',
+      hire_date: employee.hire_date ? employee.hire_date.split('T')[0] : '',
+      employment_status: employee.employment_status || 'active',
+    });
+    setEditingDetails(true);
+  };
 
   if (!employee) {
     return <div className="sales-container"><div style={{ padding: 40 }}>Loading...</div></div>;
@@ -170,17 +220,92 @@ const LaborEmployeeDetail: React.FC = () => {
 
           {tab === 'details' && (
             <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                {!editingDetails ? (
+                  <button onClick={startEditingDetails} style={editDetailsBtnStyle}>Edit</button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => saveDetailsMutation.mutate()}
+                      disabled={saveDetailsMutation.isPending}
+                      style={saveDetailsBtnStyle}
+                    >
+                      {saveDetailsMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button onClick={() => setEditingDetails(false)} style={cancelDetailsBtnStyle}>Cancel</button>
+                  </div>
+                )}
+              </div>
+
               <Detail label="Email" value={employee.email} />
-              <Detail label="Phone" value={employee.phone} />
-              <Detail label="Mobile" value={employee.mobile_phone} />
-              <Detail label="Trade" value={(employee as any).trade} />
-              <Detail label="Title" value={(employee as any).title} />
-              <Detail label="Group" value={(employee as any).employee_group} />
-              <Detail label="Profile Type" value={(employee as any).profile_type} />
+
+              <DetailEditable
+                label="Phone"
+                value={employee.phone}
+                editing={editingDetails}
+                inputValue={detailForm.phone}
+                onChange={(v) => setDetailForm((f) => ({ ...f, phone: v }))}
+              />
+              <DetailEditable
+                label="Mobile"
+                value={employee.mobile_phone}
+                editing={editingDetails}
+                inputValue={detailForm.mobile_phone}
+                onChange={(v) => setDetailForm((f) => ({ ...f, mobile_phone: v }))}
+              />
+              <DetailEditable
+                label="Trade"
+                value={(employee as any).trade}
+                editing={editingDetails}
+                inputValue={detailForm.trade}
+                onChange={(v) => setDetailForm((f) => ({ ...f, trade: v }))}
+                type="select"
+                options={['', ...ASSIGNMENT_TRADES]}
+              />
+              <DetailEditable
+                label="Title"
+                value={(employee as any).title}
+                editing={editingDetails}
+                inputValue={detailForm.title}
+                onChange={(v) => setDetailForm((f) => ({ ...f, title: v }))}
+              />
+              <DetailEditable
+                label="Group"
+                value={(employee as any).employee_group}
+                editing={editingDetails}
+                inputValue={detailForm.employee_group}
+                onChange={(v) => setDetailForm((f) => ({ ...f, employee_group: v }))}
+              />
+              <DetailEditable
+                label="Profile Type"
+                value={(employee as any).profile_type}
+                editing={editingDetails}
+                inputValue={detailForm.profile_type}
+                onChange={(v) => setDetailForm((f) => ({ ...f, profile_type: v }))}
+                type="select"
+                options={['', 'Field', 'Office', 'Hybrid']}
+              />
+
               <Detail label="Department" value={employee.department_name} />
               <Detail label="Office Location" value={employee.office_location_name} />
-              <Detail label="Hire Date" value={employee.hire_date ? new Date(employee.hire_date).toLocaleDateString() : null} />
-              <Detail label="Status" value={employee.employment_status} />
+
+              <DetailEditable
+                label="Hire Date"
+                value={employee.hire_date ? new Date(employee.hire_date).toLocaleDateString() : null}
+                editing={editingDetails}
+                inputValue={detailForm.hire_date}
+                onChange={(v) => setDetailForm((f) => ({ ...f, hire_date: v }))}
+                type="date"
+              />
+              <DetailEditable
+                label="Status"
+                value={employee.employment_status}
+                editing={editingDetails}
+                inputValue={detailForm.employment_status}
+                onChange={(v) => setDetailForm((f) => ({ ...f, employment_status: v }))}
+                type="select"
+                options={['active', 'inactive', 'on_leave', 'terminated']}
+              />
             </div>
           )}
         </div>
@@ -228,6 +353,53 @@ const Detail: React.FC<{ label: string; value: any }> = ({ label, value }) => (
     <div style={{ color: value ? '#1e293b' : '#cbd5e1' }}>{value || '—'}</div>
   </div>
 );
+
+const DetailEditable: React.FC<{
+  label: string;
+  value: any;
+  editing: boolean;
+  inputValue: string;
+  onChange: (v: string) => void;
+  type?: 'text' | 'date' | 'select';
+  options?: string[];
+}> = ({ label, value, editing, inputValue, onChange, type = 'text', options }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.5rem', padding: '0.4rem 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem', alignItems: 'center' }}>
+    <div style={{ color: '#64748b' }}>{label}</div>
+    {editing ? (
+      type === 'select' ? (
+        <select
+          value={inputValue}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ fontSize: '0.85rem', padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 5, color: '#1e293b', background: 'white' }}
+        >
+          {options?.map((o) => <option key={o} value={o}>{o || '—'}</option>)}
+        </select>
+      ) : (
+        <input
+          type={type}
+          value={inputValue}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ fontSize: '0.85rem', padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 5, color: '#1e293b', width: '100%', boxSizing: 'border-box' }}
+        />
+      )
+    ) : (
+      <div style={{ color: value ? '#1e293b' : '#cbd5e1' }}>{value || '—'}</div>
+    )}
+  </div>
+);
+
+const editDetailsBtnStyle: React.CSSProperties = {
+  background: 'transparent', border: '1px solid #cbd5e1', color: '#475569',
+  padding: '0.3rem 0.85rem', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 500,
+};
+const saveDetailsBtnStyle: React.CSSProperties = {
+  background: '#002356', color: 'white', border: 'none',
+  padding: '0.3rem 0.85rem', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+};
+const cancelDetailsBtnStyle: React.CSSProperties = {
+  background: 'transparent', border: '1px solid #cbd5e1', color: '#64748b',
+  padding: '0.3rem 0.85rem', borderRadius: 6, fontSize: '0.8rem', cursor: 'pointer',
+};
 
 const AssignmentSection: React.FC<{
   title: string;
