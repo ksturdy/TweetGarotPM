@@ -241,14 +241,14 @@ const LaborEmployeeDetail: React.FC = () => {
 
               <DetailEditable
                 label="Phone"
-                value={employee.phone}
+                value={formatPhone(employee.phone)}
                 editing={editingDetails}
                 inputValue={detailForm.phone}
                 onChange={(v) => setDetailForm((f) => ({ ...f, phone: v }))}
               />
               <DetailEditable
                 label="Mobile"
-                value={employee.mobile_phone}
+                value={formatPhone(employee.mobile_phone)}
                 editing={editingDetails}
                 inputValue={detailForm.mobile_phone}
                 onChange={(v) => setDetailForm((f) => ({ ...f, mobile_phone: v }))}
@@ -346,6 +346,14 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     {children}
   </button>
 );
+
+const formatPhone = (raw: string | null | undefined): string => {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return raw;
+};
 
 const Detail: React.FC<{ label: string; value: any }> = ({ label, value }) => (
   <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '0.5rem', padding: '0.4rem 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem' }}>

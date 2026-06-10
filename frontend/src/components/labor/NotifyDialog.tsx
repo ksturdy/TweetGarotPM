@@ -3,6 +3,14 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { laborApi, NotificationChannel, AssignmentRecord, NotifyResult } from '../../services/labor';
 import '../modals/Modal.css';
 
+const formatPhone = (raw: string | null | undefined): string => {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  return raw;
+};
+
 interface NotifyDialogProps {
   open: boolean;
   onClose: () => void;
@@ -92,7 +100,7 @@ const NotifyDialog: React.FC<NotifyDialogProps> = ({ open, onClose, assignment }
               <div>
                 <div style={{ fontWeight: 600 }}>Text Message (SMS)</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  {hasPhone ? (assignment.mobile_phone || assignment.phone) : 'No phone on file'}
+                  {hasPhone ? formatPhone(assignment.mobile_phone || assignment.phone) : 'No phone on file'}
                 </div>
               </div>
             </label>
@@ -115,22 +123,38 @@ const NotifyDialog: React.FC<NotifyDialogProps> = ({ open, onClose, assignment }
           </div>
 
           {results && (
-            <div style={{ marginBottom: '0.75rem' }}>
-              {results.map((r, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: r.success ? '#d1fae5' : '#fee2e2',
-                    color: r.success ? '#065f46' : '#991b1b',
-                    padding: '0.4rem 0.6rem',
-                    borderRadius: 6,
-                    fontSize: '0.8rem',
-                    marginBottom: 4,
-                  }}
-                >
-                  {r.channel.toUpperCase()}: {r.message || (r.success ? 'Sent' : r.error)}
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.45)',
+            }}>
+              <div style={{ background: 'white', borderRadius: 12, width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg,#002356,#004080)', padding: '1.25rem 1.5rem' }}>
+                  <div style={{ color: 'white', fontWeight: 700, fontSize: '1rem' }}>Titan</div>
+                  <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginTop: 2 }}>Assignment Notification</div>
                 </div>
-              ))}
+                <div style={{ padding: '1.25rem 1.5rem' }}>
+                  {results.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', marginBottom: 10 }}>
+                      <span style={{ fontSize: '1.1rem', marginTop: 1 }}>{r.success ? '✅' : '❌'}</span>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#1e293b' }}>{r.channel.toUpperCase()}</div>
+                        <div style={{ fontSize: '0.75rem', color: r.success ? '#059669' : '#dc2626' }}>
+                          {r.message || (r.success ? 'Sent successfully' : r.error)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ borderTop: '1px solid #f1f5f9', padding: '0.75rem 1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => { setResults(null); onClose(); }}
+                    style={{ background: '#002356', color: 'white', border: 'none', padding: '0.5rem 1.25rem', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
