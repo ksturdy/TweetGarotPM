@@ -104,15 +104,18 @@ const ProjectAssignment = {
 
   async findAllForBoard(tenantId, filters = {}) {
     const params = [tenantId];
+    // Note: trade and title filters use COALESCE so they match either the
+    // employee-level value or the trade/role on the employee's current
+    // assignment (until the Vista import populates e.trade / e.title).
     let where = `WHERE e.tenant_id = $1 AND e.employment_status = 'active'`;
 
     if (filters.trade) {
       params.push(filters.trade);
-      where += ` AND e.trade = $${params.length}`;
+      where += ` AND COALESCE(e.trade, ca.trade) = $${params.length}`;
     }
     if (filters.title) {
       params.push(filters.title);
-      where += ` AND e.title = $${params.length}`;
+      where += ` AND COALESCE(e.title, ca.role) = $${params.length}`;
     }
     if (filters.employee_group) {
       params.push(filters.employee_group);
@@ -131,7 +134,7 @@ const ProjectAssignment = {
 
     const sql = `
       WITH current_a AS (
-        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.end_date, pa.role, pa.start_date, p.name as project_name, p.number as project_number
+        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.end_date, pa.role, pa.trade, pa.start_date, p.name as project_name, p.number as project_number
         FROM project_assignments pa
         JOIN projects p ON p.id = pa.project_id
         WHERE pa.tenant_id = $1
@@ -141,7 +144,7 @@ const ProjectAssignment = {
         ORDER BY pa.employee_id, pa.start_date NULLS LAST
       ),
       next_a AS (
-        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.start_date, pa.end_date, pa.role, p.name as project_name, p.number as project_number
+        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.start_date, pa.end_date, pa.role, pa.trade, p.name as project_name, p.number as project_number
         FROM project_assignments pa
         JOIN projects p ON p.id = pa.project_id
         WHERE pa.tenant_id = $1
@@ -150,7 +153,10 @@ const ProjectAssignment = {
         ORDER BY pa.employee_id, pa.start_date ASC
       )
       SELECT e.id, e.first_name, e.last_name, e.email, e.phone, e.mobile_phone,
-             e.job_title, e.title, e.trade, e.employee_group, e.profile_type,
+             e.job_title,
+             COALESCE(e.title, ca.role) as title,
+             COALESCE(e.trade, ca.trade) as trade,
+             e.employee_group, e.profile_type,
              e.hire_date,
              ca.project_id as current_project_id,
              ca.project_name as current_project_name,

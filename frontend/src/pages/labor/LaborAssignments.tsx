@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { laborApi, AssignmentRecord, ASSIGNMENT_STATUSES } from '../../services/labor';
+import { laborApi, AssignmentRecord, ASSIGNMENT_STATUSES, ASSIGNMENT_TRADES } from '../../services/labor';
 import AssignDialog from '../../components/labor/AssignDialog';
 import NotifyDialog from '../../components/labor/NotifyDialog';
+import PillFilter from '../../components/labor/PillFilter';
 import '../../styles/SalesPipeline.css';
 
 const isoMinusDays = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
@@ -15,6 +16,8 @@ const LaborAssignments: React.FC = () => {
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState(isoMinusDays(30));
   const [to, setTo] = useState(isoPlusDays(180));
+  const [trade, setTrade] = useState<string | undefined>();
+  const [group, setGroup] = useState<string | undefined>();
   const [editing, setEditing] = useState<AssignmentRecord | null>(null);
   const [notifyAssignment, setNotifyAssignment] = useState<AssignmentRecord | null>(null);
 
@@ -24,10 +27,30 @@ const LaborAssignments: React.FC = () => {
   }, [searchInput]);
 
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['labor-assignments-list', { statusFilter, search, from, to }],
-    queryFn: () => laborApi.getAssignmentsList({ status: statusFilter || undefined, search: search || undefined, from, to }),
+    queryKey: ['labor-assignments-list', { statusFilter, search, from, to, trade, group }],
+    queryFn: () => laborApi.getAssignmentsList({
+      status: statusFilter || undefined,
+      search: search || undefined,
+      from, to, trade, group,
+    }),
     placeholderData: keepPreviousData,
   });
+
+  // Unfiltered board for pill options
+  const { data: allRows } = useQuery({
+    queryKey: ['labor-board', {}, ''],
+    queryFn: () => laborApi.getBoard(),
+    staleTime: 5 * 60_000,
+  });
+
+  const { trades, groups } = useMemo(() => {
+    const tr = new Set<string>(ASSIGNMENT_TRADES); const g = new Set<string>();
+    (allRows || []).forEach((r) => {
+      if (r.trade) tr.add(r.trade);
+      if (r.employee_group) g.add(r.employee_group);
+    });
+    return { trades: [...tr].sort(), groups: [...g].sort() };
+  }, [allRows]);
 
   return (
     <div className="sales-container">
@@ -61,6 +84,11 @@ const LaborAssignments: React.FC = () => {
             <input type="date" className="sales-filter-btn" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" className="sales-filter-btn" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0.5rem 1rem 0.75rem' }}>
+          <PillFilter label="Group" value={group} options={groups} onChange={setGroup} />
+          <PillFilter label="Trade" value={trade} options={trades} onChange={setTrade} />
         </div>
 
         {isLoading ? (

@@ -47,26 +47,40 @@ router.get('/dashboard/summary', async (req, res, next) => {
   }
 });
 
-// GET /api/labor/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
+const applyEmployeeFilters = (rows, query) => {
+  let filtered = rows;
+  if (query.trade) {
+    filtered = filtered.filter((r) => r.employee_trade === query.trade);
+  }
+  if (query.group) {
+    filtered = filtered.filter((r) => r.employee_group === query.group);
+  }
+  if (query.title) {
+    filtered = filtered.filter((r) => r.employee_title === query.title);
+  }
+  return filtered;
+};
+
+// GET /api/labor/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&trade=&group=&title=
 router.get('/calendar', async (req, res, next) => {
   try {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to query params required (YYYY-MM-DD)' });
     const rows = await ProjectAssignment.findByDateRange(req.tenantId, from, to);
-    res.json(rows);
+    res.json(applyEmployeeFilters(rows, req.query));
   } catch (error) {
     next(error);
   }
 });
 
-// GET /api/labor/assignments?status=&search=&from=&to= — flat list
+// GET /api/labor/assignments?status=&search=&from=&to=&trade=&group=&title= — flat list
 router.get('/assignments', async (req, res, next) => {
   try {
     const from = req.query.from || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
     const to = req.query.to || new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10);
     const rows = await ProjectAssignment.findByDateRange(req.tenantId, from, to);
 
-    let filtered = rows;
+    let filtered = applyEmployeeFilters(rows, req.query);
     if (req.query.status) {
       filtered = filtered.filter((r) => r.status === req.query.status);
     }

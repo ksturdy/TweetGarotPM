@@ -200,6 +200,44 @@ router.put('/:id', authorizeHR('write'), async (req, res) => {
   }
 });
 
+// Partial update of labor-only fields (trade/group/title/profile_type/phone).
+// Used by the Labor Board's inline edit. Open to admin + manager since the
+// Labor module operates under those roles — does NOT need HR write access.
+router.patch('/:id/labor-fields', authorize('admin', 'manager'), async (req, res) => {
+  try {
+    const ALLOWED = ['trade', 'employee_group', 'title', 'profile_type', 'phone', 'mobile_phone'];
+    const patch = {};
+    for (const key of ALLOWED) {
+      if (key in req.body) patch[key] = req.body[key] === '' ? null : req.body[key];
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ error: 'No editable fields provided.' });
+    }
+
+    const existing = await Employee.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!existing) return res.status(404).json({ error: 'Employee not found' });
+
+    const sets = [];
+    const params = [];
+    for (const [k, v] of Object.entries(patch)) {
+      params.push(v);
+      sets.push(`${k} = $${params.length}`);
+    }
+    params.push(req.params.id, req.tenantId);
+    const db = require('../config/database');
+    const result = await db.query(
+      `UPDATE employees SET ${sets.join(', ')}
+       WHERE id = $${params.length - 1} AND tenant_id = $${params.length}
+       RETURNING id, trade, employee_group, title, profile_type, phone, mobile_phone`,
+      params
+    );
+    res.json({ data: result.rows[0] });
+  } catch (error) {
+    console.error('Error patching employee labor fields:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
 // Delete employee - requires HR write access
 router.delete('/:id', authorizeHR('write'), async (req, res) => {
   try {

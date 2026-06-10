@@ -115,4 +115,20 @@ export const employeesApi = {
   },
 
   delete: (id: number) => api.delete<{ message: string }>(`/employees/${id}`),
+
+  patchLaborFields: (
+    id: number,
+    patch: Partial<{
+      trade: string | null;
+      employee_group: string | null;
+      title: string | null;
+      profile_type: string | null;
+      phone: string | null;
+      mobile_phone: string | null;
+    }>
+  ) =>
+    api.patch<{ data: { id: number } & Record<string, any> }>(
+      `/employees/${id}/labor-fields`,
+      patch
+    ),
 };

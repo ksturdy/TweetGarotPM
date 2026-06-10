@@ -160,15 +160,23 @@ export const laborApi = {
 
   getSummary: () => api.get<LaborSummary>('/labor/dashboard/summary').then((r) => r.data),
 
-  getCalendar: (from: string, to: string) =>
-    api.get<AssignmentRecord[]>(`/labor/calendar?from=${from}&to=${to}`).then((r) => r.data),
+  getCalendar: (from: string, to: string, filters?: { trade?: string; group?: string; title?: string }) => {
+    const qs = new URLSearchParams({ from, to });
+    if (filters?.trade) qs.append('trade', filters.trade);
+    if (filters?.group) qs.append('group', filters.group);
+    if (filters?.title) qs.append('title', filters.title);
+    return api.get<AssignmentRecord[]>(`/labor/calendar?${qs.toString()}`).then((r) => r.data);
+  },
 
-  getAssignmentsList: (params: { status?: string; search?: string; from?: string; to?: string }) => {
+  getAssignmentsList: (params: { status?: string; search?: string; from?: string; to?: string; trade?: string; group?: string; title?: string }) => {
     const qs = new URLSearchParams();
     if (params.status) qs.append('status', params.status);
     if (params.search) qs.append('search', params.search);
     if (params.from) qs.append('from', params.from);
     if (params.to) qs.append('to', params.to);
+    if (params.trade) qs.append('trade', params.trade);
+    if (params.group) qs.append('group', params.group);
+    if (params.title) qs.append('title', params.title);
     const s = qs.toString();
     return api.get<AssignmentRecord[]>(`/labor/assignments${s ? `?${s}` : ''}`).then((r) => r.data);
   },
