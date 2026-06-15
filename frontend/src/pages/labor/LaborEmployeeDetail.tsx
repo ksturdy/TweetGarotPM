@@ -29,6 +29,7 @@ const LaborEmployeeDetail: React.FC = () => {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editing, setEditing] = useState<AssignmentRecord | null>(null);
   const [notifyAssignment, setNotifyAssignment] = useState<AssignmentRecord | null>(null);
+  const [confirmAssignment, setConfirmAssignment] = useState<AssignmentRecord | null>(null);
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailForm, setDetailForm] = useState<DetailForm>({
     phone: '', mobile_phone: '', trade: '', title: '',
@@ -191,22 +192,14 @@ const LaborEmployeeDetail: React.FC = () => {
                 rows={current}
                 onEdit={(a) => { setEditing(a); setAssignOpen(true); }}
                 onNotify={(a) => setNotifyAssignment(a)}
-                onCancel={(a) => {
-                  if (window.confirm(`Cancel ${a.first_name || ''} ${a.last_name || ''} on ${a.project_name}?`)) {
-                    cancelMutation.mutate(a.id);
-                  }
-                }}
+                onCancel={(a) => setConfirmAssignment(a)}
               />
               <AssignmentSection
                 title="Upcoming Assignments"
                 rows={upcoming}
                 onEdit={(a) => { setEditing(a); setAssignOpen(true); }}
                 onNotify={(a) => setNotifyAssignment(a)}
-                onCancel={(a) => {
-                  if (window.confirm(`Cancel ${a.first_name || ''} ${a.last_name || ''} on ${a.project_name}?`)) {
-                    cancelMutation.mutate(a.id);
-                  }
-                }}
+                onCancel={(a) => setConfirmAssignment(a)}
               />
               <AssignmentSection title="Past Assignments" rows={past} pastMode />
             </>
@@ -326,6 +319,34 @@ const LaborEmployeeDetail: React.FC = () => {
           onClose={() => setNotifyAssignment(null)}
           assignment={notifyAssignment}
         />
+      )}
+
+      {confirmAssignment && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
+          <div style={{ background: 'white', borderRadius: 12, width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#002356,#004080)', padding: '1.25rem 1.5rem' }}>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '1rem' }}>Titan</div>
+              <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginTop: 2 }}>Cancel Assignment</div>
+            </div>
+            <div style={{ padding: '1.25rem 1.5rem', fontSize: '0.9rem', color: '#1e293b' }}>
+              Cancel <strong>{confirmAssignment.first_name} {confirmAssignment.last_name}</strong> on <strong>{confirmAssignment.project_name}</strong>?
+            </div>
+            <div style={{ borderTop: '1px solid #f1f5f9', padding: '0.75rem 1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                onClick={() => setConfirmAssignment(null)}
+                style={{ background: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: '0.5rem 1.25rem', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { cancelMutation.mutate(confirmAssignment.id); setConfirmAssignment(null); }}
+                style={{ background: '#dc2626', color: 'white', border: 'none', padding: '0.5rem 1.25rem', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
