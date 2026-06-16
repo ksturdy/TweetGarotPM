@@ -409,7 +409,8 @@ router.post('/generate', async (req, res, next) => {
           bidYear,
           yearsSinceBid: yearsSinceBid ? parseFloat(yearsSinceBid) : null,
           inflationAdjusted: true,
-          similarityScore: originalProject?.similarity_score || 0
+          similarityScore: originalProject?.similarity_score || 0,
+          source: originalProject?.source || 'historical'
         };
       }),
       averages: {

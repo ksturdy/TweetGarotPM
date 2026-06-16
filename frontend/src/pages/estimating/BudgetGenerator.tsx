@@ -1204,8 +1204,20 @@ const BudgetGenerator: React.FC = () => {
                         <div className="comparable-header">
                           <span className="comparable-rank">#{index + 1}</span>
                           <span className="comparable-name">{project.name}</span>
+                          <span style={{
+                            marginLeft: 'auto',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: '10px',
+                            backgroundColor: project.source === 'project' ? '#dbeafe' : '#f3f4f6',
+                            color: project.source === 'project' ? '#1d4ed8' : '#6b7280',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {project.source === 'project' ? 'Live Project' : 'Historical'}
+                          </span>
                           {project.bidYear && (
-                            <span className="comparable-year" style={{ marginLeft: 'auto', fontSize: '12px', color: '#666' }}>
+                            <span className="comparable-year" style={{ fontSize: '12px', color: '#666' }}>
                               ({project.bidYear})
                             </span>
                           )}
@@ -1551,6 +1563,18 @@ const BudgetGenerator: React.FC = () => {
                             />
                             <span className="project-rank">#{index + 1}</span>
                             <span className="match-badge">{project.similarity_score}% match</span>
+                            <span style={{
+                              marginLeft: 'auto',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '10px',
+                              backgroundColor: project.source === 'project' ? '#dbeafe' : '#f3f4f6',
+                              color: project.source === 'project' ? '#1d4ed8' : '#6b7280',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {project.source === 'project' ? 'Live' : 'Historical'}
+                            </span>
                           </div>
                           <div className="preview-project-name" title={project.name}>{project.name}</div>
 
@@ -1619,7 +1643,7 @@ const BudgetGenerator: React.FC = () => {
                   <h3>Ready to Generate</h3>
                   <p>Fill in the project details and click "Generate Budget" to create an AI-powered estimate based on historical project data.</p>
                   <div className="empty-state-hint">
-                    <p>Select a <strong>Building Type</strong> and <strong>Project Type</strong> to preview similar projects.</p>
+                    <p>Select a <strong>Market</strong> to preview similar projects.</p>
                   </div>
                 </div>
               )}

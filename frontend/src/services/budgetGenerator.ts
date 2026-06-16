@@ -17,6 +17,7 @@ export interface SimilarProject {
   totalCost: number;
   costPerSqft: number;
   similarityScore: number;
+  source?: 'historical' | 'project';
   // Inflation adjustment fields
   originalTotalCost?: number;
   originalCostPerSqft?: number;
