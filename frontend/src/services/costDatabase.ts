@@ -101,6 +101,8 @@ export interface ProjectRow {
   projected_cost: number | null;
   phase_est_cost: number;
   phase_jtd_cost: number;
+  total_sqft: number | null;
+  cost_per_sqft: number | null;
 }
 
 function toParams(filters: CostDbFilters): Record<string, string> {

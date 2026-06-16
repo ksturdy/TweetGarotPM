@@ -1145,6 +1145,7 @@ const SourceProjectsTable: React.FC<{
         <Th align="left">Status</Th><Th align="left">Dept</Th><Th align="left">Market</Th>
         <Th align="left">Start</Th><Th align="left">End</Th>
         <Th>Contract</Th><Th>Phase Est</Th><Th>Phase JTD</Th>
+        <Th>Sq Ft</Th><Th>JTD $/SF</Th>
         <Th>% of Total</Th>
       </tr></thead>
       <tbody>
@@ -1172,6 +1173,8 @@ const SourceProjectsTable: React.FC<{
               <Td align="right">{fmt(p.contract_value)}</Td>
               <Td align="right">{fmt(p.phase_est_cost)}</Td>
               <Td align="right">{fmt(p.phase_jtd_cost)}</Td>
+              <Td align="right">{p.total_sqft != null ? fmtNum(p.total_sqft) : '—'}</Td>
+              <Td align="right">{p.cost_per_sqft != null ? `$${p.cost_per_sqft.toFixed(2)}` : '—'}</Td>
               <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
                 {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
               </Td>

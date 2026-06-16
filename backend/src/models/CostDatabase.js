@@ -377,7 +377,12 @@ const CostDatabase = {
              fp.contract_value, fp.start_date, fp.end_date,
              fp.actual_cost, fp.projected_cost,
              COALESCE(pc_sum.jtd_cost, 0) AS phase_jtd_cost,
-             COALESCE(pc_sum.est_cost, 0) AS phase_est_cost
+             COALESCE(pc_sum.est_cost, 0) AS phase_est_cost,
+             pcm.total_sqft,
+             CASE WHEN pcm.total_sqft > 0
+               THEN COALESCE(pc_sum.jtd_cost, 0) / pcm.total_sqft
+               ELSE NULL
+             END AS cost_per_sqft
       FROM fp
       LEFT JOIN LATERAL (
         SELECT COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
@@ -385,6 +390,7 @@ const CostDatabase = {
         FROM vp_phase_codes pc
         WHERE ${PHASE_JOIN}
       ) pc_sum ON true
+      LEFT JOIN project_cost_models pcm ON pcm.project_id = fp.id
       ORDER BY fp.number`;
     const { rows } = await runWithTimeout(sql, params);
     return rows.map(r => ({
@@ -402,6 +408,8 @@ const CostDatabase = {
       projected_cost: r.projected_cost != null ? parseFloat(r.projected_cost) : null,
       phase_jtd_cost: parseFloat(r.phase_jtd_cost),
       phase_est_cost: parseFloat(r.phase_est_cost),
+      total_sqft: r.total_sqft != null ? parseInt(r.total_sqft, 10) : null,
+      cost_per_sqft: r.cost_per_sqft != null ? parseFloat(r.cost_per_sqft) : null,
     }));
   },
 };
