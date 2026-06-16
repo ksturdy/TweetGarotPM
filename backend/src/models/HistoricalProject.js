@@ -178,7 +178,7 @@ const HistoricalProject = {
         SELECT
           p.id,
           p.name,
-          pcm.building_type,
+          COALESCE(pcm.building_type, p.market) AS building_type,
           pcm.project_type,
           pcm.bid_type,
           COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
@@ -201,10 +201,10 @@ const HistoricalProject = {
           NULL::INTEGER AS boilers, NULL::INTEGER AS pumps, NULL::INTEGER AS chiller,
           'project' AS source
         FROM projects p
-        JOIN project_cost_models pcm ON pcm.project_id = p.id
+        LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
         WHERE p.tenant_id = $6::integer
           AND p.contract_value IS NOT NULL AND p.contract_value > 0
-          AND (pcm.building_type IS NOT NULL OR pcm.project_type IS NOT NULL)
+          AND (COALESCE(pcm.building_type, p.market) IS NOT NULL OR pcm.project_type IS NOT NULL)
       ) combined
       ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
       LIMIT $5::integer
@@ -220,7 +220,8 @@ const HistoricalProject = {
     const result = await db.query(
       `SELECT
         p.id, 'project' AS source, p.name,
-        pcm.building_type, pcm.project_type, pcm.bid_type,
+        COALESCE(pcm.building_type, p.market) AS building_type,
+        pcm.project_type, pcm.bid_type,
         COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
         p.contract_value AS total_cost,
         CASE WHEN COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) > 0
@@ -242,7 +243,7 @@ const HistoricalProject = {
         NULL::INTEGER AS ahu, NULL::INTEGER AS rtu, NULL::INTEGER AS vav,
         NULL::INTEGER AS boilers, NULL::INTEGER AS pumps, NULL::INTEGER AS chiller
       FROM projects p
-      JOIN project_cost_models pcm ON pcm.project_id = p.id
+      LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
       WHERE p.id = $1 AND p.tenant_id = $2`,
       [id, tenantId]
     );
@@ -266,7 +267,7 @@ const HistoricalProject = {
     if (buildingType) {
       params.push(buildingType);
       historicalFilter += ` AND building_type = $${paramIndex}`;
-      projectFilter += ` AND pcm.building_type = $${paramIndex}`;
+      projectFilter += ` AND COALESCE(pcm.building_type, p.market) = $${paramIndex}`;
       paramIndex++;
     }
 
@@ -330,9 +331,9 @@ const HistoricalProject = {
           NULL::DECIMAL AS hw_field_cost, NULL::DECIMAL AS hw_material_with_esc,
           NULL::DECIMAL AS chw_field_cost, NULL::DECIMAL AS chw_material_with_esc
         FROM projects p
-        JOIN project_cost_models pcm ON pcm.project_id = p.id
+        LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
         WHERE p.contract_value IS NOT NULL AND p.contract_value > 0
-          AND (pcm.building_type IS NOT NULL OR pcm.project_type IS NOT NULL)
+          AND (COALESCE(pcm.building_type, p.market) IS NOT NULL OR pcm.project_type IS NOT NULL)
           ${projectFilter}
       ) combined
     `;
@@ -348,6 +349,11 @@ const HistoricalProject = {
       throw new Error('Invalid column name');
     }
 
+    // For building_type, also include projects.market (populated from Viewpoint)
+    const marketUnion = column === 'building_type'
+      ? `UNION SELECT market AS val FROM projects WHERE market IS NOT NULL AND market != ''`
+      : '';
+
     const query = `
       SELECT DISTINCT val AS value FROM (
         SELECT ${column} AS val
@@ -357,6 +363,7 @@ const HistoricalProject = {
         SELECT ${column} AS val
         FROM project_cost_models
         WHERE ${column} IS NOT NULL AND ${column} != ''
+        ${marketUnion}
       ) combined
       ORDER BY val
     `;
