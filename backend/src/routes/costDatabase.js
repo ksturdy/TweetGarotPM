@@ -95,4 +95,64 @@ router.get('/projects', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ============== Estimates endpoints ==============
+
+function parseEstimateFilters(query) {
+  const statuses = parseList(query.status);
+  const estimatorIds = parseIntList(query.estimator_id);
+  const excludedEstimateIds = parseIntList(query.excluded_ids);
+  const markets = parseList(query.market);
+  const valueMin = query.value_min != null && query.value_min !== '' ? parseFloat(query.value_min) : null;
+  const valueMax = query.value_max != null && query.value_max !== '' ? parseFloat(query.value_max) : null;
+  return {
+    statuses,
+    estimatorIds,
+    excludedEstimateIds,
+    markets,
+    dateFrom: query.date_from || null,
+    dateTo: query.date_to || null,
+    valueMin: !isNaN(valueMin) ? valueMin : null,
+    valueMax: !isNaN(valueMax) ? valueMax : null,
+  };
+}
+
+router.get('/estimates/filters', async (req, res, next) => {
+  try {
+    const options = await CostDatabase.estimates.getFilterOptions(req.tenantId);
+    res.json(options);
+  } catch (err) { next(err); }
+});
+
+router.get('/estimates/summary', async (req, res, next) => {
+  try {
+    const filters = parseEstimateFilters(req.query);
+    const summary = await CostDatabase.estimates.getSummary(req.tenantId, filters);
+    res.json(summary);
+  } catch (err) { next(err); }
+});
+
+router.get('/estimates/by-cost-type', async (req, res, next) => {
+  try {
+    const filters = parseEstimateFilters(req.query);
+    const rows = await CostDatabase.estimates.getByCostType(req.tenantId, filters);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.get('/estimates/by-section', async (req, res, next) => {
+  try {
+    const filters = parseEstimateFilters(req.query);
+    const rows = await CostDatabase.estimates.getBySection(req.tenantId, filters);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.get('/estimates/list', async (req, res, next) => {
+  try {
+    const filters = parseEstimateFilters(req.query);
+    const rows = await CostDatabase.estimates.getList(req.tenantId, filters);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

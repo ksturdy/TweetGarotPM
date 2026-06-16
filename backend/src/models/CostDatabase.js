@@ -406,4 +406,232 @@ const CostDatabase = {
   },
 };
 
+// ============== Estimates aggregation ==============
+
+function buildEstimateFilter(tenantId, filters = {}) {
+  const params = [tenantId];
+  const conds = ['e.tenant_id = $1'];
+  let i = 2;
+
+  if (filters.statuses && filters.statuses.length) {
+    conds.push(`e.status = ANY($${i})`);
+    params.push(filters.statuses);
+    i++;
+  }
+  if (filters.excludedEstimateIds && filters.excludedEstimateIds.length) {
+    conds.push(`e.id <> ALL($${i})`);
+    params.push(filters.excludedEstimateIds);
+    i++;
+  }
+  if (filters.estimatorIds && filters.estimatorIds.length) {
+    conds.push(`e.estimator_id = ANY($${i})`);
+    params.push(filters.estimatorIds);
+    i++;
+  }
+  if (filters.dateFrom) {
+    conds.push(`e.bid_date >= $${i}`);
+    params.push(filters.dateFrom);
+    i++;
+  }
+  if (filters.dateTo) {
+    conds.push(`e.bid_date <= $${i}`);
+    params.push(filters.dateTo);
+    i++;
+  }
+  if (filters.valueMin != null) {
+    conds.push(`e.total_cost >= $${i}`);
+    params.push(filters.valueMin);
+    i++;
+  }
+  if (filters.valueMax != null) {
+    conds.push(`e.total_cost <= $${i}`);
+    params.push(filters.valueMax);
+    i++;
+  }
+  if (filters.markets && filters.markets.length) {
+    conds.push(`e.customer_id IN (SELECT id FROM customers WHERE market = ANY($${i}))`);
+    params.push(filters.markets);
+    i++;
+  }
+
+  return { whereSql: conds.join(' AND '), params, nextParamIndex: i };
+}
+
+const EstimateDb = {
+  async getFilterOptions(tenantId) {
+    const { rows: statusRows } = await db.query(
+      `SELECT DISTINCT status FROM estimates WHERE tenant_id = $1 AND status IS NOT NULL ORDER BY status`,
+      [tenantId]
+    );
+    const { rows: estimatorRows } = await db.query(
+      `SELECT DISTINCT e.estimator_id, emp.first_name || ' ' || emp.last_name AS name
+       FROM estimates e
+       JOIN employees emp ON e.estimator_id = emp.id
+       WHERE e.tenant_id = $1 AND e.estimator_id IS NOT NULL
+       ORDER BY name`,
+      [tenantId]
+    );
+    const { rows: marketRows } = await db.query(
+      `SELECT DISTINCT c.market
+       FROM estimates e
+       JOIN customers c ON e.customer_id = c.id
+       WHERE e.tenant_id = $1 AND c.market IS NOT NULL AND c.market != ''
+       ORDER BY c.market`,
+      [tenantId]
+    );
+    const { rows: rangeRows } = await db.query(
+      `SELECT MIN(total_cost) AS min_value, MAX(total_cost) AS max_value,
+              MIN(bid_date) AS min_date, MAX(bid_date) AS max_date
+       FROM estimates WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    return {
+      statuses: statusRows.map(r => r.status),
+      estimators: estimatorRows.map(r => ({ id: r.estimator_id, name: r.name })),
+      markets: marketRows.map(r => r.market),
+      valueRange: {
+        min: rangeRows[0]?.min_value != null ? parseFloat(rangeRows[0].min_value) : null,
+        max: rangeRows[0]?.max_value != null ? parseFloat(rangeRows[0].max_value) : null,
+      },
+      dateRange: {
+        minDate: rangeRows[0]?.min_date || null,
+        maxDate: rangeRows[0]?.max_date || null,
+      },
+    };
+  },
+
+  async getSummary(tenantId, filters) {
+    const { whereSql, params } = buildEstimateFilter(tenantId, filters);
+    const sql2 = `
+      SELECT
+        COUNT(*) AS estimate_count,
+        COALESCE(SUM(e.total_cost), 0) AS total_cost_sum,
+        COALESCE(SUM(e.labor_cost), 0) AS labor_cost,
+        COALESCE(SUM(e.material_cost), 0) AS material_cost,
+        COALESCE(SUM(e.equipment_cost), 0) AS equipment_cost,
+        COALESCE(SUM(e.subcontractor_cost), 0) AS subcontractor_cost,
+        COALESCE(SUM(e.rental_cost), 0) AS rental_cost,
+        COALESCE(SUM(lh.hours), 0) AS est_hours
+      FROM estimates e
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(SUM(eli.labor_hours), 0) AS hours
+        FROM estimate_line_items eli WHERE eli.estimate_id = e.id
+      ) lh ON true
+      WHERE ${whereSql}`;
+    const { rows } = await db.query(sql2, params);
+    const r = rows[0] || {};
+    return {
+      estimate_count: parseInt(r.estimate_count || 0, 10),
+      total_cost_sum: parseFloat(r.total_cost_sum || 0),
+      labor_cost: parseFloat(r.labor_cost || 0),
+      material_cost: parseFloat(r.material_cost || 0),
+      equipment_cost: parseFloat(r.equipment_cost || 0),
+      subcontractor_cost: parseFloat(r.subcontractor_cost || 0),
+      rental_cost: parseFloat(r.rental_cost || 0),
+      est_hours: parseFloat(r.est_hours || 0),
+    };
+  },
+
+  // Returns one row per cost type (1=Labor … 5=Equipment) using the
+  // aggregated cost columns already stored on estimates.
+  async getByCostType(tenantId, filters) {
+    const { whereSql, params } = buildEstimateFilter(tenantId, filters);
+    const sql = `
+      WITH fe AS (
+        SELECT e.id, e.labor_cost, e.material_cost, e.equipment_cost,
+               e.subcontractor_cost, e.rental_cost
+        FROM estimates e
+        WHERE ${whereSql}
+      ),
+      labor_hours AS (
+        SELECT eli.estimate_id, COALESCE(SUM(eli.labor_hours), 0) AS hours
+        FROM estimate_line_items eli
+        WHERE eli.estimate_id IN (SELECT id FROM fe)
+        GROUP BY eli.estimate_id
+      )
+      SELECT 1::int AS cost_type,
+             COUNT(*) AS estimate_count,
+             COALESCE(SUM(f.labor_cost), 0) AS est_cost,
+             COALESCE(SUM(lh.hours), 0) AS est_hours
+      FROM fe f LEFT JOIN labor_hours lh ON lh.estimate_id = f.id
+      WHERE f.labor_cost > 0
+      UNION ALL
+      SELECT 2, COUNT(*), COALESCE(SUM(material_cost), 0), 0 FROM fe WHERE material_cost > 0
+      UNION ALL
+      SELECT 3, COUNT(*), COALESCE(SUM(subcontractor_cost), 0), 0 FROM fe WHERE subcontractor_cost > 0
+      UNION ALL
+      SELECT 4, COUNT(*), COALESCE(SUM(rental_cost), 0), 0 FROM fe WHERE rental_cost > 0
+      UNION ALL
+      SELECT 5, COUNT(*), COALESCE(SUM(equipment_cost), 0), 0 FROM fe WHERE equipment_cost > 0
+      ORDER BY cost_type`;
+    const { rows } = await db.query(sql, params);
+    return rows.map(r => ({
+      cost_type: parseInt(r.cost_type, 10),
+      estimate_count: parseInt(r.estimate_count, 10),
+      est_cost: parseFloat(r.est_cost),
+      est_hours: parseFloat(r.est_hours),
+    }));
+  },
+
+  async getBySection(tenantId, filters) {
+    const { whereSql, params } = buildEstimateFilter(tenantId, filters);
+    const sql = `
+      WITH fe AS (SELECT id FROM estimates e WHERE ${whereSql})
+      SELECT es.section_name,
+             COUNT(DISTINCT es.estimate_id) AS estimate_count,
+             COALESCE(SUM(es.labor_cost), 0) AS labor_cost,
+             COALESCE(SUM(es.material_cost), 0) AS material_cost,
+             COALESCE(SUM(es.equipment_cost), 0) AS equipment_cost,
+             COALESCE(SUM(es.subcontractor_cost), 0) AS subcontractor_cost,
+             COALESCE(SUM(es.rental_cost), 0) AS rental_cost,
+             COALESCE(SUM(es.total_cost), 0) AS est_cost
+      FROM estimate_sections es
+      WHERE es.estimate_id IN (SELECT id FROM fe)
+      GROUP BY es.section_name
+      ORDER BY est_cost DESC`;
+    const { rows } = await db.query(sql, params);
+    return rows.map(r => ({
+      section_name: r.section_name,
+      estimate_count: parseInt(r.estimate_count, 10),
+      labor_cost: parseFloat(r.labor_cost),
+      material_cost: parseFloat(r.material_cost),
+      equipment_cost: parseFloat(r.equipment_cost),
+      subcontractor_cost: parseFloat(r.subcontractor_cost),
+      rental_cost: parseFloat(r.rental_cost),
+      est_cost: parseFloat(r.est_cost),
+    }));
+  },
+
+  async getList(tenantId, filters) {
+    const { whereSql, params } = buildEstimateFilter(tenantId, filters);
+    const sql = `
+      SELECT e.id, e.estimate_number, e.project_name, e.customer_name, e.status,
+             e.bid_date, e.total_cost, e.labor_cost, e.material_cost,
+             e.equipment_cost, e.subcontractor_cost, e.rental_cost,
+             emp.first_name || ' ' || emp.last_name AS estimator_name
+      FROM estimates e
+      LEFT JOIN employees emp ON e.estimator_id = emp.id
+      WHERE ${whereSql}
+      ORDER BY e.bid_date DESC NULLS LAST, e.estimate_number DESC`;
+    const { rows } = await db.query(sql, params);
+    return rows.map(r => ({
+      id: r.id,
+      estimate_number: r.estimate_number,
+      project_name: r.project_name,
+      customer_name: r.customer_name,
+      status: r.status,
+      bid_date: r.bid_date,
+      total_cost: parseFloat(r.total_cost || 0),
+      labor_cost: parseFloat(r.labor_cost || 0),
+      material_cost: parseFloat(r.material_cost || 0),
+      equipment_cost: parseFloat(r.equipment_cost || 0),
+      subcontractor_cost: parseFloat(r.subcontractor_cost || 0),
+      rental_cost: parseFloat(r.rental_cost || 0),
+      estimator_name: r.estimator_name,
+    }));
+  },
+};
+
+CostDatabase.estimates = EstimateDb;
+
 module.exports = CostDatabase;

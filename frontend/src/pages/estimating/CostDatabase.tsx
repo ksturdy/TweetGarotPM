@@ -4,11 +4,15 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   costDatabaseService,
+  estimateDbService,
   CostDbFilters,
+  EstDbFilters,
   COST_TYPE_LABELS,
   PhaseRow,
   PhaseProjectRow,
   ProjectRow,
+  EstSectionRow,
+  EstimateListRow,
 } from '../../services/costDatabase';
 import '../../styles/SalesPipeline.css';
 
@@ -30,6 +34,7 @@ const fmtPct = (value: number | null | undefined): string => {
   return `${(value * 100).toFixed(1)}%`;
 };
 
+type DataSource = 'vista' | 'estimates';
 type Tab = 'cost-type' | 'phase' | 'projects';
 
 type PhaseRowEnriched = PhaseRow & {
@@ -45,11 +50,20 @@ type PhaseRowEnriched = PhaseRow & {
 const safeAvg = (sum: number, count: number) => (count > 0 ? sum / count : 0);
 
 const CostDatabase: React.FC = () => {
+  const [dataSource, setDataSource] = useState<DataSource>('vista');
+
+  // Vista state
   const [filters, setFilters] = useState<CostDbFilters>({});
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [tab, setTab] = useState<Tab>('cost-type');
   const [drillPhase, setDrillPhase] = useState<{ phase: string; cost_type: number } | null>(null);
   const [search, setSearch] = useState('');
+
+  // Estimates state
+  const [estFilters, setEstFilters] = useState<EstDbFilters>({});
+  const [estExcluded, setEstExcluded] = useState<Set<number>>(new Set());
+  const [estTab, setEstTab] = useState<'cost-type' | 'section' | 'list'>('cost-type');
+  const [estSearch, setEstSearch] = useState('');
 
   // Filters with exclusions applied — used for all aggregations.
   const aggFilters = useMemo<CostDbFilters>(
@@ -104,6 +118,93 @@ const CostDatabase: React.FC = () => {
       : Promise.resolve([] as PhaseProjectRow[]),
     enabled: !!drillPhase,
   });
+
+  // Estimates queries
+  const estAggFilters = useMemo<EstDbFilters>(
+    () => ({ ...estFilters, excluded_estimate_ids: estExcluded.size ? Array.from(estExcluded) : undefined }),
+    [estFilters, estExcluded]
+  );
+
+  const { data: estOpts } = useQuery({
+    queryKey: ['estDb', 'filters'],
+    queryFn: () => estimateDbService.getFilters(),
+    enabled: dataSource === 'estimates',
+  });
+
+  const { data: estSummary } = useQuery({
+    queryKey: ['estDb', 'summary', estAggFilters],
+    queryFn: () => estimateDbService.getSummary(estAggFilters),
+    enabled: dataSource === 'estimates',
+  });
+
+  const { data: estByCostType, isLoading: estCtLoading } = useQuery({
+    queryKey: ['estDb', 'by-cost-type', estAggFilters],
+    queryFn: () => estimateDbService.getByCostType(estAggFilters),
+    enabled: dataSource === 'estimates',
+  });
+
+  const { data: estBySection, isLoading: estSectionLoading } = useQuery({
+    queryKey: ['estDb', 'by-section', estAggFilters],
+    queryFn: () => estimateDbService.getBySection(estAggFilters),
+    enabled: dataSource === 'estimates' && estTab === 'section',
+  });
+
+  const { data: estList, isLoading: estListLoading } = useQuery({
+    queryKey: ['estDb', 'list', estFilters],
+    queryFn: () => estimateDbService.getList(estFilters),
+    enabled: dataSource === 'estimates',
+  });
+
+  const setEstFilter = <K extends keyof EstDbFilters>(key: K, value: EstDbFilters[K]) => {
+    setEstFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const toggleEstListFilter = (key: 'status' | 'market', value: string) => {
+    setEstFilters(prev => {
+      const list = prev[key] || [];
+      const next = list.includes(value) ? list.filter(v => v !== value) : [...list, value];
+      return { ...prev, [key]: next.length ? next : undefined };
+    });
+  };
+
+  const toggleEstExcluded = (id: number) => {
+    setEstExcluded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearEstFilters = () => { setEstFilters({}); setEstSearch(''); };
+
+  const estActiveFilterCount = useMemo(() => {
+    let n = 0;
+    if (estFilters.status?.length) n++;
+    if (estFilters.estimator_id?.length) n++;
+    if (estFilters.market?.length) n++;
+    if (estFilters.date_from || estFilters.date_to) n++;
+    if (estFilters.value_min != null || estFilters.value_max != null) n++;
+    return n;
+  }, [estFilters]);
+
+  const filteredEstSections = useMemo<EstSectionRow[]>(() => {
+    if (!estBySection) return [];
+    if (!estSearch.trim()) return estBySection;
+    const q = estSearch.toLowerCase();
+    return estBySection.filter(r => r.section_name.toLowerCase().includes(q));
+  }, [estBySection, estSearch]);
+
+  const filteredEstList = useMemo<EstimateListRow[]>(() => {
+    if (!estList) return [];
+    if (!estSearch.trim()) return estList;
+    const q = estSearch.toLowerCase();
+    return estList.filter(r =>
+      r.estimate_number.toLowerCase().includes(q) ||
+      r.project_name.toLowerCase().includes(q) ||
+      (r.customer_name || '').toLowerCase().includes(q)
+    );
+  }, [estList, estSearch]);
 
   const setFilter = <K extends keyof CostDbFilters>(key: K, value: CostDbFilters[K]) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -173,13 +274,25 @@ const CostDatabase: React.FC = () => {
         <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
           &larr; Back to Estimating
         </Link>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.15rem' }}>
-          📊 Cost Database
-        </h1>
-        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-          Historical cost data aggregated from project phase codes
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.15rem' }}>
+              📊 Cost Database
+            </h1>
+            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+              {dataSource === 'vista'
+                ? 'Historical cost data aggregated from project phase codes'
+                : 'Aggregated cost data from estimates'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '3px', gap: '2px' }}>
+            <SourceBtn active={dataSource === 'vista'} onClick={() => setDataSource('vista')}>Vista Projects</SourceBtn>
+            <SourceBtn active={dataSource === 'estimates'} onClick={() => setDataSource('estimates')}>Estimates</SourceBtn>
+          </div>
         </div>
       </div>
+
+      {dataSource === 'vista' && (<>
 
       {/* Filters panel */}
       <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1rem' }}>
@@ -496,6 +609,7 @@ const CostDatabase: React.FC = () => {
 
       {/* Drill-in modal: phase → projects */}
       {drillPhase && (
+
         <div onClick={() => setDrillPhase(null)} style={{
           position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 1000,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
@@ -560,6 +674,317 @@ const CostDatabase: React.FC = () => {
           </div>
         </div>
       )}
+      </>)}
+
+      {/* ============== Estimates view ============== */}
+      {dataSource === 'estimates' && (<>
+
+      {/* Estimates filters panel */}
+      <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+            Filters {estActiveFilterCount > 0 && <span style={{ marginLeft: '0.4rem', background: '#3b82f6', color: '#fff', padding: '0.05rem 0.4rem', borderRadius: '8px', fontSize: '0.7rem' }}>{estActiveFilterCount}</span>}
+          </div>
+          {estActiveFilterCount > 0 && (
+            <button onClick={clearEstFilters} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#64748b' }}>
+              Clear all
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '0.75rem 1rem' }}>
+          <div style={{ flex: '1 1 200px' }}>
+            <Label>Status</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+              {estOpts?.statuses.map(s => (
+                <Chip key={s} active={estFilters.status?.includes(s) ?? false}
+                  onClick={() => toggleEstListFilter('status', s)}>
+                  {s}
+                </Chip>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: '1 1 200px' }}>
+            <Label>Estimator</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+              {(estOpts?.estimators || []).map(e => (
+                <Chip key={e.id} active={estFilters.estimator_id?.includes(e.id) ?? false}
+                  onClick={() => {
+                    const cur = estFilters.estimator_id || [];
+                    const next = cur.includes(e.id) ? cur.filter(v => v !== e.id) : [...cur, e.id];
+                    setEstFilter('estimator_id', next.length ? next : undefined);
+                  }}>
+                  {e.name}
+                </Chip>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: '1 1 200px' }}>
+            <Label>Market</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+              {(estOpts?.markets || []).map(m => (
+                <Chip key={m} active={estFilters.market?.includes(m) ?? false}
+                  onClick={() => toggleEstListFilter('market', m)}>
+                  {m}
+                </Chip>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: '0 0 260px' }}>
+            <Label>Bid Date Range</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <input type="date" value={estFilters.date_from || ''}
+                onChange={e => setEstFilter('date_from', e.target.value || undefined)}
+                style={inputStyle} />
+              <input type="date" value={estFilters.date_to || ''}
+                onChange={e => setEstFilter('date_to', e.target.value || undefined)}
+                style={inputStyle} />
+            </div>
+            {estOpts?.dateRange.minDate && estOpts?.dateRange.maxDate && (() => {
+              const minMs = new Date(estOpts.dateRange.minDate!).getTime();
+              const maxMs = new Date(estOpts.dateRange.maxDate!).getTime();
+              const lowMs = estFilters.date_from ? new Date(estFilters.date_from).getTime() : minMs;
+              const highMs = estFilters.date_to ? new Date(estFilters.date_to).getTime() : maxMs;
+              return (
+                <DualRangeSlider
+                  min={minMs} max={maxMs} step={86_400_000}
+                  low={lowMs} high={highMs}
+                  onChange={(lo, hi) => setEstFilters(prev => ({
+                    ...prev,
+                    date_from: lo === minMs ? undefined : new Date(lo).toISOString().slice(0, 10),
+                    date_to: hi === maxMs ? undefined : new Date(hi).toISOString().slice(0, 10),
+                  }))}
+                  formatValue={ms => new Date(ms).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })}
+                />
+              );
+            })()}
+          </div>
+          <div style={{ flex: '0 0 260px' }}>
+            <Label>Bid Value</Label>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <CurrencyInput placeholder="Min" value={estFilters.value_min}
+                onChange={v => setEstFilter('value_min', v)} style={inputStyle} />
+              <CurrencyInput placeholder="Max" value={estFilters.value_max}
+                onChange={v => setEstFilter('value_max', v)} style={inputStyle} />
+            </div>
+            {estOpts?.valueRange.min != null && estOpts?.valueRange.max != null && estOpts.valueRange.max > estOpts.valueRange.min && (() => {
+              const minV = Math.floor(estOpts.valueRange.min!);
+              const maxV = Math.ceil(estOpts.valueRange.max!);
+              const lowV = estFilters.value_min != null ? estFilters.value_min : minV;
+              const highV = estFilters.value_max != null ? estFilters.value_max : maxV;
+              const step = Math.max(1000, Math.round((maxV - minV) / 1000));
+              return (
+                <DualRangeSlider
+                  min={minV} max={maxV} step={step}
+                  low={lowV} high={highV}
+                  onChange={(lo, hi) => setEstFilters(prev => ({
+                    ...prev,
+                    value_min: lo === minV ? null : lo,
+                    value_max: hi === maxV ? null : hi,
+                  }))}
+                  formatValue={v => fmt(v)}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Estimates summary cards */}
+      {(() => {
+        const cnt = estSummary?.estimate_count || 0;
+        const avg = (v: number) => cnt > 0 ? v / cnt : 0;
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
+            <Card label="Estimates" value={String(cnt)} color="#3b82f6" />
+            <Card label="Avg Bid Value" value={fmt(avg(estSummary?.total_cost_sum || 0))} color="#0ea5e9" />
+            <Card label="Avg Labor" value={fmt(avg(estSummary?.labor_cost || 0))} color="#8b5cf6" />
+            <Card label="Avg Material" value={fmt(avg(estSummary?.material_cost || 0))} color="#f59e0b" />
+            <Card label="Avg Subcontracts" value={fmt(avg(estSummary?.subcontractor_cost || 0))} color="#6366f1" />
+            <Card label="Avg Equipment" value={fmt(avg(estSummary?.equipment_cost || 0))} color="#10b981" />
+            <Card label="Avg Rentals" value={fmt(avg(estSummary?.rental_cost || 0))} color="#14b8a6" />
+            <Card label="Avg Est Hours" value={fmtNum(avg(estSummary?.est_hours || 0))} color="#64748b" />
+          </div>
+        );
+      })()}
+
+      {/* Estimates tabs */}
+      <div style={{ display: 'flex', gap: '0.4rem', borderBottom: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+        <TabBtn active={estTab === 'cost-type'} onClick={() => setEstTab('cost-type')}>By Cost Type</TabBtn>
+        <TabBtn active={estTab === 'section'} onClick={() => setEstTab('section')}>By Section</TabBtn>
+        <TabBtn active={estTab === 'list'} onClick={() => setEstTab('list')}>Source Estimates</TabBtn>
+      </div>
+
+      {/* By Cost Type */}
+      {estTab === 'cost-type' && (
+        <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+          {estCtLoading ? <Loading /> : !estByCostType?.length ? (
+            <Empty>No estimate cost data matches your filters.</Empty>
+          ) : (() => {
+            const total = estByCostType.reduce((s, r) => s + r.est_cost, 0);
+            return (
+              <table style={tableStyle}>
+                <thead><tr style={theadRow}>
+                  <Th align="left">Cost Type</Th>
+                  <Th>Estimates</Th>
+                  <Th>Avg Est Cost</Th>
+                  <Th>Avg Est Hrs</Th>
+                  <Th>% of Total</Th>
+                </tr></thead>
+                <tbody>
+                  {estByCostType.map(r => {
+                    const pct = total > 0 ? r.est_cost / total : 0;
+                    return (
+                      <tr key={r.cost_type} style={{ ...tbodyRow, cursor: 'default' }}>
+                        <Td style={{ fontWeight: 600 }}>{COST_TYPE_LABELS[r.cost_type] || `Type ${r.cost_type}`}</Td>
+                        <Td align="right">{fmtNum(r.estimate_count)}</Td>
+                        <Td align="right">{fmt(r.estimate_count > 0 ? r.est_cost / r.estimate_count : 0)}</Td>
+                        <Td align="right">{r.est_hours > 0 ? fmtNum(r.estimate_count > 0 ? r.est_hours / r.estimate_count : 0) : '-'}</Td>
+                        <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>{(pct * 100).toFixed(1)}%</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* By Section */}
+      {estTab === 'section' && (
+        <>
+          <div style={{ marginBottom: '0.6rem' }}>
+            <input type="text" placeholder="Search section name..."
+              value={estSearch} onChange={e => setEstSearch(e.target.value)} style={{ ...inputStyle, maxWidth: '300px' }} />
+          </div>
+          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+            {estSectionLoading ? <Loading /> : !filteredEstSections.length ? (
+              <Empty>No sections match your filters.</Empty>
+            ) : (() => {
+              const total = filteredEstSections.reduce((s, r) => s + r.est_cost, 0);
+              return (
+                <table style={tableStyle}>
+                  <thead><tr style={theadRow}>
+                    <Th align="left">Section</Th>
+                    <Th>Estimates</Th>
+                    <Th>Avg Labor</Th>
+                    <Th>Avg Material</Th>
+                    <Th>Avg Subcontracts</Th>
+                    <Th>Avg Equipment</Th>
+                    <Th>Avg Rentals</Th>
+                    <Th>Avg Total</Th>
+                    <Th>% of Total</Th>
+                  </tr></thead>
+                  <tbody>
+                    {filteredEstSections.map(r => {
+                      const pct = total > 0 ? r.est_cost / total : 0;
+                      const a = (v: number) => r.estimate_count > 0 ? v / r.estimate_count : 0;
+                      return (
+                        <tr key={r.section_name} style={{ ...tbodyRow, cursor: 'default' }}>
+                          <Td style={{ maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                            {r.section_name}
+                          </Td>
+                          <Td align="right">{fmtNum(r.estimate_count)}</Td>
+                          <Td align="right">{r.labor_cost > 0 ? fmt(a(r.labor_cost)) : '-'}</Td>
+                          <Td align="right">{r.material_cost > 0 ? fmt(a(r.material_cost)) : '-'}</Td>
+                          <Td align="right">{r.subcontractor_cost > 0 ? fmt(a(r.subcontractor_cost)) : '-'}</Td>
+                          <Td align="right">{r.equipment_cost > 0 ? fmt(a(r.equipment_cost)) : '-'}</Td>
+                          <Td align="right">{r.rental_cost > 0 ? fmt(a(r.rental_cost)) : '-'}</Td>
+                          <Td align="right" style={{ fontWeight: 600 }}>{fmt(a(r.est_cost))}</Td>
+                          <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>{(pct * 100).toFixed(1)}%</Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* Source Estimates */}
+      {estTab === 'list' && (
+        <>
+          <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <input type="text" placeholder="Search estimates..."
+              value={estSearch} onChange={e => setEstSearch(e.target.value)} style={{ ...inputStyle, maxWidth: '260px' }} />
+            {estExcluded.size > 0 && (
+              <>
+                <span style={{ fontSize: '0.72rem', color: '#ef4444', fontWeight: 600 }}>{estExcluded.size} excluded</span>
+                <button onClick={() => setEstExcluded(new Set())}
+                  style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: '1px solid #cbd5e1', background: '#fff', borderRadius: '4px', cursor: 'pointer', color: '#64748b' }}>
+                  Re-include all
+                </button>
+              </>
+            )}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.4rem' }}>
+            Uncheck any estimate to exclude it from the aggregations above.
+          </div>
+          <div className="card" style={{ padding: 0, overflow: 'auto' }}>
+            {estListLoading ? <Loading /> : !filteredEstList.length ? (
+              <Empty>No estimates match your filters.</Empty>
+            ) : (() => {
+              const includedTotal = filteredEstList.reduce((s, r) => (estExcluded.has(r.id) ? s : s + r.total_cost), 0);
+              return (
+                <table style={tableStyle}>
+                  <thead><tr style={theadRow}>
+                    <Th align="left">Incl.</Th>
+                    <Th align="left">Number</Th>
+                    <Th align="left">Project</Th>
+                    <Th align="left">Customer</Th>
+                    <Th align="left">Status</Th>
+                    <Th align="left">Bid Date</Th>
+                    <Th align="left">Estimator</Th>
+                    <Th>Labor</Th>
+                    <Th>Material</Th>
+                    <Th>Subcontracts</Th>
+                    <Th>Equipment</Th>
+                    <Th>Rentals</Th>
+                    <Th>Bid Value</Th>
+                    <Th>% of Total</Th>
+                  </tr></thead>
+                  <tbody>
+                    {filteredEstList.map(r => {
+                      const isExcluded = estExcluded.has(r.id);
+                      const pct = includedTotal > 0 && !isExcluded ? r.total_cost / includedTotal : 0;
+                      return (
+                        <tr key={r.id} style={{
+                          borderBottom: '1px solid #f1f5f9',
+                          opacity: isExcluded ? 0.45 : 1,
+                          background: isExcluded ? '#fef2f2' : undefined,
+                        }}>
+                          <Td align="left" style={{ width: '40px' }}>
+                            <input type="checkbox" checked={!isExcluded} onChange={() => toggleEstExcluded(r.id)} />
+                          </Td>
+                          <Td><Link to={`/estimating/${r.id}`} style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>{r.estimate_number}</Link></Td>
+                          <Td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.project_name}</Td>
+                          <Td style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer_name || '-'}</Td>
+                          <Td>{r.status}</Td>
+                          <Td>{r.bid_date ? new Date(r.bid_date).toLocaleDateString() : '-'}</Td>
+                          <Td>{r.estimator_name || '-'}</Td>
+                          <Td align="right">{r.labor_cost > 0 ? fmt(r.labor_cost) : '-'}</Td>
+                          <Td align="right">{r.material_cost > 0 ? fmt(r.material_cost) : '-'}</Td>
+                          <Td align="right">{r.subcontractor_cost > 0 ? fmt(r.subcontractor_cost) : '-'}</Td>
+                          <Td align="right">{r.equipment_cost > 0 ? fmt(r.equipment_cost) : '-'}</Td>
+                          <Td align="right">{r.rental_cost > 0 ? fmt(r.rental_cost) : '-'}</Td>
+                          <Td align="right" style={{ fontWeight: 600 }}>{fmt(r.total_cost)}</Td>
+                          <Td align="right" style={{ fontWeight: 600, color: '#3b82f6' }}>
+                            {isExcluded ? '—' : `${(pct * 100).toFixed(1)}%`}
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      </>)}
     </div>
   );
 };
@@ -608,6 +1033,18 @@ const Card: React.FC<{ label: string; value: string; color?: string }> = ({ labe
     <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.1rem' }}>{label}</div>
     <div style={{ fontSize: '1.05rem', fontWeight: 700, color: color || '#1e293b' }}>{value}</div>
   </div>
+);
+
+const SourceBtn: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+  <button onClick={onClick} style={{
+    padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 600, borderRadius: '4px',
+    border: 'none', cursor: 'pointer',
+    background: active ? '#fff' : 'transparent',
+    color: active ? '#1e293b' : '#64748b',
+    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+  }}>
+    {children}
+  </button>
 );
 
 const TabBtn: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
