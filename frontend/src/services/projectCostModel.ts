@@ -9,6 +9,7 @@ export interface ProjectCostModelMeta {
   project_type: string | null;
   bid_type: string | null;
   notes: string | null;
+  scopes: string[];
   created_at: string;
   updated_at: string;
 }
@@ -151,6 +152,7 @@ export const projectCostModelApi = {
     project_type?: string | null;
     bid_type?: string | null;
     notes?: string | null;
+    scopes?: string[];
   }): Promise<ProjectCostModelMeta> => {
     const response = await api.put(`/projects/${projectId}/cost-model`, data);
     return response.data.data;

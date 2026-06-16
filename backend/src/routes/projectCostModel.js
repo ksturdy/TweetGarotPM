@@ -50,13 +50,14 @@ router.get('/:projectId/cost-model', verifyProject, async (req, res, next) => {
 // PUT /api/projects/:projectId/cost-model — upsert metadata
 router.put('/:projectId/cost-model', verifyProject, async (req, res, next) => {
   try {
-    const { total_sqft, building_type, project_type, bid_type, notes } = req.body;
+    const { total_sqft, building_type, project_type, bid_type, notes, scopes } = req.body;
     const meta = await ProjectCostModel.upsertMeta(req.params.projectId, req.tenantId, {
       total_sqft,
       building_type,
       project_type,
       bid_type,
       notes,
+      scopes,
     });
     res.json({ data: meta });
   } catch (error) {

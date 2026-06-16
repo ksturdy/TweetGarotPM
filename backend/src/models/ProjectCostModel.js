@@ -113,14 +113,15 @@ const ProjectCostModel = {
    */
   async upsertMeta(projectId, tenantId, data) {
     const result = await db.query(
-      `INSERT INTO project_cost_models (project_id, tenant_id, total_sqft, building_type, project_type, bid_type, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO project_cost_models (project_id, tenant_id, total_sqft, building_type, project_type, bid_type, notes, scopes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (project_id) DO UPDATE SET
          total_sqft = EXCLUDED.total_sqft,
          building_type = EXCLUDED.building_type,
          project_type = EXCLUDED.project_type,
          bid_type = EXCLUDED.bid_type,
          notes = EXCLUDED.notes,
+         scopes = EXCLUDED.scopes,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -131,6 +132,7 @@ const ProjectCostModel = {
         data.project_type ?? null,
         data.bid_type ?? null,
         data.notes ?? null,
+        Array.isArray(data.scopes) ? data.scopes : [],
       ]
     );
     return result.rows[0];

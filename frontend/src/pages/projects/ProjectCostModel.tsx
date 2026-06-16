@@ -69,8 +69,16 @@ const ProjectCostModel: React.FC = () => {
   const [projectType, setProjectType] = useState<string>('');
   const [bidType, setBidType] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [scopes, setScopes] = useState<string[]>([]);
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  const SCOPE_OPTIONS = ['Plumbing', 'Sheet Metal', 'Piping', 'BAS'] as const;
+
+  const toggleScope = (scope: string) => {
+    setScopes(prev => prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]);
+    setHasChanges(true);
+  };
 
   // Custom equipment form
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -118,6 +126,7 @@ const ProjectCostModel: React.FC = () => {
       setProjectType(meta.project_type || '');
       setBidType(meta.bid_type || '');
       setNotes(meta.notes || '');
+      setScopes(Array.isArray(meta.scopes) ? meta.scopes : []);
     }
 
     const rows: EquipmentRow[] = [];
@@ -188,6 +197,7 @@ const ProjectCostModel: React.FC = () => {
         project_type: projectType || null,
         bid_type: bidType || null,
         notes: notes || null,
+        scopes,
       });
 
       const secCols = costModelData?.standardTypes?.columns || {};
@@ -497,8 +507,10 @@ const ProjectCostModel: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
           <div className="form-group">
             <label className="form-label">Total Square Footage</label>
-            <input type="number" className="form-input" value={totalSqft}
-              onChange={(e) => { setTotalSqft(e.target.value); setHasChanges(true); }} placeholder="e.g., 150000" />
+            <input type="text" inputMode="numeric" className="form-input"
+              value={totalSqft ? Number(totalSqft).toLocaleString('en-US') : ''}
+              onChange={(e) => { setTotalSqft(e.target.value.replace(/[^\d]/g, '')); setHasChanges(true); }}
+              placeholder="e.g., 150,000" />
           </div>
           <div className="form-group">
             <label className="form-label">Building Type</label>
@@ -523,6 +535,18 @@ const ProjectCostModel: React.FC = () => {
               <option value="">Select...</option>
               {BID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            <label className="form-label">Scope of Work</label>
+            <div style={{ display: 'flex', gap: '1.5rem', paddingTop: '0.35rem', flexWrap: 'wrap' }}>
+              {SCOPE_OPTIONS.map(scope => (
+                <label key={scope} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem', cursor: 'pointer', fontWeight: 400 }}>
+                  <input type="checkbox" checked={scopes.includes(scope)} onChange={() => toggleScope(scope)}
+                    style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
+                  {scope}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label className="form-label">Notes</label>
