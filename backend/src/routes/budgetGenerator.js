@@ -158,16 +158,20 @@ const anthropic = new Anthropic({
 // Get dropdown options (building types, project types, bid types)
 router.get('/options', async (req, res, next) => {
   try {
-    const [buildingTypes, projectTypes, bidTypes] = await Promise.all([
+    const [markets, buildingTypes, projectTypes, bidTypes, projectTypesByMarket] = await Promise.all([
+      HistoricalProject.getDistinctValues('market'),
       HistoricalProject.getDistinctValues('building_type'),
       HistoricalProject.getDistinctValues('project_type'),
-      HistoricalProject.getDistinctValues('bid_type')
+      HistoricalProject.getDistinctValues('bid_type'),
+      HistoricalProject.getProjectTypesByMarket()
     ]);
 
     res.json({
+      markets,
       buildingTypes,
       projectTypes,
-      bidTypes
+      bidTypes,
+      projectTypesByMarket
     });
   } catch (error) {
     console.error('Error getting budget options:', error);
@@ -189,14 +193,14 @@ router.get('/stats', async (req, res, next) => {
 // Find similar projects (preview before generating)
 router.post('/similar', async (req, res, next) => {
   try {
-    const { buildingType, bidType, sqft } = req.body;
+    const { market, buildingType, bidType, sqft } = req.body;
     const projectTypes = Array.isArray(req.body.projectType)
       ? req.body.projectType.filter(Boolean)
       : (req.body.projectType ? [req.body.projectType] : []);
 
-    if (!buildingType && projectTypes.length === 0) {
+    if (!market && projectTypes.length === 0) {
       return res.status(400).json({
-        error: 'At least one of building type or project type is required'
+        error: 'At least a market or project type is required'
       });
     }
 
@@ -204,6 +208,7 @@ router.post('/similar', async (req, res, next) => {
 
     const [similarProjects, averages] = await Promise.all([
       HistoricalProject.findSimilar({
+        market: market || null,
         buildingType: buildingType || null,
         projectType: projectTypeParam,
         bidType: bidType || null,
@@ -211,7 +216,7 @@ router.post('/similar', async (req, res, next) => {
         limit: 20,
         tenantId: req.tenantId
       }),
-      HistoricalProject.getCategoryAverages(buildingType || null, projectTypeParam, req.tenantId)
+      HistoricalProject.getCategoryAverages(market || null, projectTypeParam, req.tenantId)
     ]);
 
     // Add match criteria details and inflation adjustment to each project
@@ -243,7 +248,8 @@ router.post('/similar', async (req, res, next) => {
         years_since_bid: yearsSinceBid,
         inflation_adjusted: true,
         match_details: {
-          building_type: p.building_type === buildingType,
+          market: !!market && p.market === market,
+          building_type: !!buildingType && p.building_type === buildingType,
           project_type: projectTypes.length > 0 && projectTypes.includes(p.project_type),
           bid_type: !bidType || p.bid_type === bidType,
           sqft_within_25: sqftDiff !== null && sqftDiff <= 0.25,
@@ -276,6 +282,7 @@ router.post('/generate', async (req, res, next) => {
   try {
     const {
       projectName,
+      market,
       buildingType,
       bidType,
       sqft,
@@ -290,14 +297,15 @@ router.post('/generate', async (req, res, next) => {
     const projectTypeParam = projectTypes.length > 0 ? projectTypes : null;
 
     // Validation
-    if (!projectName || !sqft || (!buildingType && projectTypes.length === 0)) {
+    if (!projectName || !sqft || (!market && projectTypes.length === 0)) {
       return res.status(400).json({
-        error: 'Project name, square footage, and at least one of building type or project type are required'
+        error: 'Project name, square footage, and at least a market or project type are required'
       });
     }
 
     // Find similar projects for scoring (unified historical + live projects)
     const similarProjects = await HistoricalProject.findSimilar({
+      market: market || null,
       buildingType: buildingType || null,
       projectType: projectTypeParam,
       bidType: bidType || null,
@@ -331,7 +339,7 @@ router.post('/generate', async (req, res, next) => {
 
     // Get category averages across both historical and live projects
     const averagesRaw = await HistoricalProject.getCategoryAverages(
-      buildingType || null,
+      market || null,
       projectTypeParam,
       req.tenantId
     );
@@ -342,6 +350,7 @@ router.post('/generate', async (req, res, next) => {
     // Build AI prompt
     const systemPrompt = buildBudgetSystemPrompt(
       projectName,
+      market,
       buildingType,
       projectType,
       bidType,
@@ -359,7 +368,7 @@ router.post('/generate', async (req, res, next) => {
       system: systemPrompt,
       messages: [{
         role: 'user',
-        content: `Generate a detailed HVAC budget estimate for this ${sqft.toLocaleString()} square foot ${buildingType} ${projectType} project called "${projectName}". Return the budget in JSON format only, no additional text.`
+        content: `Generate a detailed HVAC budget estimate for this ${sqft.toLocaleString()} square foot ${[market, projectType, buildingType].filter(Boolean).join(' / ')} project called "${projectName}". Return the budget in JSON format only, no additional text.`
       }]
     });
 
@@ -423,7 +432,7 @@ router.post('/generate', async (req, res, next) => {
 });
 
 // Helper function to build AI system prompt
-function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location) {
+function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
 
@@ -435,8 +444,9 @@ function buildBudgetSystemPrompt(projectName, buildingType, projectType, bidType
 
 ## NEW PROJECT DETAILS:
 - Project Name: ${projectName}
-${buildingType ? `- Building Type: ${buildingType}` : '- Building Type: Not specified'}
+${market ? `- Market: ${market}` : '- Market: Not specified'}
 ${projectType ? `- Project Type: ${projectType}` : '- Project Type: Not specified'}
+${buildingType ? `- Scope: ${buildingType}` : ''}
 - Bid Type: ${bidType || 'Not specified'}
 ${location ? `- Location: ${location}` : ''}
 - Square Footage: ${formatNumber(sqft)} SF
@@ -448,7 +458,7 @@ Average project age in dataset: ${avgAge} years
 This ensures the estimate reflects current market conditions.
 
 ## HISTORICAL DATA ANALYSIS:
-Based on ${averages.project_count || 0} similar ${buildingType} ${projectType} projects (costs adjusted to today's dollars):
+Based on ${averages.project_count || 0} similar ${[market, projectType].filter(Boolean).join(' / ')} projects (costs adjusted to today's dollars):
 - Average Total Cost: ${formatCurrency(averages.avg_total_cost)}
 - Average Cost/SF: $${(parseFloat(averages.avg_cost_per_sqft) || 0).toFixed(2)}
 

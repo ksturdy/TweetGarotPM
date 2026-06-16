@@ -132,13 +132,14 @@ const HistoricalProject = {
 
 
   // Find similar projects from both historical_projects and live projects
+  // Scoring: market(30) + projectType(30) + buildingType/scope(15) + bidType(10) + sqft(15) = 100
   async findSimilar(criteria) {
-    const { buildingType, projectType, bidType, sqft, limit = 5, tenantId = null } = criteria;
+    const { market, buildingType, projectType, bidType, sqft, limit = 5, tenantId = null } = criteria;
 
-    // $1=buildingType $2=projectType[] $3=bidType $4=sqft $5=limit $6=tenantId
+    // $1=market $2=projectType[] $3=buildingType(scope) $4=bidType $5=sqft $6=limit $7=tenantId
     const query = `
       SELECT
-        id, name, building_type, project_type, bid_type,
+        id, name, market, building_type, project_type, bid_type,
         total_sqft, total_cost, total_cost_per_sqft, bid_date,
         pm_hours, pm_cost, sm_equip_cost, pf_equip_cost,
         controls, insulation, balancing, electrical, general, allowance,
@@ -148,20 +149,21 @@ const HistoricalProject = {
         ahu, rtu, vav, boilers, pumps, chiller,
         source,
         (
-          CASE WHEN $1::text IS NULL THEN 40 WHEN building_type = $1::text THEN 40 ELSE 0 END +
-          CASE WHEN $2::text[] IS NULL THEN 35 WHEN project_type = ANY($2::text[]) THEN 35 ELSE 0 END +
-          CASE WHEN $3::text IS NULL OR bid_type = $3::text THEN 10 ELSE 0 END +
+          CASE WHEN $1::text IS NULL THEN 30 WHEN market = $1::text THEN 30 ELSE 0 END +
+          CASE WHEN $2::text[] IS NULL THEN 30 WHEN project_type = ANY($2::text[]) THEN 30 ELSE 0 END +
+          CASE WHEN $3::text IS NULL THEN 15 WHEN building_type = $3::text THEN 15 ELSE 0 END +
+          CASE WHEN $4::text IS NULL OR bid_type = $4::text THEN 10 ELSE 0 END +
           CASE
-            WHEN total_sqft IS NULL OR $4::decimal IS NULL THEN 0
-            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 0.25 THEN 15
-            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 0.5 THEN 10
-            WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 1.0 THEN 5
+            WHEN total_sqft IS NULL OR $5::decimal IS NULL THEN 0
+            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.25 THEN 15
+            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 0.5 THEN 10
+            WHEN ABS(total_sqft - $5::decimal) / GREATEST($5::decimal, 1) <= 1.0 THEN 5
             ELSE 0
           END
         ) AS similarity_score
       FROM (
         SELECT
-          id, name, building_type, project_type, bid_type,
+          id, name, market, building_type, project_type, bid_type,
           total_sqft, total_cost, total_cost_per_sqft, bid_date,
           pm_hours, pm_cost, sm_equip_cost, pf_equip_cost,
           controls, insulation, balancing, electrical, general, allowance,
@@ -178,7 +180,8 @@ const HistoricalProject = {
         SELECT
           p.id,
           p.name,
-          COALESCE(pcm.building_type, p.market) AS building_type,
+          p.market,
+          NULL::VARCHAR AS building_type,
           pcm.project_type,
           pcm.bid_type,
           COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
@@ -202,15 +205,15 @@ const HistoricalProject = {
           'project' AS source
         FROM projects p
         LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
-        WHERE p.tenant_id = $6::integer
+        WHERE p.tenant_id = $7::integer
           AND p.contract_value IS NOT NULL AND p.contract_value > 0
-          AND (COALESCE(pcm.building_type, p.market) IS NOT NULL OR pcm.project_type IS NOT NULL)
+          AND p.market IS NOT NULL
       ) combined
       ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
-      LIMIT $5::integer
+      LIMIT $6::integer
     `;
 
-    const params = [buildingType, projectType, bidType, sqft, limit, tenantId];
+    const params = [market, projectType, buildingType, bidType, sqft, limit, tenantId];
     const result = await db.query(query, params);
     return result.rows;
   },
@@ -220,7 +223,8 @@ const HistoricalProject = {
     const result = await db.query(
       `SELECT
         p.id, 'project' AS source, p.name,
-        COALESCE(pcm.building_type, p.market) AS building_type,
+        p.market,
+        NULL::VARCHAR AS building_type,
         pcm.project_type, pcm.bid_type,
         COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
         p.contract_value AS total_cost,
@@ -251,7 +255,7 @@ const HistoricalProject = {
   },
 
   // Get category averages across historical + live projects
-  async getCategoryAverages(buildingType, projectType, tenantId = null) {
+  async getCategoryAverages(market, projectType, tenantId = null) {
     // Build filter clauses for both sides of the UNION
     const params = [];
     let paramIndex = 1;
@@ -264,10 +268,10 @@ const HistoricalProject = {
       paramIndex++;
     }
 
-    if (buildingType) {
-      params.push(buildingType);
-      historicalFilter += ` AND building_type = $${paramIndex}`;
-      projectFilter += ` AND COALESCE(pcm.building_type, p.market) = $${paramIndex}`;
+    if (market) {
+      params.push(market);
+      historicalFilter += ` AND market = $${paramIndex}`;
+      projectFilter += ` AND p.market = $${paramIndex}`;
       paramIndex++;
     }
 
@@ -333,7 +337,7 @@ const HistoricalProject = {
         FROM projects p
         LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
         WHERE p.contract_value IS NOT NULL AND p.contract_value > 0
-          AND (COALESCE(pcm.building_type, p.market) IS NOT NULL OR pcm.project_type IS NOT NULL)
+          AND p.market IS NOT NULL
           ${projectFilter}
       ) combined
     `;
@@ -344,32 +348,60 @@ const HistoricalProject = {
 
   // Get distinct classification values from both historical and live projects
   async getDistinctValues(column) {
-    const allowedColumns = ['building_type', 'project_type', 'bid_type'];
+    const allowedColumns = ['market', 'building_type', 'project_type', 'bid_type'];
     if (!allowedColumns.includes(column)) {
       throw new Error('Invalid column name');
     }
 
-    // For building_type, also include projects.market (populated from Viewpoint)
-    const marketUnion = column === 'building_type'
-      ? `UNION SELECT market AS val FROM projects WHERE market IS NOT NULL AND market != ''`
-      : '';
-
-    const query = `
-      SELECT DISTINCT val AS value FROM (
-        SELECT ${column} AS val
+    let query;
+    if (column === 'market') {
+      // market: historical_projects.market + projects.market (from Viewpoint)
+      query = `
+        SELECT DISTINCT val AS value FROM (
+          SELECT market AS val FROM historical_projects WHERE market IS NOT NULL AND market != ''
+          UNION
+          SELECT market AS val FROM projects WHERE market IS NOT NULL AND market != ''
+        ) combined ORDER BY val
+      `;
+    } else if (column === 'project_type' || column === 'bid_type') {
+      // project_type / bid_type: historical + project_cost_models
+      query = `
+        SELECT DISTINCT val AS value FROM (
+          SELECT ${column} AS val FROM historical_projects WHERE ${column} IS NOT NULL AND ${column} != ''
+          UNION
+          SELECT ${column} AS val FROM project_cost_models WHERE ${column} IS NOT NULL AND ${column} != ''
+        ) combined ORDER BY val
+      `;
+    } else {
+      // building_type (scope: New/Remodel/Addition) — historical only
+      query = `
+        SELECT DISTINCT ${column} AS value
         FROM historical_projects
         WHERE ${column} IS NOT NULL AND ${column} != ''
-        UNION
-        SELECT ${column} AS val
-        FROM project_cost_models
-        WHERE ${column} IS NOT NULL AND ${column} != ''
-        ${marketUnion}
-      ) combined
-      ORDER BY val
-    `;
+        ORDER BY ${column}
+      `;
+    }
 
     const result = await db.query(query);
     return result.rows.map(r => r.value);
+  },
+
+  // Get project_type values that appear under a given market (for cascading dropdown)
+  async getProjectTypesByMarket() {
+    const query = `
+      SELECT DISTINCT market, project_type
+      FROM historical_projects
+      WHERE market IS NOT NULL AND project_type IS NOT NULL
+        AND market != '' AND project_type != ''
+      ORDER BY market, project_type
+    `;
+    const result = await db.query(query);
+    const map = {};
+    for (const row of result.rows) {
+      if (!map[row.market]) map[row.market] = [];
+      map[row.market].push(row.project_type);
+    }
+    return map;
   },
 
   // Get statistics for dashboard (no tenant filtering)

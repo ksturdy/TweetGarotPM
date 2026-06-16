@@ -1,9 +1,11 @@
 import api from './api';
 
 export interface BudgetOptions {
+  markets: string[];
   buildingTypes: string[];
   projectTypes: string[];
   bidTypes: string[];
+  projectTypesByMarket: Record<string, string[]>;
 }
 
 export interface SimilarProject {
@@ -122,6 +124,7 @@ export const budgetGeneratorService = {
   },
 
   async findSimilar(criteria: {
+    market?: string;
     buildingType?: string;
     projectType?: string[];
     bidType?: string;
@@ -133,6 +136,7 @@ export const budgetGeneratorService = {
 
   async generate(params: {
     projectName: string;
+    market?: string;
     buildingType?: string;
     projectType?: string[];
     bidType?: string;
