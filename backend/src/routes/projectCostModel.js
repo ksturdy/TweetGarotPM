@@ -352,4 +352,92 @@ Only include equipment types where you found actual evidence. Do not guess or in
   }
 });
 
+// POST /api/projects/:projectId/cost-model/web-lookup — AI web search to fill project details
+router.post('/:projectId/cost-model/web-lookup', verifyProject, async (req, res, next) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'AI is not configured (missing API key)' });
+    }
+
+    const project = await Project.findByIdAndTenant(req.params.projectId, req.tenantId);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const projectName = project.name;
+    const projectLocation = project.location || project.city || '';
+
+    const systemPrompt = `You are a construction project research assistant for a mechanical (HVAC/plumbing) subcontractor. Search the web to find details about a specific construction project by name.
+
+You are looking for:
+1. Total square footage / building area
+2. Building type (Hospital, Medical Office, K-12 School, University, Office, Data Center, Laboratory, Hotel, Retail, Church, Government, Other)
+3. Project scope (New Construction, Renovation, Expansion, Tenant Improvement, Other)
+4. Owner / client name
+5. Architect or engineer of record
+6. General contractor
+7. Location (city, state)
+8. Year completed or bid
+9. Any brief project description
+
+Return ONLY valid JSON in this exact shape — no markdown, no explanation:
+{
+  "found": true,
+  "sqft": 85000,
+  "building_type": "Hospital",
+  "project_type": "New Construction",
+  "owner": "Aurora Health Care",
+  "architect": "HGA Architects",
+  "general_contractor": "Miron Construction",
+  "location": "Green Bay, WI",
+  "year": 2019,
+  "description": "Free-standing emergency department with 24 exam rooms",
+  "sources": ["https://example.com/article"]
+}
+
+If you cannot find the project or reliable square footage, set found to false:
+{ "found": false, "reason": "Could not locate project online" }
+
+Important: only report sqft if you found a specific number — do not estimate.`;
+
+    const userMessage = `Find construction project details for:
+Project: ${projectName}${projectLocation ? `\nLocation hint: ${projectLocation}` : ''}
+
+Search the web to find its square footage, building type, and other construction details.`;
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: systemPrompt,
+      tools: [{
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 6,
+      }],
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    let responseText = '';
+    for (const block of response.content) {
+      if (block.type === 'text') responseText += block.text;
+    }
+
+    let result;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      result = jsonMatch ? JSON.parse(jsonMatch[0]) : { found: false, reason: 'Could not parse AI response' };
+    } catch {
+      result = { found: false, reason: 'Invalid response from AI' };
+    }
+
+    res.json({
+      result,
+      usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+    });
+  } catch (error) {
+    console.error('Web lookup error:', error);
+    next(error);
+  }
+});
+
 module.exports = router;

@@ -124,6 +124,21 @@ export interface AiScanResult {
   }[];
 }
 
+export interface WebLookupResult {
+  found: boolean;
+  reason?: string;
+  sqft?: number | null;
+  building_type?: string | null;
+  project_type?: string | null;
+  owner?: string | null;
+  architect?: string | null;
+  general_contractor?: string | null;
+  location?: string | null;
+  year?: number | null;
+  description?: string | null;
+  sources?: string[];
+}
+
 export const projectCostModelApi = {
   get: async (projectId: number): Promise<CostModelData> => {
     const response = await api.get(`/projects/${projectId}/cost-model`);
@@ -155,5 +170,10 @@ export const projectCostModelApi = {
       drawing_ids: drawingIds,
     });
     return response.data.data;
+  },
+
+  webLookup: async (projectId: number): Promise<{ result: WebLookupResult; usage?: any }> => {
+    const response = await api.post(`/projects/${projectId}/cost-model/web-lookup`);
+    return response.data;
   },
 };

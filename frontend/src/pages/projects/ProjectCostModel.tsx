@@ -6,6 +6,7 @@ import {
   EquipmentInput,
   AiScanResult,
   SectionColumn,
+  WebLookupResult,
 } from '../../services/projectCostModel';
 import { projectsApi } from '../../services/projects';
 import { drawingsApi } from '../../services/drawings';
@@ -81,6 +82,11 @@ const ProjectCostModel: React.FC = () => {
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<number[]>([]);
   const [scanResult, setScanResult] = useState<AiScanResult | null>(null);
   const [scanAccepted, setScanAccepted] = useState<Record<string, boolean>>({});
+
+  // Web lookup state
+  const [showWebLookupDialog, setShowWebLookupDialog] = useState(false);
+  const [webLookupResult, setWebLookupResult] = useState<WebLookupResult | null>(null);
+  const [webLookupAccepted, setWebLookupAccepted] = useState<Record<string, boolean>>({});
 
   // Queries
   const { data: project } = useQuery({
@@ -240,6 +246,22 @@ const ProjectCostModel: React.FC = () => {
     },
   });
 
+  const webLookupMutation = useMutation({
+    mutationFn: () => projectCostModelApi.webLookup(Number(projectId)),
+    onSuccess: ({ result }) => {
+      setWebLookupResult(result);
+      // Pre-accept any fields that would fill in a currently-blank value
+      const accepted: Record<string, boolean> = {};
+      if (result.found) {
+        if (result.sqft && !totalSqft) accepted.sqft = true;
+        if (result.building_type && !buildingType) accepted.building_type = true;
+        if (result.project_type && !projectType) accepted.project_type = true;
+        if (result.description && !notes) accepted.description = true;
+      }
+      setWebLookupAccepted(accepted);
+    },
+  });
+
   // Derived data
   const sectionRows = useMemo(() => {
     const result: Record<string, EquipmentRow[]> = {};
@@ -316,6 +338,28 @@ const ProjectCostModel: React.FC = () => {
     }
     setEquipmentRows(prev => prev.filter(r => r.equipment_type !== equipmentType));
     setHasChanges(true);
+  };
+
+  const applyWebLookupResults = () => {
+    if (!webLookupResult) return;
+    if (webLookupAccepted.sqft && webLookupResult.sqft) {
+      setTotalSqft(String(webLookupResult.sqft));
+    }
+    if (webLookupAccepted.building_type && webLookupResult.building_type) {
+      // Map to closest BUILDING_TYPES option if possible
+      const match = BUILDING_TYPES.find(t => t.toLowerCase() === webLookupResult.building_type!.toLowerCase());
+      setBuildingType(match || webLookupResult.building_type);
+    }
+    if (webLookupAccepted.project_type && webLookupResult.project_type) {
+      const match = PROJECT_TYPES.find(t => t.toLowerCase() === webLookupResult.project_type!.toLowerCase());
+      setProjectType(match || webLookupResult.project_type);
+    }
+    if (webLookupAccepted.description && webLookupResult.description) {
+      setNotes(webLookupResult.description);
+    }
+    setHasChanges(true);
+    setShowWebLookupDialog(false);
+    setWebLookupResult(null);
   };
 
   const toggleDrawingSelection = (drawingId: number) => {
@@ -396,6 +440,13 @@ const ProjectCostModel: React.FC = () => {
             Cost Model {project?.name ? `\u2014 ${project.name}` : ''}
           </h2>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => { setShowWebLookupDialog(true); setWebLookupResult(null); webLookupMutation.reset(); }}
+              disabled={webLookupMutation.isPending}
+            >
+              {webLookupMutation.isPending ? 'Searching...' : 'Search Web'}
+            </button>
             <button className="btn btn-secondary" onClick={() => setShowScanDialog(true)}>
               Scan Drawings with AI
             </button>
@@ -560,6 +611,132 @@ const ProjectCostModel: React.FC = () => {
           </table>
         )}
       </div>
+
+      {/* Web Lookup Dialog */}
+      {showWebLookupDialog && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '1.5rem', width: '560px',
+            maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            {!webLookupResult ? (
+              <>
+                <h3 style={{ marginTop: 0 }}>Search Web for Project Details</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  Titan will search the internet for <strong>{project?.name}</strong> and try to find its square footage, building type, and other details.
+                </p>
+                {webLookupMutation.isPending && (
+                  <div style={{ padding: '1.5rem', background: '#f0f9ff', borderRadius: '8px', textAlign: 'center', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🔍</div>
+                    <div style={{ fontSize: '0.875rem', color: '#1e40af', fontWeight: 500 }}>Searching the web...</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>This may take 15–30 seconds.</div>
+                  </div>
+                )}
+                {webLookupMutation.isError && (
+                  <div style={{ padding: '1rem', background: '#fef2f2', borderRadius: '8px', color: '#dc2626', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    Search failed. Please try again.
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowWebLookupDialog(false); webLookupMutation.reset(); }}>Cancel</button>
+                  <button className="btn btn-primary" disabled={webLookupMutation.isPending} onClick={() => webLookupMutation.mutate()}>
+                    {webLookupMutation.isPending ? 'Searching...' : 'Search Now'}
+                  </button>
+                </div>
+              </>
+            ) : !webLookupResult.found ? (
+              <>
+                <h3 style={{ marginTop: 0 }}>No Results Found</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>{webLookupResult.reason || 'Could not find this project online.'}</p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowWebLookupDialog(false); setWebLookupResult(null); }}>Close</button>
+                  <button className="btn btn-primary" onClick={() => { setWebLookupResult(null); webLookupMutation.mutate(); }}>Try Again</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 style={{ marginTop: 0 }}>Project Found</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                  Select the fields you want to apply to this cost model.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                  {webLookupResult.sqft && (
+                    <WebLookupField
+                      label="Square Footage"
+                      value={webLookupResult.sqft.toLocaleString() + ' SF'}
+                      current={totalSqft ? Number(totalSqft).toLocaleString() + ' SF' : null}
+                      accepted={!!webLookupAccepted.sqft}
+                      onToggle={() => setWebLookupAccepted(prev => ({ ...prev, sqft: !prev.sqft }))}
+                    />
+                  )}
+                  {webLookupResult.building_type && (
+                    <WebLookupField
+                      label="Building Type"
+                      value={webLookupResult.building_type}
+                      current={buildingType || null}
+                      accepted={!!webLookupAccepted.building_type}
+                      onToggle={() => setWebLookupAccepted(prev => ({ ...prev, building_type: !prev.building_type }))}
+                    />
+                  )}
+                  {webLookupResult.project_type && (
+                    <WebLookupField
+                      label="Project Scope"
+                      value={webLookupResult.project_type}
+                      current={projectType || null}
+                      accepted={!!webLookupAccepted.project_type}
+                      onToggle={() => setWebLookupAccepted(prev => ({ ...prev, project_type: !prev.project_type }))}
+                    />
+                  )}
+                  {webLookupResult.description && (
+                    <WebLookupField
+                      label="Notes / Description"
+                      value={webLookupResult.description}
+                      current={notes || null}
+                      accepted={!!webLookupAccepted.description}
+                      onToggle={() => setWebLookupAccepted(prev => ({ ...prev, description: !prev.description }))}
+                    />
+                  )}
+                </div>
+
+                {/* Info-only fields */}
+                {(webLookupResult.owner || webLookupResult.architect || webLookupResult.general_contractor || webLookupResult.location || webLookupResult.year) && (
+                  <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#475569' }}>
+                    <div style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>Additional Info (read-only)</div>
+                    {webLookupResult.owner && <div><strong>Owner:</strong> {webLookupResult.owner}</div>}
+                    {webLookupResult.architect && <div><strong>Architect:</strong> {webLookupResult.architect}</div>}
+                    {webLookupResult.general_contractor && <div><strong>GC:</strong> {webLookupResult.general_contractor}</div>}
+                    {webLookupResult.location && <div><strong>Location:</strong> {webLookupResult.location}</div>}
+                    {webLookupResult.year && <div><strong>Year:</strong> {webLookupResult.year}</div>}
+                  </div>
+                )}
+
+                {webLookupResult.sources && webLookupResult.sources.length > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '1rem' }}>
+                    Source{webLookupResult.sources.length > 1 ? 's' : ''}: {webLookupResult.sources.slice(0, 2).map((s, i) => (
+                      <a key={i} href={s} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', marginRight: '0.5rem', wordBreak: 'break-all' }}>{s}</a>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowWebLookupDialog(false); setWebLookupResult(null); }}>Discard</button>
+                  <button
+                    className="btn btn-primary"
+                    disabled={!Object.values(webLookupAccepted).some(v => v)}
+                    onClick={applyWebLookupResults}
+                  >
+                    Apply Selected ({Object.values(webLookupAccepted).filter(v => v).length})
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* AI Scan Drawing Dialog */}
       {showScanDialog && (
@@ -837,6 +1014,33 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({ title, color, bg, c
     </div>
   );
 };
+
+const WebLookupField: React.FC<{
+  label: string;
+  value: string;
+  current: string | null;
+  accepted: boolean;
+  onToggle: () => void;
+}> = ({ label, value, current, accepted, onToggle }) => (
+  <div
+    onClick={onToggle}
+    style={{
+      display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem',
+      borderRadius: '8px', cursor: 'pointer', border: '1px solid',
+      borderColor: accepted ? '#6366f1' : '#e5e7eb',
+      background: accepted ? '#eef2ff' : '#fafafa',
+    }}
+  >
+    <input type="checkbox" checked={accepted} onChange={onToggle} onClick={e => e.stopPropagation()} style={{ marginTop: '2px', flexShrink: 0 }} />
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: '2px' }}>{label}</div>
+      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827' }}>{value}</div>
+      {current && current !== value && (
+        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>Current: {current}</div>
+      )}
+    </div>
+  </div>
+);
 
 const ConfidenceBadge: React.FC<{ confidence: number }> = ({ confidence }) => {
   const pct = Math.round(confidence * 100);
