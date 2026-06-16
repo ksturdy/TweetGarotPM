@@ -208,9 +208,10 @@ router.post('/similar', async (req, res, next) => {
         projectType: projectTypeParam,
         bidType: bidType || null,
         sqft: sqft || null,
-        limit: 20  // Return more projects for preview
+        limit: 20,
+        tenantId: req.tenantId
       }),
-      HistoricalProject.getCategoryAverages(buildingType || null, projectTypeParam)
+      HistoricalProject.getCategoryAverages(buildingType || null, projectTypeParam, req.tenantId)
     ]);
 
     // Add match criteria details and inflation adjustment to each project
@@ -295,43 +296,44 @@ router.post('/generate', async (req, res, next) => {
       });
     }
 
-    // Find similar projects for scoring
+    // Find similar projects for scoring (unified historical + live projects)
     const similarProjects = await HistoricalProject.findSimilar({
       buildingType: buildingType || null,
       projectType: projectTypeParam,
       bidType: bidType || null,
       sqft,
-      limit: 20
+      limit: 20,
+      tenantId: req.tenantId
     });
 
     let topProjects, projectDetailsRaw;
 
+    const fetchDetail = (p) => p.source === 'project'
+      ? HistoricalProject.findProjectById(p.id, req.tenantId)
+      : HistoricalProject.findById(p.id);
+
     if (selectedProjectIds && selectedProjectIds.length > 0) {
       // User selected specific projects — use those
       const ids = selectedProjectIds.map(id => parseInt(id, 10));
-      projectDetailsRaw = (await Promise.all(
-        ids.map(id => HistoricalProject.findById(id))
-      )).filter(p => p != null);
-      // Map similarity scores from the scored list (use == for type-safe comparison)
       topProjects = ids.map(id => {
         const scored = similarProjects.find(s => parseInt(s.id) === id);
-        return scored || { id, similarity_score: 0 };
+        return scored || { id, similarity_score: 0, source: 'historical' };
       });
+      projectDetailsRaw = (await Promise.all(topProjects.map(fetchDetail))).filter(p => p != null);
     } else {
       // Default: auto-select top 3
       topProjects = similarProjects.slice(0, 3);
-      projectDetailsRaw = await Promise.all(
-        topProjects.map(p => HistoricalProject.findById(p.id))
-      );
+      projectDetailsRaw = await Promise.all(topProjects.map(fetchDetail));
     }
 
     // Apply inflation adjustment to project costs
     const projectDetails = projectDetailsRaw.map(p => adjustProjectCostsForInflation(p));
 
-    // Get category averages
+    // Get category averages across both historical and live projects
     const averagesRaw = await HistoricalProject.getCategoryAverages(
       buildingType || null,
-      projectTypeParam
+      projectTypeParam,
+      req.tenantId
     );
 
     // Adjust averages for inflation based on average project age

@@ -131,13 +131,11 @@ const HistoricalProject = {
   },
 
 
-  // Find similar projects for budget generation (no tenant filtering - table doesn't have tenant_id)
+  // Find similar projects from both historical_projects and live projects
   async findSimilar(criteria) {
-    const { buildingType, projectType, bidType, sqft, limit = 5 } = criteria;
+    const { buildingType, projectType, bidType, sqft, limit = 5, tenantId = null } = criteria;
 
-    // Build query with similarity scoring
-    // Cast parameters to explicit types to avoid PostgreSQL type inference issues
-    // When a filter is NULL, award full points (not filtering on that criteria)
+    // $1=buildingType $2=projectType[] $3=bidType $4=sqft $5=limit $6=tenantId
     const query = `
       SELECT
         id, name, building_type, project_type, bid_type,
@@ -148,14 +146,11 @@ const HistoricalProject = {
         e_material_with_escalation, o_materials_with_escalation,
         hw_material_with_esc, chw_material_with_esc,
         ahu, rtu, vav, boilers, pumps, chiller,
+        source,
         (
-          -- Building type match: 40 points (full points if not filtering)
           CASE WHEN $1::text IS NULL THEN 40 WHEN building_type = $1::text THEN 40 ELSE 0 END +
-          -- Project type match: 35 points (full points if not filtering)
           CASE WHEN $2::text[] IS NULL THEN 35 WHEN project_type = ANY($2::text[]) THEN 35 ELSE 0 END +
-          -- Bid type match: 10 points
           CASE WHEN $3::text IS NULL OR bid_type = $3::text THEN 10 ELSE 0 END +
-          -- Square footage similarity: 15 points
           CASE
             WHEN total_sqft IS NULL OR $4::decimal IS NULL THEN 0
             WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 0.25 THEN 15
@@ -163,69 +158,190 @@ const HistoricalProject = {
             WHEN ABS(total_sqft - $4::decimal) / GREATEST($4::decimal, 1) <= 1.0 THEN 5
             ELSE 0
           END
-        ) as similarity_score
-      FROM historical_projects
-      WHERE total_cost IS NOT NULL AND total_cost > 0
+        ) AS similarity_score
+      FROM (
+        SELECT
+          id, name, building_type, project_type, bid_type,
+          total_sqft, total_cost, total_cost_per_sqft, bid_date,
+          pm_hours, pm_cost, sm_equip_cost, pf_equip_cost,
+          controls, insulation, balancing, electrical, general, allowance,
+          s_materials_with_escalation, r_materials_with_escalation,
+          e_material_with_escalation, o_materials_with_escalation,
+          hw_material_with_esc, chw_material_with_esc,
+          ahu, rtu, vav, boilers, pumps, chiller,
+          'historical' AS source
+        FROM historical_projects
+        WHERE total_cost IS NOT NULL AND total_cost > 0
+
+        UNION ALL
+
+        SELECT
+          p.id,
+          p.name,
+          pcm.building_type,
+          pcm.project_type,
+          pcm.bid_type,
+          COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
+          p.contract_value AS total_cost,
+          CASE WHEN COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) > 0
+            THEN p.contract_value / COALESCE(pcm.total_sqft, p.square_footage::DECIMAL)
+            ELSE NULL END AS total_cost_per_sqft,
+          COALESCE(p.end_date, p.start_date) AS bid_date,
+          NULL::DECIMAL AS pm_hours, NULL::DECIMAL AS pm_cost,
+          NULL::DECIMAL AS sm_equip_cost, NULL::DECIMAL AS pf_equip_cost,
+          NULL::DECIMAL AS controls, NULL::DECIMAL AS insulation,
+          NULL::DECIMAL AS balancing, NULL::DECIMAL AS electrical,
+          NULL::DECIMAL AS general, NULL::DECIMAL AS allowance,
+          NULL::DECIMAL AS s_materials_with_escalation,
+          NULL::DECIMAL AS r_materials_with_escalation,
+          NULL::DECIMAL AS e_material_with_escalation,
+          NULL::DECIMAL AS o_materials_with_escalation,
+          NULL::DECIMAL AS hw_material_with_esc, NULL::DECIMAL AS chw_material_with_esc,
+          NULL::INTEGER AS ahu, NULL::INTEGER AS rtu, NULL::INTEGER AS vav,
+          NULL::INTEGER AS boilers, NULL::INTEGER AS pumps, NULL::INTEGER AS chiller,
+          'project' AS source
+        FROM projects p
+        JOIN project_cost_models pcm ON pcm.project_id = p.id
+        WHERE p.tenant_id = $6::integer
+          AND p.contract_value IS NOT NULL AND p.contract_value > 0
+          AND (pcm.building_type IS NOT NULL OR pcm.project_type IS NOT NULL)
+      ) combined
       ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
       LIMIT $5::integer
     `;
 
-    const params = [buildingType, projectType, bidType, sqft, limit];
+    const params = [buildingType, projectType, bidType, sqft, limit, tenantId];
     const result = await db.query(query, params);
     return result.rows;
   },
 
-  // Get category averages for budget estimation (no tenant filtering)
-  async getCategoryAverages(buildingType, projectType) {
-    let query = `
-      SELECT
-        COUNT(*)::integer as project_count,
-        AVG(total_cost) as avg_total_cost,
-        AVG(total_cost_per_sqft) as avg_cost_per_sqft,
-        AVG(pm_cost) as avg_pm_cost,
-        AVG(sm_equip_cost) as avg_sm_equip_cost,
-        AVG(pf_equip_cost) as avg_pf_equip_cost,
-        AVG(controls) as avg_controls,
-        AVG(insulation) as avg_insulation,
-        AVG(balancing) as avg_balancing,
-        AVG(electrical) as avg_electrical,
-        AVG(general) as avg_general,
-        AVG(allowance) as avg_allowance,
-        AVG(s_field_cost) as avg_supply_labor,
-        AVG(s_materials_with_escalation) as avg_supply_material,
-        AVG(r_field_cost) as avg_return_labor,
-        AVG(r_materials_with_escalation) as avg_return_material,
-        AVG(e_field_cost) as avg_exhaust_labor,
-        AVG(e_material_with_escalation) as avg_exhaust_material,
-        AVG(o_field_cost) as avg_outside_air_labor,
-        AVG(o_materials_with_escalation) as avg_outside_air_material,
-        AVG(hw_field_cost) as avg_hw_labor,
-        AVG(hw_material_with_esc) as avg_hw_material,
-        AVG(chw_field_cost) as avg_chw_labor,
-        AVG(chw_material_with_esc) as avg_chw_material
-      FROM historical_projects
-      WHERE total_cost IS NOT NULL AND total_cost > 0
-    `;
+  // Fetch a live project's data in the same shape as findById for use in AI prompts
+  async findProjectById(id, tenantId) {
+    const result = await db.query(
+      `SELECT
+        p.id, 'project' AS source, p.name,
+        pcm.building_type, pcm.project_type, pcm.bid_type,
+        COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) AS total_sqft,
+        p.contract_value AS total_cost,
+        CASE WHEN COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) > 0
+          THEN p.contract_value / COALESCE(pcm.total_sqft, p.square_footage::DECIMAL)
+          ELSE NULL END AS total_cost_per_sqft,
+        COALESCE(p.end_date, p.start_date) AS bid_date,
+        pcm.notes,
+        NULL::DECIMAL AS pm_hours, NULL::DECIMAL AS pm_cost,
+        NULL::DECIMAL AS sm_equip_cost, NULL::DECIMAL AS pf_equip_cost,
+        NULL::DECIMAL AS controls, NULL::DECIMAL AS insulation,
+        NULL::DECIMAL AS balancing, NULL::DECIMAL AS electrical,
+        NULL::DECIMAL AS general, NULL::DECIMAL AS allowance,
+        NULL::DECIMAL AS s_field_cost, NULL::DECIMAL AS s_materials_with_escalation, NULL::DECIMAL AS s_lbs,
+        NULL::DECIMAL AS r_field_cost, NULL::DECIMAL AS r_materials_with_escalation, NULL::DECIMAL AS r_lbs,
+        NULL::DECIMAL AS e_field_cost, NULL::DECIMAL AS e_material_with_escalation, NULL::DECIMAL AS e_lbs,
+        NULL::DECIMAL AS o_field_cost, NULL::DECIMAL AS o_materials_with_escalation,
+        NULL::DECIMAL AS hw_field_cost, NULL::DECIMAL AS hw_material_with_esc, NULL::DECIMAL AS hw_footage,
+        NULL::DECIMAL AS chw_field_cost, NULL::DECIMAL AS chw_material_with_esc, NULL::DECIMAL AS chw_footage,
+        NULL::INTEGER AS ahu, NULL::INTEGER AS rtu, NULL::INTEGER AS vav,
+        NULL::INTEGER AS boilers, NULL::INTEGER AS pumps, NULL::INTEGER AS chiller
+      FROM projects p
+      JOIN project_cost_models pcm ON pcm.project_id = p.id
+      WHERE p.id = $1 AND p.tenant_id = $2`,
+      [id, tenantId]
+    );
+    return result.rows[0] || null;
+  },
 
+  // Get category averages across historical + live projects
+  async getCategoryAverages(buildingType, projectType, tenantId = null) {
+    // Build filter clauses for both sides of the UNION
     const params = [];
     let paramIndex = 1;
+    let historicalFilter = '';
+    let projectFilter = '';
+
+    if (tenantId !== null) {
+      params.push(tenantId);
+      projectFilter += ` AND p.tenant_id = $${paramIndex}::integer`;
+      paramIndex++;
+    }
 
     if (buildingType) {
-      query += ` AND building_type = $${paramIndex}`;
       params.push(buildingType);
+      historicalFilter += ` AND building_type = $${paramIndex}`;
+      projectFilter += ` AND pcm.building_type = $${paramIndex}`;
       paramIndex++;
     }
 
     if (projectType && projectType.length > 0) {
-      query += ` AND project_type = ANY($${paramIndex}::text[])`;
       params.push(projectType);
+      historicalFilter += ` AND project_type = ANY($${paramIndex}::text[])`;
+      projectFilter += ` AND pcm.project_type = ANY($${paramIndex}::text[])`;
+      paramIndex++;
     }
+
+    const query = `
+      SELECT
+        COUNT(*)::integer AS project_count,
+        AVG(total_cost) AS avg_total_cost,
+        AVG(total_cost_per_sqft) AS avg_cost_per_sqft,
+        AVG(pm_cost) AS avg_pm_cost,
+        AVG(sm_equip_cost) AS avg_sm_equip_cost,
+        AVG(pf_equip_cost) AS avg_pf_equip_cost,
+        AVG(controls) AS avg_controls,
+        AVG(insulation) AS avg_insulation,
+        AVG(balancing) AS avg_balancing,
+        AVG(electrical) AS avg_electrical,
+        AVG(general) AS avg_general,
+        AVG(allowance) AS avg_allowance,
+        AVG(s_field_cost) AS avg_supply_labor,
+        AVG(s_materials_with_escalation) AS avg_supply_material,
+        AVG(r_field_cost) AS avg_return_labor,
+        AVG(r_materials_with_escalation) AS avg_return_material,
+        AVG(e_field_cost) AS avg_exhaust_labor,
+        AVG(e_material_with_escalation) AS avg_exhaust_material,
+        AVG(o_field_cost) AS avg_outside_air_labor,
+        AVG(o_materials_with_escalation) AS avg_outside_air_material,
+        AVG(hw_field_cost) AS avg_hw_labor,
+        AVG(hw_material_with_esc) AS avg_hw_material,
+        AVG(chw_field_cost) AS avg_chw_labor,
+        AVG(chw_material_with_esc) AS avg_chw_material
+      FROM (
+        SELECT
+          total_cost, total_cost_per_sqft, pm_cost, sm_equip_cost, pf_equip_cost,
+          controls, insulation, balancing, electrical, general, allowance,
+          s_field_cost, s_materials_with_escalation, r_field_cost, r_materials_with_escalation,
+          e_field_cost, e_material_with_escalation, o_field_cost, o_materials_with_escalation,
+          hw_field_cost, hw_material_with_esc, chw_field_cost, chw_material_with_esc
+        FROM historical_projects
+        WHERE total_cost IS NOT NULL AND total_cost > 0 ${historicalFilter}
+
+        UNION ALL
+
+        SELECT
+          p.contract_value AS total_cost,
+          CASE WHEN COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) > 0
+            THEN p.contract_value / COALESCE(pcm.total_sqft, p.square_footage::DECIMAL)
+            ELSE NULL END AS total_cost_per_sqft,
+          NULL::DECIMAL AS pm_cost, NULL::DECIMAL AS sm_equip_cost, NULL::DECIMAL AS pf_equip_cost,
+          NULL::DECIMAL AS controls, NULL::DECIMAL AS insulation, NULL::DECIMAL AS balancing,
+          NULL::DECIMAL AS electrical, NULL::DECIMAL AS general, NULL::DECIMAL AS allowance,
+          NULL::DECIMAL AS s_field_cost, NULL::DECIMAL AS s_materials_with_escalation,
+          NULL::DECIMAL AS r_field_cost, NULL::DECIMAL AS r_materials_with_escalation,
+          NULL::DECIMAL AS e_field_cost, NULL::DECIMAL AS e_material_with_escalation,
+          NULL::DECIMAL AS o_field_cost, NULL::DECIMAL AS o_materials_with_escalation,
+          NULL::DECIMAL AS hw_field_cost, NULL::DECIMAL AS hw_material_with_esc,
+          NULL::DECIMAL AS chw_field_cost, NULL::DECIMAL AS chw_material_with_esc
+        FROM projects p
+        JOIN project_cost_models pcm ON pcm.project_id = p.id
+        WHERE p.contract_value IS NOT NULL AND p.contract_value > 0
+          AND (pcm.building_type IS NOT NULL OR pcm.project_type IS NOT NULL)
+          ${projectFilter}
+      ) combined
+    `;
 
     const result = await db.query(query, params);
     return result.rows[0];
   },
 
-  // Get distinct values for dropdown options (no tenant filtering)
+  // Get distinct classification values from both historical and live projects
   async getDistinctValues(column) {
     const allowedColumns = ['building_type', 'project_type', 'bid_type'];
     if (!allowedColumns.includes(column)) {
@@ -233,10 +349,16 @@ const HistoricalProject = {
     }
 
     const query = `
-      SELECT DISTINCT ${column} as value
-      FROM historical_projects
-      WHERE ${column} IS NOT NULL AND ${column} != ''
-      ORDER BY ${column}
+      SELECT DISTINCT val AS value FROM (
+        SELECT ${column} AS val
+        FROM historical_projects
+        WHERE ${column} IS NOT NULL AND ${column} != ''
+        UNION
+        SELECT ${column} AS val
+        FROM project_cost_models
+        WHERE ${column} IS NOT NULL AND ${column} != ''
+      ) combined
+      ORDER BY val
     `;
 
     const result = await db.query(query);
