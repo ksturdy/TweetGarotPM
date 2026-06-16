@@ -109,16 +109,17 @@ const ProjectCostModel = {
   },
 
   /**
-   * Create or update cost model metadata (sqft, building_type, project_type, notes)
+   * Create or update cost model metadata (sqft, building_type, project_type, bid_type, notes)
    */
   async upsertMeta(projectId, tenantId, data) {
     const result = await db.query(
-      `INSERT INTO project_cost_models (project_id, tenant_id, total_sqft, building_type, project_type, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO project_cost_models (project_id, tenant_id, total_sqft, building_type, project_type, bid_type, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (project_id) DO UPDATE SET
          total_sqft = EXCLUDED.total_sqft,
          building_type = EXCLUDED.building_type,
          project_type = EXCLUDED.project_type,
+         bid_type = EXCLUDED.bid_type,
          notes = EXCLUDED.notes,
          updated_at = NOW()
        RETURNING *`,
@@ -128,6 +129,7 @@ const ProjectCostModel = {
         data.total_sqft ?? null,
         data.building_type ?? null,
         data.project_type ?? null,
+        data.bid_type ?? null,
         data.notes ?? null,
       ]
     );

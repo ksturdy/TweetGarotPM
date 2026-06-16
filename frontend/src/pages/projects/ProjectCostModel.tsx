@@ -31,6 +31,10 @@ const PROJECT_TYPES = [
   'Design-Build', 'Design-Assist', 'Plan & Spec', 'Other',
 ];
 
+const BID_TYPES = [
+  'GC Bid', 'Negotiated', 'Design-Build', 'Design-Assist', 'CM at Risk', 'Public Bid', 'Other',
+];
+
 // Equipment row state — specs stored as spec_N keyed strings
 interface EquipmentRow {
   equipment_type: string;
@@ -62,6 +66,7 @@ const ProjectCostModel: React.FC = () => {
   const [totalSqft, setTotalSqft] = useState<string>('');
   const [buildingType, setBuildingType] = useState<string>('');
   const [projectType, setProjectType] = useState<string>('');
+  const [bidType, setBidType] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
@@ -105,6 +110,7 @@ const ProjectCostModel: React.FC = () => {
       setTotalSqft(meta.total_sqft ? String(meta.total_sqft) : '');
       setBuildingType(meta.building_type || '');
       setProjectType(meta.project_type || '');
+      setBidType(meta.bid_type || '');
       setNotes(meta.notes || '');
     }
 
@@ -174,6 +180,7 @@ const ProjectCostModel: React.FC = () => {
         total_sqft: totalSqft ? Number(totalSqft) : null,
         building_type: buildingType || null,
         project_type: projectType || null,
+        bid_type: bidType || null,
         notes: notes || null,
       });
 
@@ -427,6 +434,10 @@ const ProjectCostModel: React.FC = () => {
           <span style={{ color: '#6b7280', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project Type</span>
           <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{projectType || '\u2014'}</div>
         </div>
+        <div>
+          <span style={{ color: '#6b7280', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bid Type</span>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600 }}>{bidType || '\u2014'}</div>
+        </div>
       </div>
 
       {/* Metadata Card */}
@@ -455,6 +466,14 @@ const ProjectCostModel: React.FC = () => {
             </select>
           </div>
           <div className="form-group">
+            <label className="form-label">Bid Type</label>
+            <select className="form-input" value={bidType}
+              onChange={(e) => { setBidType(e.target.value); setHasChanges(true); }}>
+              <option value="">Select...</option>
+              {BID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label className="form-label">Notes</label>
             <input type="text" className="form-input" value={notes}
               onChange={(e) => { setNotes(e.target.value); setHasChanges(true); }} placeholder="Additional notes..." />
