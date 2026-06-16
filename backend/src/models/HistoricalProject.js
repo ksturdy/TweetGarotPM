@@ -152,7 +152,7 @@ const HistoricalProject = {
           -- Building type match: 40 points (full points if not filtering)
           CASE WHEN $1::text IS NULL THEN 40 WHEN building_type = $1::text THEN 40 ELSE 0 END +
           -- Project type match: 35 points (full points if not filtering)
-          CASE WHEN $2::text IS NULL THEN 35 WHEN project_type = $2::text THEN 35 ELSE 0 END +
+          CASE WHEN $2::text[] IS NULL THEN 35 WHEN project_type = ANY($2::text[]) THEN 35 ELSE 0 END +
           -- Bid type match: 10 points
           CASE WHEN $3::text IS NULL OR bid_type = $3::text THEN 10 ELSE 0 END +
           -- Square footage similarity: 15 points
@@ -216,8 +216,8 @@ const HistoricalProject = {
       paramIndex++;
     }
 
-    if (projectType) {
-      query += ` AND project_type = $${paramIndex}`;
+    if (projectType && projectType.length > 0) {
+      query += ` AND project_type = ANY($${paramIndex}::text[])`;
       params.push(projectType);
     }
 

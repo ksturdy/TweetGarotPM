@@ -38,7 +38,7 @@ const BudgetGenerator: React.FC = () => {
   // Form state
   const [projectName, setProjectName] = useState('');
   const [buildingType, setBuildingType] = useState('');
-  const [projectType, setProjectType] = useState('');
+  const [projectTypes, setProjectTypes] = useState<string[]>([]);
   const [bidType, setBidType] = useState('');
   const [location, setLocation] = useState('');
   const [sqft, setSqft] = useState('');
@@ -109,7 +109,7 @@ const BudgetGenerator: React.FC = () => {
       // Populate form fields
       setProjectName(existingBudget.project_name || '');
       setBuildingType(existingBudget.building_type || '');
-      setProjectType(existingBudget.project_type || '');
+      setProjectTypes(existingBudget.project_type ? [existingBudget.project_type] : []);
       setBidType(existingBudget.bid_type || '');
       setSqft(existingBudget.square_footage?.toString() || '');
       setScope(existingBudget.scope_notes || '');
@@ -199,21 +199,21 @@ const BudgetGenerator: React.FC = () => {
 
   // Load preview when form changes - requires at least one of buildingType or projectType
   useEffect(() => {
-    if (buildingType || projectType) {
+    if (buildingType || projectTypes.length > 0) {
       loadPreview();
     } else {
       setShowPreview(false);
       setPreviewProjects([]);
       setPreviewAverages(null);
     }
-  }, [buildingType, projectType, bidType, sqft]);
+  }, [buildingType, projectTypes, bidType, sqft]);
 
   const loadPreview = async () => {
     try {
       setPreviewLoading(true);
       const result = await budgetGeneratorService.findSimilar({
         buildingType: buildingType || undefined,
-        projectType: projectType || undefined,
+        projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
         sqft: sqft ? parseFloat(sqft) : undefined
       });
@@ -365,7 +365,7 @@ const BudgetGenerator: React.FC = () => {
     setError('');
     setSuccessMessage('');
 
-    if (!projectName || !sqft || (!buildingType && !projectType)) {
+    if (!projectName || !sqft || (!buildingType && projectTypes.length === 0)) {
       setError('Please fill in project name, square footage, and at least one of building type or project type.');
       return;
     }
@@ -379,7 +379,7 @@ const BudgetGenerator: React.FC = () => {
       const result = await budgetGeneratorService.generate({
         projectName,
         buildingType: buildingType || undefined,
-        projectType: projectType || undefined,
+        projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
         sqft: parseFloat(sqft),
         scope: scope || undefined,
@@ -470,7 +470,7 @@ const BudgetGenerator: React.FC = () => {
   const handleReset = () => {
     setProjectName('');
     setBuildingType('');
-    setProjectType('');
+    setProjectTypes([]);
     setBidType('');
     setLocation('');
     setSqft('');
@@ -832,17 +832,49 @@ const BudgetGenerator: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Project Type</label>
-                <select
-                  className="form-input"
-                  value={projectType}
-                  onChange={(e) => setProjectType(e.target.value)}
-                >
-                  <option value="">Any project type</option>
-                  {options.projectTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+                <label className="form-label">
+                  Project Type
+                  {projectTypes.length > 0 && (
+                    <span style={{ fontWeight: 400, marginLeft: '8px', color: '#6b7280', fontSize: '13px' }}>
+                      ({projectTypes.length} selected)
+                    </span>
+                  )}
+                </label>
+                <div style={{
+                  maxHeight: '160px',
+                  overflowY: 'auto',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  padding: '6px 8px',
+                  backgroundColor: '#fff'
+                }}>
+                  {options.projectTypes.length === 0 ? (
+                    <span style={{ color: '#9ca3af', fontSize: '14px' }}>Loading...</span>
+                  ) : (
+                    options.projectTypes.map(type => (
+                      <label key={type} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '3px 0',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={projectTypes.includes(type)}
+                          onChange={() => setProjectTypes(prev =>
+                            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+                          )}
+                        />
+                        {type}
+                      </label>
+                    ))
+                  )}
+                </div>
+                {projectTypes.length === 0 && (
+                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>No selection = any project type</p>
+                )}
               </div>
 
               <div className="form-group">
@@ -904,7 +936,7 @@ const BudgetGenerator: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={loading || !projectName || (!buildingType && !projectType) || !sqft}
+                  disabled={loading || !projectName || (!buildingType && projectTypes.length === 0) || !sqft}
                 >
                   {loading ? 'Generating...' : 'Generate Budget'}
                 </button>

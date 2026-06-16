@@ -189,23 +189,28 @@ router.get('/stats', async (req, res, next) => {
 // Find similar projects (preview before generating)
 router.post('/similar', async (req, res, next) => {
   try {
-    const { buildingType, projectType, bidType, sqft } = req.body;
+    const { buildingType, bidType, sqft } = req.body;
+    const projectTypes = Array.isArray(req.body.projectType)
+      ? req.body.projectType.filter(Boolean)
+      : (req.body.projectType ? [req.body.projectType] : []);
 
-    if (!buildingType && !projectType) {
+    if (!buildingType && projectTypes.length === 0) {
       return res.status(400).json({
         error: 'At least one of building type or project type is required'
       });
     }
 
+    const projectTypeParam = projectTypes.length > 0 ? projectTypes : null;
+
     const [similarProjects, averages] = await Promise.all([
       HistoricalProject.findSimilar({
         buildingType: buildingType || null,
-        projectType: projectType || null,
+        projectType: projectTypeParam,
         bidType: bidType || null,
         sqft: sqft || null,
         limit: 20  // Return more projects for preview
       }),
-      HistoricalProject.getCategoryAverages(buildingType || null, projectType || null)
+      HistoricalProject.getCategoryAverages(buildingType || null, projectTypeParam)
     ]);
 
     // Add match criteria details and inflation adjustment to each project
@@ -238,7 +243,7 @@ router.post('/similar', async (req, res, next) => {
         inflation_adjusted: true,
         match_details: {
           building_type: p.building_type === buildingType,
-          project_type: p.project_type === projectType,
+          project_type: projectTypes.length > 0 && projectTypes.includes(p.project_type),
           bid_type: !bidType || p.bid_type === bidType,
           sqft_within_25: sqftDiff !== null && sqftDiff <= 0.25,
           sqft_within_50: sqftDiff !== null && sqftDiff <= 0.5,
@@ -271,16 +276,20 @@ router.post('/generate', async (req, res, next) => {
     const {
       projectName,
       buildingType,
-      projectType,
       bidType,
       sqft,
       scope,
       location,
       selectedProjectIds
     } = req.body;
+    const projectTypes = Array.isArray(req.body.projectType)
+      ? req.body.projectType.filter(Boolean)
+      : (req.body.projectType ? [req.body.projectType] : []);
+    const projectType = projectTypes.length > 0 ? projectTypes.join(', ') : null;
+    const projectTypeParam = projectTypes.length > 0 ? projectTypes : null;
 
     // Validation
-    if (!projectName || !sqft || (!buildingType && !projectType)) {
+    if (!projectName || !sqft || (!buildingType && projectTypes.length === 0)) {
       return res.status(400).json({
         error: 'Project name, square footage, and at least one of building type or project type are required'
       });
@@ -289,7 +298,7 @@ router.post('/generate', async (req, res, next) => {
     // Find similar projects for scoring
     const similarProjects = await HistoricalProject.findSimilar({
       buildingType: buildingType || null,
-      projectType: projectType || null,
+      projectType: projectTypeParam,
       bidType: bidType || null,
       sqft,
       limit: 20
@@ -322,7 +331,7 @@ router.post('/generate', async (req, res, next) => {
     // Get category averages
     const averagesRaw = await HistoricalProject.getCategoryAverages(
       buildingType || null,
-      projectType || null
+      projectTypeParam
     );
 
     // Adjust averages for inflation based on average project age

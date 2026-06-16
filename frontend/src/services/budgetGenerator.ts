@@ -123,7 +123,7 @@ export const budgetGeneratorService = {
 
   async findSimilar(criteria: {
     buildingType?: string;
-    projectType?: string;
+    projectType?: string[];
     bidType?: string;
     sqft?: number;
   }): Promise<SimilarProjectsResponse> {
@@ -134,7 +134,7 @@ export const budgetGeneratorService = {
   async generate(params: {
     projectName: string;
     buildingType?: string;
-    projectType?: string;
+    projectType?: string[];
     bidType?: string;
     sqft: number;
     scope?: string;
