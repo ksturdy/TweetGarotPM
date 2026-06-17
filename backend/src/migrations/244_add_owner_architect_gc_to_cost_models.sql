@@ -1,0 +1,4 @@
+ALTER TABLE project_cost_models
+  ADD COLUMN IF NOT EXISTS owner VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS architect VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS general_contractor VARCHAR(255);

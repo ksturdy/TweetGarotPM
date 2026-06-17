@@ -28,6 +28,9 @@ export interface Project {
   customer_name?: string;
   owner_customer_id?: number;
   owner_name?: string;
+  architect_customer_id?: number;
+  architect_name?: string;
+  cost_model_architect_text?: string;
   ship_address?: string;
   ship_city?: string;
   ship_state?: string;

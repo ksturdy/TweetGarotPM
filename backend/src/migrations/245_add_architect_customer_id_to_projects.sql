@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS architect_customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;

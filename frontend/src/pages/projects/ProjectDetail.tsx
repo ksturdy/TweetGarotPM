@@ -135,13 +135,14 @@ const ProjectDetail: React.FC = () => {
   });
 
   // Titan-editable fields
-  const [titanFormData, setTitanFormData] = useState({ customer_id: '', owner_customer_id: '', description: '' });
+  const [titanFormData, setTitanFormData] = useState({ customer_id: '', owner_customer_id: '', architect_customer_id: '', description: '' });
 
   React.useEffect(() => {
     if (project) {
       setTitanFormData({
         customer_id: project.customer_id?.toString() || '',
         owner_customer_id: project.owner_customer_id?.toString() || '',
+        architect_customer_id: project.architect_customer_id?.toString() || '',
         description: project.description || '',
       });
     }
@@ -161,6 +162,7 @@ const ProjectDetail: React.FC = () => {
     updateMutation.mutate({
       customerId: titanFormData.customer_id ? Number(titanFormData.customer_id) : undefined,
       ownerCustomerId: titanFormData.owner_customer_id ? Number(titanFormData.owner_customer_id) : undefined,
+      architectCustomerId: titanFormData.architect_customer_id ? Number(titanFormData.architect_customer_id) : undefined,
       description: titanFormData.description || undefined,
     });
   };
@@ -600,6 +602,16 @@ const ProjectDetail: React.FC = () => {
                 <small style={{ color: '#64748b', fontSize: '0.65rem' }}>The building owner / end customer</small>
               </div>
               <div className="form-group" style={{ marginBottom: '0.6rem' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Architect</label>
+                <SearchableSelect
+                  options={customers.map((c: Customer) => ({ value: c.id, label: c.name }))}
+                  value={titanFormData.architect_customer_id}
+                  onChange={(value) => setTitanFormData(prev => ({ ...prev, architect_customer_id: value }))}
+                  placeholder="-- Select Architect --"
+                />
+                <small style={{ color: '#64748b', fontSize: '0.65rem' }}>The architect of record</small>
+              </div>
+              <div className="form-group" style={{ marginBottom: '0.6rem' }}>
                 <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Notes</label>
                 <textarea
                   name="description"
@@ -622,6 +634,7 @@ const ProjectDetail: React.FC = () => {
                       setTitanFormData({
                         customer_id: project.customer_id?.toString() || '',
                         owner_customer_id: project.owner_customer_id?.toString() || '',
+                        architect_customer_id: project.architect_customer_id?.toString() || '',
                         description: project.description || '',
                       });
                     }
@@ -672,13 +685,26 @@ const ProjectDetail: React.FC = () => {
                 </div>
                 <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.1rem' }}>The building owner / end customer</div>
               </div>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={labelStyle}>Architect</div>
+                <div style={{ fontSize: '0.85rem' }}>
+                  {project.architect_name ? (
+                    <Link to={`/customers/${project.architect_customer_id}`} style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                      {project.architect_name}
+                    </Link>
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.8rem' }}>Not linked</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.1rem' }}>The architect of record</div>
+              </div>
               {project.description && (
                 <div style={{ marginBottom: '0.75rem' }}>
                   <div style={labelStyle}>Notes</div>
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem', color: '#475569' }}>{project.description}</div>
                 </div>
               )}
-              {!project.customer_name && !project.owner_name && !project.description && (
+              {!project.customer_name && !project.owner_name && !project.architect_name && !project.description && (
                 <div style={{
                   textAlign: 'center', padding: '1.25rem 0.75rem', color: '#94a3b8',
                   background: '#f8fafc', borderRadius: '6px',

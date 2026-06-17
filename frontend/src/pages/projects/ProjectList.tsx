@@ -441,6 +441,7 @@ const ProjectList: React.FC = () => {
       (project.client && project.client.toLowerCase().includes(term)) ||
       (project.customer_name && project.customer_name.toLowerCase().includes(term)) ||
       (project.owner_name && project.owner_name.toLowerCase().includes(term)) ||
+      (project.architect_name && project.architect_name.toLowerCase().includes(term)) ||
       (project.status && project.status.toLowerCase().includes(term)) ||
       (project.department_number && project.department_number.toLowerCase().includes(term)) ||
       (project.market && project.market.toLowerCase().includes(term)) ||

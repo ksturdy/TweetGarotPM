@@ -9,7 +9,9 @@ import {
   WebLookupResult,
 } from '../../services/projectCostModel';
 import { projectsApi } from '../../services/projects';
+import { customersApi } from '../../services/customers';
 import { drawingsApi } from '../../services/drawings';
+import { costDatabaseService } from '../../services/costDatabase';
 
 // Section visual config
 const SECTION_UI: Record<string, { label: string; color: string; bg: string }> = {
@@ -21,7 +23,7 @@ const SECTION_UI: Record<string, { label: string; color: string; bg: string }> =
 const SECTION_ORDER = ['major_equipment', 'terminal_units', 'ventilation', 'piping'];
 
 const BUILDING_TYPES = [
-  'Hospital', 'Medical Office', 'Office', 'Data Center', 'Laboratory',
+  'Athletic Facility', 'Hospital', 'Medical Office', 'Office', 'Data Center', 'Laboratory',
   'Manufacturing', 'Warehouse', 'K-12 School', 'University', 'Dormitory',
   'Hotel', 'Retail', 'Restaurant', 'Church', 'Government', 'Courthouse',
   'Prison', 'Military', 'Airport', 'Parking Garage', 'Mixed Use', 'Other',
@@ -70,6 +72,8 @@ const ProjectCostModel: React.FC = () => {
   const [bidType, setBidType] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [scopes, setScopes] = useState<string[]>([]);
+  const [market, setMarket] = useState<string>('');
+  const [generalContractor, setGeneralContractor] = useState<string>('');
   const [equipmentRows, setEquipmentRows] = useState<EquipmentRow[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -95,6 +99,11 @@ const ProjectCostModel: React.FC = () => {
   const [showWebLookupDialog, setShowWebLookupDialog] = useState(false);
   const [webLookupResult, setWebLookupResult] = useState<WebLookupResult | null>(null);
   const [webLookupAccepted, setWebLookupAccepted] = useState<Record<string, boolean>>({});
+  const [webLookupEdits, setWebLookupEdits] = useState<Record<string, string>>({});
+  // Customer matches found for owner/architect from web lookup
+  type CustomerMatch = { id: number; name: string } | null | 'loading' | 'not_found';
+  const [ownerMatch, setOwnerMatch] = useState<CustomerMatch>(null);
+  const [architectMatch, setArchitectMatch] = useState<CustomerMatch>(null);
 
   // Queries
   const { data: project } = useQuery({
@@ -113,6 +122,11 @@ const ProjectCostModel: React.FC = () => {
     enabled: showScanDialog,
   });
 
+  const { data: vistaFilterOpts } = useQuery({
+    queryKey: ['costDb', 'filters'],
+    queryFn: () => costDatabaseService.getFilters(),
+  });
+
   // Initialize form from loaded data
   useEffect(() => {
     if (!costModelData) return;
@@ -127,6 +141,8 @@ const ProjectCostModel: React.FC = () => {
       setBidType(meta.bid_type || '');
       setNotes(meta.notes || '');
       setScopes(Array.isArray(meta.scopes) ? meta.scopes : []);
+      setMarket(meta.market || '');
+      setGeneralContractor(meta.general_contractor || '');
     }
 
     const rows: EquipmentRow[] = [];
@@ -198,6 +214,8 @@ const ProjectCostModel: React.FC = () => {
         bid_type: bidType || null,
         notes: notes || null,
         scopes,
+        market: market || null,
+        general_contractor: generalContractor || null,
       });
 
       const secCols = costModelData?.standardTypes?.columns || {};
@@ -263,12 +281,30 @@ const ProjectCostModel: React.FC = () => {
       // Pre-accept any fields that would fill in a currently-blank value
       const accepted: Record<string, boolean> = {};
       if (result.found) {
+        if (result.general_contractor && !generalContractor) accepted.general_contractor = true;
         if (result.sqft && !totalSqft) accepted.sqft = true;
         if (result.building_type && !buildingType) accepted.building_type = true;
         if (result.project_type && !projectType) accepted.project_type = true;
         if (result.description && !notes) accepted.description = true;
       }
       setWebLookupAccepted(accepted);
+      setWebLookupEdits({});
+      setOwnerMatch(null);
+      setArchitectMatch(null);
+      if (result.found) {
+        if (result.owner) {
+          setOwnerMatch('loading');
+          customersApi.search(result.owner).then(results => {
+            setOwnerMatch(results.length > 0 ? { id: results[0].id, name: results[0].name } : 'not_found');
+          }).catch(() => setOwnerMatch('not_found'));
+        }
+        if (result.architect) {
+          setArchitectMatch('loading');
+          customersApi.search(result.architect).then(results => {
+            setArchitectMatch(results.length > 0 ? { id: results[0].id, name: results[0].name } : 'not_found');
+          }).catch(() => setArchitectMatch('not_found'));
+        }
+      }
     },
   });
 
@@ -350,22 +386,46 @@ const ProjectCostModel: React.FC = () => {
     setHasChanges(true);
   };
 
+  const wlVal = (key: string, fallback: string | null | undefined) =>
+    webLookupEdits[key] !== undefined ? webLookupEdits[key] : (fallback ?? '');
+
+  const linkCustomerToProject = async (field: 'ownerCustomerId' | 'architectCustomerId', customerId: number) => {
+    await projectsApi.update(Number(projectId), { [field]: customerId });
+    queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+  };
+
+  const handleAddProspect = async (name: string, field: 'ownerCustomerId' | 'architectCustomerId') => {
+    const customer = await customersApi.quickCreate(name);
+    await linkCustomerToProject(field, customer.id);
+  };
+
   const applyWebLookupResults = () => {
     if (!webLookupResult) return;
-    if (webLookupAccepted.sqft && webLookupResult.sqft) {
-      setTotalSqft(String(webLookupResult.sqft));
+    if (webLookupAccepted.sqft) {
+      const v = wlVal('sqft', webLookupResult.sqft != null ? String(webLookupResult.sqft) : null);
+      if (v) setTotalSqft(v.replace(/[^\d]/g, ''));
     }
-    if (webLookupAccepted.building_type && webLookupResult.building_type) {
-      // Map to closest BUILDING_TYPES option if possible
-      const match = BUILDING_TYPES.find(t => t.toLowerCase() === webLookupResult.building_type!.toLowerCase());
-      setBuildingType(match || webLookupResult.building_type);
+    if (webLookupAccepted.building_type) {
+      const v = wlVal('building_type', webLookupResult.building_type);
+      if (v) {
+        const match = BUILDING_TYPES.find(t => t.toLowerCase() === v.toLowerCase());
+        setBuildingType(match || v);
+      }
     }
-    if (webLookupAccepted.project_type && webLookupResult.project_type) {
-      const match = PROJECT_TYPES.find(t => t.toLowerCase() === webLookupResult.project_type!.toLowerCase());
-      setProjectType(match || webLookupResult.project_type);
+    if (webLookupAccepted.project_type) {
+      const v = wlVal('project_type', webLookupResult.project_type);
+      if (v) {
+        const match = PROJECT_TYPES.find(t => t.toLowerCase() === v.toLowerCase());
+        setProjectType(match || v);
+      }
     }
-    if (webLookupAccepted.description && webLookupResult.description) {
-      setNotes(webLookupResult.description);
+    if (webLookupAccepted.description) {
+      const v = wlVal('description', webLookupResult.description);
+      if (v) setNotes(v);
+    }
+    if (webLookupAccepted.general_contractor) {
+      const v = wlVal('general_contractor', webLookupResult.general_contractor);
+      if (v) setGeneralContractor(v);
     }
     setHasChanges(true);
     setShowWebLookupDialog(false);
@@ -504,7 +564,7 @@ const ProjectCostModel: React.FC = () => {
       {/* Metadata Card */}
       <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
         <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Project Details</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
           <div className="form-group">
             <label className="form-label">Total Square Footage</label>
             <input type="text" inputMode="numeric" className="form-input"
@@ -512,6 +572,31 @@ const ProjectCostModel: React.FC = () => {
               onChange={(e) => { setTotalSqft(e.target.value.replace(/[^\d]/g, '')); setHasChanges(true); }}
               placeholder="e.g., 150,000" />
           </div>
+          {(() => {
+            const vistaMarket = project?.market || '';
+            const isOverride = !!market && !!vistaMarket && market !== vistaMarket;
+            return (
+              <div className="form-group">
+                <label className="form-label">Market</label>
+                <select
+                  className="form-input"
+                  value={market}
+                  onChange={(e) => { setMarket(e.target.value); setHasChanges(true); }}
+                  style={isOverride ? { background: '#fffbeb', borderColor: '#f59e0b' } : undefined}
+                >
+                  <option value="">{vistaMarket ? `From project: ${vistaMarket}` : 'Select...'}</option>
+                  {(vistaFilterOpts?.markets || []).map((m: string) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {isOverride && (
+                  <div style={{ fontSize: '0.7rem', color: '#92400e', marginTop: '0.2rem' }}>
+                    Vista: {vistaMarket}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div className="form-group">
             <label className="form-label">Building Type</label>
             <select className="form-input" value={buildingType}
@@ -536,6 +621,42 @@ const ProjectCostModel: React.FC = () => {
               {BID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          <div className="form-group">
+            <label className="form-label">Owner</label>
+            <div className="form-input" style={{ background: '#f9fafb', color: project?.owner_name ? '#111827' : '#9ca3af', cursor: 'default' }}>
+              {project?.owner_name || 'Set in Project Details'}
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Architect</label>
+            <div className="form-input" style={{ background: '#f9fafb', color: project?.architect_name ? '#111827' : '#9ca3af', cursor: 'default' }}>
+              {project?.architect_name || 'Set in Project Details'}
+            </div>
+          </div>
+          {(() => {
+            const vistaGC = project?.customer_name || '';
+            const isGCOverride = !!generalContractor && !!vistaGC && generalContractor !== vistaGC;
+            return (
+              <div className="form-group">
+                <label className="form-label">General Contractor</label>
+                <input type="text" className="form-input" value={generalContractor}
+                  onChange={(e) => { setGeneralContractor(e.target.value); setHasChanges(true); }}
+                  placeholder={vistaGC || 'General contractor'}
+                  style={isGCOverride ? { background: '#fffbeb', borderColor: '#f59e0b' } : undefined}
+                />
+                {isGCOverride && (
+                  <div style={{ fontSize: '0.7rem', color: '#92400e', marginTop: '0.2rem' }}>
+                    Vista: {vistaGC}
+                  </div>
+                )}
+                {!generalContractor && vistaGC && (
+                  <div style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.2rem' }}>
+                    From project: {vistaGC}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label className="form-label">Scope of Work</label>
             <div style={{ display: 'flex', gap: '1.5rem', paddingTop: '0.35rem', flexWrap: 'wrap' }}>
@@ -550,8 +671,10 @@ const ProjectCostModel: React.FC = () => {
           </div>
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label className="form-label">Notes</label>
-            <input type="text" className="form-input" value={notes}
-              onChange={(e) => { setNotes(e.target.value); setHasChanges(true); }} placeholder="Additional notes..." />
+            <textarea className="form-input" value={notes} rows={3}
+              onChange={(e) => { setNotes(e.target.value); setHasChanges(true); }}
+              placeholder="Additional notes..."
+              style={{ resize: 'vertical', minHeight: '72px' }} />
           </div>
         </div>
       </div>
@@ -692,47 +815,122 @@ const ProjectCostModel: React.FC = () => {
                     <WebLookupField
                       label="Square Footage"
                       value={webLookupResult.sqft.toLocaleString() + ' SF'}
+                      editedValue={webLookupEdits.sqft}
                       current={totalSqft ? Number(totalSqft).toLocaleString() + ' SF' : null}
                       accepted={!!webLookupAccepted.sqft}
                       onToggle={() => setWebLookupAccepted(prev => ({ ...prev, sqft: !prev.sqft }))}
+                      onValueChange={v => setWebLookupEdits(prev => ({ ...prev, sqft: v }))}
                     />
                   )}
                   {webLookupResult.building_type && (
                     <WebLookupField
                       label="Building Type"
                       value={webLookupResult.building_type}
+                      editedValue={webLookupEdits.building_type}
                       current={buildingType || null}
                       accepted={!!webLookupAccepted.building_type}
                       onToggle={() => setWebLookupAccepted(prev => ({ ...prev, building_type: !prev.building_type }))}
+                      onValueChange={v => setWebLookupEdits(prev => ({ ...prev, building_type: v }))}
                     />
                   )}
                   {webLookupResult.project_type && (
                     <WebLookupField
                       label="Project Scope"
                       value={webLookupResult.project_type}
+                      editedValue={webLookupEdits.project_type}
                       current={projectType || null}
                       accepted={!!webLookupAccepted.project_type}
                       onToggle={() => setWebLookupAccepted(prev => ({ ...prev, project_type: !prev.project_type }))}
+                      onValueChange={v => setWebLookupEdits(prev => ({ ...prev, project_type: v }))}
                     />
                   )}
                   {webLookupResult.description && (
                     <WebLookupField
                       label="Notes / Description"
                       value={webLookupResult.description}
+                      editedValue={webLookupEdits.description}
                       current={notes || null}
                       accepted={!!webLookupAccepted.description}
                       onToggle={() => setWebLookupAccepted(prev => ({ ...prev, description: !prev.description }))}
+                      onValueChange={v => setWebLookupEdits(prev => ({ ...prev, description: v }))}
+                    />
+                  )}
+                  {webLookupResult.general_contractor && (
+                    <WebLookupField
+                      label="General Contractor"
+                      value={webLookupResult.general_contractor}
+                      editedValue={webLookupEdits.general_contractor}
+                      current={generalContractor || null}
+                      accepted={!!webLookupAccepted.general_contractor}
+                      onToggle={() => setWebLookupAccepted(prev => ({ ...prev, general_contractor: !prev.general_contractor }))}
+                      onValueChange={v => setWebLookupEdits(prev => ({ ...prev, general_contractor: v }))}
                     />
                   )}
                 </div>
 
-                {/* Info-only fields */}
-                {(webLookupResult.owner || webLookupResult.architect || webLookupResult.general_contractor || webLookupResult.location || webLookupResult.year) && (
+                {/* Owner / Architect customer linking */}
+                {(webLookupResult.owner || webLookupResult.architect) && (
                   <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#475569' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>Additional Info (read-only)</div>
-                    {webLookupResult.owner && <div><strong>Owner:</strong> {webLookupResult.owner}</div>}
-                    {webLookupResult.architect && <div><strong>Architect:</strong> {webLookupResult.architect}</div>}
-                    {webLookupResult.general_contractor && <div><strong>GC:</strong> {webLookupResult.general_contractor}</div>}
+                    <div style={{ fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>Link to Titan Customers</div>
+                    {webLookupResult.owner && (() => {
+                      const alreadyLinked = !!project?.owner_name;
+                      return (
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          <span style={{ fontWeight: 600 }}>Owner: </span>{webLookupResult.owner}
+                          {alreadyLinked ? (
+                            <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓ Linked: {project?.owner_name}</span>
+                          ) : ownerMatch === 'loading' ? (
+                            <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>Searching...</span>
+                          ) : ownerMatch === 'not_found' ? (
+                            <button className="btn btn-secondary" style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                              onClick={() => handleAddProspect(webLookupResult.owner!, 'ownerCustomerId')}>
+                              + Add as Prospect
+                            </button>
+                          ) : ownerMatch ? (
+                            <span>
+                              <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>Match: {ownerMatch.name}</span>
+                              <button className="btn btn-primary" style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                                onClick={() => linkCustomerToProject('ownerCustomerId', (ownerMatch as any).id)}>
+                                Link
+                              </button>
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                    {webLookupResult.architect && (() => {
+                      const alreadyLinked = !!project?.architect_name;
+                      return (
+                        <div>
+                          <span style={{ fontWeight: 600 }}>Architect: </span>{webLookupResult.architect}
+                          {alreadyLinked ? (
+                            <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓ Linked: {project?.architect_name}</span>
+                          ) : architectMatch === 'loading' ? (
+                            <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>Searching...</span>
+                          ) : architectMatch === 'not_found' ? (
+                            <button className="btn btn-secondary" style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                              onClick={() => handleAddProspect(webLookupResult.architect!, 'architectCustomerId')}>
+                              + Add as Prospect
+                            </button>
+                          ) : architectMatch ? (
+                            <span>
+                              <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>Match: {architectMatch.name}</span>
+                              <button className="btn btn-primary" style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                                onClick={() => linkCustomerToProject('architectCustomerId', (architectMatch as any).id)}>
+                                Link
+                              </button>
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Info-only fields (location + year) */}
+                {(webLookupResult.location || webLookupResult.year) && (
+                  <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#475569' }}>
+                    <div style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>Additional Info</div>
                     {webLookupResult.location && <div><strong>Location:</strong> {webLookupResult.location}</div>}
                     {webLookupResult.year && <div><strong>Year:</strong> {webLookupResult.year}</div>}
                   </div>
@@ -1042,29 +1240,47 @@ const EquipmentSection: React.FC<EquipmentSectionProps> = ({ title, color, bg, c
 const WebLookupField: React.FC<{
   label: string;
   value: string;
+  editedValue?: string;
   current: string | null;
   accepted: boolean;
   onToggle: () => void;
-}> = ({ label, value, current, accepted, onToggle }) => (
-  <div
-    onClick={onToggle}
-    style={{
-      display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem',
-      borderRadius: '8px', cursor: 'pointer', border: '1px solid',
-      borderColor: accepted ? '#6366f1' : '#e5e7eb',
-      background: accepted ? '#eef2ff' : '#fafafa',
-    }}
-  >
-    <input type="checkbox" checked={accepted} onChange={onToggle} onClick={e => e.stopPropagation()} style={{ marginTop: '2px', flexShrink: 0 }} />
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: '2px' }}>{label}</div>
-      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827' }}>{value}</div>
-      {current && current !== value && (
-        <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>Current: {current}</div>
-      )}
+  onValueChange?: (v: string) => void;
+}> = ({ label, value, editedValue, current, accepted, onToggle, onValueChange }) => {
+  const displayValue = editedValue !== undefined ? editedValue : value;
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem',
+        borderRadius: '8px', border: '1px solid',
+        borderColor: accepted ? '#6366f1' : '#e5e7eb',
+        background: accepted ? '#eef2ff' : '#fafafa',
+      }}
+    >
+      <input type="checkbox" checked={accepted} onChange={onToggle} style={{ marginTop: '2px', flexShrink: 0, cursor: 'pointer' }} />
+      <div style={{ flex: 1, minWidth: 0, cursor: !accepted ? 'pointer' : 'default' }} onClick={!accepted ? onToggle : undefined}>
+        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280', marginBottom: '4px', cursor: !accepted ? 'pointer' : 'default' }}>{label}</div>
+        {accepted && onValueChange ? (
+          <input
+            type="text"
+            value={displayValue}
+            onChange={e => onValueChange(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', fontWeight: 600, fontSize: '0.9rem', color: '#111827',
+              border: '1px solid #a5b4fc', borderRadius: '4px', padding: '0.25rem 0.5rem',
+              background: 'white', boxSizing: 'border-box',
+            }}
+          />
+        ) : (
+          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827', cursor: 'pointer' }} onClick={onToggle}>{displayValue}</div>
+        )}
+        {current && current !== value && (
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Current: {current}</div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ConfidenceBadge: React.FC<{ confidence: number }> = ({ confidence }) => {
   const pct = Math.round(confidence * 100);

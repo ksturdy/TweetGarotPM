@@ -49,6 +49,7 @@ const Project = {
               COALESCE(d.department_number, vd.department_number) as department_number,
               COALESCE(d.name, vd.name) as department_name,
               COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
+              COALESCE(ac.name, ac.customer_owner) as architect_name,
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
               COALESCE(vc.contract_amount, p.contract_value) as contract_value,
@@ -71,6 +72,7 @@ const Project = {
        LEFT JOIN departments d ON p.department_id = d.id
        LEFT JOIN customers c ON p.customer_id = c.id
        LEFT JOIN customers oc ON p.owner_customer_id = oc.id
+       LEFT JOIN customers ac ON p.architect_customer_id = ac.id
        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
        LEFT JOIN departments vd ON vc.linked_department_id = vd.id
        WHERE p.id = $1 AND p.tenant_id = $2`,
@@ -140,6 +142,7 @@ const Project = {
              COALESCE(d.name, vd.name) as department_name,
              COALESCE(d.department_number, vd.department_number) as department_number,
              COALESCE(c.name, c.customer_owner, p.client) as customer_name, COALESCE(oc.name, oc.customer_owner) as owner_name,
+             COALESCE(ac.name, ac.customer_owner) as architect_name,
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
@@ -155,14 +158,17 @@ const Project = {
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
                ELSE NULL
-             END as percent_complete
+             END as percent_complete,
+             pcm.architect as cost_model_architect_text
       FROM projects p
       LEFT JOIN employees e ON p.manager_id = e.id
       LEFT JOIN departments d ON p.department_id = d.id
       LEFT JOIN customers c ON p.customer_id = c.id
       LEFT JOIN customers oc ON p.owner_customer_id = oc.id
+      LEFT JOIN customers ac ON p.architect_customer_id = ac.id
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
       LEFT JOIN departments vd ON vc.linked_department_id = vd.id
+      LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id AND pcm.tenant_id = p.tenant_id
       WHERE p.tenant_id = $1
     `;
     const params = [tenantId];
