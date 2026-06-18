@@ -70,6 +70,13 @@ const WINDOW_OPTIONS: { label: string; days: number }[] = [
   { label: '12 weeks', days: 84 },
 ];
 
+type MetricMode = 'pct' | 'dollar';
+
+const METRIC_OPTIONS: { label: string; value: MetricMode }[] = [
+  { label: 'GM%', value: 'pct' },
+  { label: '$ Amount', value: 'dollar' },
+];
+
 const GmTrendRankWidget: React.FC<Props> = ({
   viewScope,
   currentEmployeeId,
@@ -78,6 +85,7 @@ const GmTrendRankWidget: React.FC<Props> = ({
 }) => {
   const navigate = useNavigate();
   const [windowDays, setWindowDays] = React.useState<number>(7);
+  const [metric, setMetric] = React.useState<MetricMode>('dollar');
 
   const { data: allProjects, isLoading } = useQuery({
     queryKey: ['gm-trend-report', windowDays],
@@ -102,31 +110,36 @@ const GmTrendRankWidget: React.FC<Props> = ({
 
     const filtered = scoped.filter((p) => {
       if (p.status !== 'Open' && p.status !== 'Soft-Closed') return false;
-      const delta = Number(p.gm_delta);
+      const delta = metric === 'dollar' ? Number(p.gm_dollar_delta) : Number(p.gm_delta);
       if (Number.isNaN(delta)) return false;
       return config.direction === 'down' ? delta < 0 : delta > 0;
     });
 
+    const getValue = (p: GmTrendProject) =>
+      metric === 'dollar' ? Number(p.gm_dollar_delta) : Number(p.gm_delta);
+
     return filtered
       .sort((a, b) => (config.direction === 'down'
-        ? Number(a.gm_delta) - Number(b.gm_delta)
-        : Number(b.gm_delta) - Number(a.gm_delta)))
+        ? getValue(a) - getValue(b)
+        : getValue(b) - getValue(a)))
       .slice(0, 10);
-  }, [allProjects, viewScope, currentEmployeeId, teamMemberEmployeeIds, config.direction]);
+  }, [allProjects, viewScope, currentEmployeeId, teamMemberEmployeeIds, config.direction, metric]);
 
   const chartData = React.useMemo(() => ({
     labels: ranked.map((p) => p.name),
     datasets: [
       {
-        label: 'GM% change (pts)',
-        data: ranked.map((p) => Number(p.gm_delta) * 100),
+        label: metric === 'dollar' ? 'GM $ change' : 'GM% change (pts)',
+        data: metric === 'dollar'
+          ? ranked.map((p) => Number(p.gm_dollar_delta))
+          : ranked.map((p) => Number(p.gm_delta) * 100),
         backgroundColor: config.backgroundColor,
         borderColor: config.borderColor,
         borderWidth: 1,
         borderRadius: 4,
       },
     ],
-  }), [ranked, config.backgroundColor, config.borderColor]);
+  }), [ranked, config.backgroundColor, config.borderColor, metric]);
 
   const chartOptions = React.useMemo(() => ({
     indexAxis: 'y' as const,
@@ -137,9 +150,10 @@ const GmTrendRankWidget: React.FC<Props> = ({
       tooltip: {
         callbacks: {
           label: (ctx: any) => {
-            const pts = Number(ctx.parsed.x);
-            const sign = pts > 0 ? '+' : '';
-            return `${sign}${pts.toFixed(1)}%`;
+            const n = Number(ctx.parsed.x);
+            if (metric === 'dollar') return fmtSignedMoney(n);
+            const sign = n > 0 ? '+' : '';
+            return `${sign}${n.toFixed(1)}%`;
           },
           afterLabel: (ctx: any) => {
             const p = ranked[ctx.dataIndex];
@@ -161,6 +175,15 @@ const GmTrendRankWidget: React.FC<Props> = ({
         ticks: {
           callback: (v: any) => {
             const n = Number(v);
+            if (metric === 'dollar') {
+              const abs = Math.abs(n);
+              const formatted = abs >= 1_000_000
+                ? `${(abs / 1_000_000).toFixed(1)}M`
+                : abs >= 1_000
+                  ? `${(abs / 1_000).toFixed(0)}K`
+                  : String(abs);
+              return n < 0 ? `-$${formatted}` : n > 0 ? `+$${formatted}` : `$${formatted}`;
+            }
             const sign = n > 0 ? '+' : '';
             return `${sign}${n.toFixed(1)}`;
           },
@@ -186,7 +209,7 @@ const GmTrendRankWidget: React.FC<Props> = ({
       const project = ranked[idx];
       if (project) navigate(`/projects/${project.id}`);
     },
-  }), [ranked, navigate, windowDays]);
+  }), [ranked, navigate, windowDays, metric]);
 
   const chartHeight = Math.max(160, ranked.length * 20 + 30);
 
@@ -202,25 +225,46 @@ const GmTrendRankWidget: React.FC<Props> = ({
           {config.icon}
           {config.title}
         </h2>
-        <select
-          value={windowDays}
-          onChange={(e) => setWindowDays(Number(e.target.value))}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            fontSize: '0.75rem',
-            padding: '0.2rem 0.4rem',
-            border: '1px solid #d1d5db',
-            borderRadius: 4,
-            background: '#fff',
-            color: '#374151',
-            cursor: 'pointer',
-          }}
-          aria-label="Trend window"
-        >
-          {WINDOW_OPTIONS.map((opt) => (
-            <option key={opt.days} value={opt.days}>{opt.label}</option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <select
+            value={metric}
+            onChange={(e) => setMetric(e.target.value as MetricMode)}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: '0.75rem',
+              padding: '0.2rem 0.4rem',
+              border: '1px solid #d1d5db',
+              borderRadius: 4,
+              background: '#fff',
+              color: '#374151',
+              cursor: 'pointer',
+            }}
+            aria-label="Metric"
+          >
+            {METRIC_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <select
+            value={windowDays}
+            onChange={(e) => setWindowDays(Number(e.target.value))}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              fontSize: '0.75rem',
+              padding: '0.2rem 0.4rem',
+              border: '1px solid #d1d5db',
+              borderRadius: 4,
+              background: '#fff',
+              color: '#374151',
+              cursor: 'pointer',
+            }}
+            aria-label="Trend window"
+          >
+            {WINDOW_OPTIONS.map((opt) => (
+              <option key={opt.days} value={opt.days}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
       <div className="dashboard-scrollable" style={{ padding: '0.5rem 0' }}>
         {isLoading ? (
