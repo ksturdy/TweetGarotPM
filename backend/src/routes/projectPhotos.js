@@ -165,6 +165,23 @@ router.post('/project/:projectId', photoUpload.single('file'), async (req, res) 
 });
 
 /**
+ * PUT /api/project-photos/bulk
+ */
+router.put('/bulk', async (req, res) => {
+  try {
+    const { ids, caption, tags, tagMode } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No IDs provided' });
+    }
+    const rows = await ProjectPhoto.bulkUpdate(req.tenantId, ids, { caption, tags, tagMode });
+    res.json({ updated: rows.length });
+  } catch (err) {
+    console.error('Error bulk updating photos:', err);
+    res.status(500).json({ error: 'Failed to update photos' });
+  }
+});
+
+/**
  * PUT /api/project-photos/:id
  */
 router.put('/:id', async (req, res) => {

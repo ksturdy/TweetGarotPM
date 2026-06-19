@@ -158,6 +158,23 @@ router.post('/', mediaUpload.single('file'), async (req, res) => {
 });
 
 /**
+ * PUT /api/marketing-media/bulk
+ */
+router.put('/bulk', async (req, res) => {
+  try {
+    const { ids, title, caption, tags, tagMode } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No IDs provided' });
+    }
+    const rows = await MarketingMedia.bulkUpdate(req.tenantId, ids, { title, caption, tags, tagMode });
+    res.json({ updated: rows.length });
+  } catch (err) {
+    console.error('Error bulk updating media:', err);
+    res.status(500).json({ error: 'Failed to update media' });
+  }
+});
+
+/**
  * PUT /api/marketing-media/:id
  */
 router.put('/:id', async (req, res) => {

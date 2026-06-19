@@ -57,5 +57,10 @@ export const marketingMediaApi = {
     data: { title?: string; caption?: string; tags?: string }
   ) => api.put<MarketingMediaItem>(`/marketing-media/${id}`, data),
 
+  bulkUpdate: (
+    ids: number[],
+    data: { title?: string; caption?: string; tags?: string; tagMode?: 'append' | 'replace' }
+  ) => api.put<{ updated: number }>('/marketing-media/bulk', { ids, ...data }),
+
   delete: (id: number) => api.delete(`/marketing-media/${id}`),
 };

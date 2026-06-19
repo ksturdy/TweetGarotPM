@@ -57,5 +57,10 @@ export const projectPhotosApi = {
     data: { caption?: string; tags?: string; display_order?: number }
   ) => api.put<ProjectPhoto>(`/project-photos/${id}`, data),
 
+  bulkUpdate: (
+    ids: number[],
+    data: { caption?: string; tags?: string; tagMode?: 'append' | 'replace' }
+  ) => api.put<{ updated: number }>('/project-photos/bulk', { ids, ...data }),
+
   delete: (id: number) => api.delete(`/project-photos/${id}`),
 };

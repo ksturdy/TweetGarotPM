@@ -91,6 +91,22 @@ const ProjectPhoto = {
     return result.rows[0] || null;
   },
 
+  async bulkUpdate(tenantId, ids, { caption, tags, tagMode }) {
+    const result = await db.query(
+      `UPDATE project_photos
+       SET caption = CASE WHEN $1 != '' THEN $1 ELSE caption END,
+           tags = CASE
+             WHEN $2 = '' THEN tags
+             WHEN $3 = 'replace' THEN $2
+             ELSE CASE WHEN COALESCE(tags,'') = '' THEN $2 ELSE tags || ', ' || $2 END
+           END
+       WHERE tenant_id = $4 AND id = ANY($5::int[])
+       RETURNING id`,
+      [caption || '', tags || '', tagMode || 'append', tenantId, ids]
+    );
+    return result.rows;
+  },
+
   async countByProject(projectId) {
     const result = await db.query(
       `SELECT COUNT(*) FROM project_photos WHERE project_id=$1`,

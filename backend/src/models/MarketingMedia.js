@@ -80,6 +80,23 @@ const MarketingMedia = {
     return result.rows[0] || null;
   },
 
+  async bulkUpdate(tenantId, ids, { title, caption, tags, tagMode }) {
+    const result = await db.query(
+      `UPDATE marketing_media
+       SET title   = CASE WHEN $1 != '' THEN $1 ELSE title END,
+           caption = CASE WHEN $2 != '' THEN $2 ELSE caption END,
+           tags = CASE
+             WHEN $3 = '' THEN tags
+             WHEN $4 = 'replace' THEN $3
+             ELSE CASE WHEN COALESCE(tags,'') = '' THEN $3 ELSE tags || ', ' || $3 END
+           END
+       WHERE tenant_id = $5 AND id = ANY($6::int[])
+       RETURNING id`,
+      [title || '', caption || '', tags || '', tagMode || 'append', tenantId, ids]
+    );
+    return result.rows;
+  },
+
   async countUploadedTodayByUser(userId, tenantId) {
     const result = await db.query(
       `SELECT COUNT(*) FROM marketing_media

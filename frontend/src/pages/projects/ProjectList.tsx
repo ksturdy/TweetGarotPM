@@ -31,7 +31,7 @@ const ProjectList: React.FC = () => {
       const raw = sessionStorage.getItem(FILTERS_STORAGE_KEY);
       return raw ? JSON.parse(raw) as {
         searchTerm?: string;
-        statusFilter?: string;
+        statusFilter?: string | string[];
         departmentFilter?: string;
         marketFilter?: string;
         projectManagerFilter?: string;
@@ -48,7 +48,14 @@ const ProjectList: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<string>(savedFilters.sortColumn ?? 'number');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(savedFilters.sortDirection ?? 'desc');
   const [hasUserSorted, setHasUserSorted] = useState(savedFilters.hasUserSorted ?? false);
-  const [statusFilter, setStatusFilter] = useState<string>(savedFilters.statusFilter ?? 'Open');
+  const [statusFilter, setStatusFilter] = useState<string[]>(() => {
+    const saved = savedFilters.statusFilter;
+    if (Array.isArray(saved)) return saved;
+    if (saved && saved !== 'all') return [saved];
+    return ['Open', 'Soft-Closed'];
+  });
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [departmentFilter, setDepartmentFilter] = useState<string>(savedFilters.departmentFilter ?? 'all');
   const [marketFilter, setMarketFilter] = useState<string>(savedFilters.marketFilter ?? 'all');
   const [projectManagerFilter, setProjectManagerFilter] = useState<string>(savedFilters.projectManagerFilter ?? '');
@@ -64,6 +71,16 @@ const ProjectList: React.FC = () => {
       }));
     } catch {}
   }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, sortColumn, sortDirection, hasUserSorted]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusDropdownOpen(false);
+      }
+    };
+    if (statusDropdownOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [statusDropdownOpen]);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -413,7 +430,7 @@ const ProjectList: React.FC = () => {
   // Filter projects based on search term and dropdown filters
   const filteredProjects = (projects || []).filter(project => {
     // Apply dropdown filters first
-    if (statusFilter !== 'all' && project.status !== statusFilter) return false;
+    if (statusFilter.length > 0 && !statusFilter.includes(project.status)) return false;
     if (departmentFilter !== 'all' && project.department_number !== departmentFilter) return false;
     if (marketFilter !== 'all' && project.market !== marketFilter) return false;
     if (projectManagerFilter && project.manager_id !== Number(projectManagerFilter)) return false;
@@ -624,7 +641,7 @@ const ProjectList: React.FC = () => {
 
     const filters: string[] = [];
     if (myProjectsOnly) filters.push('My Projects');
-    if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
+    if (statusFilter.length > 0) filters.push(`Status: ${statusFilter.join(', ')}`);
     if (departmentFilter !== 'all') filters.push(`Dept: ${departmentFilter}`);
     if (marketFilter !== 'all') filters.push(`Market: ${marketFilter}`);
     if (searchTerm) filters.push(`Search: "${searchTerm}"`);
@@ -854,19 +871,45 @@ const ProjectList: React.FC = () => {
             />
           </div>
         </div>
-        <div style={{ minWidth: '150px' }}>
+        <div style={{ minWidth: '160px', position: 'relative' }} ref={statusDropdownRef}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Status</label>
-          <select
+          <button
+            type="button"
             className="form-input"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+            onClick={() => setStatusDropdownOpen(o => !o)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' }}
           >
-            <option value="all">All Statuses</option>
-            {uniqueStatuses.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
+            </span>
+            <span style={{ marginLeft: '0.5rem', flexShrink: 0 }}>▾</span>
+          </button>
+          {statusDropdownOpen && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.375rem', boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: '100%', marginTop: '2px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.875rem', color: '#475569' }}>
+                <input
+                  type="checkbox"
+                  checked={statusFilter.length === 0}
+                  onChange={() => setStatusFilter([])}
+                />
+                All Statuses
+              </label>
+              {uniqueStatuses.map(status => (
+                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', color: '#1e293b' }}>
+                  <input
+                    type="checkbox"
+                    checked={statusFilter.includes(status)}
+                    onChange={() => {
+                      setStatusFilter(prev =>
+                        prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+                      );
+                    }}
+                  />
+                  {status}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ minWidth: '150px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Department</label>
@@ -983,11 +1026,11 @@ const ProjectList: React.FC = () => {
           </div>
         </div>
 
-        {(statusFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || searchTerm) && (
+        {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || searchTerm) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
-              setStatusFilter('all');
+              setStatusFilter([]);
               setDepartmentFilter('all');
               setMarketFilter('all');
               setProjectManagerFilter('');

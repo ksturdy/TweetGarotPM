@@ -20,6 +20,12 @@ const ProjectPhotos: React.FC = () => {
   const [editTags, setEditTags] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkCaption, setBulkCaption] = useState('');
+  const [bulkTags, setBulkTags] = useState('');
+  const [bulkTagMode, setBulkTagMode] = useState<'append' | 'replace'>('append');
 
   const { data: photos = [], isLoading } = useQuery({
     queryKey: ['project-photos', projectId],
@@ -58,6 +64,29 @@ const ProjectPhotos: React.FC = () => {
     },
   });
 
+  const bulkUpdateMutation = useMutation({
+    mutationFn: () =>
+      projectPhotosApi.bulkUpdate(Array.from(selectedIds), {
+        caption: bulkCaption,
+        tags: bulkTags,
+        tagMode: bulkTagMode,
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['project-photos', projectId] });
+      const n = res.data.updated;
+      toast.success(`Updated ${n} photo${n !== 1 ? 's' : ''}`);
+      setBulkModalOpen(false);
+      setBulkCaption('');
+      setBulkTags('');
+      setBulkTagMode('append');
+      setSelectedIds(new Set());
+      setSelectMode(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Bulk update failed');
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => projectPhotosApi.delete(id),
     onSuccess: () => {
@@ -87,6 +116,23 @@ const ProjectPhotos: React.FC = () => {
     const ok = await confirm(`Delete this photo? This cannot be undone.`);
     if (!ok) return;
     deleteMutation.mutate(photo.id);
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkSave = () => {
+    if (!bulkCaption && !bulkTags) {
+      toast.error('Enter a caption or tags to apply');
+      return;
+    }
+    bulkUpdateMutation.mutate();
   };
 
   const openEdit = (photo: ProjectPhoto) => {
@@ -143,6 +189,21 @@ const ProjectPhotos: React.FC = () => {
         >
           {photos.length} photo{photos.length !== 1 ? 's' : ''}
         </span>
+        <button
+          onClick={() => { setSelectMode((s) => !s); setSelectedIds(new Set()); }}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 6,
+            border: '1px solid',
+            borderColor: selectMode ? '#2563eb' : '#d1d5db',
+            background: selectMode ? '#eff6ff' : '#fff',
+            color: selectMode ? '#2563eb' : '#6b7280',
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          {selectMode ? 'Cancel' : 'Select'}
+        </button>
       </div>
 
       {/* Upload strip */}
@@ -324,12 +385,28 @@ const ProjectPhotos: React.FC = () => {
                 background: '#fff',
                 display: 'flex',
                 flexDirection: 'column',
+                outline: selectMode && selectedIds.has(photo.id) ? '3px solid #2563eb' : 'none',
+                outlineOffset: '-1px',
               }}
             >
               <div
                 style={{ position: 'relative', paddingTop: '66%', background: '#f3f4f6', cursor: 'pointer' }}
-                onClick={() => setLightboxPhoto(photo)}
+                onClick={() => selectMode ? toggleSelect(photo.id) : setLightboxPhoto(photo)}
               >
+                {selectMode && (
+                  <div style={{
+                    position: 'absolute', top: 8, right: 8, zIndex: 3,
+                    width: 22, height: 22, borderRadius: 5,
+                    border: '2px solid #fff',
+                    background: selectedIds.has(photo.id) ? '#2563eb' : 'rgba(0,0,0,0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  }}>
+                    {selectedIds.has(photo.id) && (
+                      <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>
+                    )}
+                  </div>
+                )}
                 <img
                   src={resolveMediaUrl(photo.thumb_url || photo.feed_url || photo.url)}
                   alt={photo.caption || photo.file_name}
@@ -528,6 +605,142 @@ const ProjectPhotos: React.FC = () => {
                 }}
               >
                 {updateMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating bulk action bar */}
+      {selectMode && (
+        <div style={{
+          position: 'fixed',
+          bottom: 28,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#1e293b',
+          color: '#fff',
+          borderRadius: 12,
+          padding: '10px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+          zIndex: 500,
+          whiteSpace: 'nowrap',
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 500, marginRight: 4 }}>
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={() => setSelectedIds(new Set(filtered.map((p) => p.id)))}
+            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}
+          >
+            Select all ({filtered.length})
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}
+          >
+            Clear
+          </button>
+          <button
+            onClick={() => setBulkModalOpen(true)}
+            disabled={selectedIds.size === 0}
+            style={{
+              padding: '5px 14px', borderRadius: 6, border: 'none',
+              background: selectedIds.size === 0 ? '#334155' : '#2563eb',
+              color: selectedIds.size === 0 ? '#64748b' : '#fff',
+              fontSize: 12, cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Edit selected
+          </button>
+          <button
+            onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}
+            style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #475569', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Bulk edit modal */}
+      {bulkModalOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setBulkModalOpen(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 12, padding: 28, width: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 600 }}>
+              Edit {selectedIds.size} Photo{selectedIds.size !== 1 ? 's' : ''}
+            </h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6b7280' }}>
+              Leave a field blank to keep existing values unchanged.
+            </p>
+
+            <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 4 }}>Caption</label>
+            <input
+              value={bulkCaption}
+              onChange={(e) => setBulkCaption(e.target.value)}
+              placeholder="Leave blank to keep existing"
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, marginBottom: 16, fontSize: 14, boxSizing: 'border-box' }}
+            />
+
+            <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 4 }}>Tags</label>
+            <input
+              value={bulkTags}
+              onChange={(e) => setBulkTags(e.target.value)}
+              placeholder="e.g. roof, hvac, complete"
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, marginBottom: 12, fontSize: 14, boxSizing: 'border-box' }}
+            />
+
+            {bulkTags && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                <button
+                  onClick={() => setBulkTagMode('append')}
+                  style={{
+                    flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid',
+                    borderColor: bulkTagMode === 'append' ? '#2563eb' : '#d1d5db',
+                    background: bulkTagMode === 'append' ? '#eff6ff' : '#fff',
+                    color: bulkTagMode === 'append' ? '#2563eb' : '#6b7280',
+                    fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  Add to existing tags
+                </button>
+                <button
+                  onClick={() => setBulkTagMode('replace')}
+                  style={{
+                    flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid',
+                    borderColor: bulkTagMode === 'replace' ? '#dc2626' : '#d1d5db',
+                    background: bulkTagMode === 'replace' ? '#fef2f2' : '#fff',
+                    color: bulkTagMode === 'replace' ? '#dc2626' : '#6b7280',
+                    fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  Replace existing tags
+                </button>
+              </div>
+            )}
+            {!bulkTags && <div style={{ marginBottom: 20 }} />}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setBulkModalOpen(false)}
+                style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 14 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkSave}
+                disabled={bulkUpdateMutation.isPending}
+                style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer', fontSize: 14 }}
+              >
+                {bulkUpdateMutation.isPending ? 'Saving…' : `Apply to ${selectedIds.size} photos`}
               </button>
             </div>
           </div>
