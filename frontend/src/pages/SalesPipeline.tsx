@@ -76,9 +76,9 @@ const SalesPipeline: React.FC = () => {
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [myOpportunitiesOnly, setMyOpportunitiesOnly] = useState(locationState?.myItemsOnly ?? false);
   const [myTeamOnly, setMyTeamOnly] = useState(false);
-  const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Awarded', 'Lost', 'Passed']));
+  const [excludedStages, setExcludedStages] = useState<Set<string>>(new Set(['Lost', 'Passed']));
   // Awarded sub-status filter: values are the raw awarded_status string ('' = Not in Vista)
-  const [excludedAwardedStatuses, setExcludedAwardedStatuses] = useState<Set<string>>(new Set());
+  const [excludedAwardedStatuses, setExcludedAwardedStatuses] = useState<Set<string>>(new Set(['In Progress', 'Completed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
 

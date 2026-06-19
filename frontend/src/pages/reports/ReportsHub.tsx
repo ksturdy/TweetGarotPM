@@ -11,6 +11,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import CalendarViewMonthIcon from '@mui/icons-material/CalendarViewMonth';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
@@ -94,6 +95,14 @@ const reports = [
     desc: 'Snapshot-to-snapshot deltas, notes, tasks, and gain/fade per project',
     color: '#0891b2',
     bg: '#ecfeff',
+  },
+  {
+    name: 'Rolling 12 Revenue',
+    Icon: CalendarViewMonthIcon,
+    path: '/reports/rolling-12',
+    desc: 'Secured, awarded, and weighted pursuit revenue across the next 12 months',
+    color: '#2563eb',
+    bg: '#eff6ff',
   },
   {
     name: 'Scheduled Reports',
