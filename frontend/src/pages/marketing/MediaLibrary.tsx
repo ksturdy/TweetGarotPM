@@ -602,12 +602,16 @@ const MediaLibrary: React.FC = () => {
           >
             ✕
           </button>
-          <img
-            src={resolveMediaUrl(lightboxItem.feed_url || lightboxItem.url)}
-            alt={lightboxItem.file_name}
-            style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }}
+          <div
+            style={{ width: '92vw', height: '85vh' }}
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <img
+              src={resolveMediaUrl(lightboxItem.url || lightboxItem.feed_url)}
+              alt={lightboxItem.file_name}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }}
+            />
+          </div>
           {lightboxItem.caption && (
             <p style={{ color: '#e5e7eb', marginTop: 16, fontSize: 15 }}>{lightboxItem.caption}</p>
           )}

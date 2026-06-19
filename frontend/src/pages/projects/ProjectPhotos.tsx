@@ -512,12 +512,16 @@ const ProjectPhotos: React.FC = () => {
           >
             ✕
           </button>
-          <img
-            src={resolveMediaUrl(lightboxPhoto.feed_url || lightboxPhoto.url)}
-            alt={lightboxPhoto.caption || lightboxPhoto.file_name}
-            style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }}
+          <div
+            style={{ width: '92vw', height: '85vh' }}
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <img
+              src={resolveMediaUrl(lightboxPhoto.url || lightboxPhoto.feed_url)}
+              alt={lightboxPhoto.caption || lightboxPhoto.file_name}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }}
+            />
+          </div>
           {lightboxPhoto.caption && (
             <p style={{ color: '#e5e7eb', marginTop: 16, fontSize: 15 }}>{lightboxPhoto.caption}</p>
           )}
