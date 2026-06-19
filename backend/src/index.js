@@ -130,6 +130,8 @@ const projectCostModelRoutes = require('./routes/projectCostModel');
 const costDatabaseRoutes = require('./routes/costDatabase');
 const orgChartRoutes = require('./routes/orgCharts');
 const tradeShowRoutes = require('./routes/tradeShows');
+const projectPhotoRoutes = require('./routes/projectPhotos');
+const marketingMediaRoutes = require('./routes/marketingMedia');
 
 const app = express();
 const server = http.createServer(app);
@@ -188,6 +190,12 @@ app.use(express.urlencoded({ extended: true, limit: '260mb' }));
 // Static files for uploads (only when using local storage)
 // When R2 is enabled, files are served via presigned URLs from download endpoints
 if (!isR2Enabled()) {
+  // Allow cross-origin image loads in local dev (Helmet sets same-origin by default,
+  // which blocks <img src="http://localhost:3001/..."> from a localhost:3000 page)
+  app.use('/uploads', (req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  });
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
   console.log('Using local file storage - serving static files from /uploads');
 } else {
@@ -297,6 +305,8 @@ app.use('/api/projects', projectCostModelRoutes);
 app.use('/api/cost-database', costDatabaseRoutes);
 app.use('/api/org-charts', orgChartRoutes);
 app.use('/api/trade-shows', tradeShowRoutes);
+app.use('/api/project-photos', projectPhotoRoutes);
+app.use('/api/marketing-media', marketingMediaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

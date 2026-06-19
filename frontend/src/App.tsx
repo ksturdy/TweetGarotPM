@@ -60,6 +60,7 @@ import ProposalWizard from './pages/marketing/ProposalWizard';
 import ProjectLocations from './pages/marketing/ProjectLocations';
 import CustomerComparison from './pages/marketing/CustomerComparison';
 import CustomMaps from './pages/marketing/CustomMaps';
+import MediaLibrary from './pages/marketing/MediaLibrary';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
 import EstimateNew from './pages/estimating/EstimateNew';
@@ -101,6 +102,7 @@ import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
 import ProjectCostModel from './pages/projects/ProjectCostModel';
+import ProjectPhotos from './pages/projects/ProjectPhotos';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
 import CostDrillIn from './pages/projects/CostDrillIn';
@@ -397,6 +399,7 @@ const App: React.FC = () => {
                 <Route path="/marketing/project-locations" element={<ProjectLocations />} />
                 <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
                 <Route path="/marketing/custom-maps" element={<CustomMaps />} />
+                <Route path="/marketing/media" element={<MediaLibrary />} />
                 <Route path="/marketing/trade-shows" element={<TradeShowList />} />
                 <Route path="/marketing/trade-shows/create" element={<TradeShowForm />} />
                 <Route path="/marketing/trade-shows/:id" element={<TradeShowDetail />} />
@@ -528,6 +531,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:id/drawings" element={<ProjectDrawings />} />
                 <Route path="/projects/:id/drawings/:drawingId" element={<DrawingDetail />} />
                 <Route path="/projects/:id/cost-model" element={<ProjectCostModel />} />
+                <Route path="/projects/:projectId/photos" element={<ProjectPhotos />} />
               </Routes>
             </Layout>
               </ForemanRoute>

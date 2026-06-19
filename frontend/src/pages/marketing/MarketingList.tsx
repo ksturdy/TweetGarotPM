@@ -93,6 +93,15 @@ const MarketingList: React.FC = () => {
       inDev: false,
     },
     {
+      name: 'Media Library',
+      icon: '🖼️',
+      path: '/marketing/media',
+      desc: 'Photos from marketing and all projects',
+      color: '#7c3aed',
+      ready: true,
+      inDev: false,
+    },
+    {
       name: 'Social Media',
       icon: '📱',
       path: '/marketing/social-media',

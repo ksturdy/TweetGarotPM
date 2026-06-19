@@ -33,6 +33,7 @@ const MODULE_ICONS: Record<string, string> = {
   'weekly-goals': '🎯',
   issues: '⚠️',
   'cost-model': '🔧',
+  photos: '📷',
 };
 
 const MODULES = [
@@ -51,6 +52,7 @@ const MODULES = [
   { path: 'stratus', label: 'Stratus', description: 'Model content and part-level statuses' },
   { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
   { path: 'cost-model', label: 'Cost Model', description: 'Equipment counts and cost data' },
+  { path: 'photos', label: 'Photos', description: 'Project photos and site images' },
 ];
 
 // ── Formatting helpers ──────────────────────────────────────────────
