@@ -11,6 +11,7 @@ const {
   getDurationForValue,
   DEFAULT_DURATION_RULES,
 } = require('../utils/forecastProjections');
+const { getContourMultipliers } = require('../utils/phaseScheduleContours');
 const { generateRolling12PdfBuffer } = require('../utils/rolling12ReportPdfGenerator');
 
 router.use(authenticate);
@@ -54,19 +55,6 @@ function buildColumns(now) {
   return cols;
 }
 
-function distributeOverMonths(amount, startOffset, durationMonths, monthKeys) {
-  const result = {};
-  if (amount <= 0 || durationMonths <= 0) return result;
-  const monthly = amount / durationMonths;
-  for (let i = 0; i < durationMonths; i++) {
-    const idx = startOffset + i;
-    if (idx >= 0 && idx < monthKeys.length) {
-      const key = monthKeys[idx];
-      result[key] = (result[key] || 0) + monthly;
-    }
-  }
-  return result;
-}
 
 function pickMonthlyFromMap(map, monthKeys) {
   const out = {};
@@ -76,7 +64,7 @@ function pickMonthlyFromMap(map, monthKeys) {
 
 // ─── Core data builder ────────────────────────────────────────────────────────
 
-async function buildRolling12Data(tenantId, { departments = [] } = {}) {
+async function buildRolling12Data(tenantId, { departments = [], teams = [] } = {}) {
   const now = startOfMonth(new Date());
   const columns = buildColumns(now);
   const monthKeys = columns.map(c => c.key);
@@ -86,8 +74,36 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
   const awardedByMonth = init();
   const pursuitsByMonth = init();
 
+  // Resolve team filter for secured contracts via the Vista employee linkage:
+  // vp_contracts.employee_number → vp_employees.employee_number → vp_employees.linked_employee_id → team_members
+  let teamContractNumbers = null;
+  let teamEmployeeIds = null;
+  if (teams.length > 0) {
+    const [contractRes, empRes] = await Promise.all([
+      db.query(
+        `SELECT DISTINCT vc.contract_number
+         FROM vp_contracts vc
+         JOIN vp_employees ve
+           ON ve.employee_number = NULLIF(vc.employee_number, '')::integer
+           AND ve.linked_employee_id IS NOT NULL
+         JOIN team_members tm ON tm.employee_id = ve.linked_employee_id
+         WHERE vc.tenant_id = $1 AND tm.team_id = ANY($2::int[])`,
+        [tenantId, teams]
+      ),
+      db.query(
+        `SELECT DISTINCT tm.employee_id FROM team_members tm WHERE tm.team_id = ANY($1::int[])`,
+        [teams]
+      ),
+    ]);
+    teamContractNumbers = new Set(contractRes.rows.map(r => r.contract_number));
+    teamEmployeeIds = new Set(empRes.rows.map(r => r.employee_id));
+  }
+
   // ── Secured: active Vista contracts ───────────────────────────────────────
-  const contracts = await VistaData.getAllContracts({}, tenantId);
+  let contracts = await VistaData.getAllContracts({}, tenantId);
+  if (teamContractNumbers !== null) {
+    contracts = contracts.filter(c => teamContractNumbers.has(c.contract_number));
+  }
   const revenueResult = buildRevenueProjections(
     contracts,
     { status: 'all', departments },
@@ -122,14 +138,21 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
     .sort((a, b) => b.backlog - a.backlog);
 
   // ── Awarded & Pursuits: from opportunities ────────────────────────────────
+  const oppsParams = [tenantId];
+  const oppsTeamClause = teamEmployeeIds !== null
+    ? (() => { oppsParams.push([...teamEmployeeIds]); return `AND o.assigned_to = ANY($${oppsParams.length}::int[])`; })()
+    : '';
+
   const oppsRes = await db.query(
     `SELECT
        o.id, o.title, o.client_name, o.client_company,
        o.estimated_value,
        o.estimated_start_date,
+       o.estimated_end_date,
        o.estimated_duration_days,
        o.user_adjusted_start_date,
        o.user_adjusted_duration_months,
+       o.contour_type,
        o.awarded_status,
        ps.name AS stage_name,
        ps.probability AS stage_probability_label
@@ -137,8 +160,9 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
      JOIN pipeline_stages ps ON o.stage_id = ps.id
      WHERE o.tenant_id = $1
        AND ps.name NOT IN ('Lost', 'Passed')
+       ${oppsTeamClause}
      ORDER BY o.estimated_value DESC NULLS LAST`,
-    [tenantId]
+    oppsParams
   );
 
   const awardedProjects = [];
@@ -155,21 +179,40 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
     );
     if (startOff >= MONTHS) continue;
 
+    // Duration: user-adjusted months → end date → duration days → value-based default
     let duration;
     if (opp.user_adjusted_duration_months) {
-      duration = Math.max(1, opp.user_adjusted_duration_months);
+      duration = Math.max(1, Number(opp.user_adjusted_duration_months));
+    } else if (opp.estimated_end_date) {
+      const endOff = parseDateToOffset(opp.estimated_end_date, now);
+      duration = endOff != null ? Math.max(1, endOff - startOff) : getDurationForValue(value, DEFAULT_DURATION_RULES);
     } else if (opp.estimated_duration_days) {
       duration = Math.max(1, Math.round(opp.estimated_duration_days / 30));
     } else {
       duration = getDurationForValue(value, DEFAULT_DURATION_RULES);
     }
 
+    const contour = opp.contour_type || 'flat';
+    const multipliers = getContourMultipliers(duration, contour);
     const isWon = opp.stage_name === 'Won' || opp.stage_name === 'Awarded';
     const client = opp.client_company || opp.client_name || '';
 
+    function distributeWithContour(amount) {
+      const dist = {};
+      const baseMonthly = amount / duration;
+      for (let i = 0; i < duration; i++) {
+        const idx = startOff + i;
+        if (idx >= 0 && idx < monthKeys.length) {
+          const key = monthKeys[idx];
+          dist[key] = (dist[key] || 0) + baseMonthly * multipliers[i];
+        }
+      }
+      return dist;
+    }
+
     if (isWon) {
       if (opp.awarded_status === 'Completed') continue;
-      const dist = distributeOverMonths(value, startOff, duration, monthKeys);
+      const dist = distributeWithContour(value);
       for (const [key, val] of Object.entries(dist)) {
         awardedByMonth[key] = (awardedByMonth[key] || 0) + val;
       }
@@ -185,7 +228,7 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
     } else {
       const prob = probWeight(opp.stage_probability_label);
       const weighted = value * prob;
-      const dist = distributeOverMonths(weighted, startOff, duration, monthKeys);
+      const dist = distributeWithContour(weighted);
       for (const [key, val] of Object.entries(dist)) {
         pursuitsByMonth[key] = (pursuitsByMonth[key] || 0) + val;
       }
@@ -221,27 +264,56 @@ async function buildRolling12Data(tenantId, { departments = [] } = {}) {
 // GET /api/reports/rolling-12/filters
 router.get('/filters', async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT DISTINCT department_code
-       FROM vp_contracts
-       WHERE tenant_id = $1 AND department_code IS NOT NULL AND department_code != ''
-       ORDER BY department_code`,
-      [req.tenantId]
-    );
-    res.json({ departments: result.rows.map(r => r.department_code) });
+    const [deptRes, teamRes] = await Promise.all([
+      db.query(
+        `SELECT DISTINCT department_code
+         FROM vp_contracts
+         WHERE tenant_id = $1 AND department_code IS NOT NULL AND department_code != ''
+         ORDER BY department_code`,
+        [req.tenantId]
+      ),
+      db.query(
+        `SELECT id, name, color
+         FROM teams
+         WHERE tenant_id = $1 AND is_active = true
+         ORDER BY name`,
+        [req.tenantId]
+      ),
+    ]);
+    res.json({
+      departments: deptRes.rows.map(r => r.department_code),
+      teams: teamRes.rows,
+    });
   } catch (err) {
     console.error('Error fetching rolling-12 filters:', err);
     res.status(500).json({ error: 'Failed to fetch filters' });
   }
 });
 
+async function resolveTeamNames(teamIds, tenantId) {
+  if (!teamIds || !teamIds.length) return [];
+  const res = await db.query(
+    `SELECT id, name FROM teams WHERE id = ANY($1::int[]) AND tenant_id = $2 ORDER BY name`,
+    [teamIds, tenantId]
+  );
+  return res.rows.map(r => r.name);
+}
+
+function parseFilters(query) {
+  const departments = query.departments
+    ? String(query.departments).split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  const teams = query.teams
+    ? String(query.teams).split(',').map(s => parseInt(s, 10)).filter(n => !isNaN(n))
+    : [];
+  return { departments, teams };
+}
+
 // GET /api/reports/rolling-12
 router.get('/', async (req, res) => {
   try {
-    const departments = req.query.departments
-      ? String(req.query.departments).split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-    const data = await buildRolling12Data(req.tenantId, { departments });
+    const filters = parseFilters(req.query);
+    const data = await buildRolling12Data(req.tenantId, filters);
     res.json(data);
   } catch (err) {
     console.error('Error building rolling-12 report:', err);
@@ -252,15 +324,16 @@ router.get('/', async (req, res) => {
 // GET /api/reports/rolling-12/pdf-download
 router.get('/pdf-download', async (req, res) => {
   try {
-    const departments = req.query.departments
-      ? String(req.query.departments).split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-    const data = await buildRolling12Data(req.tenantId, { departments });
-    const pdfBuffer = await generateRolling12PdfBuffer(data, { departments });
+    const filters = parseFilters(req.query);
+    const [data, teamNames] = await Promise.all([
+      buildRolling12Data(req.tenantId, filters),
+      resolveTeamNames(filters.teams, req.tenantId),
+    ]);
+    const pdfBytes = await generateRolling12PdfBuffer(data, { ...filters, teamNames });
     const dateStr = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Rolling-12-Revenue-${dateStr}.pdf"`);
-    res.send(pdfBuffer);
+    res.send(Buffer.from(pdfBytes));
   } catch (err) {
     console.error('Error generating rolling-12 PDF:', err);
     res.status(500).json({ error: 'Failed to generate PDF' });
@@ -270,10 +343,11 @@ router.get('/pdf-download', async (req, res) => {
 // GET /api/reports/rolling-12/excel-download
 router.get('/excel-download', async (req, res) => {
   try {
-    const departments = req.query.departments
-      ? String(req.query.departments).split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-    const data = await buildRolling12Data(req.tenantId, { departments });
+    const { departments, teams } = parseFilters(req.query);
+    const [data, teamNames] = await Promise.all([
+      buildRolling12Data(req.tenantId, { departments, teams }),
+      resolveTeamNames(teams, req.tenantId),
+    ]);
     const { columns, secured, awarded, pursuits, secured_projects, awarded_projects, pursuit_projects } = data;
 
     const totalByMonth = Object.fromEntries(
@@ -295,7 +369,11 @@ router.get('/excel-download', async (req, res) => {
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF1E293B' } };
     titleRow.height = 24;
 
-    const dateRow = ws.addRow([`Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}${departments.length ? `  |  Dept: ${departments.join(', ')}` : ''}`]);
+    const filterLabel = [
+      departments.length ? `Dept: ${departments.join(', ')}` : '',
+      teamNames.length ? `Team: ${teamNames.join(', ')}` : '',
+    ].filter(Boolean).join('  |  ');
+    const dateRow = ws.addRow([`Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}${filterLabel ? `  |  ${filterLabel}` : ''}`]);
     ws.mergeCells(2, 1, 2, columns.length + 2);
     dateRow.getCell(1).font = { size: 10, color: { argb: 'FF64748B' } };
 

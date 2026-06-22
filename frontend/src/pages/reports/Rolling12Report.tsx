@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -13,6 +13,7 @@ import { Bar } from 'react-chartjs-2';
 import {
   rolling12ReportApi,
   Rolling12Data,
+  Rolling12Team,
   SecuredProject,
   AwardedProject,
   PursuitProject,
@@ -58,6 +59,7 @@ function buildSummaryRows(data: Rolling12Data) {
 
 const Rolling12Report: React.FC = () => {
   const [deptFilter, setDeptFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<number[]>([]);
   const [excelLoading, setExcelLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -68,8 +70,8 @@ const Rolling12Report: React.FC = () => {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['rolling12Report', deptFilter],
-    queryFn: () => rolling12ReportApi.get(deptFilter).then(r => r.data),
+    queryKey: ['rolling12Report', deptFilter, teamFilter],
+    queryFn: () => rolling12ReportApi.get(deptFilter, teamFilter).then(r => r.data),
   });
 
   const rows = useMemo(() => (data ? buildSummaryRows(data) : null), [data]);
@@ -84,6 +86,7 @@ const Rolling12Report: React.FC = () => {
   }, [data, deptFilter]);
 
   const deptFilterActive = deptFilter.length > 0;
+  const teamFilterActive = teamFilter.length > 0;
 
   const chartData = rows
     ? {
@@ -133,7 +136,7 @@ const Rolling12Report: React.FC = () => {
   const handleExcel = async () => {
     setExportError(null);
     setExcelLoading(true);
-    try { await rolling12ReportApi.downloadExcel(deptFilter); }
+    try { await rolling12ReportApi.downloadExcel(deptFilter, teamFilter); }
     catch (e: any) { setExportError(e?.response?.data?.error || e?.message || 'Export failed'); }
     finally { setExcelLoading(false); }
   };
@@ -141,7 +144,7 @@ const Rolling12Report: React.FC = () => {
   const handlePdf = async () => {
     setExportError(null);
     setPdfLoading(true);
-    try { await rolling12ReportApi.downloadPdf(deptFilter); }
+    try { await rolling12ReportApi.downloadPdf(deptFilter, teamFilter); }
     catch (e: any) { setExportError(e?.response?.data?.error || e?.message || 'PDF failed'); }
     finally { setPdfLoading(false); }
   };
@@ -149,6 +152,11 @@ const Rolling12Report: React.FC = () => {
   const toggleDept = (code: string) =>
     setDeptFilter(prev =>
       prev.includes(code) ? prev.filter(d => d !== code) : [...prev, code]
+    );
+
+  const toggleTeam = (id: number) =>
+    setTeamFilter(prev =>
+      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
     );
 
   return (
@@ -181,25 +189,27 @@ const Rolling12Report: React.FC = () => {
         </div>
       </div>
 
-      {/* Department filter */}
-      {filtersData && filtersData.departments.length > 0 && (
-        <div className="card" style={{ padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
-            Filter by Department
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
-            <button
-              onClick={() => setDeptFilter([])}
-              style={pillStyle(deptFilter.length === 0)}
-            >
-              All
-            </button>
-            {filtersData.departments.map(d => (
-              <button key={d} onClick={() => toggleDept(d)} style={pillStyle(deptFilter.includes(d))}>
-                {d}
-              </button>
-            ))}
-          </div>
+      {/* Filters */}
+      {filtersData && (filtersData.departments.length > 0 || (filtersData.teams?.length ?? 0) > 0) && (
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {filtersData.departments.length > 0 && (
+            <FilterDropdown
+              label="Department"
+              selected={deptFilter}
+              options={filtersData.departments.map(d => ({ key: d, label: d }))}
+              onToggle={key => toggleDept(key)}
+              onClear={() => setDeptFilter([])}
+            />
+          )}
+          {(filtersData.teams?.length ?? 0) > 0 && (
+            <FilterDropdown
+              label="Team"
+              selected={teamFilter.map(String)}
+              options={(filtersData.teams ?? []).map((t: Rolling12Team) => ({ key: String(t.id), label: t.name, color: t.color }))}
+              onToggle={key => toggleTeam(Number(key))}
+              onClear={() => setTeamFilter([])}
+            />
+          )}
         </div>
       )}
 
@@ -281,7 +291,7 @@ const Rolling12Report: React.FC = () => {
 
           {/* ── Awarded detail ───────────────────────────────────────────── */}
           <DetailSection
-            title={`Awarded Opportunities (${data.awarded_projects.length})${deptFilterActive ? ' — dept filter n/a' : ''}`}
+            title={`Awarded Opportunities (${data.awarded_projects.length})${deptFilterActive && !teamFilterActive ? ' — dept filter n/a' : ''}`}
             accentColor="#065F46"
             textColor="#065F46"
             bgAlt="#ECFDF5"
@@ -308,7 +318,7 @@ const Rolling12Report: React.FC = () => {
 
           {/* ── Pursuits detail ──────────────────────────────────────────── */}
           <DetailSection
-            title={`Weighted Pursuits (${data.pursuit_projects.length})${deptFilterActive ? ' — dept filter n/a' : ''}`}
+            title={`Weighted Pursuits (${data.pursuit_projects.length})${deptFilterActive && !teamFilterActive ? ' — dept filter n/a' : ''}`}
             accentColor="#92400E"
             textColor="#92400E"
             bgAlt="#FFFBEB"
@@ -345,15 +355,101 @@ const Rolling12Report: React.FC = () => {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-const pillStyle = (active: boolean): React.CSSProperties => ({
-  fontSize: '0.72rem',
-  padding: '0.2rem 0.55rem',
-  borderRadius: '999px',
-  border: active ? '2px solid #2563eb' : '1px solid #cbd5e1',
-  background: active ? '#eff6ff' : '#fff',
-  color: active ? '#1e40af' : '#475569',
-  cursor: 'pointer',
+const FilterDropdown: React.FC<{
+  label: string;
+  selected: string[];
+  options: { key: string; label: string; color?: string }[];
+  onToggle: (key: string) => void;
+  onClear: () => void;
+}> = ({ label, selected, options, onToggle, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const triggerLabel = selected.length === 0
+    ? label
+    : `${label}: ${selected.map(k => options.find(o => o.key === k)?.label ?? k).join(', ')}`;
+
+  const isActive = selected.length > 0;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          fontSize: '0.78rem',
+          padding: '0.3rem 0.65rem',
+          borderRadius: '6px',
+          border: isActive ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+          background: isActive ? '#eff6ff' : '#fff',
+          color: isActive ? '#1e40af' : '#475569',
+          cursor: 'pointer',
+          fontWeight: isActive ? 600 : 400,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          maxWidth: 260,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{triggerLabel}</span>
+        <span style={{ fontSize: '0.55rem', flexShrink: 0 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          left: 0,
+          zIndex: 200,
+          background: '#fff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          minWidth: 170,
+          maxHeight: 260,
+          overflowY: 'auto',
+          padding: '0.25rem 0',
+        }}>
+          <button onClick={() => { onClear(); setOpen(false); }} style={ddItemStyle(selected.length === 0)}>
+            All
+          </button>
+          {options.map(opt => (
+            <button key={opt.key} onClick={() => onToggle(opt.key)} style={ddItemStyle(selected.includes(opt.key))}>
+              {opt.color && (
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+              )}
+              <span style={{ flex: 1 }}>{opt.label}</span>
+              {selected.includes(opt.key) && <span style={{ color: '#2563eb', fontSize: '0.75rem' }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ddItemStyle = (active: boolean): React.CSSProperties => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  width: '100%',
+  padding: '0.38rem 0.75rem',
+  border: 'none',
+  background: active ? '#eff6ff' : 'transparent',
+  color: active ? '#1e40af' : '#374151',
+  fontSize: '0.78rem',
   fontWeight: active ? 600 : 400,
+  cursor: 'pointer',
+  textAlign: 'left',
 });
 
 const Kpi: React.FC<{ label: string; value: string; color: string; bold?: boolean }> = ({ label, value, color, bold }) => (

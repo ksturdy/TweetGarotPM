@@ -126,9 +126,10 @@ function buildChartSvg(data) {
 
 function buildHtml(data, filters) {
   const { columns, secured, awarded, pursuits, secured_projects, awarded_projects, pursuit_projects } = data;
-  const deptLabel = (filters.departments || []).length
-    ? `Departments: ${filters.departments.join(', ')}`
-    : 'All Departments';
+  const filterParts = [];
+  if ((filters.departments || []).length) filterParts.push(`Dept: ${filters.departments.join(', ')}`);
+  if ((filters.teamNames || []).length) filterParts.push(`Team: ${filters.teamNames.join(', ')}`);
+  const deptLabel = filterParts.length ? filterParts.join('  ·  ') : 'All Departments / Teams';
   const genDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // Aggregate totals

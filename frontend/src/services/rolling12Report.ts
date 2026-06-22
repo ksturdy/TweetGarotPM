@@ -49,23 +49,34 @@ export interface Rolling12Data {
   pursuit_projects: PursuitProject[];
 }
 
-export interface Rolling12Filters {
-  departments: string[];
+export interface Rolling12Team {
+  id: number;
+  name: string;
+  color: string;
 }
 
-const buildParams = (departments: string[]) =>
-  departments.length ? `?departments=${departments.join(',')}` : '';
+export interface Rolling12Filters {
+  departments: string[];
+  teams: Rolling12Team[];
+}
+
+const buildParams = (departments: string[], teams: number[]) => {
+  const parts: string[] = [];
+  if (departments.length) parts.push(`departments=${departments.join(',')}`);
+  if (teams.length) parts.push(`teams=${teams.join(',')}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+};
 
 export const rolling12ReportApi = {
   getFilters: () =>
     api.get<Rolling12Filters>('/reports/rolling-12/filters'),
 
-  get: (departments: string[] = []) =>
-    api.get<Rolling12Data>(`/reports/rolling-12${buildParams(departments)}`),
+  get: (departments: string[] = [], teams: number[] = []) =>
+    api.get<Rolling12Data>(`/reports/rolling-12${buildParams(departments, teams)}`),
 
-  downloadExcel: async (departments: string[] = []) => {
+  downloadExcel: async (departments: string[] = [], teams: number[] = []) => {
     const response = await api.get(
-      `/reports/rolling-12/excel-download${buildParams(departments)}`,
+      `/reports/rolling-12/excel-download${buildParams(departments, teams)}`,
       { responseType: 'blob' }
     );
     const url = URL.createObjectURL(
@@ -82,9 +93,9 @@ export const rolling12ReportApi = {
     URL.revokeObjectURL(url);
   },
 
-  downloadPdf: async (departments: string[] = []) => {
+  downloadPdf: async (departments: string[] = [], teams: number[] = []) => {
     const response = await api.get(
-      `/reports/rolling-12/pdf-download${buildParams(departments)}`,
+      `/reports/rolling-12/pdf-download${buildParams(departments, teams)}`,
       { responseType: 'blob' }
     );
     const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
