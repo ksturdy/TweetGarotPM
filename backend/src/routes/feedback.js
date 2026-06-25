@@ -216,6 +216,22 @@ router.put('/:id', async (req, res) => {
 
           // Send email to submitter
           if (feedback.submitter_email) {
+            const comments = await Feedback.getComments(feedback.id);
+            const commentsHtml = comments.length > 0
+              ? `<div style="margin-top:20px;">
+                  <div style="font-weight:600;color:#6b7280;margin-bottom:10px;text-transform:uppercase;font-size:12px;">Comments</div>
+                  ${comments.map(c => `
+                  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:8px;">
+                    <div style="font-weight:600;font-size:13px;color:#1f2937;">${c.commenter_name}</div>
+                    <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">${new Date(c.created_at).toLocaleString()}</div>
+                    <div style="color:#374151;">${c.comment.replace(/\n/g, '<br>')}</div>
+                  </div>`).join('')}
+                </div>`
+              : '';
+            const commentsText = comments.length > 0
+              ? '\n\nComments:\n' + comments.map(c => `${c.commenter_name}: ${c.comment}`).join('\n\n')
+              : '';
+
             const html = `
 <!DOCTYPE html>
 <html>
@@ -243,6 +259,7 @@ router.put('/:id', async (req, res) => {
     <div class="info-row"><span class="info-label">Status:</span><span class="info-value">${oldLabel} → ${newLabel}</span></div>
     <div class="info-row"><span class="info-label">Type:</span><span class="info-value">${feedback.type || '-'}</span></div>
     <div class="info-row"><span class="info-label">Module:</span><span class="info-value">${feedback.module || '-'}</span></div>
+    ${commentsHtml}
     ${(process.env.APP_URL || process.env.FRONTEND_URL) ? `<p><a href="${process.env.APP_URL || process.env.FRONTEND_URL}/feedback" class="btn">View in TITAN</a></p>` : ''}
   </div>
   <div class="footer">
@@ -255,7 +272,7 @@ router.put('/:id', async (req, res) => {
               to: feedback.submitter_email,
               subject: `[TITAN] Feedback "${feedback.title}" — ${newLabel}`,
               html,
-              text: `Your feedback "${feedback.title}" was updated from ${oldLabel} to ${newLabel}.`,
+              text: `Your feedback "${feedback.title}" was updated from ${oldLabel} to ${newLabel}.${commentsText}`,
             });
           }
         } catch (err) {
