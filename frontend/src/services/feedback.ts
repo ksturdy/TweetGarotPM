@@ -172,8 +172,10 @@ export const MODULE_OPTIONS = [
   'Accounts',
   'Projects',
   'Field',
+  'Labor',
   'Safety',
   'Risk Management',
+  'Reports',
   'Administration',
   'HR',
   'Users',
@@ -184,17 +186,19 @@ export const MODULE_OPTIONS = [
 
 // Submodule options by module
 export const SUBMODULE_OPTIONS: Record<string, string[]> = {
-  'Dashboard': ['Overview', 'Widgets', 'Reports'],
-  'Sales': ['Pipeline', 'Campaigns', 'Marketing'],
-  'Estimating': ['Estimates', 'Budgets', 'Cost Model', 'Cost Database'],
-  'Accounts': ['Overview', 'Customers', 'Contacts', 'Vendors', 'Work Orders', 'Teams'],
-  'Projects': ['Project List', 'Project Details', 'RFIs', 'Submittals', 'Change Orders', 'Daily Reports', 'Schedule', 'Specifications', 'Drawings'],
-  'Field': ['Dashboard', 'Daily Reports', 'Purchase Orders', 'Fitting Orders', 'Safety JSA', 'PDF Generation'],
+  'Dashboard': ['Overview', 'Widgets'],
+  'Sales': ['Opportunity Search', 'Opportunities', 'Campaigns', 'Marketing'],
+  'Estimating': ['Estimates', 'Takeoffs', 'Budgets', 'Cost Model', 'Cost Database'],
+  'Accounts': ['Customers', 'Contacts', 'Vendors', 'Work Orders', 'Teams'],
+  'Projects': ['Project List', 'Project Details', 'Financial', 'RFIs', 'Submittals', 'Change Orders', 'Daily Reports', 'Schedule', 'Phase Schedule', 'GC Schedule', 'Specifications', 'Drawings', 'Photos'],
+  'Field': ['Daily Reports', 'Purchase Orders', 'Fitting Orders', 'Safety JSA', 'Near Miss', 'RFIs', 'Issues', 'Vendors'],
+  'Labor': ['Board', 'Calendar', 'Assignments'],
   'Safety': ['Safety Dashboard', 'Incidents', 'Inspections'],
-  'Risk Management': ['Risk Register', 'Risk Assessment'],
+  'Risk Management': ['Contract Reviews'],
+  'Reports': ['Executive Report', 'Rolling 12', 'PM Report', 'PM Workload', 'Cash Flow', 'Backlog Fit', 'Weekly Sales', 'Buyout Metric', 'Scheduled Reports'],
   'HR': ['Dashboard', 'Employees', 'Departments', 'Locations'],
   'Users': ['User Management', 'Role Management', 'Permissions'],
-  'Settings': ['General', 'Vista Data'],
+  'Settings': ['General', 'Vista Data', 'EST Products'],
 };
 
 export default feedbackService;
