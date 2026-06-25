@@ -3,7 +3,11 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import securityApi from '../../services/security';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
-const TwoFactorSetup: React.FC = () => {
+interface Props {
+  onComplete?: () => void;
+}
+
+const TwoFactorSetup: React.FC<Props> = ({ onComplete }) => {
   const { toast } = useTitanFeedback();
   const [step, setStep] = useState<'status' | 'setup' | 'verify' | 'backup-codes'>('status');
   const [secret, setSecret] = useState('');
@@ -276,7 +280,10 @@ const TwoFactorSetup: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setStep('status')}
+          onClick={() => {
+            setStep('status');
+            onComplete?.();
+          }}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           Done

@@ -11,6 +11,8 @@ interface User {
   hrAccess?: string;
   forcePasswordChange?: boolean;
   twoFactorEnabled?: boolean;
+  twoFactorRequired?: boolean;
+  mustSetup2FA?: boolean;
   tenantId?: number;
   isPlatformAdmin?: boolean;
 }
@@ -72,6 +74,7 @@ interface AuthContextType {
   signup: (data: SignupData) => Promise<void>;
   hasFeature: (feature: string) => boolean;
   isWithinLimit: (limitName: string, currentCount: number) => boolean;
+  clearMustSetup2FA: () => void;
 }
 
 interface RegisterData {
@@ -138,6 +141,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           hrAccess: res.data.hr_access,
           forcePasswordChange: res.data.force_password_change,
           twoFactorEnabled: res.data.two_factor_enabled,
+          twoFactorRequired: res.data.two_factor_required,
+          mustSetup2FA: !!res.data.two_factor_required && !res.data.two_factor_enabled,
           tenantId: res.data.tenant_id,
           isPlatformAdmin: res.data.is_platform_admin || false,
         });
@@ -171,6 +176,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userId: res.data.userId,
         email: res.data.email,
       };
+    }
+
+    // Check if 2FA setup is required before accessing the app
+    if (res.data.force2FASetup) {
+      console.log('[auth-debug] login: 2FA setup required');
+      localStorage.setItem('token', res.data.token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+      setUser({ ...res.data.user, mustSetup2FA: true });
+      setTenant(res.data.tenant);
+      return { requires2FA: false, force2FASetup: true };
     }
 
     // Normal login (no 2FA)
@@ -267,6 +282,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return currentCount < limit;
   }, [tenant]);
 
+  const clearMustSetup2FA = useCallback(() => {
+    setUser((prev) => prev ? { ...prev, mustSetup2FA: false, twoFactorEnabled: true } : prev);
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -280,6 +299,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signup,
       hasFeature,
       isWithinLimit,
+      clearMustSetup2FA,
     }}>
       {children}
     </AuthContext.Provider>

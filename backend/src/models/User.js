@@ -44,7 +44,7 @@ const User = {
   async findById(id) {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
-              two_factor_enabled, force_password_change, password_changed_at,
+              two_factor_enabled, two_factor_required, force_password_change, password_changed_at,
               last_login_at, tenant_id, is_platform_admin, created_at
        FROM users WHERE id = $1`,
       [id]
@@ -58,7 +58,7 @@ const User = {
   async findByIdAndTenant(id, tenantId) {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
-              two_factor_enabled, force_password_change, password_changed_at,
+              two_factor_enabled, two_factor_required, force_password_change, password_changed_at,
               last_login_at, tenant_id, is_platform_admin, created_at
        FROM users WHERE id = $1 AND tenant_id = $2`,
       [id, tenantId]
@@ -72,7 +72,7 @@ const User = {
   async findAll() {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
-              two_factor_enabled, force_password_change, password_changed_at,
+              two_factor_enabled, two_factor_required, force_password_change, password_changed_at,
               last_login_at, tenant_id, created_at
        FROM users ORDER BY last_name, first_name`
     );
@@ -85,7 +85,7 @@ const User = {
   async findAllByTenant(tenantId) {
     const result = await db.query(
       `SELECT id, email, first_name, last_name, role, hr_access, is_active,
-              two_factor_enabled, force_password_change, password_changed_at,
+              two_factor_enabled, two_factor_required, force_password_change, password_changed_at,
               last_login_at, last_seen_at, tenant_id, created_at
        FROM users WHERE tenant_id = $1 ORDER BY last_name, first_name`,
       [tenantId]
@@ -297,6 +297,16 @@ const User = {
        WHERE id = $1
        RETURNING id, email, two_factor_enabled`,
       [id]
+    );
+    return result.rows[0];
+  },
+
+  async setTwoFactorRequired(id, required) {
+    const result = await db.query(
+      `UPDATE users SET two_factor_required = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING id, email, two_factor_required`,
+      [required, id]
     );
     return result.rows[0];
   },

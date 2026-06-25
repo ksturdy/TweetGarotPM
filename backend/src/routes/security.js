@@ -375,6 +375,39 @@ router.post(
   }
 );
 
+// Require or un-require 2FA for a user (HR Admin only)
+router.post(
+  '/2fa/require/:userId',
+  authenticate,
+  authorizeHR('write'),
+  async (req, res, next) => {
+    try {
+      const { userId } = req.params;
+      const { required } = req.body;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      await User.setTwoFactorRequired(userId, !!required);
+
+      await User.logSecurityEvent(
+        userId,
+        required ? '2fa_required' : '2fa_unrequired',
+        req.user.id,
+        getIpAddress(req),
+        req.headers['user-agent'],
+        { set_by_admin: true }
+      );
+
+      res.json({ message: required ? '2FA is now required for this user' : '2FA requirement removed for this user' });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Disable 2FA for user (HR Admin only)
 router.post(
   '/2fa/disable/:userId',

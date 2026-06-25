@@ -163,6 +163,18 @@ const UserManagement: React.FC = () => {
     },
   });
 
+  const require2FAMutation = useMutation({
+    mutationFn: ({ userId, required }: { userId: number; required: boolean }) =>
+      securityApi.requireUserTwoFactor(userId, required),
+    onSuccess: (_data, { required }) => {
+      toast.success(required ? '2FA is now required for this user' : '2FA requirement removed');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      toast.error(`Failed to update 2FA requirement: ${err.response?.data?.error || 'Unknown error'}`);
+    },
+  });
+
   const forcePasswordChangeMutation = useMutation({
     mutationFn: (userId: number) => securityApi.forcePasswordChange(userId),
     onSuccess: () => {
@@ -218,6 +230,17 @@ const UserManagement: React.FC = () => {
     const ok = await confirm({ message: `Disable 2FA for ${user.first_name} ${user.last_name}?\n\nThis will remove their two-factor authentication protection.`, danger: true });
     if (ok) {
       disable2FAMutation.mutate(user.id);
+    }
+  };
+
+  const handleRequire2FA = async (user: User) => {
+    const isRequired = (user as any).two_factor_required;
+    if (isRequired) {
+      const ok = await confirm(`Remove 2FA requirement for ${user.first_name} ${user.last_name}?\n\nThey will no longer be required to use 2FA.`);
+      if (ok) require2FAMutation.mutate({ userId: user.id, required: false });
+    } else {
+      const ok = await confirm(`Require 2FA for ${user.first_name} ${user.last_name}?\n\nThey will be prompted to set up 2FA on next login if they haven't already.`);
+      if (ok) require2FAMutation.mutate({ userId: user.id, required: true });
     }
   };
 
@@ -591,10 +614,19 @@ const UserManagement: React.FC = () => {
                         </select>
                       </td>
                       <td>
-                        <span className={`sales-stage-badge ${(user as any).two_factor_enabled ? 'awarded' : 'closed'}`}>
-                          <span className="sales-stage-dot"></span>
-                          {(user as any).two_factor_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        {(user as any).two_factor_enabled ? (
+                          <span className="sales-stage-badge awarded">
+                            <span className="sales-stage-dot"></span>Active
+                          </span>
+                        ) : (user as any).two_factor_required ? (
+                          <span className="sales-stage-badge quoted">
+                            <span className="sales-stage-dot"></span>Required
+                          </span>
+                        ) : (
+                          <span className="sales-stage-badge closed">
+                            <span className="sales-stage-dot"></span>Off
+                          </span>
+                        )}
                       </td>
                       <td>
                         <select
@@ -651,10 +683,19 @@ const UserManagement: React.FC = () => {
                         </span>
                       </td>
                       <td>
-                        <span className={`sales-stage-badge ${(user as any).two_factor_enabled ? 'awarded' : 'closed'}`}>
-                          <span className="sales-stage-dot"></span>
-                          {(user as any).two_factor_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
+                        {(user as any).two_factor_enabled ? (
+                          <span className="sales-stage-badge awarded">
+                            <span className="sales-stage-dot"></span>Active
+                          </span>
+                        ) : (user as any).two_factor_required ? (
+                          <span className="sales-stage-badge quoted">
+                            <span className="sales-stage-dot"></span>Required
+                          </span>
+                        ) : (
+                          <span className="sales-stage-badge closed">
+                            <span className="sales-stage-dot"></span>Off
+                          </span>
+                        )}
                       </td>
                       <td>
                         <span className={`sales-stage-badge ${user.is_active ? 'awarded' : 'closed'}`}>
@@ -679,6 +720,13 @@ const UserManagement: React.FC = () => {
                             <>
                               <button className="sales-action-btn" onClick={() => handleResetPassword(user)} title="Reset password (generates temporary password)">
                                 🔐
+                              </button>
+                              <button
+                                className="sales-action-btn"
+                                onClick={() => handleRequire2FA(user)}
+                                title={(user as any).two_factor_required ? 'Remove 2FA requirement' : 'Require 2FA for this user'}
+                              >
+                                {(user as any).two_factor_required ? '🔓' : '🔒'}
                               </button>
                               {(user as any).two_factor_enabled && (
                                 <button className="sales-action-btn" onClick={() => handleDisable2FA(user)} title="Disable two-factor authentication">

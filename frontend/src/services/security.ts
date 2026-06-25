@@ -64,6 +64,9 @@ const securityApi = {
   disable2FAForUser: (userId: number) =>
     api.post(`/security/2fa/disable/${userId}`),
 
+  requireUserTwoFactor: (userId: number, required: boolean) =>
+    api.post(`/security/2fa/require/${userId}`, { required }),
+
   // Security audit log
   getAuditLog: (userId?: number) =>
     api.get<SecurityAuditLog[]>(`/security/audit-log${userId ? `/${userId}` : ''}`),

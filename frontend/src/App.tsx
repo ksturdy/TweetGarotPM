@@ -98,6 +98,7 @@ import LaborAssignments from './pages/labor/LaborAssignments';
 import UserManagement from './pages/UserManagement';
 import RolesPermissions from './pages/RolesPermissions';
 import SecuritySettings from './pages/SecuritySettings';
+import Force2FASetupPage from './pages/Force2FASetupPage';
 import ProjectSpecifications from './pages/projects/ProjectSpecifications';
 import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
@@ -197,7 +198,21 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     return <div className="loading">Loading...</div>;
   }
 
-  return user ? <>{children}</> : <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" />;
+  if (user.mustSetup2FA) return <Navigate to="/setup-2fa" />;
+  return <>{children}</>;
+};
+
+const Setup2FARoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  if (!user) return <Navigate to="/login" />;
+  if (!user.mustSetup2FA) return <Navigate to="/" />;
+  return <>{children}</>;
 };
 
 const PlatformAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -276,6 +291,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/setup-2fa" element={<Setup2FARoute><Force2FASetupPage /></Setup2FARoute>} />
         <Route path="/build-questionnaire" element={<BuildQuestionnaire />} />
 
         {/* Platform Admin routes */}

@@ -113,6 +113,48 @@ router.post(
         });
       }
 
+      // Check if 2FA is required but not yet set up — issue token but flag setup needed
+      if (user.two_factor_required && !user.two_factor_enabled) {
+        await User.updateLastLogin(user.id);
+        const tenant = user.tenant_id ? await getTenantById(user.tenant_id) : null;
+        if (tenant && !tenant.is_active) {
+          return res.status(401).json({ error: 'Your organization account is inactive. Please contact support.' });
+        }
+        const setupToken = jwt.sign({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          hrAccess: user.hr_access,
+          tenantId: user.tenant_id,
+          isPlatformAdmin: user.is_platform_admin || false,
+        }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
+        return res.json({
+          force2FASetup: true,
+          token: setupToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            role: user.role,
+            hrAccess: user.hr_access,
+            twoFactorEnabled: false,
+            twoFactorRequired: true,
+            tenantId: user.tenant_id,
+            isPlatformAdmin: user.is_platform_admin || false,
+          },
+          tenant: tenant ? {
+            id: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            settings: tenant.settings,
+            planName: tenant.plan_display_name,
+            planLimits: tenant.plan_limits,
+            planFeatures: tenant.plan_features,
+          } : null,
+        });
+      }
+
       // Update last login
       await User.updateLastLogin(user.id);
 
@@ -158,6 +200,7 @@ router.post(
           hrAccess: user.hr_access,
           forcePasswordChange,
           twoFactorEnabled: user.two_factor_enabled,
+          twoFactorRequired: user.two_factor_required,
           tenantId: user.tenant_id,
           isPlatformAdmin: user.is_platform_admin || false,
         },
@@ -274,6 +317,7 @@ router.post(
           hrAccess: user.hr_access,
           forcePasswordChange,
           twoFactorEnabled: user.two_factor_enabled,
+          twoFactorRequired: user.two_factor_required,
           tenantId: user.tenant_id,
           isPlatformAdmin: user.is_platform_admin || false,
         },
