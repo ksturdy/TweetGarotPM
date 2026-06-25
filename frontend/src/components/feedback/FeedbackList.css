@@ -72,16 +72,16 @@
 /* col 1: # */
 .feedback-table th:nth-child(1),
 .feedback-table td:nth-child(1) {
-  width: 5%;
+  width: 44px;
 }
 
 /* col 2: date */
 .feedback-table th:nth-child(2),
 .feedback-table td:nth-child(2) {
-  width: 9%;
+  width: 80px;
 }
 
-/* col 3: title */
+/* col 3: title — takes remaining space */
 .feedback-table th:nth-child(3),
 .feedback-table td:nth-child(3) {
   width: auto;
@@ -90,25 +90,25 @@
 /* col 4: submitted by */
 .feedback-table th:nth-child(4),
 .feedback-table td:nth-child(4) {
-  width: 12%;
+  width: 130px;
 }
 
 /* col 5: status */
 .feedback-table th:nth-child(5),
 .feedback-table td:nth-child(5) {
-  width: 12%;
+  width: 110px;
 }
 
 /* col 6: module */
 .feedback-table th:nth-child(6),
 .feedback-table td:nth-child(6) {
-  width: 11%;
+  width: 90px;
 }
 
 /* col 7: votes */
 .feedback-table th:nth-child(7),
 .feedback-table td:nth-child(7) {
-  width: 16%;
+  width: 100px;
   padding-right: 6px;
 }
 
