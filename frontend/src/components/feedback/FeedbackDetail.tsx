@@ -56,8 +56,10 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
     }
   };
 
+  const toUtcDate = (s: string) => new Date(/Z|[+-]\d{2}:?\d{2}$/.test(s) ? s : s + 'Z');
+
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return toUtcDate(dateString).toLocaleString();
   };
 
   const handleSubmitComment = async (e: React.FormEvent) => {
