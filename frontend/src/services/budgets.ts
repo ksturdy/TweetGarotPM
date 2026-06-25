@@ -64,6 +64,7 @@ export interface Budget {
   created_by_name?: string;
   created_at: string;
   updated_at: string;
+  narrative_attachment_id?: number | null;
 }
 
 export interface BudgetStats {

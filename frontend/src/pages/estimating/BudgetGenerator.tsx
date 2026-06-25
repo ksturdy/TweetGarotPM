@@ -44,6 +44,9 @@ const BudgetGenerator: React.FC = () => {
   const [location, setLocation] = useState('');
   const [sqft, setSqft] = useState('');
   const [scope, setScope] = useState('');
+  const [narrativeFile, setNarrativeFile] = useState<File | null>(null);
+  const [narrativeAttachmentId, setNarrativeAttachmentId] = useState<number | null>(null);
+  const [narrativeWarning, setNarrativeWarning] = useState('');
 
   // Options for dropdowns
   const [options, setOptions] = useState<BudgetOptions>({
@@ -379,8 +382,9 @@ const BudgetGenerator: React.FC = () => {
       setBudget(null);
       setAdjustedBudget(null);
       setIsEditMode(false);
+      setNarrativeWarning('');
 
-      const result = await budgetGeneratorService.generate({
+      const generateParams = {
         projectName,
         market: market || undefined,
         buildingType: buildingType || undefined,
@@ -390,7 +394,14 @@ const BudgetGenerator: React.FC = () => {
         scope: scope || undefined,
         location: location || undefined,
         selectedProjectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined
-      });
+      };
+
+      const result = narrativeFile
+        ? await budgetGeneratorService.generateWithNarrative({ ...generateParams, narrativeFile })
+        : await budgetGeneratorService.generate(generateParams);
+
+      if (result.narrativeWarning) setNarrativeWarning(result.narrativeWarning);
+      if (result.narrativeAttachmentId) setNarrativeAttachmentId(result.narrativeAttachmentId);
 
       setBudget(result.budget);
       setComparableProjects(result.similarProjects);
@@ -481,6 +492,9 @@ const BudgetGenerator: React.FC = () => {
     setLocation('');
     setSqft('');
     setScope('');
+    setNarrativeFile(null);
+    setNarrativeAttachmentId(null);
+    setNarrativeWarning('');
     setBudget(null);
     setAdjustedBudget(null);
     setComparableProjects([]);
@@ -545,7 +559,8 @@ const BudgetGenerator: React.FC = () => {
           year: new Date().getFullYear(),
           similarity_score: p.similarityScore
         })),
-        status
+        status,
+        ...(narrativeAttachmentId ? { narrative_attachment_id: narrativeAttachmentId } : {})
       };
 
       if (isEditing && id) {
@@ -954,6 +969,53 @@ const BudgetGenerator: React.FC = () => {
                   rows={3}
                 />
               </div>
+
+              <div className="form-group">
+                <label className="form-label">Design Narrative <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span></label>
+                <div
+                  className={`narrative-upload-zone${narrativeFile ? ' has-file' : ''}`}
+                  onClick={() => document.getElementById('narrative-file-input')?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files[0];
+                    if (f) { setNarrativeFile(f); setNarrativeAttachmentId(null); }
+                  }}
+                >
+                  <input
+                    id="narrative-file-input"
+                    type="file"
+                    accept=".pdf,.docx,.txt"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setNarrativeFile(f); setNarrativeAttachmentId(null); }
+                    }}
+                  />
+                  <span className="narrative-upload-icon">{narrativeFile ? '📄' : '📎'}</span>
+                  <span className="narrative-upload-text">
+                    {narrativeFile ? narrativeFile.name : 'Upload PDF, DOCX, or TXT — specs, narratives, scope docs'}
+                  </span>
+                  {narrativeFile && (
+                    <button
+                      type="button"
+                      className="narrative-remove-btn"
+                      onClick={(e) => { e.stopPropagation(); setNarrativeFile(null); setNarrativeAttachmentId(null); }}
+                      title="Remove file"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="narrative-hint">Max 20MB. Titan will read this document when building the estimate.</p>
+              </div>
+
+              {narrativeWarning && (
+                <div className="narrative-warning">
+                  <span>⚠</span>
+                  <span>{narrativeWarning}</span>
+                </div>
+              )}
 
               {error && (
                 <div className="error-message" style={{ marginBottom: '1rem' }}>

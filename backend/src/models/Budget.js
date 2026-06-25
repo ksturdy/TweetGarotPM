@@ -31,7 +31,8 @@ class Budget {
       risks,
       comparable_projects,
       status,
-      created_by
+      created_by,
+      narrative_attachment_id
     } = budgetData;
 
     const result = await pool.query(
@@ -42,8 +43,8 @@ class Budget {
         equipment_subtotal, subcontract_subtotal, direct_cost_subtotal,
         overhead, profit, contingency, grand_total, overhead_percent,
         profit_percent, contingency_percent, sections, assumptions, risks,
-        comparable_projects, status, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        comparable_projects, status, created_by, narrative_attachment_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       RETURNING *`,
       [
         tenant_id, project_name, building_type, project_type, bid_type,
@@ -53,7 +54,8 @@ class Budget {
         overhead || 0, profit || 0, contingency || 0, grand_total || 0, overhead_percent || 10,
         profit_percent || 10, contingency_percent || 5, JSON.stringify(sections || []),
         JSON.stringify(assumptions || []), JSON.stringify(risks || []),
-        JSON.stringify(comparable_projects || []), status || 'draft', created_by
+        JSON.stringify(comparable_projects || []), status || 'draft', created_by,
+        narrative_attachment_id || null
       ]
     );
     return result.rows[0];
@@ -118,7 +120,7 @@ class Budget {
       'equipment_subtotal', 'subcontract_subtotal', 'direct_cost_subtotal',
       'overhead', 'profit', 'contingency', 'grand_total', 'overhead_percent',
       'profit_percent', 'contingency_percent', 'sections', 'assumptions',
-      'risks', 'comparable_projects', 'status'
+      'risks', 'comparable_projects', 'status', 'narrative_attachment_id'
     ];
 
     const setClauses = [];

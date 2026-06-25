@@ -4,7 +4,6 @@ import { budgetsApi, Budget, BudgetStats } from '../../services/budgets';
 import { renderMarketIcon, getMarketGradient, resolveMarketKey } from '../../utils/marketIcons';
 import './BudgetsList.css';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
-import '../../styles/SalesPipeline.css';
 
 const BudgetsList: React.FC = () => {
   const navigate = useNavigate();
@@ -131,21 +130,14 @@ const BudgetsList: React.FC = () => {
   return (
     <div className="budgets-page">
       {/* Page Header */}
-      <div className="sales-page-header">
-        <div className="sales-page-title">
-          <div>
-            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Estimating
-            </Link>
-            <h1>💵 Budgets</h1>
-            <div className="sales-subtitle">Manage project budgets</div>
-          </div>
+      <div className="budgets-top-bar">
+        <div className="budgets-breadcrumb">
+          <Link to="/estimating" className="breadcrumb-link">&larr; Back to Estimating</Link>
+          <h1 className="breadcrumb-current">Budgets</h1>
         </div>
-        <div className="sales-header-actions">
-          <Link to="/estimating/budget-generator" className="btn btn-primary">
-            + New Budget
-          </Link>
-        </div>
+        <Link to="/estimating/budget-generator" className="btn btn-primary">
+          + New Budget
+        </Link>
       </div>
 
       {/* Summary Cards */}
@@ -228,20 +220,13 @@ const BudgetsList: React.FC = () => {
       {/* Table Section */}
       <div className="budgets-table-section">
       {/* Filters Row */}
-      <div className="sales-table-header">
-        <div className="sales-table-title">Budget List</div>
-        <div className="sales-table-controls">
+      <div className="budgets-toolbar">
+        <span className="budgets-table-title">Budget List</span>
+        <div className="toolbar-filters">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '6px',
-              border: '1px solid #e5e7eb',
-              fontSize: '14px',
-              minWidth: '150px',
-              marginRight: '8px'
-            }}
+            className="filter-select"
           >
             <option value="">All Statuses</option>
             <option value="draft">Draft</option>
@@ -251,22 +236,15 @@ const BudgetsList: React.FC = () => {
           <select
             value={buildingTypeFilter}
             onChange={(e) => setBuildingTypeFilter(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '6px',
-              border: '1px solid #e5e7eb',
-              fontSize: '14px',
-              minWidth: '150px',
-              marginRight: '8px'
-            }}
+            className="filter-select"
           >
             <option value="">All Building Types</option>
             {buildingTypes.map(type => (
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
-          <div className="sales-search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div className="budgets-search-box">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/>
               <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>

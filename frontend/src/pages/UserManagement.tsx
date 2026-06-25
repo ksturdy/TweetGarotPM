@@ -726,7 +726,7 @@ const UserManagement: React.FC = () => {
                                 onClick={() => handleRequire2FA(user)}
                                 title={(user as any).two_factor_required ? 'Remove 2FA requirement' : 'Require 2FA for this user'}
                               >
-                                {(user as any).two_factor_required ? '🔓' : '🔒'}
+                                {(user as any).two_factor_required ? '🛡️' : '🔰'}
                               </button>
                               {(user as any).two_factor_enabled && (
                                 <button className="sales-action-btn" onClick={() => handleDisable2FA(user)} title="Disable two-factor authentication">

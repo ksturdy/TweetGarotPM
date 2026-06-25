@@ -1,10 +1,34 @@
 const express = require('express');
+const multer = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, requireFeature } = require('../middleware/tenant');
+const { parseNarrative } = require('../utils/narrativeParser');
+const { getR2Client, isR2Enabled } = require('../config/r2Client');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const path = require('path');
+const fs = require('fs');
+const pool = require('../config/database');
+const config = require('../config');
 const HistoricalProject = require('../models/HistoricalProject');
 
 const router = express.Router();
+
+// Multer middleware for optional narrative file upload (memory storage, no temp file written)
+// Extension-first check because browsers may send application/octet-stream for DOCX
+const NARRATIVE_ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
+const narrativeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (NARRATIVE_ALLOWED_EXTENSIONS.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type. Allowed: ${NARRATIVE_ALLOWED_EXTENSIONS.join(', ')}`));
+    }
+  }
+});
 
 // Apply middleware
 router.use(authenticate);
@@ -278,7 +302,22 @@ router.post('/similar', async (req, res, next) => {
 });
 
 // Generate AI budget
-router.post('/generate', async (req, res, next) => {
+router.post('/generate', (req, res, next) => {
+  // Apply multer as a sub-middleware so we can handle its errors gracefully
+  narrativeUpload.single('narrative')(req, res, (multerErr) => {
+    if (multerErr) {
+      const status = multerErr.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({
+        error: multerErr.code === 'LIMIT_FILE_SIZE'
+          ? 'Design narrative file is too large. Maximum size is 20MB.'
+          : `Invalid file: ${multerErr.message}`
+      });
+    }
+    generateHandler(req, res, next);
+  });
+});
+
+async function generateHandler(req, res, next) {
   try {
     const {
       projectName,
@@ -301,6 +340,19 @@ router.post('/generate', async (req, res, next) => {
       return res.status(400).json({
         error: 'Project name, square footage, and at least a market or project type are required'
       });
+    }
+
+    // Parse design narrative if uploaded
+    let narrativeText = null;
+    let narrativeWarning = null;
+    if (req.file) {
+      try {
+        narrativeText = await parseNarrative(req.file.buffer, req.file.mimetype, req.file.originalname);
+        console.log(`[BudgetGenerator] Narrative parsed: ${narrativeText.length} chars from ${req.file.originalname}`);
+      } catch (parseErr) {
+        console.error('[BudgetGenerator] Narrative parse failed:', parseErr.message);
+        narrativeWarning = `Design narrative could not be read and was excluded from the estimate: ${parseErr.message}`;
+      }
     }
 
     // Find similar projects for scoring (unified historical + live projects)
@@ -358,7 +410,8 @@ router.post('/generate', async (req, res, next) => {
       scope,
       projectDetails,
       averages,
-      location
+      location,
+      narrativeText
     );
 
     // Call Claude to generate budget
@@ -383,8 +436,45 @@ router.post('/generate', async (req, res, next) => {
       });
     }
 
+    // Persist narrative file to storage and record in attachments table
+    let narrativeAttachmentId = null;
+    if (req.file) {
+      try {
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const storageKey = `uploads/budget-narratives/${uniqueSuffix}-${safeName}`;
+
+        if (isR2Enabled()) {
+          const r2 = getR2Client();
+          await r2.send(new PutObjectCommand({
+            Bucket: config.r2.bucketName,
+            Key: storageKey,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+          }));
+        } else {
+          const dir = path.join(__dirname, '../../uploads/budget-narratives');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, `${uniqueSuffix}-${safeName}`), req.file.buffer);
+        }
+
+        // Insert a provisional attachments row; entity_id gets updated when the budget is saved
+        const attResult = await pool.query(
+          `INSERT INTO attachments (entity_type, entity_id, filename, original_name, mime_type, size, uploaded_by)
+           VALUES ('budget_narrative_pending', 0, $1, $2, $3, $4, $5) RETURNING id`,
+          [storageKey, req.file.originalname, req.file.mimetype, req.file.size, req.user.id]
+        );
+        narrativeAttachmentId = attResult.rows[0].id;
+      } catch (storageErr) {
+        console.error('[BudgetGenerator] Failed to persist narrative file:', storageErr.message);
+        // Non-fatal — generation result is still returned
+      }
+    }
+
     res.json({
       budget: budgetJson,
+      narrativeAttachmentId,
+      ...(narrativeWarning ? { narrativeWarning } : {}),
       similarProjects: projectDetails.map((p, i) => {
         const originalProject = topProjects[i];
         const bidYear = p.bid_date ? new Date(p.bid_date).getFullYear() : null;
@@ -397,15 +487,12 @@ router.post('/generate', async (req, res, next) => {
           buildingType: p.building_type,
           projectType: p.project_type,
           sqft: parseFloat(p.total_sqft) || 0,
-          // Inflation-adjusted values
           totalCost: parseFloat(p.total_cost) || 0,
           costPerSqft: parseFloat(p.total_cost_per_sqft) || 0,
-          // Original values for reference
           originalTotalCost: parseFloat(p.original_total_cost) || 0,
           originalCostPerSqft: p.original_total_cost && p.total_sqft
             ? parseFloat(p.original_total_cost) / parseFloat(p.total_sqft)
             : 0,
-          // Metadata
           bidYear,
           yearsSinceBid: yearsSinceBid ? parseFloat(yearsSinceBid) : null,
           inflationAdjusted: true,
@@ -430,10 +517,10 @@ router.post('/generate', async (req, res, next) => {
     console.error('Budget generation error:', error);
     next(error);
   }
-});
+}
 
 // Helper function to build AI system prompt
-function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location) {
+function buildBudgetSystemPrompt(projectName, market, buildingType, projectType, bidType, sqft, scope, projectDetails, averages, location, narrativeText = null) {
   const formatCurrency = (val) => val ? `$${Math.round(val).toLocaleString()}` : '$0';
   const formatNumber = (val) => val ? Math.round(val).toLocaleString() : '0';
 
@@ -452,6 +539,13 @@ ${buildingType ? `- Scope: ${buildingType}` : ''}
 ${location ? `- Location: ${location}` : ''}
 - Square Footage: ${formatNumber(sqft)} SF
 ${scope ? `- Additional Scope Notes: ${scope}` : ''}
+${narrativeText ? `
+## PROJECT DESIGN NARRATIVE:
+The following design narrative or specification document was provided for this project. Use it to inform equipment types, system configurations, piping and ductwork complexity, controls requirements, and any special scope items not captured in the standard fields above. Where the narrative specifies quantities, systems, or cost-driving details, weight these more heavily than the historical averages.
+
+${narrativeText}
+
+---` : ''}
 
 ## INFLATION ADJUSTMENT NOTICE:
 All historical costs have been adjusted for inflation to ${new Date().getFullYear()} dollars using a ${inflationRate}% annual inflation rate.

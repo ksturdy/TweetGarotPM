@@ -89,6 +89,8 @@ export interface BudgetGeneratorResponse {
     inputTokens: number;
     outputTokens: number;
   };
+  narrativeAttachmentId?: number | null;
+  narrativeWarning?: string;
 }
 
 export interface SimilarProjectsResponse {
@@ -147,6 +149,35 @@ export const budgetGeneratorService = {
     selectedProjectIds?: number[];
   }): Promise<BudgetGeneratorResponse> {
     const response = await api.post<BudgetGeneratorResponse>('/budget-generator/generate', params);
+    return response.data;
+  },
+
+  async generateWithNarrative(params: {
+    projectName: string;
+    market?: string;
+    buildingType?: string;
+    projectType?: string[];
+    bidType?: string;
+    sqft: number;
+    scope?: string;
+    location?: string;
+    selectedProjectIds?: number[];
+    narrativeFile: File;
+  }): Promise<BudgetGeneratorResponse> {
+    const { narrativeFile, projectType, selectedProjectIds, ...rest } = params;
+    const formData = new FormData();
+    formData.append('narrative', narrativeFile);
+    Object.entries(rest).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) formData.append(k, String(v));
+    });
+    if (projectType) projectType.forEach((t) => formData.append('projectType', t));
+    if (selectedProjectIds) selectedProjectIds.forEach((id) => formData.append('selectedProjectIds', String(id)));
+
+    const response = await api.post<BudgetGeneratorResponse>(
+      '/budget-generator/generate',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data;
   }
 };

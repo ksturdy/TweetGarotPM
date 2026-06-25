@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Budget = require('../models/Budget');
 const { authenticate } = require('../middleware/auth');
+const pool = require('../config/database');
 
 // Get all budgets
 router.get('/', authenticate, async (req, res) => {
@@ -65,6 +66,20 @@ router.post('/', authenticate, async (req, res) => {
     };
 
     const budget = await Budget.create(budgetData);
+
+    // Link the narrative attachment to the newly-created budget
+    const attId = parseInt(req.body.narrative_attachment_id, 10);
+    if (attId) {
+      try {
+        await pool.query(
+          `UPDATE attachments SET entity_type = 'budget', entity_id = $1 WHERE id = $2`,
+          [budget.id, attId]
+        );
+      } catch (attErr) {
+        console.error('[Budgets] Failed to link narrative attachment:', attErr.message);
+      }
+    }
+
     res.status(201).json(budget);
   } catch (error) {
     console.error('Error creating budget:', error);
