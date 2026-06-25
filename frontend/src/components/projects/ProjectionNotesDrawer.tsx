@@ -374,6 +374,38 @@ const GainFadeTab: React.FC<{
   const [recognized, setRecognized] = useState(false);
   const [groups, setGroups] = useState<string[]>([]);
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editBody, setEditBody] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDirection, setEditDirection] = useState<'gain' | 'fade'>('gain');
+  const [editCostType, setEditCostType] = useState<number | null>(null);
+  const [editGroups, setEditGroups] = useState<string[]>([]);
+
+  const startEdit = (n: ProjectionNote) => {
+    const v = typeof n.amount === 'string' ? parseFloat(n.amount) : (n.amount || 0);
+    setEditingId(n.id);
+    setEditBody(n.body);
+    setEditAmount(String(Math.abs(v)));
+    setEditDirection(v >= 0 ? 'gain' : 'fade');
+    setEditCostType(n.cost_type ?? null);
+    setEditGroups(n.groups_affected ?? []);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = (n: ProjectionNote) => {
+    const num = parseFloat(editAmount.replace(/,/g, ''));
+    if (isNaN(num) || !editBody.trim()) return;
+    const signed = editDirection === 'gain' ? Math.abs(num) : -Math.abs(num);
+    onUpdate(n.id, {
+      body: editBody.trim(),
+      amount: signed,
+      cost_type: editCostType,
+      groups_affected: editGroups.length > 0 ? editGroups : null,
+    });
+    setEditingId(null);
+  };
+
   const toggleGroup = (g: string) => {
     setGroups(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
@@ -479,6 +511,70 @@ const GainFadeTab: React.FC<{
             <tbody>
               {items.map(n => {
                 const v = typeof n.amount === 'string' ? parseFloat(n.amount) : (n.amount || 0);
+                const isEditing = editingId === n.id;
+                if (isEditing) {
+                  return (
+                    <tr key={n.id} style={{ borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                      <td style={gfTd}>{format(new Date(n.created_at), 'MM/dd')}</td>
+                      <td style={gfTd}>
+                        <select value={editCostType ?? ''} onChange={e => setEditCostType(e.target.value === '' ? null : Number(e.target.value))}
+                          style={{ fontSize: '0.7rem', padding: '0.15rem', width: '100%', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                          {COST_TYPES.map(c => (
+                            <option key={c.label} value={c.value ?? ''}>{c.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ ...gfTd, textAlign: 'left' }}>
+                        <textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={2}
+                          style={{ fontSize: '0.7rem', width: '100%', padding: '0.15rem', border: '1px solid #cbd5e1', borderRadius: '4px', resize: 'vertical' }} />
+                      </td>
+                      <td style={{ ...gfTd, textAlign: 'left' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
+                          {GAIN_FADE_GROUPS.map(g => {
+                            const on = editGroups.includes(g);
+                            return (
+                              <button key={g} type="button"
+                                onClick={() => setEditGroups(prev => on ? prev.filter(x => x !== g) : [...prev, g])}
+                                style={{
+                                  fontSize: '0.6rem', padding: '0.1rem 0.4rem', borderRadius: '999px',
+                                  border: on ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                                  background: on ? '#eff6ff' : '#fff',
+                                  color: on ? '#1e40af' : '#475569', cursor: 'pointer',
+                                }}>{g}</button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td style={{ ...gfTd, textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <select value={editDirection} onChange={e => setEditDirection(e.target.value as 'gain' | 'fade')}
+                            style={{ fontSize: '0.7rem', padding: '0.15rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                            <option value="gain">+</option>
+                            <option value="fade">−</option>
+                          </select>
+                          <input type="text" inputMode="numeric" value={editAmount}
+                            onChange={e => setEditAmount(e.target.value.replace(/[^0-9.,]/g, ''))}
+                            style={{ fontSize: '0.7rem', width: '72px', padding: '0.15rem', border: '1px solid #cbd5e1', borderRadius: '4px', textAlign: 'right' }} />
+                        </div>
+                      </td>
+                      <td style={gfTd}>
+                        <input type="checkbox" checked={n.recognized_in_financials}
+                          onChange={e => onUpdate(n.id, {
+                            recognized_in_financials: e.target.checked,
+                            recognized_at: e.target.checked ? new Date().toISOString().split('T')[0] : null,
+                          })} style={{ cursor: 'pointer' }} />
+                      </td>
+                      <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
+                        <button onClick={() => saveEdit(n)}
+                          style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                          title="Save">✓</button>
+                        <button onClick={cancelEdit}
+                          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem' }}
+                          title="Cancel">×</button>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={n.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={gfTd}>{format(new Date(n.created_at), 'MM/dd')}</td>
@@ -515,7 +611,10 @@ const GainFadeTab: React.FC<{
                         style={{ cursor: 'pointer' }}
                       />
                     </td>
-                    <td style={gfTd}>
+                    <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
+                      <button onClick={() => startEdit(n)}
+                        style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.8rem' }}
+                        title="Edit">✎</button>
                       <button onClick={() => onDelete(n.id)}
                         style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}
                         title="Delete">×</button>
