@@ -57,28 +57,57 @@
   color: #5a5a72;
 }
 
-.feedback-table th:nth-child(1),
-.feedback-table td:nth-child(1) {
-  width: 11%;
+.col-number {
+  white-space: nowrap;
+  color: #9ca3af;
+  font-size: 13px;
 }
 
+.col-submitter {
+  white-space: nowrap;
+  color: #374151;
+  font-size: 13px;
+}
+
+/* col 1: # */
+.feedback-table th:nth-child(1),
+.feedback-table td:nth-child(1) {
+  width: 5%;
+}
+
+/* col 2: date */
 .feedback-table th:nth-child(2),
 .feedback-table td:nth-child(2) {
+  width: 9%;
+}
+
+/* col 3: title */
+.feedback-table th:nth-child(3),
+.feedback-table td:nth-child(3) {
   width: auto;
 }
 
-.feedback-table th:nth-child(3),
-.feedback-table td:nth-child(3) {
+/* col 4: submitted by */
+.feedback-table th:nth-child(4),
+.feedback-table td:nth-child(4) {
   width: 12%;
 }
 
-.feedback-table th:nth-child(4),
-.feedback-table td:nth-child(4) {
+/* col 5: status */
+.feedback-table th:nth-child(5),
+.feedback-table td:nth-child(5) {
+  width: 12%;
+}
+
+/* col 6: module */
+.feedback-table th:nth-child(6),
+.feedback-table td:nth-child(6) {
   width: 11%;
 }
 
-.feedback-table th:nth-child(5),
-.feedback-table td:nth-child(5) {
+/* col 7: votes */
+.feedback-table th:nth-child(7),
+.feedback-table td:nth-child(7) {
   width: 16%;
   padding-right: 6px;
 }

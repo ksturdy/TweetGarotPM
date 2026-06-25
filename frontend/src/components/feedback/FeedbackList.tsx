@@ -80,8 +80,10 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
         <table className="feedback-table">
           <thead>
             <tr>
+              <th>#</th>
               <th>Date</th>
               <th>Title</th>
+              <th>Submitted By</th>
               <th>Status</th>
               <th>Module</th>
               <th>Votes</th>
@@ -98,6 +100,7 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
                   className={isSelected ? 'selected' : ''}
                   onClick={() => onSelectFeedback(feedback)}
                 >
+                  <td className="col-number">#{feedback.id}</td>
                   <td className="col-date">{formatDate(feedback.created_at)}</td>
                   <td className="col-title">
                     <div className="title-inner">
@@ -108,6 +111,7 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
                       )}
                     </div>
                   </td>
+                  <td className="col-submitter">{(feedback as any).submitter_name || '—'}</td>
                   <td className="col-status">
                     <span
                       className="feedback-status-badge"
