@@ -42,26 +42,56 @@ async function buildProjectionsReport({
   startDate = null,
   endDate = null,
 }) {
-  // Resolve team filter into a set of project_ids (project belongs to a team
-  // if its manager is a member of that team).
-  let teamProjectIds = null;
+  // Resolve all entity filters (team, PM, department) into project ID sets and
+  // intersect them. Filtering individual snapshots by pm_employee_no or
+  // department_code would exclude prior snapshots captured before those fields
+  // were populated, causing KPI deltas to go blank whenever a PM is selected.
+  const intersect = (existing, incoming) => {
+    if (existing === null) return incoming;
+    const s = new Set(incoming);
+    return existing.filter(id => s.has(id));
+  };
+
+  let projectIdFilter = null; // null = no restriction (all projects)
+
   if (teamIds && teamIds.length > 0) {
-    const teamRes = await db.query(
+    const res = await db.query(
       `SELECT DISTINCT p.id
        FROM projects p
        JOIN team_members tm ON tm.employee_id = p.manager_id
        WHERE p.tenant_id = $1 AND tm.team_id = ANY($2::int[])`,
       [tenantId, teamIds]
     );
-    teamProjectIds = teamRes.rows.map(r => r.id);
-    if (teamProjectIds.length === 0) {
-      return {
-        generated_at: new Date().toISOString(),
-        projects: [],
-        rollup_by_pm: [],
-        rollup_by_department: [],
-      };
-    }
+    projectIdFilter = intersect(projectIdFilter, res.rows.map(r => r.id));
+  }
+
+  if (pmEmployeeNos && pmEmployeeNos.length > 0) {
+    // Match any snapshot that has the PM, not just the most recent — some
+    // projects have PM data only in older snapshots.
+    const res = await db.query(
+      `SELECT DISTINCT project_id FROM project_snapshots
+       WHERE tenant_id = $1 AND pm_employee_no = ANY($2::text[])`,
+      [tenantId, pmEmployeeNos]
+    );
+    projectIdFilter = intersect(projectIdFilter, res.rows.map(r => r.project_id));
+  }
+
+  if (departmentCodes && departmentCodes.length > 0) {
+    const res = await db.query(
+      `SELECT DISTINCT project_id FROM project_snapshots
+       WHERE tenant_id = $1 AND department_code = ANY($2::text[])`,
+      [tenantId, departmentCodes]
+    );
+    projectIdFilter = intersect(projectIdFilter, res.rows.map(r => r.project_id));
+  }
+
+  if (projectIdFilter !== null && projectIdFilter.length === 0) {
+    return {
+      generated_at: new Date().toISOString(),
+      projects: [],
+      rollup_by_pm: [],
+      rollup_by_department: [],
+    };
   }
 
   const params = [tenantId];
@@ -71,16 +101,8 @@ async function buildProjectionsReport({
   // the nearest snapshot per project below, which may sit just outside the
   // literal window.
 
-  if (pmEmployeeNos && pmEmployeeNos.length > 0) {
-    params.push(pmEmployeeNos);
-    where.push(`pm_employee_no = ANY($${params.length}::text[])`);
-  }
-  if (departmentCodes && departmentCodes.length > 0) {
-    params.push(departmentCodes);
-    where.push(`department_code = ANY($${params.length}::text[])`);
-  }
-  if (teamProjectIds) {
-    params.push(teamProjectIds);
+  if (projectIdFilter !== null) {
+    params.push(projectIdFilter);
     where.push(`project_id = ANY($${params.length}::int[])`);
   }
 
@@ -104,6 +126,21 @@ async function buildProjectionsReport({
     if (!byProject.has(s.project_id)) byProject.set(s.project_id, []);
     byProject.get(s.project_id).push(s);
   }
+
+  // Before slicing to 2, pull PM/dept metadata from the full snapshot history.
+  // PM data may only exist in older snapshots, so current/prior alone can miss it.
+  const snapMeta = new Map();
+  for (const [pid, arr] of byProject.entries()) {
+    const withPm   = arr.find(s => s.pm_name);
+    const withDept = arr.find(s => s.department_name);
+    snapMeta.set(pid, {
+      pm_name:         withPm?.pm_name         || null,
+      pm_employee_no:  withPm?.pm_employee_no  || null,
+      department_code: withDept?.department_code || null,
+      department_name: withDept?.department_name || null,
+    });
+  }
+
   const findNearest = (arr, target) => {
     const t = new Date(target).getTime();
     let best = null, bestDist = Infinity;
@@ -139,10 +176,16 @@ async function buildProjectionsReport({
     };
   }
 
-  // Pull project metadata in one round trip.
+  // Pull project metadata in one round trip, including live PM and department
+  // from the projects table so the name is always current.
   const projectsRes = await db.query(
-    `SELECT id, number, name FROM projects
-     WHERE tenant_id = $1 AND id = ANY($2::int[])`,
+    `SELECT p.id, p.number, p.name,
+            e.first_name || ' ' || e.last_name AS manager_name,
+            d.name AS department_name, d.department_number
+     FROM projects p
+     LEFT JOIN employees e ON e.id = p.manager_id
+     LEFT JOIN departments d ON d.id = p.department_id
+     WHERE p.tenant_id = $1 AND p.id = ANY($2::int[])`,
     [tenantId, projectIds]
   );
   const projectMeta = new Map(projectsRes.rows.map(p => [p.id, p]));
@@ -231,10 +274,10 @@ async function buildProjectionsReport({
       project_id: projectId,
       project_number: meta.number,
       project_name: meta.name,
-      pm_name: current.pm_name,
-      pm_employee_no: current.pm_employee_no,
-      department_code: current.department_code,
-      department_name: current.department_name,
+      pm_name: meta.manager_name || current.pm_name || prior?.pm_name || snapMeta.get(projectId)?.pm_name || null,
+      pm_employee_no: current.pm_employee_no || prior?.pm_employee_no || snapMeta.get(projectId)?.pm_employee_no || null,
+      department_code: current.department_code || prior?.department_code || snapMeta.get(projectId)?.department_code || null,
+      department_name: meta.department_name || current.department_name || prior?.department_name || snapMeta.get(projectId)?.department_name || null,
       current_snapshot: current,
       prior_snapshot: prior,
       deltas,

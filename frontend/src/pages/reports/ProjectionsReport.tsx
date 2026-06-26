@@ -99,16 +99,20 @@ const ProjectionsReport: React.FC = () => {
     }).then(r => r.data),
   });
 
-  // When the team filter changes, any PM/Dept selections that no longer
-  // appear in the team-filtered option list should be pruned so the visible
-  // filter state matches the actual query.
+  // When the team filter changes: auto-select all PMs in that team so the
+  // report immediately shows PM names and prior-snapshot deltas. If no team is
+  // selected, only prune any stale PM/Dept selections.
   useEffect(() => {
     if (!filters) return;
-    const pmSet = new Set(filters.pms.map(pm => pm.employee_no));
-    setPmFilter(prev => {
-      const next = new Set(Array.from(prev).filter(no => pmSet.has(no)));
-      return next.size === prev.size ? prev : next;
-    });
+    if (teamFilter.size > 0) {
+      setPmFilter(new Set(filters.pms.map(pm => pm.employee_no)));
+    } else {
+      const pmSet = new Set(filters.pms.map(pm => pm.employee_no));
+      setPmFilter(prev => {
+        const next = new Set(Array.from(prev).filter(no => pmSet.has(no)));
+        return next.size === prev.size ? prev : next;
+      });
+    }
     const deptSet = new Set(filters.departments.map(d => d.code));
     setDeptFilter(prev => {
       const next = new Set(Array.from(prev).filter(code => deptSet.has(code)));
