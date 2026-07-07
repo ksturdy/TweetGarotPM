@@ -114,6 +114,18 @@ function computeEffectiveDates(row) {
   return { project_start_date, project_end_date };
 }
 
+// GET /api/labor/employees/:employeeId/history — all non-cancelled assignments for resume building
+router.get('/employees/:employeeId/history', async (req, res, next) => {
+  try {
+    const employeeId = parseInt(req.params.employeeId, 10);
+    if (!employeeId) return res.status(400).json({ error: 'Invalid employeeId' });
+    const rows = await ProjectAssignment.findHistoryByEmployee(employeeId, req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/labor/assignments?status=&search=&from=&to=&trade=&group=&title= — flat list
 router.get('/assignments', async (req, res, next) => {
   try {

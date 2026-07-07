@@ -130,6 +130,29 @@ export interface NotifyResult {
   preview?: boolean;
 }
 
+export interface EmployeeHistoryRecord {
+  id: number;
+  project_id: number;
+  role: string | null;
+  trade: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: AssignmentStatus | null;
+  first_name: string;
+  last_name: string;
+  employee_title: string | null;
+  employee_trade: string | null;
+  project_name: string;
+  project_number: string;
+  project_address: string | null;
+  market: string | null;
+  square_footage: number | null;
+  project_start_date: string | null;
+  project_end_date: string | null;
+  customer_name: string | null;
+  contract_amount: string | null;
+}
+
 export const ASSIGNMENT_ROLES = [
   'Foreman',
   'Journeyman',
@@ -182,6 +205,9 @@ export const laborApi = {
     const s = qs.toString();
     return api.get<AssignmentRecord[]>(`/labor/assignments${s ? `?${s}` : ''}`).then((r) => r.data);
   },
+
+  getEmployeeHistory: (employeeId: number) =>
+    api.get<EmployeeHistoryRecord[]>(`/labor/employees/${employeeId}/history`).then((r) => r.data),
 
   getEmployeeAssignments: (employeeId: number, scope: 'current' | 'upcoming' | 'past') =>
     api

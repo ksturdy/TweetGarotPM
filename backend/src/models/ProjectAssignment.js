@@ -403,6 +403,78 @@ const ProjectAssignment = {
     }
   },
 
+  async findHistoryByEmployee(employeeId, tenantId) {
+    const result = await db.query(
+      `SELECT * FROM (
+         SELECT
+           pa.id,
+           pa.project_id,
+           pa.role,
+           pa.trade,
+           pa.start_date,
+           pa.end_date,
+           pa.status,
+           e.first_name,
+           e.last_name,
+           e.title     AS employee_title,
+           e.trade     AS employee_trade,
+           p.name      AS project_name,
+           p.number    AS project_number,
+           p.address   AS project_address,
+           p.market,
+           p.square_footage,
+           p.start_date AS project_start_date,
+           p.end_date   AS project_end_date,
+           COALESCE(c.name, c.customer_owner, p.client) AS customer_name,
+           vc.contract_amount
+         FROM project_assignments pa
+         JOIN employees e ON e.id = pa.employee_id
+         JOIN projects p ON p.id = pa.project_id
+         LEFT JOIN customers c ON c.id = p.customer_id
+         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $2
+         WHERE pa.employee_id = $1 AND pa.tenant_id = $2
+           AND pa.status NOT IN ('cancelled')
+
+         UNION ALL
+
+         SELECT
+           NULL::integer AS id,
+           p.id          AS project_id,
+           'Project Manager' AS role,
+           NULL          AS trade,
+           p.start_date  AS start_date,
+           p.end_date    AS end_date,
+           p.status      AS status,
+           e.first_name,
+           e.last_name,
+           e.title       AS employee_title,
+           e.trade       AS employee_trade,
+           p.name        AS project_name,
+           p.number      AS project_number,
+           p.address     AS project_address,
+           p.market,
+           p.square_footage,
+           p.start_date  AS project_start_date,
+           p.end_date    AS project_end_date,
+           COALESCE(c.name, c.customer_owner, p.client) AS customer_name,
+           vc.contract_amount
+         FROM projects p
+         JOIN employees e ON e.id = p.manager_id
+         LEFT JOIN customers c ON c.id = p.customer_id
+         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $2
+         WHERE p.manager_id = $1 AND p.tenant_id = $2
+           AND NOT EXISTS (
+             SELECT 1 FROM project_assignments pa2
+             WHERE pa2.employee_id = $1 AND pa2.project_id = p.id
+               AND pa2.tenant_id = $2 AND pa2.status NOT IN ('cancelled')
+           )
+       ) combined
+       ORDER BY COALESCE(start_date, project_start_date) DESC NULLS LAST`,
+      [employeeId, tenantId]
+    );
+    return result.rows;
+  },
+
   async summary(tenantId) {
     const result = await db.query(
       `SELECT

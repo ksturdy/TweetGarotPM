@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { employeeResumesApi, Certification, Language, Reference, ResumeProject, EmployeeResume } from '../../services/employeeResumes';
 import { resumeTemplatesApi, ResumeTemplate } from '../../services/resumeTemplates';
+import api from '../../services/api';
 import ResumeProjectManager from '../../components/resumes/ResumeProjectManager';
 import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
 import ResumePreview from '../../components/resumes/ResumePreview';
@@ -99,6 +100,11 @@ const EmployeeResumeForm: React.FC = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [templateId, setTemplateId] = useState<number | null>(null);
 
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState<number | null>(null);
+  const [empSearch, setEmpSearch] = useState('');
+  const [empPickerOpen, setEmpPickerOpen] = useState(false);
+  const empPickerRef = useRef<HTMLDivElement>(null);
+
   // Fetch existing resume if editing
   const { data: existingResume, isLoading, refetch } = useQuery({
     queryKey: ['employeeResume', id],
@@ -132,6 +138,27 @@ const EmployeeResumeForm: React.FC = () => {
     refetchOnMount: false, // Don't refetch on mount - only fetch once
   });
 
+  // Employee search for linking
+  const { data: empSearchResults = [] } = useQuery<any[]>({
+    queryKey: ['employees', 'search', empSearch],
+    queryFn: async () => {
+      const res = await api.get(`/employees?search=${encodeURIComponent(empSearch)}`);
+      return res.data.data ?? res.data;
+    },
+    enabled: empPickerOpen && empSearch.trim().length >= 1,
+  });
+
+  // Close employee picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (empPickerRef.current && !empPickerRef.current.contains(e.target as Node)) {
+        setEmpPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Populate form when editing
   useEffect(() => {
     if (existingResume) {
@@ -163,6 +190,9 @@ const EmployeeResumeForm: React.FC = () => {
 
       if (existingResume.template_id) {
         setTemplateId(existingResume.template_id);
+      }
+      if (existingResume.employee_id) {
+        setLinkedEmployeeId(existingResume.employee_id);
       }
     }
   }, [existingResume]);
@@ -432,6 +462,9 @@ const EmployeeResumeForm: React.FC = () => {
       data.append('hobbies', JSON.stringify(hobbies));
       data.append('references', JSON.stringify(references));
       data.append('is_active', formData.is_active.toString());
+      if (linkedEmployeeId) {
+        data.append('employee_id', linkedEmployeeId.toString());
+      }
       if (templateId) {
         data.append('template_id', templateId.toString());
       }
@@ -692,6 +725,93 @@ const EmployeeResumeForm: React.FC = () => {
       >
         <div className="card">
           <h2 className="section-title">Basic Information</h2>
+
+          {/* Employee record link — enables Labor History tab in project picker */}
+          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+            <label>Link to Employee Record</label>
+            {linkedEmployeeId ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{
+                  padding: '0.4rem 0.85rem',
+                  backgroundColor: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '6px',
+                  color: '#1d4ed8',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                }}>
+                  {formData.employee_name || `Employee #${linkedEmployeeId}`}
+                </span>
+                <button
+                  type="button"
+                  className="btnSecondary"
+                  style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem' }}
+                  onClick={() => { setLinkedEmployeeId(null); setEmpSearch(''); }}
+                >
+                  Unlink
+                </button>
+              </div>
+            ) : (
+              <div style={{ position: 'relative' }} ref={empPickerRef}>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Search by name to link a labor record..."
+                  value={empSearch}
+                  onChange={(e) => { setEmpSearch(e.target.value); setEmpPickerOpen(true); }}
+                  onFocus={() => setEmpPickerOpen(true)}
+                  style={{ maxWidth: '400px' }}
+                />
+                {empPickerOpen && empSearch.trim().length >= 1 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    width: '400px',
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    backgroundColor: 'white',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    zIndex: 1000,
+                    marginTop: '2px',
+                  }}>
+                    {empSearchResults.length === 0 ? (
+                      <div style={{ padding: '0.75rem', color: '#9ca3af', fontSize: '0.9rem' }}>No employees found</div>
+                    ) : empSearchResults.map((emp: any) => (
+                      <div
+                        key={emp.id}
+                        style={{ padding: '0.6rem 0.85rem', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f9fafb')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'white')}
+                        onClick={() => {
+                          setLinkedEmployeeId(emp.id);
+                          setEmpPickerOpen(false);
+                          setEmpSearch('');
+                          setFormData(prev => ({
+                            ...prev,
+                            employee_name: `${emp.first_name} ${emp.last_name}`.trim(),
+                            job_title: prev.job_title || emp.job_title || emp.title || '',
+                            phone: prev.phone || formatPhoneNumber(emp.mobile_phone || emp.phone || ''),
+                            email: prev.email || (emp.email || ''),
+                          }));
+                        }}
+                      >
+                        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{emp.first_name} {emp.last_name}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                          {[emp.job_title || emp.title, emp.trade].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  Linking enables the "Labor History" tab to auto-import their project assignments
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="form-row">
             <div className="form-group">
@@ -1234,7 +1354,7 @@ const EmployeeResumeForm: React.FC = () => {
 
           <ResumeProjectManager
             resumeId={id ? parseInt(id) : undefined}
-            employeeId={existingResume?.employee_id}
+            employeeId={linkedEmployeeId ?? undefined}
             value={projects}
             onChange={setProjects}
             limit={limits.projects}
