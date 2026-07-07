@@ -123,6 +123,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
   const [pct, setPct] = useState<OpportunityEstimateData>(DEFAULT_ESTIMATE);
   const [initialized, setInitialized] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pctRef = useRef<OpportunityEstimateData>(DEFAULT_ESTIMATE);
 
   const { data: savedEstimate } = useQuery({
     queryKey: ['opportunity-estimate', opportunityId],
@@ -166,11 +167,21 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
   }, [savedEstimate, defaults, initialized]);
 
   const debouncedSave = useCallback((data: OpportunityEstimateData) => {
+    pctRef.current = data;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => { saveMutation.mutate(data); }, 800);
   }, [saveMutation]);
 
-  useEffect(() => { return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }; }, []);
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        if (opportunityId) {
+          opportunitiesService.saveEstimate(opportunityId, pctRef.current);
+        }
+      }
+    };
+  }, [opportunityId]);
 
   const updateField = useCallback((field: keyof OpportunityEstimateData, value: number) => {
     setPct(prev => {
@@ -190,7 +201,6 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
     const field = `${trade}_labor_pct` as keyof OpportunityEstimateData;
     const isDisabling = (pct[field] as number) > 0;
 
-    // Determine new active trades
     const newTrades = TRADES
       .filter(t => {
         if (t.key === trade) return !isDisabling;
@@ -198,35 +208,54 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
       })
       .map(t => t.key);
 
-    // Fetch conditional defaults from backend for this trade mix
-    try {
-      const newDefaults = await opportunitiesService.getEstimateDefaults(newTrades);
-      // Apply ALL defaults — cost categories, trade splits, and rates
-      setPct(newDefaults);
-      debouncedSave(newDefaults);
-    } catch {
-      // Fallback: just zero/redistribute trade percentages locally
-      setPct(prev => {
-        const next = { ...prev };
-        if (isDisabling) {
-          (next as any)[field] = 0;
-          const others = TRADES.filter(t => t.key !== trade && (prev[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number) > 0);
-          if (others.length > 0) {
-            const othersSum = others.reduce((s, t) => s + (prev[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number), 0);
-            for (const t of others) {
-              const k = `${t.key}_labor_pct` as keyof OpportunityEstimateData;
-              (next as any)[k] = othersSum > 0 ? (prev[k] as number) / othersSum : 1 / others.length;
-            }
-          }
-        } else {
-          const fallback = 1 / newTrades.length;
-          for (const t of TRADES) {
-            (next as any)[`${t.key}_labor_pct`] = newTrades.includes(t.key) ? fallback : 0;
+    // Apply optimistic state immediately so the checkbox flips without waiting for the network
+    let optimisticState!: OpportunityEstimateData;
+    setPct(prev => {
+      const next = { ...prev };
+      if (isDisabling) {
+        (next as any)[field] = 0;
+        const others = TRADES.filter(t => t.key !== trade && (prev[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number) > 0);
+        if (others.length > 0) {
+          const othersSum = others.reduce((s, t) => s + (prev[`${t.key}_labor_pct` as keyof OpportunityEstimateData] as number), 0);
+          for (const t of others) {
+            const k = `${t.key}_labor_pct` as keyof OpportunityEstimateData;
+            (next as any)[k] = othersSum > 0 ? (prev[k] as number) / othersSum : 1 / others.length;
           }
         }
+      } else {
+        const fallback = 1 / newTrades.length;
+        for (const t of TRADES) {
+          (next as any)[`${t.key}_labor_pct`] = newTrades.includes(t.key) ? fallback : 0;
+        }
+      }
+      optimisticState = next;
+      return next;
+    });
+
+    // Then fetch real defaults and apply only trade-specific fields (not cost breakdown %)
+    try {
+      const newDefaults = await opportunitiesService.getEstimateDefaults(newTrades);
+      setPct(prev => {
+        const next: OpportunityEstimateData = {
+          ...prev,
+          pf_labor_pct: newDefaults.pf_labor_pct,
+          sm_labor_pct: newDefaults.sm_labor_pct,
+          pl_labor_pct: newDefaults.pl_labor_pct,
+          pf_shop_pct: newDefaults.pf_shop_pct,
+          pf_field_pct: newDefaults.pf_field_pct,
+          sm_shop_pct: newDefaults.sm_shop_pct,
+          sm_field_pct: newDefaults.sm_field_pct,
+          pl_shop_pct: newDefaults.pl_shop_pct,
+          pl_field_pct: newDefaults.pl_field_pct,
+          pf_labor_rate: newDefaults.pf_labor_rate,
+          sm_labor_rate: newDefaults.sm_labor_rate,
+          pl_labor_rate: newDefaults.pl_labor_rate,
+        };
         debouncedSave(next);
         return next;
       });
+    } catch {
+      debouncedSave(optimisticState);
     }
   }, [pct, debouncedSave]);
 
