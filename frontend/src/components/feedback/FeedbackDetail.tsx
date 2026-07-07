@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Feedback, FeedbackComment } from '../../services/feedback';
 import { attachmentsApi } from '../../services/attachments';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +9,8 @@ interface FeedbackDetailProps {
   feedback: Feedback;
   comments: FeedbackComment[];
   onAddComment: (comment: string) => Promise<void>;
+  onUpdateComment?: (commentId: number, comment: string) => Promise<void>;
+  onDeleteComment?: (commentId: number) => Promise<void>;
   onUpdateStatus?: (status: string) => Promise<void>;
   onClose: () => void;
 }
@@ -17,12 +19,19 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   feedback,
   comments,
   onAddComment,
+  onUpdateComment,
+  onDeleteComment,
   onUpdateStatus,
   onClose
 }) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
+  const [commentFiles, setCommentFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', 'feedback', feedback.id],
@@ -64,16 +73,66 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() && commentFiles.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      await onAddComment(newComment);
-      setNewComment('');
+      if (newComment.trim()) {
+        await onAddComment(newComment);
+        setNewComment('');
+      }
+      if (commentFiles.length > 0) {
+        for (const file of commentFiles) {
+          await attachmentsApi.upload('feedback', feedback.id, file);
+        }
+        queryClient.invalidateQueries({ queryKey: ['attachments', 'feedback', feedback.id] });
+        setCommentFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     } catch (error) {
-      console.error('Error adding comment:', error);
+      console.error('Error submitting comment:', error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setCommentFiles(Array.from(e.target.files));
+    }
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setCommentFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleStartEdit = (comment: FeedbackComment) => {
+    setEditingCommentId(comment.id);
+    setEditingText(comment.comment);
+  };
+
+  const handleSaveEdit = async (commentId: number) => {
+    if (!onUpdateComment || !editingText.trim()) return;
+    try {
+      await onUpdateComment(commentId, editingText);
+      setEditingCommentId(null);
+    } catch (error) {
+      console.error('Error updating comment:', error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditingText('');
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!onDeleteComment) return;
+    if (!window.confirm('Delete this comment?')) return;
+    try {
+      await onDeleteComment(commentId);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
     }
   };
 
@@ -84,6 +143,11 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   };
 
   const isAdmin = user?.role === 'admin';
+
+  const canEditComment = (comment: FeedbackComment) => comment.user_id === user?.id;
+  const canDeleteComment = (comment: FeedbackComment) => comment.user_id === user?.id || isAdmin;
+
+  const canSubmitComment = newComment.trim().length > 0 || commentFiles.length > 0;
 
   return (
     <div className="feedback-detail">
@@ -187,13 +251,36 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
               rows={3}
               disabled={isSubmitting}
             />
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={isSubmitting || !newComment.trim()}
-            >
-              {isSubmitting ? 'Posting...' : 'Post Comment'}
-            </button>
+            <div className="comment-form-footer">
+              <label className="comment-attach-btn">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                  disabled={isSubmitting}
+                />
+                <span>📎 Attach file</span>
+              </label>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm"
+                disabled={isSubmitting || !canSubmitComment}
+              >
+                {isSubmitting ? 'Posting...' : 'Post Comment'}
+              </button>
+            </div>
+            {commentFiles.length > 0 && (
+              <ul className="comment-file-list">
+                {commentFiles.map((f, i) => (
+                  <li key={i} className="comment-file-item">
+                    <span>{f.name}</span>
+                    <button type="button" className="comment-file-remove" onClick={() => removeSelectedFile(i)}>✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </form>
 
           <div className="comments-list">
@@ -204,9 +291,56 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
                 <div key={comment.id} className="comment">
                   <div className="comment-header">
                     <span className="comment-author">{comment.commenter_name}</span>
-                    <span className="comment-date">{formatDate(comment.created_at)}</span>
+                    <div className="comment-header-right">
+                      <span className="comment-date">{formatDate(comment.created_at)}</span>
+                      {canEditComment(comment) && onUpdateComment && (
+                        <button
+                          className="comment-action-btn"
+                          onClick={() => handleStartEdit(comment)}
+                          title="Edit comment"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canDeleteComment(comment) && onDeleteComment && (
+                        <button
+                          className="comment-action-btn comment-action-delete"
+                          onClick={() => handleDeleteComment(comment.id)}
+                          title="Delete comment"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <p className="comment-text">{comment.comment}</p>
+                  {editingCommentId === comment.id ? (
+                    <div className="comment-edit-form">
+                      <textarea
+                        className="form-control"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        rows={3}
+                        autoFocus
+                      />
+                      <div className="comment-edit-actions">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleSaveEdit(comment.id)}
+                          disabled={!editingText.trim()}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={handleCancelEdit}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="comment-text">{comment.comment}</p>
+                  )}
                 </div>
               ))
             )}

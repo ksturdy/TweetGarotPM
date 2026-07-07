@@ -262,11 +262,70 @@
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
 }
 
-.comment-form button {
-  align-self: flex-end;
+.comment-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.comment-attach-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #5a5a72;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e0e2e7;
+  background: #f0f1f3;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.comment-attach-btn:hover {
+  background: #e0e2e7;
+  color: #1a1a2e;
+}
+
+.comment-form-footer button {
   padding: 4px 12px;
   font-size: 11px;
   border-radius: 6px;
+}
+
+.comment-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.comment-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  background: #f0f1f3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #1a1a2e;
+}
+
+.comment-file-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #5a5a72;
+  font-size: 10px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.comment-file-remove:hover {
+  color: #dc3545;
 }
 
 .comments-list {
@@ -296,6 +355,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  gap: 8px;
 }
 
 .comment-author {
@@ -304,9 +364,65 @@
   font-size: 12px;
 }
 
+.comment-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .comment-date {
   font-size: 11px;
   color: #5a5a72;
+}
+
+.comment-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #5a5a72;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.comment-action-btn:hover {
+  color: #007bff;
+  background: #e8f0fe;
+}
+
+.comment-action-delete:hover {
+  color: #dc3545;
+  background: #fde8e8;
+}
+
+.comment-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.comment-edit-form textarea {
+  resize: vertical;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+.comment-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.comment-edit-actions button {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 5px;
 }
 
 .comment-text {

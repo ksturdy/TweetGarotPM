@@ -113,6 +113,25 @@ const FeedbackPage: React.FC = () => {
     }
   });
 
+  // Update comment mutation
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ feedbackId, commentId, comment }: { feedbackId: number; commentId: number; comment: string }) =>
+      feedbackService.updateComment(feedbackId, commentId, comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feedback-comments', selectedFeedback?.id] });
+    }
+  });
+
+  // Delete comment mutation
+  const deleteCommentMutation = useMutation({
+    mutationFn: ({ feedbackId, commentId }: { feedbackId: number; commentId: number }) =>
+      feedbackService.deleteComment(feedbackId, commentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feedback-comments', selectedFeedback?.id] });
+      queryClient.invalidateQueries({ queryKey: ['feedback'] });
+    }
+  });
+
   // Update status mutation (admin only)
   const updateStatusMutation = useMutation({
     mutationFn: ({ feedbackId, status }: { feedbackId: number; status: string }) =>
@@ -146,6 +165,25 @@ const FeedbackPage: React.FC = () => {
       await addCommentMutation.mutateAsync({
         feedbackId: selectedFeedback.id,
         comment
+      });
+    }
+  };
+
+  const handleUpdateComment = async (commentId: number, comment: string) => {
+    if (selectedFeedback) {
+      await updateCommentMutation.mutateAsync({
+        feedbackId: selectedFeedback.id,
+        commentId,
+        comment
+      });
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (selectedFeedback) {
+      await deleteCommentMutation.mutateAsync({
+        feedbackId: selectedFeedback.id,
+        commentId
       });
     }
   };
@@ -346,6 +384,8 @@ const FeedbackPage: React.FC = () => {
               feedback={selectedFeedback}
               comments={comments}
               onAddComment={handleAddComment}
+              onUpdateComment={handleUpdateComment}
+              onDeleteComment={handleDeleteComment}
               onUpdateStatus={isAdmin ? handleUpdateStatus : undefined}
               onClose={() => setSelectedFeedback(null)}
             />
