@@ -12,6 +12,7 @@ import EngineeringIcon from '@mui/icons-material/Engineering';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import CalendarViewMonthIcon from '@mui/icons-material/CalendarViewMonth';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
@@ -103,6 +104,14 @@ const reports = [
     desc: 'Secured, awarded, and weighted pursuit revenue across the next 12 months',
     color: '#2563eb',
     bg: '#eff6ff',
+  },
+  {
+    name: 'Historical Revenue',
+    Icon: BarChartIcon,
+    path: '/reports/historical-revenue',
+    desc: 'Revenue by year stacked by market, department, PM, or customer',
+    color: '#0f766e',
+    bg: '#f0fdfa',
   },
   {
     name: 'Scheduled Reports',
