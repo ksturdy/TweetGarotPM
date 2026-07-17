@@ -251,21 +251,35 @@ const ProjectLocations: React.FC = () => {
   const stats = useMemo(() => {
     const states = new Set<string>();
     const marketCounts: Record<string, number> = {};
-    const customerCounts: Record<string, number> = {};
+    const customerData: Record<string, { count: number; value: number; revForGm: number; profit: number }> = {};
     let totalContract = 0;
     filteredLocations.forEach((loc: MapProject) => {
       if (loc.ship_state) states.add(loc.ship_state);
       if (loc.market) marketCounts[loc.market] = (marketCounts[loc.market] || 0) + 1;
-      if (loc.customer_name) customerCounts[loc.customer_name] = (customerCounts[loc.customer_name] || 0) + 1;
       if (loc.contract_value) totalContract += Number(loc.contract_value) || 0;
+      if (loc.customer_name) {
+        if (!customerData[loc.customer_name]) customerData[loc.customer_name] = { count: 0, value: 0, revForGm: 0, profit: 0 };
+        const d = customerData[loc.customer_name];
+        d.count += 1;
+        d.value += Number(loc.contract_value) || 0;
+        const rev = Number(loc.projected_revenue) || 0;
+        const gm = Number(loc.gross_margin_percent) || 0;
+        if (rev > 0 && gm > 0 && gm < 1) { d.revForGm += rev; d.profit += rev * gm; }
+      }
     });
     const topMarket = Object.entries(marketCounts).sort((a, b) => b[1] - a[1])[0];
-    const topCustomer = Object.entries(customerCounts).sort((a, b) => b[1] - a[1])[0];
+    const customerEntries = Object.entries(customerData);
+    const byCount = customerEntries.sort((a, b) => b[1].count - a[1].count)[0];
+    const byValue = [...customerEntries].sort((a, b) => b[1].value - a[1].value)[0];
+    const makeCustomerStat = (entry: typeof byCount | undefined) => entry
+      ? { name: entry[0], count: entry[1].count, value: entry[1].value, gm: entry[1].revForGm > 0 ? entry[1].profit / entry[1].revForGm : null }
+      : null;
     return {
       totalOnMap: filteredLocations.length,
       statesCovered: states.size,
       topMarket: topMarket ? topMarket[0] : '-',
-      topCustomer: topCustomer ? topCustomer[0] : '-',
+      topCustomerByCount: makeCustomerStat(byCount),
+      topCustomerByValue: makeCustomerStat(byValue),
       totalContract,
     };
   }, [filteredLocations]);
@@ -515,11 +529,44 @@ const ProjectLocations: React.FC = () => {
             <div style={{ fontSize: '14px', color: '#718096' }}>Top Market</div>
           </div>
         </div>
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
-          <div style={{ fontSize: '32px' }}>🤝</div>
-          <div>
-            <div style={{ fontSize: '18px', fontWeight: 600, color: '#1a202c', lineHeight: 1.2 }}>{stats.topCustomer}</div>
-            <div style={{ fontSize: '14px', color: '#718096', marginTop: '2px' }}>Top Customer</div>
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ fontSize: '28px', marginTop: '2px' }}>🏆</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', color: '#718096', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Top Customer (by Count)</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a202c', lineHeight: 1.2, marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {stats.topCustomerByCount?.name ?? '-'}
+              </div>
+              {stats.topCustomerByCount && (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{stats.topCustomerByCount.count}</span> projects</span>
+                  <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{formatCurrency(stats.topCustomerByCount.value)}</span> value</span>
+                  {stats.topCustomerByCount.gm != null && (
+                    <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{(stats.topCustomerByCount.gm * 100).toFixed(1)}%</span> GM</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <div style={{ fontSize: '28px', marginTop: '2px' }}>💎</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', color: '#718096', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Top Customer (by Value)</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a202c', lineHeight: 1.2, marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {stats.topCustomerByValue?.name ?? '-'}
+              </div>
+              {stats.topCustomerByValue && (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{stats.topCustomerByValue.count}</span> projects</span>
+                  <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{formatCurrency(stats.topCustomerByValue.value)}</span> value</span>
+                  {stats.topCustomerByValue.gm != null && (
+                    <span style={{ fontSize: '12px', color: '#4a5568' }}><span style={{ fontWeight: 600 }}>{(stats.topCustomerByValue.gm * 100).toFixed(1)}%</span> GM</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
