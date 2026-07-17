@@ -530,13 +530,13 @@ const ProjectLocations: React.FC = () => {
             <div style={{ fontSize: '13px', color: '#718096', marginTop: '4px' }}>Top Market</div>
           </div>
         </div>
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '30px', flexShrink: 0 }}>🏆</div>
+        <div className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '18px 20px' }}>
+          <div style={{ fontSize: '22px', flexShrink: 0, marginTop: '2px' }}>🏆</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a202c', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1a202c', lineHeight: 1.3 }}>
               {stats.topCustomerByCount?.name ?? '-'}
             </div>
-            <div style={{ fontSize: '13px', color: '#718096', marginTop: '3px', marginBottom: '5px' }}>Top Customer (by Count)</div>
+            <div style={{ fontSize: '12px', color: '#718096', marginTop: '3px', marginBottom: '5px' }}>Top Customer (by Count)</div>
             {stats.topCustomerByCount && (
               <div style={{ fontSize: '12px', color: '#4a5568', lineHeight: 1.6 }}>
                 <span style={{ fontWeight: 600 }}>{stats.topCustomerByCount.count}</span> proj · <span style={{ fontWeight: 600 }}>{formatCurrency(stats.topCustomerByCount.value)}</span>
@@ -546,13 +546,13 @@ const ProjectLocations: React.FC = () => {
             )}
           </div>
         </div>
-        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '18px 20px' }}>
-          <div style={{ fontSize: '30px', flexShrink: 0 }}>💎</div>
+        <div className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '18px 20px' }}>
+          <div style={{ fontSize: '22px', flexShrink: 0, marginTop: '2px' }}>💎</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: '#1a202c', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1a202c', lineHeight: 1.3 }}>
               {stats.topCustomerByValue?.name ?? '-'}
             </div>
-            <div style={{ fontSize: '13px', color: '#718096', marginTop: '3px', marginBottom: '5px' }}>Top Customer (by Value)</div>
+            <div style={{ fontSize: '12px', color: '#718096', marginTop: '3px', marginBottom: '5px' }}>Top Customer (by Value)</div>
             {stats.topCustomerByValue && (
               <div style={{ fontSize: '12px', color: '#4a5568', lineHeight: 1.6 }}>
                 <span style={{ fontWeight: 600 }}>{stats.topCustomerByValue.count}</span> proj · <span style={{ fontWeight: 600 }}>{formatCurrency(stats.topCustomerByValue.value)}</span>
