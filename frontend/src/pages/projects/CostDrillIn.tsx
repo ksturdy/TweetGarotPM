@@ -78,6 +78,12 @@ const CostDrillIn: React.FC = () => {
     queryFn: () => projectsApi.getById(Number(projectId)).then(res => res.data),
   });
 
+  const { data: vistaContract } = useQuery({
+    queryKey: ['vistaContractByProject', projectId],
+    queryFn: () => vistaDataService.getContractByProjectId(Number(projectId)),
+    enabled: !!projectId,
+  });
+
   const { data: rows, isLoading } = useQuery({
     queryKey: ['phaseCodeDetail', projectId, jobs, costType, trade],
     queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), {
@@ -113,7 +119,7 @@ const CostDrillIn: React.FC = () => {
       case 'projected_cost': return Number(row.projected_cost || 0);
       case 'remaining_spend': return Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
       case 'variance': return Number(row.est_cost || 0) - Number(row.projected_cost || 0);
-      case 'percent_complete': return Number(row.percent_complete || 0);
+      case 'percent_complete': return Number(row.projected_cost) > 0 ? Number(row.jtd_cost) / Number(row.projected_cost) : 0;
       default: return 0;
     }
   };
@@ -211,7 +217,7 @@ const CostDrillIn: React.FC = () => {
 
       {/* Summary Cards */}
       {processedRows.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isLabor ? 8 : 6}, 1fr)`, gap: '0.75rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isLabor ? 9 : 7}, 1fr)`, gap: '0.75rem', marginBottom: '1rem' }}>
           {isLabor && (
             <>
               <SummaryCard label="Est Hours" value={fmtNum(totals.est_hours)} />
@@ -225,6 +231,18 @@ const CostDrillIn: React.FC = () => {
             color={totals.change_from_last_projection > 0 ? '#ef4444' : totals.change_from_last_projection < 0 ? '#10b981' : undefined} />
           <SummaryCard label="Committed" value={fmt(totals.committed_cost)} />
           <SummaryCard label="Projected" value={fmt(totals.projected_cost)} color={getVarianceColor(totals.projected_cost, totals.est_cost)} />
+          {(() => {
+            const earned = Number(vistaContract?.earned_revenue || 0);
+            const projRev = Number(vistaContract?.projected_revenue || 0);
+            const pct = projRev > 0 ? (earned / projRev) * 100 : null;
+            return (
+              <SummaryCard
+                label="% Complete"
+                value={pct != null ? `${pct.toFixed(1)}%` : '-'}
+                color={pct != null ? (pct >= 90 ? '#10b981' : pct >= 50 ? '#f59e0b' : undefined) : undefined}
+              />
+            );
+          })()}
         </div>
       )}
 
@@ -343,7 +361,7 @@ const CostDrillIn: React.FC = () => {
                       {fmt(variance)}
                     </Td>
                     <Td align="right">
-                      {row.percent_complete != null ? `${(Number(row.percent_complete) * 100).toFixed(1)}%` : '-'}
+                      {Number(row.projected_cost) > 0 ? `${(Number(row.jtd_cost) / Number(row.projected_cost) * 100).toFixed(1)}%` : '-'}
                     </Td>
                   </tr>
                 );

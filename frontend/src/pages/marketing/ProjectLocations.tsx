@@ -13,7 +13,9 @@ import SearchableSelect from '../../components/SearchableSelect';
 import SearchableMultiSelect from '../../components/SearchableMultiSelect';
 import CustomLayerMarkers from '../../components/maps/CustomLayerMarkers';
 import StateRevenueLayer from '../../components/maps/StateRevenueLayer';
+import GroupedProjectMarkers from '../../components/maps/GroupedProjectMarkers';
 import * as customMapLayerService from '../../services/customMapLayers';
+import * as mapMarketGroupService from '../../services/mapMarketGroups';
 import '../../components/modals/Modal.css';
 import '../../styles/SalesPipeline.css';
 
@@ -278,6 +280,8 @@ const ProjectLocations: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [includeList, setIncludeList] = useState(false);
   const [enabledCustomLayers, setEnabledCustomLayers] = useState<number[]>([]);
+  const [enabledMarketGroups, setEnabledMarketGroups] = useState<number[]>([]);
+  const [showUngrouped, setShowUngrouped] = useState(false);
   const [standardLayers, setStandardLayers] = useState<string[]>(['projects']);
   const [mapStyle, setMapStyle] = useState<string>('carto-voyager');
 
@@ -285,6 +289,13 @@ const ProjectLocations: React.FC = () => {
     queryKey: ['custom-map-layers'],
     queryFn: customMapLayerService.getAll,
   });
+
+  const { data: marketGroups = [] } = useQuery({
+    queryKey: ['map-market-groups'],
+    queryFn: mapMarketGroupService.getAll,
+  });
+
+  const activeMarketGroups = marketGroups.filter(g => enabledMarketGroups.includes(g.id));
 
   const customPinQueries = useQuery({
     queryKey: ['custom-map-pins', enabledCustomLayers],
@@ -573,7 +584,7 @@ const ProjectLocations: React.FC = () => {
       </div>
 
       {/* Layer Selectors */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '1rem', marginBottom: '8px' }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label">Map Style</label>
           <SearchableSelect
@@ -615,6 +626,34 @@ const ProjectLocations: React.FC = () => {
             onChange={(vals) => setEnabledCustomLayers(vals.map(Number))}
             placeholder={customLayers.length === 0 ? 'No custom layers' : 'Select layers...'}
           />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Market Groups
+            <Link to="/marketing/market-groups" style={{ fontSize: '12px', fontWeight: 500, color: '#3b82f6', textDecoration: 'none' }}>
+              Manage
+            </Link>
+          </label>
+          <SearchableMultiSelect
+            options={marketGroups.map(g => ({
+              value: String(g.id),
+              label: g.name,
+              subtitle: `${g.markets.length} market${g.markets.length !== 1 ? 's' : ''}`,
+            }))}
+            values={enabledMarketGroups.map(String)}
+            onChange={(vals) => setEnabledMarketGroups(vals.map(Number))}
+            placeholder={marketGroups.length === 0 ? 'No groups defined' : 'Select groups...'}
+          />
+          {enabledMarketGroups.length > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={showUngrouped}
+                onChange={e => setShowUngrouped(e.target.checked)}
+              />
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>Show unmatched projects</span>
+            </label>
+          )}
         </div>
       </div>
       <div ref={mapRef} className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '1.5rem' }}>
@@ -667,6 +706,14 @@ const ProjectLocations: React.FC = () => {
               <CustomLayerMarkers key={layerId} pins={pins} color={layer.pin_color} layerName={layer.name} />
             ) : null;
           })}
+          {activeMarketGroups.length > 0 && filteredLocations.length > 0 && (
+            <GroupedProjectMarkers
+              key={activeMarketGroups.map(g => g.id).join('-') + String(showUngrouped)}
+              locations={filteredLocations}
+              groups={activeMarketGroups}
+              showUngrouped={showUngrouped}
+            />
+          )}
         </MapContainer>
       </div>
 
@@ -674,7 +721,7 @@ const ProjectLocations: React.FC = () => {
       <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Legend:</span>
-          {standardLayers.length === 0 && enabledCustomLayers.length === 0 && (
+          {standardLayers.length === 0 && enabledCustomLayers.length === 0 && enabledMarketGroups.length === 0 && (
             <span style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>Select layers above to display on map</span>
           )}
           {standardLayers.includes('projects') && (
@@ -724,6 +771,37 @@ const ProjectLocations: React.FC = () => {
                   </div>
                 );
               })}
+            </>
+          )}
+          {activeMarketGroups.length > 0 && (
+            <>
+              {(standardLayers.length > 0 || enabledCustomLayers.length > 0) && (
+                <div style={{ width: '1px', height: '16px', background: '#e2e8f0' }} />
+              )}
+              {activeMarketGroups.map(group => (
+                <div key={group.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '18px', height: '18px', flexShrink: 0,
+                    background: group.pin_color,
+                    borderRadius: '50%',
+                    border: '2px solid white',
+                    boxShadow: '0 0 0 2px ' + group.pin_color,
+                  }} />
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>{group.name}</span>
+                </div>
+              ))}
+              {showUngrouped && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '18px', height: '18px', flexShrink: 0,
+                    background: '#9ca3af',
+                    borderRadius: '50%',
+                    border: '2px solid white',
+                    boxShadow: '0 0 0 2px #9ca3af',
+                  }} />
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>Other</span>
+                </div>
+              )}
             </>
           )}
         </div>

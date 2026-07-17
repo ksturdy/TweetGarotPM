@@ -60,6 +60,7 @@ import ProposalWizard from './pages/marketing/ProposalWizard';
 import ProjectLocations from './pages/marketing/ProjectLocations';
 import CustomerComparison from './pages/marketing/CustomerComparison';
 import CustomMaps from './pages/marketing/CustomMaps';
+import MarketGroups from './pages/marketing/MarketGroups';
 import MediaLibrary from './pages/marketing/MediaLibrary';
 import EstimatingDashboard from './pages/estimating/EstimatingDashboard';
 import EstimatesList from './pages/estimating/EstimatesList';
@@ -416,6 +417,7 @@ const App: React.FC = () => {
                 <Route path="/marketing/project-locations" element={<ProjectLocations />} />
                 <Route path="/marketing/customer-comparison" element={<CustomerComparison />} />
                 <Route path="/marketing/custom-maps" element={<CustomMaps />} />
+                <Route path="/marketing/market-groups" element={<MarketGroups />} />
                 <Route path="/marketing/media" element={<MediaLibrary />} />
                 <Route path="/marketing/trade-shows" element={<TradeShowList />} />
                 <Route path="/marketing/trade-shows/create" element={<TradeShowForm />} />
