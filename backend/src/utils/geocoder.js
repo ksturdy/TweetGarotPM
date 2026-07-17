@@ -250,12 +250,6 @@ async function geocodeAddress(project) {
     }
   }
 
-  // 3. State centroid (last resort — at least in the right state)
-  if (stateAbbr && STATE_CENTROIDS[stateAbbr]) {
-    const [lat, lng] = STATE_CENTROIDS[stateAbbr];
-    return { lat, lng, source: 'centroid' };
-  }
-
   return null;
 }
 

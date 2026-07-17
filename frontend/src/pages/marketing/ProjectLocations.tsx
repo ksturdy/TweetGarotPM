@@ -148,6 +148,7 @@ const ProjectLocations: React.FC = () => {
   });
 
   const [geocodeProgress, setGeocodeProgress] = useState<{ running: boolean; total: number; geocoded: number; failed: number } | null>(null);
+  const [geocodeSummary, setGeocodeSummary] = useState<{ total: number; geocoded: number; failed: number } | null>(null);
   const [showConfirmGeocode, setShowConfirmGeocode] = useState(false);
 
   // Check for an already-running geocode job on page load
@@ -164,9 +165,12 @@ const ProjectLocations: React.FC = () => {
     onSuccess: (data) => {
       if (data.status === 'started' || data.status === 'running') {
         setGeocodeProgress({ running: true, total: data.total, geocoded: data.geocoded || 0, failed: data.failed || 0 });
+        setGeocodeSummary(null);
       } else {
+        // Completed immediately (e.g. 0 projects to geocode)
         queryClient.invalidateQueries({ queryKey: ['projectMapLocations'] });
         setGeocodeProgress(null);
+        setGeocodeSummary({ total: data.total ?? 0, geocoded: data.geocoded ?? 0, failed: data.failed ?? 0 });
       }
     },
     onError: () => {
@@ -184,6 +188,8 @@ const ProjectLocations: React.FC = () => {
         if (!data.running) {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: ['projectMapLocations'] });
+          setGeocodeProgress(null);
+          setGeocodeSummary({ total: data.total, geocoded: data.geocoded, failed: data.failed });
         }
       } catch {
         // ignore polling errors
@@ -245,19 +251,21 @@ const ProjectLocations: React.FC = () => {
   const stats = useMemo(() => {
     const states = new Set<string>();
     const marketCounts: Record<string, number> = {};
+    const customerCounts: Record<string, number> = {};
     let totalContract = 0;
     filteredLocations.forEach((loc: MapProject) => {
       if (loc.ship_state) states.add(loc.ship_state);
-      if (loc.market) {
-        marketCounts[loc.market] = (marketCounts[loc.market] || 0) + 1;
-      }
+      if (loc.market) marketCounts[loc.market] = (marketCounts[loc.market] || 0) + 1;
+      if (loc.customer_name) customerCounts[loc.customer_name] = (customerCounts[loc.customer_name] || 0) + 1;
       if (loc.contract_value) totalContract += Number(loc.contract_value) || 0;
     });
     const topMarket = Object.entries(marketCounts).sort((a, b) => b[1] - a[1])[0];
+    const topCustomer = Object.entries(customerCounts).sort((a, b) => b[1] - a[1])[0];
     return {
       totalOnMap: filteredLocations.length,
       statesCovered: states.size,
       topMarket: topMarket ? topMarket[0] : '-',
+      topCustomer: topCustomer ? topCustomer[0] : '-',
       totalContract,
     };
   }, [filteredLocations]);
@@ -296,6 +304,28 @@ const ProjectLocations: React.FC = () => {
   });
 
   const activeMarketGroups = marketGroups.filter(g => enabledMarketGroups.includes(g.id));
+
+  const marketGroupStats = useMemo(() => {
+    if (activeMarketGroups.length === 0) return {};
+    const marketToGroup = new Map<string, number>();
+    activeMarketGroups.forEach(g => g.markets.forEach(m => { if (!marketToGroup.has(m)) marketToGroup.set(m, g.id); }));
+    const stats: Record<number, { count: number; value: number; totalRevenue: number; totalProfit: number }> = {};
+    activeMarketGroups.forEach(g => { stats[g.id] = { count: 0, value: 0, totalRevenue: 0, totalProfit: 0 }; });
+    filteredLocations.forEach((loc: MapProject) => {
+      const gid = loc.market ? marketToGroup.get(loc.market) : undefined;
+      if (gid !== undefined && stats[gid]) {
+        const revenue = Number(loc.projected_revenue) || 0;
+        const margin = loc.gross_margin_percent != null ? Number(loc.gross_margin_percent) : null;
+        stats[gid].count += 1;
+        stats[gid].value += Number(loc.contract_value) || 0;
+        if (revenue > 0 && margin !== null) {
+          stats[gid].totalRevenue += revenue;
+          stats[gid].totalProfit += revenue * margin;
+        }
+      }
+    });
+    return stats;
+  }, [activeMarketGroups, filteredLocations]);
 
   const customPinQueries = useQuery({
     queryKey: ['custom-map-pins', enabledCustomLayers],
@@ -352,6 +382,10 @@ const ProjectLocations: React.FC = () => {
           tileUrl,
           standardLayers,
           customPins: customPinData,
+          marketGroups: activeMarketGroups.length > 0
+            ? activeMarketGroups.map(g => ({ name: g.name, pin_color: g.pin_color, markets: g.markets }))
+            : undefined,
+          showUngrouped: activeMarketGroups.length > 0 ? showUngrouped : undefined,
         },
       });
     } catch (err) {
@@ -413,9 +447,7 @@ const ProjectLocations: React.FC = () => {
       {geocodeProgress?.running && (
         <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>
-              Geocoding in progress...
-            </span>
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>Geocoding in progress...</span>
             <span style={{ fontSize: '14px', color: '#718096' }}>
               {geocodeProgress.geocoded + geocodeProgress.failed} / {geocodeProgress.total}
               {geocodeProgress.failed > 0 && ` (${geocodeProgress.failed} failed)`}
@@ -424,12 +456,32 @@ const ProjectLocations: React.FC = () => {
           <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
             <div style={{
               width: `${geocodeProgress.total > 0 ? ((geocodeProgress.geocoded + geocodeProgress.failed) / geocodeProgress.total * 100) : 0}%`,
-              height: '100%',
-              background: '#3b82f6',
-              borderRadius: '4px',
-              transition: 'width 0.3s ease',
+              height: '100%', background: '#3b82f6', borderRadius: '4px', transition: 'width 0.3s ease',
             }} />
           </div>
+        </div>
+      )}
+
+      {/* Geocoding Result Summary */}
+      {geocodeSummary && (
+        <div className="card" style={{ padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {geocodeSummary.total === 0 ? (
+              <>
+                <span style={{ fontSize: '16px' }}>✅</span>
+                <span style={{ fontSize: '14px', color: '#374151' }}>All projects with addresses are already geocoded — nothing to do.</span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: '16px' }}>{geocodeSummary.failed === 0 ? '✅' : '⚠️'}</span>
+                <span style={{ fontSize: '14px', color: '#374151' }}>
+                  Geocoding complete: <strong>{geocodeSummary.geocoded} added to map</strong>
+                  {geocodeSummary.failed > 0 && <span style={{ color: '#ef4444' }}> · {geocodeSummary.failed} failed (no address data)</span>}
+                </span>
+              </>
+            )}
+          </div>
+          <button onClick={() => setGeocodeSummary(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '18px', lineHeight: 1 }}>&times;</button>
         </div>
       )}
 
@@ -461,6 +513,13 @@ const ProjectLocations: React.FC = () => {
           <div>
             <div style={{ fontSize: '24px', fontWeight: 600, color: '#1a202c' }}>{stats.topMarket}</div>
             <div style={{ fontSize: '14px', color: '#718096' }}>Top Market</div>
+          </div>
+        </div>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '20px' }}>
+          <div style={{ fontSize: '32px' }}>🤝</div>
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 600, color: '#1a202c', lineHeight: 1.2 }}>{stats.topCustomer}</div>
+            <div style={{ fontSize: '14px', color: '#718096', marginTop: '2px' }}>Top Customer</div>
           </div>
         </div>
       </div>
@@ -778,18 +837,30 @@ const ProjectLocations: React.FC = () => {
               {(standardLayers.length > 0 || enabledCustomLayers.length > 0) && (
                 <div style={{ width: '1px', height: '16px', background: '#e2e8f0' }} />
               )}
-              {activeMarketGroups.map(group => (
-                <div key={group.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '18px', height: '18px', flexShrink: 0,
-                    background: group.pin_color,
-                    borderRadius: '50%',
-                    border: '2px solid white',
-                    boxShadow: '0 0 0 2px ' + group.pin_color,
-                  }} />
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#1e293b' }}>{group.name}</span>
-                </div>
-              ))}
+              {activeMarketGroups.map(group => {
+                const gs = marketGroupStats[group.id];
+                return (
+                  <div key={group.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '18px', height: '18px', flexShrink: 0,
+                      background: group.pin_color,
+                      borderRadius: '50%',
+                      border: '2px solid white',
+                      boxShadow: '0 0 0 2px ' + group.pin_color,
+                    }} />
+                    <div>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{group.name}</span>
+                      {gs && (
+                        <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '6px' }}>
+                          {gs.count} project{gs.count !== 1 ? 's' : ''}
+                          {gs.value > 0 ? ' · ' + formatCurrency(gs.value) : ''}
+                          {gs.totalRevenue > 0 ? ' · ' + (gs.totalProfit / gs.totalRevenue * 100).toFixed(1) + '% GM' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               {showUngrouped && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{

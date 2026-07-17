@@ -52,6 +52,8 @@ function buildMapHtml(opts) {
     stateRevenueData = {},
     standardLayers = [],
     customPins = [],
+    marketGroups = [],
+    showUngrouped = false,
     geoJSON = null,
   } = opts;
 
@@ -285,6 +287,97 @@ ${customPins.map((cp, i) => `
         map.addLayer(cluster);
       })();
 `).join('\n')}
+
+${marketGroups.length > 0 ? `
+      // ── Market Group clusters ──
+      (function() {
+        var allLocs = ${safeJSON(locations)};
+        var groups = ${safeJSON(marketGroups)};
+        var showUngrouped = ${showUngrouped ? 'true' : 'false'};
+
+        // Build market → group index (first group wins)
+        var marketToGroup = {};
+        groups.forEach(function(g) {
+          g.markets.forEach(function(m) {
+            if (!marketToGroup[m]) marketToGroup[m] = g;
+          });
+        });
+
+        // Bucket locations by group
+        var buckets = {};
+        var ungrouped = [];
+        allLocs.forEach(function(loc) {
+          if (!loc.latitude || !loc.longitude) return;
+          var g = loc.market ? marketToGroup[loc.market] : null;
+          if (g) {
+            if (!buckets[g.name]) buckets[g.name] = { group: g, locs: [] };
+            buckets[g.name].locs.push(loc);
+          } else {
+            ungrouped.push(loc);
+          }
+        });
+
+        // Render one cluster per group
+        groups.forEach(function(g) {
+          var bucket = buckets[g.name];
+          if (!bucket || bucket.locs.length === 0) return;
+          var color = g.pin_color;
+          var cluster = L.markerClusterGroup({
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: false,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: false,
+            animate: false,
+            iconCreateFunction: function(c) {
+              return L.divIcon({
+                className: '',
+                html: '<div style="width:24px;height:24px;background:' + color +
+                  ';border:2px solid white;border-radius:50%;color:white;font-size:10px;font-weight:700;' +
+                  'display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.3);">' +
+                  c.getChildCount() + '<\\/div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+              });
+            },
+          });
+          bucket.locs.forEach(function(loc) {
+            cluster.addLayer(L.marker([loc.latitude, loc.longitude], {
+              icon: L.divIcon({
+                className: '',
+                html: '<div style="width:12px;height:12px;background:' + color +
+                  ';border:2px solid white;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,0.15);"><\\/div>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
+              }),
+            }));
+          });
+          map.addLayer(cluster);
+        });
+
+        // Ungrouped (gray) — only if enabled
+        if (showUngrouped && ungrouped.length > 0) {
+          var grayCluster = L.markerClusterGroup({
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: false,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: false,
+            animate: false,
+          });
+          ungrouped.forEach(function(loc) {
+            grayCluster.addLayer(L.marker([loc.latitude, loc.longitude], {
+              icon: L.divIcon({
+                className: '',
+                html: '<div style="width:12px;height:12px;background:#9ca3af' +
+                  ';border:2px solid white;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,0.15);"><\\/div>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
+              }),
+            }));
+          });
+          map.addLayer(grayCluster);
+        }
+      })();
+` : ''}
 
       // Signal ready after tiles load
       tileLayer.on('load', function() {

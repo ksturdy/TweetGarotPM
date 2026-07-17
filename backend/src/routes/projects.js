@@ -101,7 +101,13 @@ router.post('/map-locations/pdf', async (req, res) => {
     const includeList = req.body.includeList === true;
 
     // Map viewport & layer config from the frontend
-    const mapConfig = req.body.mapConfig || undefined;
+    const mapConfig = req.body.mapConfig
+      ? {
+          ...req.body.mapConfig,
+          marketGroups: req.body.mapConfig.marketGroups || [],
+          showUngrouped: req.body.mapConfig.showUngrouped || false,
+        }
+      : undefined;
 
     // Get all map locations with server-side filters
     let locations = await Project.findMapLocations(req.tenantId, {
@@ -209,7 +215,7 @@ router.post('/geocode', authorize('admin', 'manager'), async (req, res, next) =>
       return res.json({ status: 'running', ...geocodeJob });
     }
 
-    const { geocodeAddress, batchGeocodeGeocodio, buildAddressString, normalizeState, isInState, STATE_CENTROIDS } = require('../utils/geocoder');
+    const { geocodeAddress, batchGeocodeGeocodio, buildAddressString, normalizeState, isInState } = require('../utils/geocoder');
     const force = req.query.force === 'true';
     const projects = force
       ? await Project.findNeedsRegeocoding(req.tenantId)
@@ -238,11 +244,6 @@ router.post('/geocode', authorize('admin', 'manager'), async (req, res, next) =>
 
           if (result && (!stateAbbr || isInState(result.lat, result.lng, stateAbbr))) {
             await Project.updateGeocode(project.id, result.lat, result.lng);
-            geocodeJob.geocoded++;
-          } else if (stateAbbr && STATE_CENTROIDS[stateAbbr]) {
-            // Geocodio failed or wrong state — use state centroid
-            const [lat, lng] = STATE_CENTROIDS[stateAbbr];
-            await Project.updateGeocode(project.id, lat, lng);
             geocodeJob.geocoded++;
           } else {
             geocodeJob.failed++;

@@ -65,6 +65,8 @@ export interface MapProject {
   manager_name?: string;
   customer_name?: string;
   contract_value?: number;
+  projected_revenue?: number;
+  gross_margin_percent?: number;
   ship_city?: string;
   ship_state?: string;
   department_name?: string;
@@ -114,6 +116,8 @@ export const projectsApi = {
       tileUrl: string;
       standardLayers: string[];
       customPins: any[];
+      marketGroups?: { name: string; pin_color: string; markets: string[] }[];
+      showUngrouped?: boolean;
     };
   } = {}) => {
     const res = await api.post('/projects/map-locations/pdf', options, {

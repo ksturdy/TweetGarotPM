@@ -205,6 +205,11 @@ const Project = {
              e.first_name || ' ' || e.last_name as manager_name,
              COALESCE(c.name, c.customer_owner, p.client) as customer_name,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
+             vc.projected_revenue,
+             CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                  THEN NULL
+                  ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
+             END as gross_margin_percent,
              vc.ship_city, vc.ship_state,
              d.name as department_name
       FROM projects p
@@ -247,7 +252,10 @@ const Project = {
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
       WHERE p.tenant_id = $1
         AND p.latitude IS NULL
-        AND (vc.ship_city IS NOT NULL OR (p.address IS NOT NULL AND p.address != ''))
+        AND (
+          (vc.ship_city IS NOT NULL AND TRIM(vc.ship_city) != '')
+          OR (p.address IS NOT NULL AND TRIM(p.address) != '')
+        )
     `, [tenantId]);
     return result.rows;
   },

@@ -43,6 +43,8 @@ async function generateProjectLocationsPdfBuffer(projects, options = {}) {
         locations: projects,
         stateRevenueData,
         customPins: mc.customPins || [],
+        marketGroups: mc.marketGroups || [],
+        showUngrouped: mc.showUngrouped || false,
       });
     }
 
