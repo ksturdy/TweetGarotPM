@@ -100,6 +100,13 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
       return XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
     };
 
+    // Helper to get raw header row as array (for column-by-position lookups)
+    const loadSheetHeaders = (sheetName) => {
+      const wb = XLSX.readFile(tempFilePath, { sheets: sheetName, sheetRows: 1 });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+      return rows[0] || [];
+    };
+
     const results = {
       contracts: { total: 0, new: 0, updated: 0, batch_id: null },
       workOrders: { total: 0, new: 0, updated: 0, batch_id: null },
@@ -121,6 +128,11 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
       console.log(`[Vista Auto-Import] ${contractSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
+        // Resolve IPD Amount column by position (BM = index 64) — name varies between exports
+        const contractHeaders = loadSheetHeaders(contractSheetName);
+        const ipdColByPosition = contractHeaders[64] || null;
+        console.log(`[Vista Auto-Import] ${contractSheetName} column BM (IPD Amount): "${ipdColByPosition}"`);
+
         if (data[0]) {
           const columns = Object.keys(data[0]);
           console.log(`[Vista Auto-Import] ${contractSheetName} columns: ${columns.join(', ')}`);
@@ -216,6 +228,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
             primary_market: row['Primary Market'] ?? row[' Primary Market '] ?? '',
             negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
             delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
+            ipd_amount: parseNumber(row['IPD Amount'] ?? row[' IPD Amount '] ?? (ipdColByPosition ? row[ipdColByPosition] : undefined)),
             raw_data: null
           };
 
