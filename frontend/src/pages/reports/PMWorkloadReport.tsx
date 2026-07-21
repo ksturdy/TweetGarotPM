@@ -21,6 +21,7 @@ import {
   pmWorkloadReportApi,
   pmWorkloadSettingsApi,
   PMWorkloadRow,
+  PMWorkloadTeamSummary,
   PMWorkloadSavedThresholds,
   WorkloadBucket,
 } from '../../services/pmWorkloadReport';
@@ -50,7 +51,8 @@ const BUCKET_META: Record<WorkloadBucket, { label: string; color: string; bg: st
   healthy: { label: 'Healthy', color: '#15803d', bg: '#f0fdf4', icon: <CheckCircleOutlineIcon /> },
 };
 
-type SortKey = 'pmName' | 'activeProjects' | 'backlogDollars' | 'backlogHours' | 'hoursOverEstimate' | 'pctOverEstimate';
+type SortKey = 'pmName' | 'activeProjects' | 'backlogDollars' | 'backlogHours' | 'mgmtRemainingHours' | 'hoursOverEstimate' | 'pctOverEstimate';
+type ProjectSortKey = 'pmName' | 'contractNumber' | 'backlog' | 'backlogHours' | 'mgmtRemainingHours' | 'hoursOverEstimate' | 'pctComplete';
 
 const PMWorkloadReport: React.FC = () => {
   const queryClient = useQueryClient();
@@ -59,6 +61,9 @@ const PMWorkloadReport: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('backlogHours');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showSettings, setShowSettings] = useState(false);
+  const [projectSortKey, setProjectSortKey] = useState<ProjectSortKey>('backlogHours');
+  const [projectSortDir, setProjectSortDir] = useState<'asc' | 'desc'>('desc');
+  const [selectedPMKey, setSelectedPMKey] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<{ maxBacklogHours: string; maxBacklogDollars: string; lowBacklogHours: string }>({
     maxBacklogHours: '',
@@ -122,6 +127,28 @@ const PMWorkloadReport: React.FC = () => {
     });
   }, [report, sortKey, sortDir]);
 
+  const projectList = useMemo(() => {
+    if (!report) return [];
+    const source = selectedPMKey
+      ? report.pms.filter(p => p.key === selectedPMKey)
+      : sortedPMs;
+    const flat = source.flatMap(pm =>
+      pm.contracts.map(c => ({ ...c, pmName: pm.pmName, pmKey: pm.key, bucket: pm.bucket }))
+    );
+    const dir = projectSortDir === 'asc' ? 1 : -1;
+    return flat.sort((a, b) => {
+      const av = a[projectSortKey];
+      const bv = b[projectSortKey];
+      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
+      return ((av as number) - (bv as number)) * dir;
+    });
+  }, [report, sortedPMs, selectedPMKey, projectSortKey, projectSortDir]);
+
+  const handleProjectSort = (key: ProjectSortKey) => {
+    if (key === projectSortKey) setProjectSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setProjectSortKey(key); setProjectSortDir('desc'); }
+  };
+
   const chartData = useMemo(() => {
     if (!report) return null;
     // Top 15 by backlog hours so labels stay readable
@@ -178,7 +205,7 @@ const PMWorkloadReport: React.FC = () => {
     );
   }
 
-  const { attention, unmatched, filterOptions, meta } = report;
+  const { attention, unmatched, filterOptions, meta, teamSummary } = report;
   const hasAttention = attention.overloaded.length > 0 || attention.available.length > 0 || attention.sideways.length > 0;
 
   return (
@@ -355,6 +382,32 @@ const PMWorkloadReport: React.FC = () => {
         </section>
       )}
 
+      {/* Team summary */}
+      {teamSummary.length > 0 && (
+        <section className="pmw-section">
+          <h2 className="pmw-section-title">Management Hours by Team</h2>
+          <p className="pmw-section-sub">Remaining management phase code hours vs. PM headcount per team.</p>
+          <div className="pmw-table-wrapper">
+            <table className="pmw-table">
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th className="num">PMs</th>
+                  <th className="num">Mgmt Backlog Hrs</th>
+                  <th className="num">Hrs / PM</th>
+                  <th style={{ width: '180px' }}>Load</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamSummary.map(t => (
+                  <TeamSummaryRow key={t.teamId} team={t} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {/* Full table */}
       <section className="pmw-section">
         <h2 className="pmw-section-title">All PMs</h2>
@@ -368,6 +421,7 @@ const PMWorkloadReport: React.FC = () => {
                 <th className="num sortable" onClick={() => handleSort('activeProjects')}>Active Projects</th>
                 <th className="num sortable" onClick={() => handleSort('backlogDollars')}>Backlog $</th>
                 <th className="num sortable" onClick={() => handleSort('backlogHours')}>Backlog Hours</th>
+                <th className="num sortable" onClick={() => handleSort('mgmtRemainingHours')}>Mgmt Hrs</th>
                 <th className="num sortable" onClick={() => handleSort('hoursOverEstimate')}>Hours Over Est.</th>
                 <th className="num sortable" onClick={() => handleSort('pctOverEstimate')}>% Over Est.</th>
                 <th>Status</th>
@@ -375,15 +429,23 @@ const PMWorkloadReport: React.FC = () => {
             </thead>
             <tbody>
               {sortedPMs.map(pm => (
-                <tr key={pm.key} className={`pmw-row-${pm.bucket}`}>
+                <tr key={pm.key} className={`pmw-row-${pm.bucket}${selectedPMKey === pm.key ? ' pmw-row-selected' : ''}`}>
                   <td>
-                    {pm.pmName}
+                    <button
+                      type="button"
+                      className="pmw-pm-link"
+                      onClick={() => setSelectedPMKey(k => k === pm.key ? null : pm.key)}
+                      title="Click to drill down to this PM's projects"
+                    >
+                      {pm.pmName}
+                    </button>
                     {!pm.linked && <span className="pmw-unlinked" title="Contract not linked to an employee">unlinked</span>}
                   </td>
                   <td>{pm.departmentName || <span className="pmw-muted">—</span>}</td>
                   <td className="num">{pm.activeProjects}</td>
                   <td className="num">{fmtMoney(pm.backlogDollars)}</td>
                   <td className="num">{fmtHrs(pm.backlogHours)}</td>
+                  <td className="num">{pm.mgmtRemainingHours > 0 ? fmtHrs(pm.mgmtRemainingHours) : <span className="pmw-muted">—</span>}</td>
                   <td className="num">{pm.hoursOverEstimate > 0 ? fmtHrs(pm.hoursOverEstimate) : '—'}</td>
                   <td className="num">{pm.activeProjects > 0 ? `${Math.round(pm.pctOverEstimate * 100)}%` : '—'}</td>
                   <td>
@@ -408,7 +470,84 @@ const PMWorkloadReport: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Project list — drills down when a PM is selected */}
+      <section className="pmw-section">
+        <div className="pmw-project-header">
+          <div>
+            <h2 className="pmw-section-title">
+              {selectedPMKey
+                ? `Projects — ${report.pms.find(p => p.key === selectedPMKey)?.pmName ?? ''}`
+                : 'All Projects'}
+            </h2>
+            <p className="pmw-section-sub">
+              {projectList.length} contract{projectList.length !== 1 ? 's' : ''}.
+              {!selectedPMKey && ' Click a PM name above to filter to their projects.'}
+            </p>
+          </div>
+          {selectedPMKey && (
+            <button type="button" className="pmw-clear-btn" onClick={() => setSelectedPMKey(null)}>
+              &times; Clear filter
+            </button>
+          )}
+        </div>
+        <div className="pmw-table-wrapper">
+          <table className="pmw-table">
+            <thead>
+              <tr>
+                <th className="sortable" onClick={() => handleProjectSort('contractNumber')}>Contract #</th>
+                <th>Description</th>
+                <th className="sortable" onClick={() => handleProjectSort('pmName')}>PM</th>
+                <th className="num sortable" onClick={() => handleProjectSort('backlog')}>Backlog $</th>
+                <th className="num sortable" onClick={() => handleProjectSort('backlogHours')}>Backlog Hrs</th>
+                <th className="num sortable" onClick={() => handleProjectSort('mgmtRemainingHours')}>Mgmt Hrs</th>
+                <th className="num sortable" onClick={() => handleProjectSort('hoursOverEstimate')}>Hrs Over Est.</th>
+                <th className="num sortable" onClick={() => handleProjectSort('pctComplete')}>% Complete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projectList.map((c, i) => (
+                <tr key={`${c.pmKey}-${c.contractNumber}-${i}`} className={`pmw-row-${c.bucket}`}>
+                  <td style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{c.contractNumber}</td>
+                  <td>{c.description || <span className="pmw-muted">—</span>}</td>
+                  <td>{c.pmName}</td>
+                  <td className="num">{fmtMoney(c.backlog)}</td>
+                  <td className="num">{fmtHrs(c.backlogHours)}</td>
+                  <td className="num">{c.mgmtRemainingHours > 0 ? fmtHrs(c.mgmtRemainingHours) : <span className="pmw-muted">—</span>}</td>
+                  <td className="num">{c.hoursOverEstimate > 0 ? fmtHrs(c.hoursOverEstimate) : '—'}</td>
+                  <td className="num">{Math.round(c.pctComplete * 100)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
+  );
+};
+
+const MAX_DISPLAY_HRS_PER_PM = 2000;
+
+const TeamSummaryRow: React.FC<{ team: PMWorkloadTeamSummary }> = ({ team }) => {
+  const fillPct = Math.min(100, (team.hoursPerPM / MAX_DISPLAY_HRS_PER_PM) * 100);
+  const color = team.hoursPerPM > 1500 ? '#b91c1c' : team.hoursPerPM > 800 ? '#b45309' : '#15803d';
+  return (
+    <tr>
+      <td><strong>{team.teamName}</strong></td>
+      <td className="num">{team.pmCount}</td>
+      <td className="num">{fmtHrs(team.totalMgmtRemainingHours)}</td>
+      <td className="num">{fmtHrs(team.hoursPerPM)}</td>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: `${fillPct}%`, height: '100%', background: color, borderRadius: '4px', transition: 'width 0.3s' }} />
+          </div>
+          <span style={{ fontSize: '0.75rem', color, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {fmtHrs(team.hoursPerPM)} / PM
+          </span>
+        </div>
+      </td>
+    </tr>
   );
 };
 

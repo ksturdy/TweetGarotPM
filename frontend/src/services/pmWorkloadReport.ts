@@ -7,6 +7,9 @@ export interface PMWorkloadContract {
   backlogHours: number;
   hoursOverEstimate: number;
   pctComplete: number;
+  mgmtRemainingHours: number;
+  mgmtEstHours: number;
+  mgmtJtdHours: number;
 }
 
 export type WorkloadBucket = 'overloaded' | 'available' | 'sideways' | 'healthy';
@@ -21,6 +24,7 @@ export interface PMWorkloadRow {
   activeProjects: number;
   backlogDollars: number;
   backlogHours: number;
+  mgmtRemainingHours: number;
   hoursOverEstimate: number;
   projectsOverEstimate: number;
   pctOverEstimate: number;
@@ -32,6 +36,14 @@ export interface PMWorkloadRow {
   bucket: WorkloadBucket;
   reasons: string[];
   contracts: PMWorkloadContract[];
+}
+
+export interface PMWorkloadTeamSummary {
+  teamId: number;
+  teamName: string;
+  pmCount: number;
+  totalMgmtRemainingHours: number;
+  hoursPerPM: number;
 }
 
 export interface PMWorkloadThresholds {
@@ -70,6 +82,7 @@ export interface PMWorkloadResponse {
     sideways: PMWorkloadRow[];
   };
   pms: PMWorkloadRow[];
+  teamSummary: PMWorkloadTeamSummary[];
   unmatched: {
     contractCount: number;
     backlogHours: number;
