@@ -2279,6 +2279,11 @@ const VistaData = {
       for (const row of linked.rows) {
         const mappedStatus = this._mapVistaStatusToProjectStatus(row.vista_status);
 
+        // Compute effective backlog before change detection so it's available in the UPDATE
+        const effectiveBacklog = (row.backlog != null || row.ipd_amount != null)
+          ? (Number(row.backlog || 0) + Number(row.ipd_amount || 0)) || null
+          : null;
+
         // Check if ANY field actually changed
         const statusChanged = mappedStatus !== row.titan_status;
         const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
@@ -2287,8 +2292,9 @@ const VistaData = {
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
         const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
         const marketChanged = row.primary_market && row.primary_market !== row.titan_market;
+        const backlogChanged = effectiveBacklog !== null && Number(effectiveBacklog) !== Number(row.titan_backlog);
 
-        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged && !managerChanged && !marketChanged) continue;
+        if (!statusChanged && !deptChanged && !startChanged && !nameChanged && !clientChanged && !managerChanged && !marketChanged && !backlogChanged) continue;
 
         await client.query('SAVEPOINT sync_contract_row');
         try {
@@ -2308,11 +2314,6 @@ const VistaData = {
               customerId = customerResult.rows[0].id;
             }
           }
-
-          // Effective backlog = Vista backlog + IPD Amount (placeholder exposure)
-          const effectiveBacklog = (row.backlog != null || row.ipd_amount != null)
-            ? (Number(row.backlog || 0) + Number(row.ipd_amount || 0)) || null
-            : null;
 
           await client.query(
             `UPDATE projects SET
