@@ -150,6 +150,13 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       return XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
     };
 
+    // Helper to get raw header row as an array (for column-by-position lookups)
+    const loadSheetHeaders = (sheetName) => {
+      const wb = XLSX.readFile(tempFilePath, { sheets: sheetName, sheetRows: 1 });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+      return rows[0] || [];
+    };
+
     const results = {
       contracts: { total: 0, new: 0, updated: 0, batch_id: null },
       workOrders: { total: 0, new: 0, updated: 0, batch_id: null },
@@ -171,10 +178,17 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
       console.log(`[Vista Import] ${contractSheetName}: ${data.length} rows to process`);
 
       if (data.length > 0) {
-        // Log available columns from first row for debugging
+        // Read raw headers to find column BM (index 64) by position — the IPD Amount
+        // column name varies between Vista export files so we resolve it by position.
+        const contractHeaders = loadSheetHeaders(contractSheetName);
+        const ipdColByPosition = contractHeaders[64] || null; // BM = index 64 (0-based)
+        console.log(`[Vista Import] ${contractSheetName} column BM (IPD Amount): "${ipdColByPosition}"`);
+
         if (data[0]) {
           const columns = Object.keys(data[0]);
           console.log(`[Vista Import] ${contractSheetName} columns: ${columns.join(', ')}`);
+          const ipdCols = columns.filter(c => c.toLowerCase().includes('ipd'));
+          console.log(`[Vista Import] IPD-related columns found: ${ipdCols.length ? ipdCols.join(', ') : 'NONE'}`);
         }
 
         // Create import batch for contracts
@@ -283,7 +297,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             primary_market: row['Primary Market'] ?? row[' Primary Market '] ?? '',
             negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
             delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
-            ipd_amount: parseNumber(pickColumn(row, 'IPD Amount', ' IPD Amount ', 'IPD Amt', ' IPD Amt ')),
+            ipd_amount: parseNumber(pickColumn(row, 'IPD Amount', ' IPD Amount ', 'IPD Amt', ' IPD Amt ', ipdColByPosition)),
             raw_data: null  // Don't store raw data to save memory
           };
 
