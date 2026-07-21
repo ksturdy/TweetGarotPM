@@ -133,9 +133,7 @@ async function loadTeamMgmtSummary(tenantId) {
      JOIN teams t ON t.id = tm.team_id AND t.tenant_id = $1 AND t.is_active = true
      WHERE pc.tenant_id = $1
        AND (
-         pc.phase LIKE '70-%'
-         OR UPPER(pc.phase_description) LIKE '%MANAGEMENT%'
-         OR UPPER(pc.phase_description) LIKE '%PROJ MGR%'
+         pc.phase LIKE '70-115%'
        )
      GROUP BY t.id, t.name
      ORDER BY total_mgmt_remaining_hours DESC`,
