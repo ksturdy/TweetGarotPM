@@ -79,6 +79,7 @@ export interface VPContract {
   primary_market: string | null;
   negotiated_work: string | null;
   delivery_method: string | null;
+  ipd_amount: number | null;
   raw_data: Record<string, unknown> | null;
   linked_project_id: number | null;
   linked_employee_id: number | null;

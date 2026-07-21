@@ -87,6 +87,7 @@ const VistaData = {
           ship_address = $66,
           prev_gross_profit_dollars = $67, prev_gross_profit_percent = $68,
           prev_projected_revenue = $69,
+          ipd_amount = $70,
           imported_at = CURRENT_TIMESTAMP
         WHERE id = $32
         RETURNING *`,
@@ -114,7 +115,8 @@ const VistaData = {
           data.ttl_labor_projected, data.start_month, data.month_closed,
           data.ship_address,
           data.prev_gross_profit_dollars, data.prev_gross_profit_percent,
-          data.prev_projected_revenue
+          data.prev_projected_revenue,
+          data.ipd_amount
         ]
       );
       return { record: result.rows[0], isNew: false };
@@ -141,8 +143,8 @@ const VistaData = {
           actual_labor_rate, estimated_labor_rate, current_est_labor_cost,
           ttl_labor_projected, start_month, month_closed,
           prev_gross_profit_dollars, prev_gross_profit_percent,
-          prev_projected_revenue
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70)
+          prev_projected_revenue, ipd_amount
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71)
         RETURNING *`,
         [
           tenantId, data.contract_number, data.description, data.status, data.employee_number,
@@ -164,7 +166,7 @@ const VistaData = {
           data.actual_labor_rate, data.estimated_labor_rate, data.current_est_labor_cost,
           data.ttl_labor_projected, data.start_month, data.month_closed,
           data.prev_gross_profit_dollars, data.prev_gross_profit_percent,
-          data.prev_projected_revenue
+          data.prev_projected_revenue, data.ipd_amount
         ]
       );
       return { record: result.rows[0], isNew: true };
@@ -1301,11 +1303,11 @@ const VistaData = {
       [tenantId, customerId]
     );
 
-    // Calculate totals
+    // Calculate totals — effective backlog = Vista backlog + IPD Amount
     const contractTotals = await db.query(
       `SELECT
         COALESCE(SUM(contract_amount), 0) as total_contract_amount,
-        COALESCE(SUM(backlog), 0) as total_backlog,
+        COALESCE(SUM(COALESCE(backlog, 0) + COALESCE(ipd_amount, 0)), 0) as total_backlog,
         COUNT(*) as count
        FROM vp_contracts
        WHERE tenant_id = $1 AND linked_customer_id = $2`,
@@ -2094,7 +2096,7 @@ const VistaData = {
       // Get all unlinked VP contracts (including orphaned auto_matched ones without actual project links)
       const unlinked = await client.query(
         `SELECT id, contract_number, description, customer_name, department_code,
-                contract_amount, gross_profit_percent, backlog,
+                contract_amount, gross_profit_percent, backlog, ipd_amount,
                 status, employee_number, project_manager_name, linked_department_id, link_status,
                 start_month, primary_market
          FROM vp_contracts
@@ -2189,7 +2191,10 @@ const VistaData = {
               vpContract.linked_department_id || null,
               vpContract.contract_amount || null,
               vpContract.gross_profit_percent || null,
-              vpContract.backlog || null,
+              // Effective backlog = Vista backlog + IPD Amount
+              (vpContract.backlog != null || vpContract.ipd_amount != null)
+                ? (Number(vpContract.backlog || 0) + Number(vpContract.ipd_amount || 0)) || null
+                : null,
               vpContract.start_month || null,
               vpContract.primary_market || null
             ]
@@ -2254,7 +2259,7 @@ const VistaData = {
       const linked = await client.query(
         `SELECT vc.id AS vp_id, vc.contract_number, vc.status AS vista_status,
                 vc.description, vc.customer_name, vc.contract_amount,
-                vc.gross_profit_percent, vc.backlog, vc.employee_number,
+                vc.gross_profit_percent, vc.backlog, vc.ipd_amount, vc.employee_number,
                 vc.linked_department_id, vc.start_month, vc.primary_market,
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
                 p.department_id AS titan_dept, p.start_date AS titan_start,
@@ -2304,6 +2309,11 @@ const VistaData = {
             }
           }
 
+          // Effective backlog = Vista backlog + IPD Amount (placeholder exposure)
+          const effectiveBacklog = (row.backlog != null || row.ipd_amount != null)
+            ? (Number(row.backlog || 0) + Number(row.ipd_amount || 0)) || null
+            : null;
+
           await client.query(
             `UPDATE projects SET
               status = $1,
@@ -2326,7 +2336,7 @@ const VistaData = {
               customerId,
               row.contract_amount || null,
               row.gross_profit_percent || null,
-              row.backlog || null,
+              effectiveBacklog,
               managerId,
               row.linked_department_id || null,
               row.start_month || null,

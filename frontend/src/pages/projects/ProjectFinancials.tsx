@@ -489,6 +489,12 @@ const ProjectFinancials: React.FC = () => {
               <SRow label="Net Cash Flow" value={fmt(c.cash_flow)} highlight valueColor={getCashFlowColor(c.cash_flow)} />
               <SRow label="Open Receivables" value={fmt(c.open_receivables)} italic />
               <SRow label="Backlog" value={fmt(c.backlog)} />
+              {(c.ipd_amount ?? 0) !== 0 && (
+                <>
+                  <SRow label="IPD Amount" value={fmt(c.ipd_amount)} italic />
+                  <SRow label="Effective Backlog" value={fmt((c.backlog ?? 0) + (c.ipd_amount ?? 0))} highlight />
+                </>
+              )}
             </div>
           </div>
 

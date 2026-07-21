@@ -283,6 +283,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             primary_market: row['Primary Market'] ?? row[' Primary Market '] ?? '',
             negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
             delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
+            ipd_amount: parseNumber(pickColumn(row, 'IPD Amount', ' IPD Amount ', 'IPD Amt', ' IPD Amt ')),
             raw_data: null  // Don't store raw data to save memory
           };
 
