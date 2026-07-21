@@ -60,7 +60,7 @@ const Project = {
               END as gross_margin_percent,
               (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
                AND p.override_gm_percent IS NOT NULL) as gm_overridden,
-              COALESCE(vc.backlog, p.backlog) as backlog,
+              CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
               COALESCE(p.market, vc.primary_market) as market,
               COALESCE(p.start_date, vc.start_month::date) as start_date,
               CASE
@@ -100,7 +100,7 @@ const Project = {
              END as gross_margin_percent,
              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
-             COALESCE(vc.backlog, p.backlog) as backlog,
+             CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
              COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
@@ -153,7 +153,7 @@ const Project = {
              END as gross_margin_percent,
              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
-             COALESCE(vc.backlog, p.backlog) as backlog,
+             CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
              COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
              CASE
                WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost)
