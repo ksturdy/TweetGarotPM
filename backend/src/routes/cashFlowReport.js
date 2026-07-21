@@ -40,7 +40,7 @@ async function buildCashFlowData(tenantId, filters = {}) {
        vc.projected_revenue,
        COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_profit_percent,
        vc.gross_profit_dollars,
-       COALESCE(vc.backlog, p.backlog) as backlog,
+       CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
        vc.pending_change_orders,
        vc.approved_changes,
        vc.change_order_count,

@@ -693,7 +693,7 @@ class Team {
           COUNT(*) as total,
           COUNT(CASE WHEN p.status = 'Open' THEN 1 END) as active,
           COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value,
-          COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0) as total_backlog,
+          COALESCE(SUM(CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END), 0) as total_backlog,
           CASE WHEN SUM(COALESCE(vc.contract_amount, p.contract_value)) > 0
             THEN SUM(COALESCE(vc.gross_profit_dollars, 0)) / SUM(COALESCE(vc.contract_amount, p.contract_value)) * 100
             ELSE NULL
@@ -856,7 +856,7 @@ class Team {
              COALESCE(oc.name, oc.customer_owner) as owner_name,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
              COALESCE(vc.gross_profit_percent, p.gross_margin_percent) as gross_margin_percent,
-             COALESCE(vc.backlog, p.backlog) as backlog,
+             CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
              vc.actual_cost,
              CASE WHEN vc.projected_cost > 0 THEN (vc.actual_cost / vc.projected_cost) ELSE NULL END as percent_complete
       FROM projects p

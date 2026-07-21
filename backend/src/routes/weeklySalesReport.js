@@ -158,12 +158,12 @@ async function buildWeeklySalesData(tenantId, weekStart) {
 
   const backlogResult = await db.query(`
     SELECT
-      COALESCE(SUM(COALESCE(vc.backlog, p.backlog)), 0)::numeric AS total_backlog,
+      COALESCE(SUM(CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END), 0)::numeric AS total_backlog,
       CASE
-        WHEN SUM(COALESCE(vc.backlog, p.backlog)) > 0
+        WHEN SUM(CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END) > 0
         THEN (
-          SUM(COALESCE(vc.backlog, p.backlog) * (${GM_EXPR}))
-          / SUM(CASE WHEN (${GM_EXPR}) IS NOT NULL THEN COALESCE(vc.backlog, p.backlog) ELSE 0 END)
+          SUM((CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END) * (${GM_EXPR}))
+          / SUM(CASE WHEN (${GM_EXPR}) IS NOT NULL THEN (CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END) ELSE 0 END)
         ) * 100
         ELSE NULL
       END AS weighted_gm_pct,
@@ -175,7 +175,7 @@ async function buildWeeklySalesData(tenantId, weekStart) {
     FROM projects p
     LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
     WHERE p.tenant_id = $1
-      AND COALESCE(vc.backlog, p.backlog) > 0
+      AND (CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END) > 0
       AND p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
   `, [tenantId]);
 
