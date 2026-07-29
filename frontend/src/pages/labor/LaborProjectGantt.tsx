@@ -41,9 +41,9 @@ const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
 const addMonths = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth() + n, d.getDate());
 const daysBetween = (a: Date, b: Date) => Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
 
-const loadPrefs = () => {
-  try { const raw = localStorage.getItem(PREFS_KEY); if (raw) return { defaultView: '6mo' as ViewKey, ...JSON.parse(raw) }; } catch {}
-  return { defaultView: '6mo' as ViewKey };
+const loadPrefs = (): { defaultView: ViewKey } => {
+  try { const raw = localStorage.getItem(PREFS_KEY); if (raw) return { defaultView: '6mo', ...JSON.parse(raw) } as { defaultView: ViewKey }; } catch {}
+  return { defaultView: '6mo' };
 };
 
 interface ProjectRow {
