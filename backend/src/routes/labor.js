@@ -67,7 +67,8 @@ router.get('/calendar', async (req, res, next) => {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to query params required (YYYY-MM-DD)' });
     const rows = await ProjectAssignment.findByDateRange(req.tenantId, from, to);
-    res.json(applyEmployeeFilters(rows, req.query));
+    const filtered = applyEmployeeFilters(rows, req.query);
+    res.json(filtered.map((r) => ({ ...r, ...computeEffectiveDates(r) })));
   } catch (error) {
     next(error);
   }
