@@ -37,7 +37,7 @@ const LaborEmployeeDetail: React.FC = () => {
   });
   const qc = useQueryClient();
 
-  const { data: employee } = useQuery({
+  const { data: employee, isError: employeeError } = useQuery({
     queryKey: ['employee', employeeId],
     queryFn: () => employeesApi.getById(employeeId).then((r) => r.data.data),
   });
@@ -98,6 +98,17 @@ const LaborEmployeeDetail: React.FC = () => {
     });
     setEditingDetails(true);
   };
+
+  if (employeeError) {
+    return (
+      <div className="sales-container">
+        <div style={{ marginBottom: '0.75rem' }}>
+          <a href="/labor" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.85rem' }}>← Back to Labor Board</a>
+        </div>
+        <div style={{ padding: 40, color: '#dc2626' }}>Could not load employee. You may not have permission to view this record.</div>
+      </div>
+    );
+  }
 
   if (!employee) {
     return <div className="sales-container"><div style={{ padding: 40 }}>Loading...</div></div>;

@@ -66,7 +66,8 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && editing) {
+    if (!open) return;
+    if (editing) {
       setProjectId(editing.project_id);
       setEmployeeId(editing.employee_id);
       setRole(editing.role || '');
@@ -81,6 +82,26 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setStatus((editing.status as AssignmentStatus) || 'planned');
       setNotes(editing.notes || '');
       setTagsText((editing.tags || []).join(', '));
+    } else {
+      setProjectId(lockedProjectId);
+      setEmployeeId(lockedEmployeeId);
+      setPickedEmployeeLabel(lockedEmployeeName || '');
+      setPickedProjectLabel(lockedProjectName || '');
+      setEmployeeSearch('');
+      setProjectSearch('');
+      setRole('');
+      setTrade('');
+      setStartDate('');
+      setEndDate('');
+      setStartOverridden(false);
+      setEndOverridden(false);
+      setShiftPattern('M-F');
+      setShiftStart('07:00');
+      setShiftEnd('15:30');
+      setStatus('planned');
+      setNotes('');
+      setTagsText('');
+      setError(null);
     }
   }, [open, editing]);
 

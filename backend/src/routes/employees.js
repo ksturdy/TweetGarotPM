@@ -73,8 +73,14 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-// Get employee by ID - requires HR read access
-router.get('/:id', authorizeHR('read'), async (req, res) => {
+// Get employee by ID - requires admin, manager, or HR read access
+// Managers need this for the Labor Board employee detail view.
+router.get('/:id', (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.role === 'admin' || req.user.role === 'manager') return next();
+  if (req.user.hrAccess && req.user.hrAccess !== 'none') return next();
+  return res.status(403).json({ error: 'HR access required' });
+}, async (req, res) => {
   try {
     const employee = await Employee.getByIdAndTenant(req.params.id, req.tenantId);
     if (!employee) {

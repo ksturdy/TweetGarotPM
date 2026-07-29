@@ -361,14 +361,17 @@ const HeaderCell: React.FC<{
       <span
         data-resize-handle="1"
         onMouseDown={onMouseDown}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#94a3b8'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = '#e2e8f0'; }}
         style={{
           position: 'absolute',
           right: 0,
-          top: 0,
-          bottom: 0,
-          width: 6,
+          top: '15%',
+          bottom: '15%',
+          width: 2,
           cursor: 'col-resize',
-          background: 'transparent',
+          background: '#e2e8f0',
+          borderRadius: 1,
         }}
       />
     </th>

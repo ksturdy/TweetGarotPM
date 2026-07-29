@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { customersApi, Customer } from '../../services/customers';
@@ -80,6 +80,7 @@ const getStatusColor = (status: string): string => {
 
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
 
@@ -270,9 +271,12 @@ const ProjectDetail: React.FC = () => {
     <div>
       {/* ─── Header Banner ─── */}
       <div style={{ marginBottom: '0.75rem' }}>
-        <Link to="/projects" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.8rem' }}>
-          &larr; Back to Projects
-        </Link>
+        <button
+          onClick={() => navigate(-1)}
+          style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          &larr; Back
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
           <h1 style={{
             margin: 0, fontSize: '1.35rem', fontWeight: 700,
