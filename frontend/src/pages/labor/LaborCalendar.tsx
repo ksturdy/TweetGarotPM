@@ -294,6 +294,12 @@ const LaborCalendar: React.FC = () => {
         </div>
       </div>
 
+      {/* View switcher tabs */}
+      <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1rem' }}>
+        <span style={tabStyle(true)}>👤 People</span>
+        <Link to="/labor/project-gantt" style={tabStyle(false)}>🏗️ Projects</Link>
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
         <PillFilter label="Group" value={group} options={groups} onChange={setGroup} />
         <PillFilter label="Trade" value={trade} options={trades} onChange={setTrade} />
@@ -561,5 +567,19 @@ const LegendChip: React.FC<{ color: { bg: string; border: string; color: string 
     {children}
   </span>
 );
+
+const tabStyle = (active: boolean): React.CSSProperties => ({
+  padding: '0.5rem 1rem',
+  fontSize: '0.875rem',
+  fontWeight: active ? 700 : 500,
+  color: active ? '#002356' : '#64748b',
+  textDecoration: 'none',
+  borderBottom: active ? '2px solid #002356' : '2px solid transparent',
+  marginBottom: '-2px',
+  cursor: active ? 'default' : 'pointer',
+  background: 'transparent',
+  border: 'none',
+  display: 'inline-block',
+});
 
 export default LaborCalendar;

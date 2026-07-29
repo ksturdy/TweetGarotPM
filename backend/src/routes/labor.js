@@ -146,6 +146,14 @@ router.get('/assignments', async (req, res, next) => {
           (r.role || '').toLowerCase().includes(s)
       );
     }
+    if (req.query.project) {
+      const s = String(req.query.project).toLowerCase();
+      filtered = filtered.filter(
+        (r) =>
+          (r.project_name || '').toLowerCase().includes(s) ||
+          (r.project_number || '').toLowerCase().includes(s)
+      );
+    }
     res.json(filtered.map((r) => ({ ...r, ...computeEffectiveDates(r) })));
   } catch (error) {
     next(error);

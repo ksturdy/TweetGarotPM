@@ -14,6 +14,8 @@ const LaborAssignments: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [projectInput, setProjectInput] = useState('');
+  const [project, setProject] = useState('');
   const [from, setFrom] = useState(isoMinusDays(30));
   const [to, setTo] = useState(isoPlusDays(180));
   const [trade, setTrade] = useState<string | undefined>();
@@ -26,11 +28,17 @@ const LaborAssignments: React.FC = () => {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  useEffect(() => {
+    const id = setTimeout(() => setProject(projectInput), 300);
+    return () => clearTimeout(id);
+  }, [projectInput]);
+
   const { data: rows, isLoading } = useQuery({
-    queryKey: ['labor-assignments-list', { statusFilter, search, from, to, trade, group }],
+    queryKey: ['labor-assignments-list', { statusFilter, search, project, from, to, trade, group }],
     queryFn: () => laborApi.getAssignmentsList({
       status: statusFilter || undefined,
       search: search || undefined,
+      project: project || undefined,
       from, to, trade, group,
     }),
     placeholderData: keepPreviousData,
@@ -75,6 +83,15 @@ const LaborAssignments: React.FC = () => {
                 placeholder="Search employee, project, role..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </div>
+            <div className="sales-search-box">
+              <span>🏗️</span>
+              <input
+                type="text"
+                placeholder="Filter by project..."
+                value={projectInput}
+                onChange={(e) => setProjectInput(e.target.value)}
               />
             </div>
             <select className="sales-filter-btn" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>

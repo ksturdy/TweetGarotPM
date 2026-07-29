@@ -239,7 +239,7 @@ const LaborBoard: React.FC = () => {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'fixed', width: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'fixed', width: columns.reduce((sum, c) => sum + c.width, 0) }}>
               <colgroup>
                 {columns.map((c) => (<col key={c.key} style={{ width: c.width }} />))}
               </colgroup>

@@ -193,7 +193,7 @@ export const laborApi = {
     return api.get<AssignmentRecord[]>(`/labor/calendar?${qs.toString()}`).then((r) => r.data);
   },
 
-  getAssignmentsList: (params: { status?: string; search?: string; from?: string; to?: string; trade?: string; group?: string; title?: string }) => {
+  getAssignmentsList: (params: { status?: string; search?: string; from?: string; to?: string; trade?: string; group?: string; title?: string; project?: string }) => {
     const qs = new URLSearchParams();
     if (params.status) qs.append('status', params.status);
     if (params.search) qs.append('search', params.search);
@@ -202,6 +202,7 @@ export const laborApi = {
     if (params.trade) qs.append('trade', params.trade);
     if (params.group) qs.append('group', params.group);
     if (params.title) qs.append('title', params.title);
+    if (params.project) qs.append('project', params.project);
     const s = qs.toString();
     return api.get<AssignmentRecord[]>(`/labor/assignments${s ? `?${s}` : ''}`).then((r) => r.data);
   },
