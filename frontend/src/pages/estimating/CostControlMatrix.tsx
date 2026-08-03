@@ -72,7 +72,7 @@ const VER_COLORS = [
 
 export default function CostControlMatrixPage() {
   const { matrixId } = useParams<{ matrixId: string }>();
-  const { toast } = useTitanFeedback();
+  const { toast, confirm } = useTitanFeedback();
 
   const [matrix, setMatrix] = useState<CCMatrix | null>(null);
   const [loading, setLoading] = useState(true);
@@ -172,7 +172,15 @@ export default function CostControlMatrixPage() {
   };
 
   const handleDeleteVersion = async (v: CostControlVersion) => {
-    if (!matrix || !window.confirm(`Delete version "${v.version_name}"? All data will be lost.`)) return;
+    if (!matrix) return;
+    const ok = await confirm({
+      title: 'Delete Version',
+      message: `Delete "${v.version_name}"? All cost data for this version will be permanently removed.`,
+      confirmText: 'Delete',
+      cancelText: 'Keep',
+      danger: true,
+    });
+    if (!ok) return;
     try { await deleteVersion(matrix.id, v.id); await load(); } catch { toast.error('Failed to delete version'); }
   };
 
@@ -207,7 +215,15 @@ export default function CostControlMatrixPage() {
   };
 
   const handleDeleteArea = async (areaId: number, areaName: string) => {
-    if (!matrix || !window.confirm(`Delete section "${areaName}"? All line items in this section will be removed.`)) return;
+    if (!matrix) return;
+    const ok = await confirm({
+      title: 'Delete Section',
+      message: `Delete "${areaName}"? All line items in this section will be permanently removed.`,
+      confirmText: 'Delete',
+      cancelText: 'Keep',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteArea(matrix.id, areaId);
       setMatrix(prev => prev ? { ...prev, areas: prev.areas.filter(a => a.id !== areaId) } : prev);
@@ -238,8 +254,17 @@ export default function CostControlMatrixPage() {
     } catch { toast.error('Failed to add line item'); }
   };
 
-  const handleDeleteItem = async (areaId: number, itemId: number) => {
+  const handleDeleteItem = async (areaId: number, itemId: number, description: string) => {
     if (!matrix) return;
+    const name = description.trim() ? `"${description.trim()}"` : 'this line item';
+    const ok = await confirm({
+      title: 'Delete Line Item',
+      message: `Delete ${name}? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Keep',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await apiDeleteLineItem(matrix.id, itemId);
       setMatrix(prev => !prev ? prev : { ...prev, areas: prev.areas.map(a => a.id === areaId ? { ...a, items: a.items.filter(i => i.id !== itemId) } : a) });
@@ -285,11 +310,21 @@ export default function CostControlMatrixPage() {
     } catch { toast.error('Failed to add item'); }
   };
 
-  const handleDeleteRisk = async (riskId: number) => {
+  const handleDeleteRisk = async (risk: CostControlRiskItem) => {
     if (!matrix) return;
+    const label = risk.type === 'opportunity' ? 'opportunity' : 'risk';
+    const name = risk.description.trim() ? `"${risk.description.trim()}"` : `this ${label}`;
+    const ok = await confirm({
+      title: `Delete ${label.charAt(0).toUpperCase() + label.slice(1)}`,
+      message: `Are you sure you want to delete ${name}? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Keep',
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      await apiDeleteRiskItem(matrix.id, riskId);
-      setMatrix(prev => prev ? { ...prev, risks: prev.risks.filter(r => r.id !== riskId) } : prev);
+      await apiDeleteRiskItem(matrix.id, risk.id);
+      setMatrix(prev => prev ? { ...prev, risks: prev.risks.filter(r => r.id !== risk.id) } : prev);
     } catch { toast.error('Failed to delete item'); }
   };
 
@@ -608,7 +643,7 @@ export default function CostControlMatrixPage() {
                           <button
                             className="ccm-icon-btn danger"
                             title="Delete line item"
-                            onClick={() => handleDeleteItem(area.id, item.id)}
+                            onClick={() => handleDeleteItem(area.id, item.id, item.description)}
                           >✕</button>
                         </td>
                       </tr>
@@ -752,7 +787,7 @@ export default function CostControlMatrixPage() {
                 />
               </td>
               <td style={{ width: 32, textAlign: 'center' }}>
-                <button className="ccm-icon-btn danger" onClick={() => handleDeleteRisk(risk.id)}>✕</button>
+                <button className="ccm-icon-btn danger" onClick={() => handleDeleteRisk(risk)}>✕</button>
               </td>
             </tr>
           );
