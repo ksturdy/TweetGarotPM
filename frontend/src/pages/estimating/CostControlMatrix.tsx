@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import CostControlCompare from './CostControlCompare';
 import {
   CostControlMatrix as CCMatrix,
   CostControlVersion,
@@ -92,6 +93,9 @@ export default function CostControlMatrixPage() {
   // Item editing
   const [itemDescDrafts, setItemDescDrafts] = useState<Record<number, string>>({});
   const [itemTypeDrafts, setItemTypeDrafts] = useState<Record<number, CostType>>({});
+
+  // Compare modal
+  const [showCompare, setShowCompare] = useState(false);
 
   const load = useCallback(async () => {
     if (!matrixId) return;
@@ -358,6 +362,11 @@ export default function CostControlMatrixPage() {
           >
             {editingHeader ? 'Cancel' : 'Settings'}
           </button>
+          {matrix.versions.length >= 2 && (
+            <button className="btn btn-secondary" onClick={() => setShowCompare(true)}>
+              Compare Versions
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => setShowAddVersion(!showAddVersion)}>
             + Add Version
           </button>
@@ -678,6 +687,11 @@ export default function CostControlMatrixPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Compare modal */}
+      {showCompare && (
+        <CostControlCompare matrix={matrix} onClose={() => setShowCompare(false)} />
       )}
 
       {/* Trend chart */}
