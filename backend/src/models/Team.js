@@ -638,17 +638,24 @@ class Team {
 
     // Get opportunities metrics (assigned_to references employees)
     // Active = not converted to project (still in pipeline)
-    let opportunitiesResult = { rows: [{ total: 0, total_value: 0, won: 0, won_value: 0 }] };
+    let opportunitiesResult = { rows: [{ total: 0, total_value: 0, won: 0, won_value: 0, weighted_value: 0 }] };
     if (employeeIds.length > 0) {
-      const oppFilter = activeOnly ? ' AND converted_to_project_id IS NULL' : '';
+      const oppFilter = activeOnly ? ' AND o.converted_to_project_id IS NULL' : '';
       opportunitiesResult = await db.query(`
         SELECT
           COUNT(*) as total,
-          COALESCE(SUM(estimated_value), 0) as total_value,
-          COUNT(CASE WHEN converted_to_project_id IS NOT NULL THEN 1 END) as won,
-          COALESCE(SUM(CASE WHEN converted_to_project_id IS NOT NULL THEN estimated_value ELSE 0 END), 0) as won_value
-        FROM opportunities
-        WHERE tenant_id = $1 AND assigned_to = ANY($2)${oppFilter}
+          COALESCE(SUM(o.estimated_value), 0) as total_value,
+          COUNT(CASE WHEN o.converted_to_project_id IS NOT NULL THEN 1 END) as won,
+          COALESCE(SUM(CASE WHEN o.converted_to_project_id IS NOT NULL THEN o.estimated_value ELSE 0 END), 0) as won_value,
+          COALESCE(SUM(o.estimated_value * CASE COALESCE(o.probability, ps.probability)
+            WHEN 'High' THEN 0.80
+            WHEN 'Medium' THEN 0.40
+            WHEN 'Low' THEN 0.15
+            ELSE 0
+          END), 0) as weighted_value
+        FROM opportunities o
+        LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
+        WHERE o.tenant_id = $1 AND o.assigned_to = ANY($2)${oppFilter}
       `, [tenantId, employeeIds]);
     }
 

@@ -253,10 +253,11 @@ const TeamDetailPage: React.FC = () => {
     }).format(value);
   };
 
-  const formatCurrencyShort = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-    return `$${value.toFixed(0)}`;
+  const formatCurrencyShort = (value: number | string | null | undefined, mDecimals = 1) => {
+    const n = Number(value) || 0;
+    if (n >= 1000000) return `$${(n / 1000000).toFixed(mDecimals)}M`;
+    if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`;
+    return `$${n.toFixed(0)}`;
   };
 
   if (isLoadingTeam) {
@@ -375,133 +376,112 @@ const TeamDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Dashboard KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>💼</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{dashboard?.opportunities.total || 0}</div>
-            <div className="sales-kpi-label">Opportunities</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-              {formatCurrency(dashboard?.opportunities.total_value || 0)} pipeline
+      {/* Dashboard KPI Strip */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        background: '#fff',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+        marginBottom: '1.5rem',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+        overflow: 'hidden',
+      }}>
+        {([
+          {
+            label: 'Opportunities',
+            value: String(dashboard?.opportunities.total || 0),
+            color: '#3b82f6',
+            sub: `${formatCurrencyShort(dashboard?.opportunities.total_value || 0)} pipeline · ${formatCurrencyShort(dashboard?.opportunities.weighted_value || 0)} weighted`,
+            subColor: '#10b981',
+            onClick: undefined as (() => void) | undefined,
+            valueFontSize: '1.4rem',
+          },
+          {
+            label: 'Projects',
+            value: String(dashboard?.projects.total || 0),
+            color: '#10b981',
+            sub: `${dashboard?.projects.active || 0} active`,
+            subColor: '#6b7280',
+            onClick: undefined as (() => void) | undefined,
+          },
+          {
+            label: 'Contract Value',
+            value: formatCurrencyShort(dashboard?.projects.total_value || 0),
+            color: '#6366f1',
+            sub: `${formatCurrencyShort(dashboard?.opportunities.won_value || 0)} won opps`,
+            subColor: '#6b7280',
+            onClick: undefined as (() => void) | undefined,
+          },
+          {
+            label: 'Backlog',
+            value: formatCurrencyShort(dashboard?.projects.total_backlog || 0),
+            color: '#002356',
+            sub: `${dashboard?.projects.active || 0} active projects`,
+            subColor: '#f59e0b',
+            onClick: undefined as (() => void) | undefined,
+          },
+          {
+            label: 'Gross Margin',
+            value: dashboard?.projects.avg_gross_margin != null
+              ? `${Number(dashboard.projects.avg_gross_margin).toFixed(1)}%`
+              : '-',
+            color: '#8b5cf6',
+            sub: 'weighted avg',
+            subColor: '#8b5cf6',
+            onClick: undefined as (() => void) | undefined,
+          },
+          {
+            label: 'Cash Flow +',
+            value: (dashboard?.cashFlow?.total_count || 0) > 0
+              ? `${Math.round(((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) * 100)}%`
+              : '0%',
+            color: ((dashboard?.cashFlow?.total_count || 0) > 0 &&
+              (dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count >= 0.5)
+              ? '#059669' : '#e11d48',
+            sub: `${dashboard?.cashFlow?.positive_count || 0}/${dashboard?.cashFlow?.total_count || 0} jobs CF+`,
+            subColor: '#6b7280',
+            onClick: () => navigate(`/reports/cash-flow?team=${teamId}`),
+          },
+          {
+            label: 'Buyout Remaining',
+            value: formatCurrencyShort(dashboard?.buyout?.total_buyout_remaining || 0, 2),
+            color: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0 ? '#d97706' : '#e11d48',
+            sub: `${dashboard?.buyout?.total_est_cost
+              ? Math.round(((dashboard?.buyout?.total_committed || 0) / dashboard.buyout.total_est_cost) * 100)
+              : 0}% bought out · ${dashboard?.buyout?.project_count || 0} jobs · ≥10%`,
+            subColor: '#8b5cf6',
+            onClick: () => navigate(`/reports/buyout-metric?team=${teamId}`),
+          },
+        ] as { label: string; value: string; color: string; sub: string; subColor: string; onClick: (() => void) | undefined; valueFontSize?: string }[]).map((kpi, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <div style={{ width: '1px', background: '#e2e8f0', flexShrink: 0, alignSelf: 'stretch' }} />}
+            <div
+              style={{
+                flex: 1,
+                padding: '0.625rem 0.5rem',
+                textAlign: 'center',
+                cursor: kpi.onClick ? 'pointer' : undefined,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-start',
+              }}
+              onClick={kpi.onClick}
+              title={kpi.onClick ? 'Click to view report' : undefined}
+            >
+              <div style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {kpi.label}
+              </div>
+              <div style={{ fontSize: kpi.valueFontSize || '1.1rem', fontWeight: 700, color: kpi.color, lineHeight: 1.2 }}>
+                {kpi.value}
+              </div>
+              <div style={{ fontSize: '0.65rem', color: kpi.subColor, lineHeight: 1.3 }}>
+                {kpi.sub}
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}>🏗️</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{dashboard?.projects.total || 0}</div>
-            <div className="sales-kpi-label">Projects</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-              {dashboard?.projects.active || 0} active
-            </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #6366f1, #3b82f6)' }}>💰</div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{formatCurrency(dashboard?.projects.total_value || 0)}</div>
-            <div className="sales-kpi-label">Contract Value</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-              {formatCurrency(dashboard?.opportunities.won_value || 0)} won opps
-            </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/>
-            </svg>
-          </div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">{formatCurrency(dashboard?.projects.total_backlog || 0)}</div>
-            <div className="sales-kpi-label">Backlog</div>
-            <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '4px' }}>
-              {dashboard?.projects.active || 0} active projects
-            </div>
-          </div>
-        </div>
-        <div className="sales-kpi-card">
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-          </div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value">
-              {dashboard?.projects.avg_gross_margin !== null && dashboard?.projects.avg_gross_margin !== undefined
-                ? `${Number(dashboard.projects.avg_gross_margin).toFixed(1)}%`
-                : '-'}
-            </div>
-            <div className="sales-kpi-label">Gross Margin</div>
-            <div style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '4px' }}>
-              weighted avg
-            </div>
-          </div>
-        </div>
-        <div
-          className="sales-kpi-card"
-          onClick={() => navigate(`/reports/cash-flow?team=${teamId}`)}
-          style={{ cursor: 'pointer' }}
-          title="View Cash Flow Report"
-        >
-          <div className="sales-kpi-icon" style={{
-            background: ((dashboard?.cashFlow?.total_count || 0) > 0 &&
-              ((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) >= 0.5)
-              ? 'linear-gradient(135deg, #059669, #10b981)'
-              : 'linear-gradient(135deg, #e11d48, #f43f5e)'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-          </div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{
-              color: ((dashboard?.cashFlow?.total_count || 0) > 0 &&
-                ((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) >= 0.5)
-                ? '#059669' : '#e11d48'
-            }}>
-              {(dashboard?.cashFlow?.total_count || 0) > 0
-                ? `${Math.round(((dashboard?.cashFlow?.positive_count || 0) / dashboard!.cashFlow.total_count) * 100)}%`
-                : '0%'}
-            </div>
-            <div className="sales-kpi-label">Cash Flow +</div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-              {dashboard?.cashFlow?.positive_count || 0}/{dashboard?.cashFlow?.total_count || 0} jobs CF+
-            </div>
-          </div>
-        </div>
-        <div
-          className="sales-kpi-card"
-          onClick={() => navigate(`/reports/buyout-metric?team=${teamId}`)}
-          style={{ cursor: 'pointer' }}
-          title="View Buyout Metric Report"
-        >
-          <div className="sales-kpi-icon" style={{
-            background: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0
-              ? 'linear-gradient(135deg, #d97706, #f59e0b)'
-              : 'linear-gradient(135deg, #e11d48, #f43f5e)'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
-          </div>
-          <div className="sales-kpi-content">
-            <div className="sales-kpi-value" style={{
-              color: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0 ? '#d97706' : '#e11d48'
-            }}>
-              {formatCurrency(dashboard?.buyout?.total_buyout_remaining || 0)}
-            </div>
-            <div className="sales-kpi-label">Buyout Remaining</div>
-            <div style={{ fontSize: '0.75rem', color: '#8b5cf6', marginTop: '4px' }}>
-              {dashboard?.buyout?.total_est_cost
-                ? `${Math.round(((dashboard?.buyout?.total_committed || 0) / dashboard.buyout.total_est_cost) * 100)}% bought out`
-                : '0% bought out'}
-              {' · '}{dashboard?.buyout?.project_count || 0} jobs · ≥10%
-            </div>
-          </div>
-        </div>
+          </React.Fragment>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -642,7 +622,7 @@ const TeamDetailPage: React.FC = () => {
                 <colgroup>
                   <col style={{ width: '80px' }} />
                   <col style={{ width: '85px' }} />
-                  <col style={{ width: '0' }} />
+                  <col />
                   <col style={{ width: '110px' }} />
                   <col style={{ width: '55px' }} />
                   <col style={{ width: '100px' }} />
@@ -676,7 +656,7 @@ const TeamDetailPage: React.FC = () => {
                         style={{ cursor: 'pointer' }}
                       >
                         <td>{proj.project_number || proj.number || '-'}</td>
-                        <td>{proj.start_date ? new Date(proj.start_date + 'T00:00:00').toLocaleDateString('en-US') : '-'}</td>
+                        <td>{proj.start_date ? new Date(proj.start_date.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '-'}</td>
                         <td>
                           <div className="sales-project-cell">
                             <div className="sales-project-icon" style={{ background: proj.market ? getMarketGradient(proj.market) : getProjectGradient(proj.status) }}>
@@ -694,7 +674,7 @@ const TeamDetailPage: React.FC = () => {
                             ? Number(proj.gross_margin_percent) > 0 ? '#10b981' : Number(proj.gross_margin_percent) < 0 ? '#ef4444' : 'inherit'
                             : 'inherit'
                         }}>
-                          {proj.gross_margin_percent != null ? `${Math.round(Number(proj.gross_margin_percent) * 100)}%` : '-'}
+                          {proj.gross_margin_percent != null ? `${(Number(proj.gross_margin_percent) * 100).toFixed(1)}%` : '-'}
                         </td>
                         <td>{proj.backlog ? `$${Math.round(Number(proj.backlog)).toLocaleString()}` : '-'}</td>
                         <td>{proj.actual_cost ? `$${Math.round(Number(proj.actual_cost)).toLocaleString()}` : '-'}</td>
@@ -766,7 +746,7 @@ const TeamDetailPage: React.FC = () => {
                           ${Math.round(totalContractValue).toLocaleString()}
                         </td>
                         <td style={{ color: weightedGm > 0 ? '#10b981' : weightedGm < 0 ? '#ef4444' : '#334155' }}>
-                          {hasGm ? `${Math.round(weightedGm * 100)}%` : '-'}
+                          {hasGm ? `${(weightedGm * 100).toFixed(1)}%` : '-'}
                         </td>
                         <td style={{ color: '#1e293b' }}>
                           ${Math.round(totalBacklog).toLocaleString()}

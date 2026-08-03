@@ -37,6 +37,7 @@ const ProjectList: React.FC = () => {
         projectManagerFilter?: string;
         myProjectsOnly?: boolean;
         myTeamOnly?: boolean;
+        teamFilter?: string;
         sortColumn?: string;
         sortDirection?: 'asc' | 'desc';
         hasUserSorted?: boolean;
@@ -61,16 +62,17 @@ const ProjectList: React.FC = () => {
   const [projectManagerFilter, setProjectManagerFilter] = useState<string>(savedFilters.projectManagerFilter ?? '');
   const [myProjectsOnly, setMyProjectsOnly] = useState(locationState?.myItemsOnly ?? savedFilters.myProjectsOnly ?? false);
   const [myTeamOnly, setMyTeamOnly] = useState(savedFilters.myTeamOnly ?? false);
+  const [teamFilter, setTeamFilter] = useState<string>(savedFilters.teamFilter ?? '');
 
   useEffect(() => {
     try {
       sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
         searchTerm, statusFilter, departmentFilter, marketFilter,
-        projectManagerFilter, myProjectsOnly, myTeamOnly,
+        projectManagerFilter, myProjectsOnly, myTeamOnly, teamFilter,
         sortColumn, sortDirection, hasUserSorted,
       }));
     } catch {}
-  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, sortColumn, sortDirection, hasUserSorted]);
+  }, [searchTerm, statusFilter, departmentFilter, marketFilter, projectManagerFilter, myProjectsOnly, myTeamOnly, teamFilter, sortColumn, sortDirection, hasUserSorted]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -208,6 +210,16 @@ const ProjectList: React.FC = () => {
     queryKey: ['teams', 'my-team-members'],
     queryFn: () => teamsApi.getMyTeamMemberIds()
   });
+  const { data: allTeamsResponse } = useQuery({
+    queryKey: ['teams', 'all'],
+    queryFn: () => teamsApi.getAll(),
+  });
+  const allTeams: import('../../services/teams').Team[] = (allTeamsResponse?.data as any)?.data || [];
+  const { data: selectedTeamMembersResponse } = useQuery({
+    queryKey: ['teams', teamFilter, 'members'],
+    queryFn: () => teamsApi.getMembers(Number(teamFilter)),
+    enabled: !!teamFilter,
+  });
   const { data: backlogSnapshot } = useQuery({
     queryKey: ['projects', 'backlog-snapshot'],
     queryFn: () => projectsApi.getBacklogSnapshot(),
@@ -224,6 +236,11 @@ const ProjectList: React.FC = () => {
     const ids = (myTeamResponse?.data as any)?.data?.employeeIds || [];
     return new Set<number>(ids);
   }, [myTeamResponse]);
+  const selectedTeamEmployeeIds = useMemo(() => {
+    if (!teamFilter) return new Set<number>();
+    const members: import('../../services/teams').TeamMember[] = (selectedTeamMembersResponse?.data as any)?.data || [];
+    return new Set<number>(members.map(m => m.employee_id));
+  }, [selectedTeamMembersResponse, teamFilter]);
 
   // Toggle favorite mutation with optimistic updates on the favorites query
   const toggleFavoriteMutation = useMutation({
@@ -440,6 +457,7 @@ const ProjectList: React.FC = () => {
     if (projectManagerFilter && project.manager_id !== Number(projectManagerFilter)) return false;
     if (myProjectsOnly && project.manager_id !== currentEmployeeId) return false;
     if (myTeamOnly && teamMemberEmployeeIds.size > 0 && !teamMemberEmployeeIds.has(project.manager_id)) return false;
+    if (teamFilter && selectedTeamEmployeeIds.size > 0 && !selectedTeamEmployeeIds.has(project.manager_id)) return false;
 
     // Then apply search filter
     if (!searchTerm) return true;
@@ -958,6 +976,20 @@ const ProjectList: React.FC = () => {
             My Team
           </button>
         </div>
+        <div style={{ minWidth: '160px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Team</label>
+          <select
+            className="form-input"
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}
+          >
+            <option value="">All Teams</option>
+            {allTeams.filter(t => t.is_active).map(team => (
+              <option key={team.id} value={String(team.id)}>{team.name}</option>
+            ))}
+          </select>
+        </div>
         <div style={{ minWidth: '200px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project Manager</label>
           <SearchableSelect
@@ -1030,7 +1062,7 @@ const ProjectList: React.FC = () => {
           </div>
         </div>
 
-        {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || searchTerm) && (
+        {(statusFilter.length > 0 || departmentFilter !== 'all' || marketFilter !== 'all' || projectManagerFilter || myProjectsOnly || myTeamOnly || teamFilter || searchTerm) && (
           <button
             className="sales-filter-btn"
             onClick={() => {
@@ -1040,6 +1072,7 @@ const ProjectList: React.FC = () => {
               setProjectManagerFilter('');
               setMyProjectsOnly(false);
               setMyTeamOnly(false);
+              setTeamFilter('');
               setSearchTerm('');
             }}
             style={{ padding: '0.5rem 1rem', height: 'fit-content' }}

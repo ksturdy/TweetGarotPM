@@ -35,6 +35,7 @@ export interface TeamDashboard {
     total_value: number;
     won: number;
     won_value: number;
+    weighted_value: number;
   };
   customers: {
     total: number;
