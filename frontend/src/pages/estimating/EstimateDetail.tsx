@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
+import { createMatrixFromEstimate, getMatrixForEstimate } from '../../services/costControl';
 import { takeoffsApi, Takeoff } from '../../services/takeoffs';
 import { customersApi, Customer } from '../../services/customers';
 import { contactsApi } from '../../services/contacts';
@@ -109,7 +110,13 @@ const EstimateDetail: React.FC = () => {
   const [selectedTakeoffId, setSelectedTakeoffId] = useState<number | ''>('');
   const [selectedImportMode, setSelectedImportMode] = useState<'summary' | 'detail'>('summary');
   const [showFilesSidebar, setShowFilesSidebar] = useState(false);
+  const [ccmId, setCcmId] = useState<number | null | undefined>(undefined);
+  const [convertingToCCM, setConvertingToCCM] = useState(false);
 
+  useEffect(() => {
+    if (!estimate?.id) return;
+    getMatrixForEstimate(estimate.id).then(m => setCcmId(m?.id ?? null)).catch(() => setCcmId(null));
+  }, [estimate?.id]); // eslint-disable-line
 
   // Get unique companies from customers list
   const uniqueCompanies = useMemo(() => {
@@ -684,6 +691,28 @@ const EstimateDetail: React.FC = () => {
             title="Project Files"
           >
             {'\u{1F4C1}'} Files
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
+            disabled={convertingToCCM || ccmId === undefined}
+            onClick={async () => {
+              if (ccmId) {
+                navigate(`/estimating/cost-control/${ccmId}`);
+              } else {
+                setConvertingToCCM(true);
+                try {
+                  const { matrixId } = await createMatrixFromEstimate(estimate!.id!);
+                  navigate(`/estimating/cost-control/${matrixId}`);
+                } catch (err: any) {
+                  const existingId = err?.response?.data?.matrixId;
+                  if (existingId) navigate(`/estimating/cost-control/${existingId}`);
+                  else toast.error('Failed to create Cost Control Matrix');
+                  setConvertingToCCM(false);
+                }
+              }
+            }}
+          >
+            {ccmId ? 'Open CCM →' : convertingToCCM ? 'Creating...' : 'Cost Control Matrix'}
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
             <label style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</label>

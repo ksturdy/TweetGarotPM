@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { budgetsApi, Budget, BudgetStats } from '../../services/budgets';
+import { getMatrixForBudget, createMatrixFromBudget } from '../../services/costControl';
 import { renderMarketIcon, getMarketGradient, resolveMarketKey } from '../../utils/marketIcons';
 import './BudgetsList.css';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
@@ -17,6 +18,9 @@ const BudgetsList: React.FC = () => {
   const [error, setError] = useState('');
   const [selectedBudget, setSelectedBudget] = useState<Budget | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  // matrixId per budget id (null = no matrix, number = existing, undefined = not yet checked)
+  const [matrixMap, setMatrixMap] = useState<Record<number, number | null>>({});
+  const [startingMatrix, setStartingMatrix] = useState<number | null>(null);
 
   // Fetch budgets on mount
   useEffect(() => {
@@ -29,6 +33,12 @@ const BudgetsList: React.FC = () => {
       setLoading(true);
       const response = await budgetsApi.getAll();
       setBudgets(response.data);
+      // Check matrix existence for each budget in parallel (fire-and-forget updates)
+      const checks = response.data.map(async (b: Budget) => {
+        const existing = await getMatrixForBudget(b.id).catch(() => null);
+        setMatrixMap(prev => ({ ...prev, [b.id]: existing ? existing.id : null }));
+      });
+      await Promise.allSettled(checks);
     } catch (err) {
       console.error('Error loading budgets:', err);
       setError('Failed to load budgets');
@@ -286,6 +296,7 @@ const BudgetsList: React.FC = () => {
                 <th className="col-confidence">Confidence</th>
                 <th className="col-status">Status</th>
                 <th className="col-date">Created</th>
+                <th style={{ padding: '6px 12px' }}>Cost Control</th>
               </tr>
             </thead>
             <tbody>
@@ -326,6 +337,43 @@ const BudgetsList: React.FC = () => {
                     </td>
                     <td className="col-date">
                       {new Date(budget.created_at).toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: '6px 12px', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                      {matrixMap[budget.id] != null ? (
+                        <button
+                          className="btn btn-secondary"
+                          style={{ fontSize: 11, padding: '3px 10px' }}
+                          onClick={() => navigate(`/estimating/cost-control/${matrixMap[budget.id]}`)}
+                        >
+                          Open Matrix →
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-primary"
+                          style={{ fontSize: 11, padding: '3px 10px' }}
+                          disabled={startingMatrix === budget.id}
+                          onClick={async () => {
+                            setStartingMatrix(budget.id);
+                            try {
+                              const { matrixId } = await createMatrixFromBudget(budget.id);
+                              setMatrixMap(prev => ({ ...prev, [budget.id]: matrixId }));
+                              navigate(`/estimating/cost-control/${matrixId}`);
+                            } catch (err: any) {
+                              const existingId = err?.response?.data?.matrixId;
+                              if (existingId) {
+                                setMatrixMap(prev => ({ ...prev, [budget.id]: existingId }));
+                                navigate(`/estimating/cost-control/${existingId}`);
+                              } else {
+                                toast.error(err?.response?.data?.error || 'Failed to create matrix');
+                              }
+                            } finally {
+                              setStartingMatrix(null);
+                            }
+                          }}
+                        >
+                          {startingMatrix === budget.id ? 'Starting…' : '+ Matrix'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -471,6 +519,41 @@ const BudgetsList: React.FC = () => {
               <button className="btn btn-secondary" onClick={handleClosePreview}>
                 Close
               </button>
+              {matrixMap[selectedBudget.id] != null ? (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { handleClosePreview(); navigate(`/estimating/cost-control/${matrixMap[selectedBudget.id]}`); }}
+                >
+                  Open Cost Control Matrix →
+                </button>
+              ) : (
+                <button
+                  className="btn btn-secondary"
+                  disabled={startingMatrix === selectedBudget.id}
+                  onClick={async () => {
+                    setStartingMatrix(selectedBudget.id);
+                    try {
+                      const { matrixId } = await createMatrixFromBudget(selectedBudget.id);
+                      setMatrixMap(prev => ({ ...prev, [selectedBudget.id]: matrixId }));
+                      handleClosePreview();
+                      navigate(`/estimating/cost-control/${matrixId}`);
+                    } catch (err: any) {
+                      const existingId = err?.response?.data?.matrixId;
+                      if (existingId) {
+                        setMatrixMap(prev => ({ ...prev, [selectedBudget.id]: existingId }));
+                        handleClosePreview();
+                        navigate(`/estimating/cost-control/${existingId}`);
+                      } else {
+                        toast.error(err?.response?.data?.error || 'Failed to create matrix');
+                      }
+                    } finally {
+                      setStartingMatrix(null);
+                    }
+                  }}
+                >
+                  {startingMatrix === selectedBudget.id ? 'Starting…' : 'Start Cost Control Matrix'}
+                </button>
+              )}
               <button
                 className="btn btn-primary"
                 onClick={() => {

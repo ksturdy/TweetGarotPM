@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { budgetGeneratorService, BudgetOptions, GeneratedBudget, SimilarProject } from '../../services/budgetGenerator';
 import { budgetsApi, Budget } from '../../services/budgets';
+import { createMatrixFromBudget, getMatrixForBudget } from '../../services/costControl';
 import BudgetReportModal from '../../components/estimates/BudgetReportModal';
 import './BudgetGenerator.css';
 import '../../styles/SalesPipeline.css';
@@ -88,6 +89,9 @@ const BudgetGenerator: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [savedBudgetId, setSavedBudgetId] = useState<number | null>(null);
+  const [existingMatrixId, setExistingMatrixId] = useState<number | null>(null);
+  const [startingMatrix, setStartingMatrix] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
@@ -564,17 +568,20 @@ const BudgetGenerator: React.FC = () => {
       };
 
       if (isEditing && id) {
-        await budgetsApi.update(parseInt(id, 10), budgetData);
+        const budgetId = parseInt(id, 10);
+        await budgetsApi.update(budgetId, budgetData);
+        setSavedBudgetId(budgetId);
         setSuccessMessage(`Budget ${status === 'final' ? 'finalized' : 'updated'} successfully!`);
+        const existing = await getMatrixForBudget(budgetId).catch(() => null);
+        setExistingMatrixId(existing?.id ?? null);
       } else {
-        await budgetsApi.create(budgetData);
+        const res = await budgetsApi.create(budgetData);
+        const newId = res.data.id;
+        setSavedBudgetId(newId);
         setSuccessMessage(`Budget ${status === 'final' ? 'finalized' : 'saved as draft'} successfully!`);
+        const existing = await getMatrixForBudget(newId).catch(() => null);
+        setExistingMatrixId(existing?.id ?? null);
       }
-
-      // Navigate to budgets list after short delay
-      setTimeout(() => {
-        navigate('/estimating/budgets');
-      }, 1500);
 
     } catch (err: any) {
       console.error('Error saving budget:', err);
@@ -814,8 +821,53 @@ const BudgetGenerator: React.FC = () => {
       </div>
 
       {successMessage && (
-        <div className="success-message no-print">
-          {successMessage}
+        <div className="success-message no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <span>{successMessage}</span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {savedBudgetId && (
+              existingMatrixId ? (
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '13px', padding: '4px 12px' }}
+                  onClick={() => navigate(`/estimating/cost-control/${existingMatrixId}`)}
+                >
+                  Open Cost Control Matrix →
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  style={{ fontSize: '13px', padding: '4px 12px' }}
+                  disabled={startingMatrix}
+                  onClick={async () => {
+                    if (!savedBudgetId) return;
+                    setStartingMatrix(true);
+                    try {
+                      const { matrixId } = await createMatrixFromBudget(savedBudgetId);
+                      navigate(`/estimating/cost-control/${matrixId}`);
+                    } catch (err: any) {
+                      // 409 = matrix already exists — navigate to it
+                      const existingId = err?.response?.data?.matrixId;
+                      if (existingId) {
+                        navigate(`/estimating/cost-control/${existingId}`);
+                      } else {
+                        setError(err?.response?.data?.error || 'Failed to create Cost Control Matrix');
+                        setStartingMatrix(false);
+                      }
+                    }
+                  }}
+                >
+                  {startingMatrix ? 'Creating…' : 'Start Cost Control Matrix →'}
+                </button>
+              )
+            )}
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: '13px', padding: '4px 12px' }}
+              onClick={() => navigate('/estimating/budgets')}
+            >
+              Back to Budgets
+            </button>
+          </div>
         </div>
       )}
 

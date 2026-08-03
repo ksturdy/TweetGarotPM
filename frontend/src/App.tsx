@@ -70,6 +70,8 @@ import BudgetsList from './pages/estimating/BudgetsList';
 import CostModel from './pages/estimating/CostModel';
 import CostDatabase from './pages/estimating/CostDatabase';
 import BudgetGenerator from './pages/estimating/BudgetGenerator';
+import CostControlMatrixPage from './pages/estimating/CostControlMatrix';
+import CostControlList from './pages/estimating/CostControlList';
 import TakeoffsList from './pages/estimating/TakeoffsList';
 import TakeoffForm from './pages/estimating/TakeoffForm';
 import TakeoffDetail from './pages/estimating/TakeoffDetail';
@@ -455,6 +457,8 @@ const App: React.FC = () => {
                 <Route path="/estimating/cost-model" element={<CostModel />} />
                 <Route path="/estimating/cost-database" element={<CostDatabase />} />
                 <Route path="/estimating/budget-generator" element={<BudgetGenerator />} />
+                <Route path="/estimating/cost-control" element={<CostControlList />} />
+                <Route path="/estimating/cost-control/:matrixId" element={<CostControlMatrixPage />} />
                 <Route path="/estimating/takeoffs" element={<TakeoffsList />} />
                 <Route path="/estimating/takeoffs/new" element={<TakeoffForm />} />
                 <Route path="/estimating/takeoffs/:id" element={<TakeoffDetail />} />

@@ -1,0 +1,424 @@
+/* Cost Control Matrix — matches estimate assembly visual style */
+
+.ccm-page {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+  background: #f0f1f3;
+  min-height: 100vh;
+  font-family: inherit;
+}
+
+/* ------------------------------------------------------------------ */
+/* Top bar */
+/* ------------------------------------------------------------------ */
+.ccm-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ccm-back-link {
+  display: inline-block;
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.ccm-back-link:hover { color: #8b5cf6; }
+
+.ccm-page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.ccm-target-display {
+  font-size: 13px;
+  color: #8888a0;
+  margin-top: 2px;
+}
+
+.ccm-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel (settings / add version) */
+/* ------------------------------------------------------------------ */
+.ccm-panel {
+  background: #ffffff;
+  border: 1px solid #e0e2e7;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.ccm-panel label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a5a72;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ccm-panel input,
+.ccm-panel select {
+  background: #f8f9fa;
+  border: 1px solid #e0e2e7;
+  border-radius: 8px;
+  color: #1a1a2e;
+  font-size: 13px;
+  padding: 6px 10px;
+  min-width: 160px;
+}
+.ccm-panel input:focus,
+.ccm-panel select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* ------------------------------------------------------------------ */
+/* Version strip */
+/* ------------------------------------------------------------------ */
+.ccm-version-strip {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  background: #ffffff;
+  border: 1px solid #e0e2e7;
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+
+.strip-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8888a0;
+  margin-right: 4px;
+}
+
+.strip-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.strip-date {
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.strip-toggle, .strip-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  opacity: 0.6;
+  line-height: 1;
+}
+.strip-toggle:hover, .strip-del:hover { opacity: 1; }
+
+/* ------------------------------------------------------------------ */
+/* Cards */
+/* ------------------------------------------------------------------ */
+.ccm-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid #e0e2e7;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.ccm-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Section header */
+/* ------------------------------------------------------------------ */
+.ccm-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f1f3;
+}
+
+.ccm-section-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.ccm-section-name-input {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 6px;
+  border-radius: 6px;
+  flex: 1;
+  min-width: 200px;
+}
+.ccm-section-name-input.editing {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  outline: none;
+}
+
+.ccm-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #8888a0;
+  font-size: 13px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.ccm-icon-btn:hover { color: #3b82f6; background: #eff6ff; }
+.ccm-icon-btn.danger:hover { color: #ef4444; background: #fef2f2; }
+
+/* ------------------------------------------------------------------ */
+/* Line items table */
+/* ------------------------------------------------------------------ */
+.ccm-table-scroll {
+  overflow-x: auto;
+  margin: 0 -4px;
+}
+
+.ccm-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 500px;
+}
+
+.ccm-items-table thead th {
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #5a5a72;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 2px solid #e0e2e7;
+}
+
+.ccm-items-table thead th.col-left { text-align: left; }
+
+.ver-group-header {
+  text-align: center !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 6px 12px !important;
+  border-left: 2px solid rgba(0,0,0,0.06) !important;
+}
+
+.ver-header-date {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.sub-header {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  border-left: none !important;
+}
+
+.ccm-items-table tbody tr.item-row:hover { background: #f8f9fa; }
+
+.ccm-items-table tbody td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0f1f3;
+  vertical-align: middle;
+}
+
+.col-desc { min-width: 180px; max-width: 280px; }
+.col-type { min-width: 110px; width: 130px; }
+.col-del  { width: 32px; text-align: center; }
+.cell-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.summary-label-col { min-width: 200px; }
+
+/* Editable cell inputs */
+.item-desc-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #1a1a2e;
+  font-size: 13px;
+  padding: 3px 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.item-desc-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+.item-desc-input::placeholder { color: #c0c0d0; }
+
+/* Type badge (styled select) */
+.type-badge {
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+  width: 100%;
+}
+.type-badge:focus { outline: none; }
+
+.type-labor_field  { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.type-labor_shop   { background: #cffafe; color: #0e7490; border-color: #a5f3fc; }
+.type-material     { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.type-equipment    { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.type-subcontract  { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+.type-gen_conditions { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+
+/* Cell value inputs */
+.ccm-cell-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #1a1a2e;
+  font-size: 12px;
+  padding: 2px 4px;
+  width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ccm-cell-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: rgba(255,255,255,0.9);
+}
+.ccm-cell-input.val-input { width: 90px; }
+.ccm-cell-input.notes-input { width: 120px; text-align: left; }
+
+.var-pos { color: #059669; }
+.var-neg { color: #ef4444; }
+
+/* ------------------------------------------------------------------ */
+/* Add type buttons */
+/* ------------------------------------------------------------------ */
+.ccm-add-type-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Add section button */
+/* ------------------------------------------------------------------ */
+.ccm-add-section-btn {
+  display: block;
+  width: 100%;
+  background: #ffffff;
+  border: 2px dashed #c7d2fe;
+  border-radius: 12px;
+  color: #6366f1;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+  margin-bottom: 16px;
+}
+.ccm-add-section-btn:hover {
+  background: #eef2ff;
+  border-color: #6366f1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary card rows */
+/* ------------------------------------------------------------------ */
+.summary-sub-row td {
+  font-size: 13px;
+  color: #5a5a72;
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.summary-total-row td {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1a1a2e;
+  padding: 8px 10px;
+  border-top: 2px solid #e0e2e7;
+  border-bottom: 1px solid #e0e2e7;
+}
+
+.summary-grand-row td {
+  font-weight: 700;
+  font-size: 15px;
+  color: #1a1a2e;
+  padding: 10px 10px;
+  border-top: 2px solid #1a1a2e;
+}
+
+/* ------------------------------------------------------------------ */
+/* Nudge / info bar */
+/* ------------------------------------------------------------------ */
+.ccm-nudge {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #5a5a72;
+  line-height: 1.5;
+}
+.ccm-nudge strong { color: #1a1a2e; }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.btn-link:hover { color: #8b5cf6; }
