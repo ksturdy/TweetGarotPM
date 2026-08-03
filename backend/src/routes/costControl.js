@@ -394,7 +394,7 @@ router.get('/:matrixId', async (req, res) => {
     if (!matrixRes.rows.length) return res.status(404).json({ error: 'Matrix not found' });
     const matrix = matrixRes.rows[0];
 
-    const [versionsRes, areasRes, itemsRes, valuesRes] = await Promise.all([
+    const [versionsRes, areasRes, itemsRes, valuesRes, risksRes] = await Promise.all([
       pool.query('SELECT * FROM cost_control_versions WHERE matrix_id = $1 ORDER BY sort_order, id', [matrixId]),
       pool.query('SELECT * FROM cost_control_areas WHERE matrix_id = $1 ORDER BY sort_order, id', [matrixId]),
       pool.query('SELECT * FROM cost_control_line_items WHERE matrix_id = $1 ORDER BY sort_order, id', [matrixId]),
@@ -404,6 +404,7 @@ router.get('/:matrixId', async (req, res) => {
          WHERE ccli.matrix_id = $1`,
         [matrixId]
       ),
+      pool.query('SELECT * FROM cost_control_risk_items WHERE matrix_id = $1 ORDER BY type, sort_order, id', [matrixId]),
     ]);
 
     // Index values by [item_id][version_id]
@@ -433,6 +434,7 @@ router.get('/:matrixId', async (req, res) => {
       ...matrix,
       versions: versionsRes.rows,
       areas,
+      risks: risksRes.rows,
     });
   } catch (err) {
     console.error('Error fetching matrix:', err);
@@ -721,6 +723,78 @@ router.put('/:matrixId/versions/:versionId/values', async (req, res) => {
     res.status(500).json({ error: 'Failed to save values' });
   } finally {
     client.release();
+  }
+});
+
+// ------------------------------------------------------------------
+// Risk & Opportunity Items CRUD
+// ------------------------------------------------------------------
+router.post('/:matrixId/risks', async (req, res) => {
+  try {
+    const check = await pool.query(
+      'SELECT id FROM cost_control_matrices WHERE id = $1 AND tenant_id = $2',
+      [req.params.matrixId, req.user.tenantId]
+    );
+    if (!check.rows.length) return res.status(404).json({ error: 'Matrix not found' });
+
+    const { type, description, version_id, probability, impact, status, notes, sort_order } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO cost_control_risk_items
+         (matrix_id, type, description, version_id, probability, impact, status, notes, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'open'), $8, COALESCE($9, 0))
+       RETURNING *`,
+      [req.params.matrixId, type || 'risk', description || '', version_id || null,
+       probability ?? null, impact ?? null, status, notes || null, sort_order]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Error adding risk item:', err);
+    res.status(500).json({ error: 'Failed to add risk item' });
+  }
+});
+
+router.put('/:matrixId/risks/:riskId', async (req, res) => {
+  try {
+    const { type, description, version_id, probability, impact, status, notes, sort_order } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE cost_control_risk_items ri
+       SET type        = COALESCE($1, ri.type),
+           description = COALESCE($2, ri.description),
+           version_id  = $3,
+           probability = $4,
+           impact      = $5,
+           status      = COALESCE($6, ri.status),
+           notes       = $7,
+           sort_order  = COALESCE($8, ri.sort_order),
+           updated_at  = NOW()
+       FROM cost_control_matrices ccm
+       WHERE ri.id = $9 AND ri.matrix_id = $10 AND ccm.id = ri.matrix_id AND ccm.tenant_id = $11
+       RETURNING ri.*`,
+      [type, description, version_id ?? null, probability ?? null, impact ?? null,
+       status, notes ?? null, sort_order, req.params.riskId, req.params.matrixId, req.user.tenantId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Risk item not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating risk item:', err);
+    res.status(500).json({ error: 'Failed to update risk item' });
+  }
+});
+
+router.delete('/:matrixId/risks/:riskId', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM cost_control_risk_items ri
+       USING cost_control_matrices ccm
+       WHERE ri.id = $1 AND ri.matrix_id = $2 AND ccm.id = ri.matrix_id AND ccm.tenant_id = $3
+       RETURNING ri.id`,
+      [req.params.riskId, req.params.matrixId, req.user.tenantId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Risk item not found' });
+    res.json({ message: 'Risk item deleted' });
+  } catch (err) {
+    console.error('Error deleting risk item:', err);
+    res.status(500).json({ error: 'Failed to delete risk item' });
   }
 });
 

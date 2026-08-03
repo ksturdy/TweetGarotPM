@@ -5,6 +5,7 @@ import {
   CostType,
   COST_TYPE_LABELS,
   calcVersionTotals,
+  calcRiskTotals,
 } from '../../services/costControl';
 import { exportCCMComparePdf } from '../../utils/costControlPdf';
 
@@ -350,6 +351,78 @@ export default function CostControlCompare({ matrix, onClose }: Props) {
                 </tbody>
               </table>
             </div>
+
+            {/* Risk & Opportunities */}
+            {matrix.risks.length > 0 && (() => {
+              const { riskEV, oppEV } = calcRiskTotals(matrix.risks);
+              const risks = matrix.risks.filter(r => r.type === 'risk');
+              const opps  = matrix.risks.filter(r => r.type === 'opportunity');
+              const versionName = (vId: number | null) =>
+                vId ? (matrix.versions.find(v => v.id === vId)?.version_name ?? '—') : '—';
+              const fmtEV = (r: typeof matrix.risks[0]) =>
+                r.probability != null && r.impact != null
+                  ? fmt((r.probability / 100) * Number(r.impact))
+                  : '—';
+              const STATUS_LABELS: Record<string, string> = { open: 'Open', realized: 'Realized', mitigated: 'Mitigated', closed: 'Closed' };
+
+              const RiskTable = ({ items, color }: { items: typeof matrix.risks; color: string }) => (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 8 }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      {['Description', 'Identified In', 'Probability', 'Impact', 'Expected Value', 'Status', 'Notes'].map(h => (
+                        <th key={h} style={{ textAlign: h === 'Description' || h === 'Notes' || h === 'Identified In' || h === 'Status' ? 'left' : 'right', padding: '4px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((r, idx) => (
+                      <tr key={r.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f8f9fa', borderBottom: '1px solid #f0f1f3' }}>
+                        <td style={{ padding: '4px 8px', minWidth: 180 }}>{r.description || <span style={{ color: '#c0c0d0', fontStyle: 'italic' }}>—</span>}</td>
+                        <td style={{ padding: '4px 8px', color: '#5a5a72', fontSize: 11 }}>{versionName(r.version_id)}</td>
+                        <td style={{ textAlign: 'right', padding: '4px 8px' }}>{r.probability != null ? `${r.probability}%` : '—'}</td>
+                        <td style={{ textAlign: 'right', padding: '4px 8px', fontVariantNumeric: 'tabular-nums' }}>{r.impact != null ? fmt(Number(r.impact)) : '—'}</td>
+                        <td style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>{fmtEV(r)}</td>
+                        <td style={{ padding: '4px 8px' }}>
+                          <span style={{ display: 'inline-block', borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 600, background: r.status === 'open' ? '#fee2e2' : '#f1f5f9', color: r.status === 'open' ? '#b91c1c' : '#475569' }}>
+                            {STATUS_LABELS[r.status]}
+                          </span>
+                        </td>
+                        <td style={{ padding: '4px 8px', color: '#5a5a72', fontSize: 11, maxWidth: 160 }}>{r.notes || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+
+              return (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ background: '#1e2937', color: '#fff', padding: '7px 10px', fontWeight: 700, fontSize: 12, borderRadius: '4px 4px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Risks &amp; Opportunities</span>
+                    <span style={{ fontSize: 11, fontWeight: 400, display: 'flex', gap: 16 }}>
+                      {riskEV > 0 && <span>Risk exposure: <strong style={{ color: '#fca5a5' }}>{fmt(riskEV)}</strong></span>}
+                      {oppEV  > 0 && <span>Opportunity upside: <strong style={{ color: '#6ee7b7' }}>{fmt(oppEV)}</strong></span>}
+                      {(riskEV > 0 || oppEV > 0) && <span>Net: <strong style={{ color: riskEV - oppEV > 0 ? '#fca5a5' : '#6ee7b7' }}>{riskEV - oppEV >= 0 ? '+' : ''}{fmt(riskEV - oppEV)}</strong></span>}
+                    </span>
+                  </div>
+                  {risks.length > 0 && (
+                    <div style={{ padding: '10px 0 4px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} /> Risks
+                      </div>
+                      <RiskTable items={risks} color="#dc2626" />
+                    </div>
+                  )}
+                  {opps.length > 0 && (
+                    <div style={{ padding: '10px 0 4px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} /> Opportunities
+                      </div>
+                      <RiskTable items={opps} color="#16a34a" />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

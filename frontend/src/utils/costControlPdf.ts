@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CostControlMatrix, CostControlVersion, CostType, COST_TYPE_LABELS, calcVersionTotals } from '../services/costControl';
+import { CostControlMatrix, CostControlVersion, CostControlRiskItem, CostType, COST_TYPE_LABELS, calcVersionTotals, calcRiskTotals } from '../services/costControl';
 
 type RGB = [number, number, number];
 
@@ -341,6 +341,125 @@ export function exportCCMComparePdf(
       }
     },
   });
+
+  // ── Risk & Opportunities section ──────────────────────────────────────
+  if (matrix.risks.length > 0) {
+    const risks = matrix.risks.filter(r => r.type === 'risk');
+    const opps  = matrix.risks.filter(r => r.type === 'opportunity');
+    const { riskEV, oppEV } = calcRiskTotals(matrix.risks);
+
+    const versionName = (vId: number | null) =>
+      vId ? (matrix.versions.find(v => v.id === vId)?.version_name ?? '—') : '—';
+    const fmtEV = (r: CostControlRiskItem) =>
+      r.probability != null && r.impact != null
+        ? fmtMoney((r.probability / 100) * Number(r.impact))
+        : '—';
+
+    const lastPage = (doc as any).internal.getCurrentPageInfo().pageNumber;
+    const finalY: number = (doc as any).lastAutoTable?.finalY ?? 200;
+
+    // Add a new page if not much space left
+    let ry = finalY + 24;
+    if (ry > pageH - 80) {
+      doc.addPage();
+      ry = 40;
+    }
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DARK);
+    doc.text('Risks & Opportunities', marginL, ry);
+    ry += 6;
+
+    // Summary line
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...SLATE);
+    const summaryParts: string[] = [];
+    if (riskEV > 0) summaryParts.push(`Risk Exposure: ${fmtMoney(riskEV)}`);
+    if (oppEV  > 0) summaryParts.push(`Opportunity Upside: ${fmtMoney(oppEV)}`);
+    if (riskEV > 0 || oppEV > 0) summaryParts.push(`Net: ${riskEV - oppEV >= 0 ? '+' : ''}${fmtMoney(riskEV - oppEV)}`);
+    if (summaryParts.length) doc.text(summaryParts.join('   '), marginL, ry + 8);
+    ry += 14;
+
+    const ROW_COLS = ['Description', 'Identified In', 'Probability', 'Impact', 'Expected Value', 'Status', 'Notes'];
+
+    const buildRows = (items: CostControlRiskItem[]) =>
+      items.map(r => [
+        sanitize(r.description) || '—',
+        sanitize(versionName(r.version_id)),
+        r.probability != null ? `${r.probability}%` : '—',
+        r.impact != null ? fmtMoney(Number(r.impact)) : '—',
+        fmtEV(r),
+        r.status.charAt(0).toUpperCase() + r.status.slice(1),
+        sanitize(r.notes ?? ''),
+      ]);
+
+    if (risks.length > 0) {
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...([220, 38, 38] as [number, number, number]));
+      doc.text('Risks', marginL, ry);
+      ry += 4;
+
+      autoTable(doc, {
+        startY: ry,
+        head: [ROW_COLS],
+        body: buildRows(risks),
+        margin: { left: marginL, right: marginR },
+        styles: { fontSize: 7.5, cellPadding: { top: 2, right: 5, bottom: 2, left: 5 }, textColor: DARK, lineColor: [226, 232, 240], lineWidth: 0.4 },
+        headStyles: { fillColor: [254, 226, 226], textColor: [185, 28, 28], fontStyle: 'bold', fontSize: 7.5 },
+        columnStyles: {
+          0: { cellWidth: 140 },
+          1: { cellWidth: 80 },
+          2: { cellWidth: 65, halign: 'right' },
+          3: { cellWidth: 75, halign: 'right' },
+          4: { cellWidth: 80, halign: 'right', fontStyle: 'bold' },
+          5: { cellWidth: 60 },
+          6: { cellWidth: 'auto' },
+        },
+        didDrawPage: (data) => {
+          doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(...MUTED);
+          doc.text(sanitize(matrix.name), marginL, pageH - 18);
+          doc.text(`Page ${data.pageNumber}`, pageW - marginR, pageH - 18, { align: 'right' });
+          if (data.pageNumber > lastPage) { doc.setFillColor(...ACCENT); doc.rect(0, 0, pageW, 4, 'F'); }
+        },
+      });
+      ry = ((doc as any).lastAutoTable?.finalY ?? ry) + 12;
+    }
+
+    if (opps.length > 0) {
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...([22, 163, 74] as [number, number, number]));
+      doc.text('Opportunities', marginL, ry);
+      ry += 4;
+
+      autoTable(doc, {
+        startY: ry,
+        head: [ROW_COLS],
+        body: buildRows(opps),
+        margin: { left: marginL, right: marginR },
+        styles: { fontSize: 7.5, cellPadding: { top: 2, right: 5, bottom: 2, left: 5 }, textColor: DARK, lineColor: [226, 232, 240], lineWidth: 0.4 },
+        headStyles: { fillColor: [220, 252, 231], textColor: [22, 101, 52], fontStyle: 'bold', fontSize: 7.5 },
+        columnStyles: {
+          0: { cellWidth: 140 },
+          1: { cellWidth: 80 },
+          2: { cellWidth: 65, halign: 'right' },
+          3: { cellWidth: 75, halign: 'right' },
+          4: { cellWidth: 80, halign: 'right', fontStyle: 'bold' },
+          5: { cellWidth: 60 },
+          6: { cellWidth: 'auto' },
+        },
+        didDrawPage: (data) => {
+          doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(...MUTED);
+          doc.text(sanitize(matrix.name), marginL, pageH - 18);
+          doc.text(`Page ${data.pageNumber}`, pageW - marginR, pageH - 18, { align: 'right' });
+          if (data.pageNumber > lastPage) { doc.setFillColor(...ACCENT); doc.rect(0, 0, pageW, 4, 'F'); }
+        },
+      });
+    }
+  }
 
   const safeName = matrix.name.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').toLowerCase();
   doc.save(`${safeName}_version_comparison.pdf`);

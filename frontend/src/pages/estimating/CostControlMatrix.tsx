@@ -6,9 +6,12 @@ import {
   CostControlMatrix as CCMatrix,
   CostControlVersion,
   CostControlVersionValue,
+  CostControlRiskItem,
+  RiskStatus,
   CostType,
   COST_TYPE_LABELS,
   calcVersionTotals,
+  calcRiskTotals,
   addVersion,
   deleteVersion,
   updateVersion,
@@ -21,6 +24,9 @@ import {
   addLineItem as apiAddLineItem,
   updateLineItem as apiUpdateLineItem,
   deleteLineItem as apiDeleteLineItem,
+  addRiskItem as apiAddRiskItem,
+  updateRiskItem as apiUpdateRiskItem,
+  deleteRiskItem as apiDeleteRiskItem,
 } from '../../services/costControl';
 import './CostControlMatrix.css';
 
@@ -96,6 +102,9 @@ export default function CostControlMatrixPage() {
 
   // Compare modal
   const [showCompare, setShowCompare] = useState(false);
+
+  // Risk / Opportunity edits — keyed by riskId
+  const [riskDrafts, setRiskDrafts] = useState<Record<number, Partial<CostControlRiskItem>>>({});
 
   const load = useCallback(async () => {
     if (!matrixId) return;
@@ -261,6 +270,51 @@ export default function CostControlMatrixPage() {
       toast.error('Failed to update type');
       setItemTypeDrafts(prev => { const n = { ...prev }; delete n[itemId]; return n; });
     }
+  };
+
+  // --- Risk & Opportunity handlers ---
+  const handleAddRisk = async (type: 'risk' | 'opportunity') => {
+    if (!matrix) return;
+    try {
+      const item = await apiAddRiskItem(matrix.id, { type, description: '', status: 'open', sort_order: matrix.risks.length });
+      setMatrix(prev => prev ? { ...prev, risks: [...prev.risks, item] } : prev);
+      setTimeout(() => {
+        const el = document.getElementById(`risk-desc-${item.id}`);
+        if (el) (el as HTMLInputElement).focus();
+      }, 50);
+    } catch { toast.error('Failed to add item'); }
+  };
+
+  const handleDeleteRisk = async (riskId: number) => {
+    if (!matrix) return;
+    try {
+      await apiDeleteRiskItem(matrix.id, riskId);
+      setMatrix(prev => prev ? { ...prev, risks: prev.risks.filter(r => r.id !== riskId) } : prev);
+    } catch { toast.error('Failed to delete item'); }
+  };
+
+  const patchRiskDraft = (riskId: number, patch: Partial<CostControlRiskItem>) =>
+    setRiskDrafts(prev => ({ ...prev, [riskId]: { ...prev[riskId], ...patch } }));
+
+  const flushRiskDraft = async (risk: CostControlRiskItem) => {
+    if (!matrix) return;
+    const draft = riskDrafts[risk.id];
+    if (!draft || Object.keys(draft).length === 0) return;
+    const merged = { ...risk, ...draft };
+    try {
+      const updated = await apiUpdateRiskItem(matrix.id, risk.id, merged);
+      setMatrix(prev => prev ? { ...prev, risks: prev.risks.map(r => r.id === risk.id ? updated : r) } : prev);
+    } catch { toast.error('Failed to save change'); }
+    setRiskDrafts(prev => { const n = { ...prev }; delete n[risk.id]; return n; });
+  };
+
+  const handleRiskFieldChange = async (risk: CostControlRiskItem, patch: Partial<CostControlRiskItem>) => {
+    if (!matrix) return;
+    const merged = { ...risk, ...patch };
+    setMatrix(prev => prev ? { ...prev, risks: prev.risks.map(r => r.id === risk.id ? { ...r, ...patch } : r) } : prev);
+    try {
+      await apiUpdateRiskItem(matrix.id, risk.id, merged);
+    } catch { toast.error('Failed to save change'); }
   };
 
   // --- Render ---
@@ -611,6 +665,192 @@ export default function CostControlMatrixPage() {
         </button>
       )}
 
+      {/* Risk & Opportunities card */}
+      {(() => {
+        const risks = matrix.risks.filter(r => r.type === 'risk');
+        const opps  = matrix.risks.filter(r => r.type === 'opportunity');
+        const { riskEV, oppEV } = calcRiskTotals(matrix.risks);
+
+        const renderRiskRow = (risk: CostControlRiskItem) => {
+          const draft = riskDrafts[risk.id] ?? {};
+          const desc = draft.description ?? risk.description;
+          const prob = draft.probability ?? risk.probability;
+          const imp  = draft.impact ?? risk.impact;
+          const ev   = prob != null && imp != null ? (Number(prob) / 100) * Number(imp) : null;
+          const isRisk = risk.type === 'risk';
+
+          return (
+            <tr key={risk.id} style={{ borderBottom: '1px solid #f0f1f3' }}>
+              <td style={{ padding: '5px 8px' }}>
+                <input
+                  id={`risk-desc-${risk.id}`}
+                  className="item-desc-input"
+                  value={desc}
+                  onChange={e => patchRiskDraft(risk.id, { description: e.target.value })}
+                  onBlur={() => flushRiskDraft(risk)}
+                  placeholder="Describe the risk or opportunity…"
+                  style={{ minWidth: 200 }}
+                />
+              </td>
+              <td style={{ padding: '5px 8px' }}>
+                <select
+                  className="ccm-cell-input"
+                  style={{ width: 120, textAlign: 'left' }}
+                  value={risk.version_id ?? ''}
+                  onChange={e => handleRiskFieldChange(risk, { version_id: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">— any —</option>
+                  {matrix.versions.map(v => <option key={v.id} value={v.id}>{v.version_name}</option>)}
+                </select>
+              </td>
+              <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                <input
+                  className="ccm-cell-input"
+                  style={{ width: 60 }}
+                  type="number"
+                  min="0" max="100" step="5"
+                  value={prob ?? ''}
+                  onChange={e => patchRiskDraft(risk.id, { probability: e.target.value === '' ? null : Number(e.target.value) })}
+                  onBlur={() => flushRiskDraft(risk)}
+                  placeholder="50"
+                />
+                <span style={{ fontSize: 11, color: '#8888a0' }}>%</span>
+              </td>
+              <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                <input
+                  className="ccm-cell-input val-input"
+                  value={imp != null ? fmtNum(String(imp)) : ''}
+                  onChange={e => patchRiskDraft(risk.id, { impact: e.target.value === '' ? null : parseFloat(e.target.value.replace(/[$,]/g, '')) || null })}
+                  onBlur={() => flushRiskDraft(risk)}
+                  placeholder="$0"
+                />
+              </td>
+              <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: isRisk ? '#dc2626' : '#16a34a' }}>
+                {ev != null ? fmt(ev) : '—'}
+              </td>
+              <td style={{ padding: '5px 8px' }}>
+                <select
+                  className="ccm-cell-input"
+                  style={{ width: 100, textAlign: 'left' }}
+                  value={risk.status}
+                  onChange={e => handleRiskFieldChange(risk, { status: e.target.value as RiskStatus })}
+                >
+                  <option value="open">Open</option>
+                  <option value="realized">Realized</option>
+                  <option value="mitigated">Mitigated</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </td>
+              <td style={{ padding: '5px 8px' }}>
+                <input
+                  className="ccm-cell-input notes-input"
+                  style={{ width: 140 }}
+                  value={draft.notes ?? risk.notes ?? ''}
+                  onChange={e => patchRiskDraft(risk.id, { notes: e.target.value })}
+                  onBlur={() => flushRiskDraft(risk)}
+                  placeholder="notes"
+                />
+              </td>
+              <td style={{ width: 32, textAlign: 'center' }}>
+                <button className="ccm-icon-btn danger" onClick={() => handleDeleteRisk(risk.id)}>✕</button>
+              </td>
+            </tr>
+          );
+        };
+
+        const RiskTableHead = () => (
+          <thead>
+            <tr>
+              <th className="col-left" style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', minWidth: 220 }}>Description</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', minWidth: 120 }}>Identified In</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', textAlign: 'right', minWidth: 80 }}>Probability</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', textAlign: 'right', minWidth: 100 }}>Impact</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', textAlign: 'right', minWidth: 110 }}>Expected Value</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', minWidth: 110 }}>Status</th>
+              <th style={{ padding: '5px 8px', fontSize: 11, fontWeight: 600, color: '#5a5a72', minWidth: 150 }}>Notes</th>
+              <th style={{ width: 32 }} />
+            </tr>
+          </thead>
+        );
+
+        return (
+          <div className="ccm-card" style={{ marginTop: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottom: '2px solid #f0f1f3' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Risks &amp; Opportunities</h3>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#5a5a72' }}>
+                {riskEV > 0 && <span>Risk Exposure: <strong style={{ color: '#dc2626' }}>{fmt(riskEV)}</strong></span>}
+                {oppEV > 0  && <span>Opportunity Upside: <strong style={{ color: '#16a34a' }}>{fmt(oppEV)}</strong></span>}
+                {(riskEV > 0 || oppEV > 0) && (
+                  <span>Net: <strong style={{ color: riskEV - oppEV > 0 ? '#dc2626' : '#16a34a' }}>{riskEV - oppEV >= 0 ? '+' : ''}{fmt(riskEV - oppEV)}</strong></span>
+                )}
+              </div>
+            </div>
+
+            {/* Risks */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#dc2626', display: 'inline-block' }} />
+                  Risks
+                </span>
+                <span style={{ fontSize: 11, color: '#8888a0' }}>Items that could increase cost</span>
+              </div>
+              {risks.length > 0 && (
+                <div className="ccm-table-scroll">
+                  <table className="ccm-items-table">
+                    <RiskTableHead />
+                    <tbody>
+                      {risks.map(renderRiskRow)}
+                      {risks.filter(r => r.status === 'open').length > 0 && (
+                        <tr style={{ background: '#fef2f2' }}>
+                          <td colSpan={4} style={{ padding: '5px 8px', fontSize: 12, fontWeight: 600, color: '#dc2626' }}>Open Risk Exposure</td>
+                          <td style={{ textAlign: 'right', padding: '5px 8px', fontWeight: 700, color: '#dc2626' }}>{fmt(riskEV)}</td>
+                          <td colSpan={3} />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button className="btn btn-sm btn-secondary" style={{ marginTop: 8, borderColor: '#fca5a5', color: '#dc2626' }} onClick={() => handleAddRisk('risk')}>
+                + Add Risk
+              </button>
+            </div>
+
+            {/* Opportunities */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#16a34a', display: 'inline-block' }} />
+                  Opportunities
+                </span>
+                <span style={{ fontSize: 11, color: '#8888a0' }}>Items that could reduce cost</span>
+              </div>
+              {opps.length > 0 && (
+                <div className="ccm-table-scroll">
+                  <table className="ccm-items-table">
+                    <RiskTableHead />
+                    <tbody>
+                      {opps.map(renderRiskRow)}
+                      {opps.filter(r => r.status === 'open').length > 0 && (
+                        <tr style={{ background: '#f0fdf4' }}>
+                          <td colSpan={4} style={{ padding: '5px 8px', fontSize: 12, fontWeight: 600, color: '#16a34a' }}>Open Opportunity Upside</td>
+                          <td style={{ textAlign: 'right', padding: '5px 8px', fontWeight: 700, color: '#16a34a' }}>{fmt(oppEV)}</td>
+                          <td colSpan={3} />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <button className="btn btn-sm btn-secondary" style={{ marginTop: 8, borderColor: '#86efac', color: '#16a34a' }} onClick={() => handleAddRisk('opportunity')}>
+                + Add Opportunity
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Summary card */}
       {matrix.versions.length > 0 && (
         <div className="ccm-card ccm-summary-card">
@@ -695,37 +935,66 @@ export default function CostControlMatrixPage() {
       )}
 
       {/* Trend chart */}
-      {matrix.versions.length > 1 && (
-        <div className="ccm-card">
-          <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 600, color: '#5a5a72' }}>Estimate Progression</h3>
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            {matrix.versions.map((v, vi) => {
-              const col = VER_COLORS[vi % VER_COLORS.length];
-              const t = calcVersionTotals(matrix, v.id);
-              const pct = Math.min((t.grand_total / maxGrandTotal) * 100, 100);
-              const overTarget = matrix.target_cost && t.grand_total > Number(matrix.target_cost);
-              return (
-                <div key={v.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: overTarget ? '#ef4444' : '#1a1a2e', fontVariantNumeric: 'tabular-nums' }}>{fmt(t.grand_total)}</div>
-                  <div style={{ width: 48, height: 80, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end' }}>
-                    <div style={{ width: '100%', height: `${pct}%`, background: overTarget ? '#ef4444' : col.border, borderRadius: '4px 4px 0 0', minHeight: 2, transition: 'height 0.3s' }} />
+      {matrix.versions.length > 1 && (() => {
+        const { riskEV, oppEV } = calcRiskTotals(matrix.risks);
+        const lastGrand = calcVersionTotals(matrix, matrix.versions[matrix.versions.length - 1].id).grand_total;
+        const worstCase = lastGrand + riskEV;
+        const chartMax = Math.max(...grandTotals, matrix.target_cost ? Number(matrix.target_cost) : 0, worstCase, 1);
+        const BAR_H = 100;
+
+        return (
+          <div className="ccm-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#5a5a72' }}>Estimate Progression</h3>
+              {(riskEV > 0 || oppEV > 0) && (
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5a5a72' }}>
+                  {riskEV > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#fca5a5', borderRadius: 2, display: 'inline-block' }} />Risk exposure {fmt(riskEV)}</span>}
+                  {oppEV > 0  && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#86efac', borderRadius: 2, display: 'inline-block' }} />Opportunity upside {fmt(oppEV)}</span>}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              {matrix.versions.map((v, vi) => {
+                const col = VER_COLORS[vi % VER_COLORS.length];
+                const t = calcVersionTotals(matrix, v.id);
+                const isLast = vi === matrix.versions.length - 1;
+                const barPct   = Math.min((t.grand_total / chartMax) * 100, 100);
+                const riskPct  = isLast && riskEV > 0 ? Math.min((riskEV / chartMax) * 100, 100 - barPct) : 0;
+                const oppPct   = isLast && oppEV > 0  ? Math.min((oppEV  / chartMax) * 100, barPct) : 0;
+                const overTarget = matrix.target_cost && t.grand_total > Number(matrix.target_cost);
+                return (
+                  <div key={v.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: overTarget ? '#ef4444' : '#1a1a2e', fontVariantNumeric: 'tabular-nums' }}>{fmt(t.grand_total)}</div>
+                    <div style={{ width: 48, height: BAR_H, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' }}>
+                      {/* Risk band on top */}
+                      {riskPct > 0 && (
+                        <div style={{ position: 'absolute', bottom: `${barPct}%`, left: 0, right: 0, height: `${riskPct}%`, background: '#fca5a5', opacity: 0.8 }} title={`Risk exposure: ${fmt(riskEV)}`} />
+                      )}
+                      {/* Base bar */}
+                      <div style={{ width: '100%', height: `${barPct}%`, background: overTarget ? '#ef4444' : col.border, minHeight: 2, transition: 'height 0.3s', position: 'relative' }}>
+                        {/* Opportunity notch at bottom of bar */}
+                        {oppPct > 0 && (
+                          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${Math.min((oppPct / barPct) * 100, 30)}%`, background: '#86efac', opacity: 0.7 }} title={`Opportunity upside: ${fmt(oppEV)}`} />
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center', maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.version_name}</div>
                   </div>
-                  <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center', maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.version_name}</div>
+                );
+              })}
+              {matrix.target_cost && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8888a0', fontVariantNumeric: 'tabular-nums' }}>{fmt(Number(matrix.target_cost))}</div>
+                  <div style={{ width: 48, height: BAR_H, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end' }}>
+                    <div style={{ width: '100%', height: `${Math.min((Number(matrix.target_cost) / chartMax) * 100, 100)}%`, background: '#e0e2e7', borderRadius: '4px 4px 0 0', minHeight: 2 }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center' }}>Target</div>
                 </div>
-              );
-            })}
-            {matrix.target_cost && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8888a0', fontVariantNumeric: 'tabular-nums' }}>{fmt(Number(matrix.target_cost))}</div>
-                <div style={{ width: 48, height: 80, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end' }}>
-                  <div style={{ width: '100%', height: `${Math.min((Number(matrix.target_cost) / maxGrandTotal) * 100, 100)}%`, background: '#e0e2e7', borderRadius: '4px 4px 0 0', minHeight: 2 }} />
-                </div>
-                <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center' }}>Target</div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

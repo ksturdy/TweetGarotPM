@@ -42,6 +42,21 @@ export interface CostControlVersion {
   notes: string | null;
 }
 
+export type RiskStatus = 'open' | 'realized' | 'mitigated' | 'closed';
+
+export interface CostControlRiskItem {
+  id: number;
+  matrix_id: number;
+  version_id: number | null;
+  type: 'risk' | 'opportunity';
+  description: string;
+  probability: number | null; // 0-100
+  impact: number | null;      // always positive dollar amount
+  status: RiskStatus;
+  notes: string | null;
+  sort_order: number;
+}
+
 export interface CostControlMatrix {
   id: number;
   tenant_id: number;
@@ -56,6 +71,7 @@ export interface CostControlMatrix {
   updated_at: string;
   versions: CostControlVersion[];
   areas: CostControlArea[];
+  risks: CostControlRiskItem[];
 }
 
 export interface CostControlMatrixSummary {
@@ -172,6 +188,29 @@ export async function updateLineItem(
 
 export async function deleteLineItem(matrixId: number, itemId: number): Promise<void> {
   await api.delete(`/cost-control/${matrixId}/items/${itemId}`);
+}
+
+// Risk & Opportunity Items
+export async function addRiskItem(matrixId: number, data: Partial<CostControlRiskItem>): Promise<CostControlRiskItem> {
+  const res = await api.post(`/cost-control/${matrixId}/risks`, data);
+  return res.data;
+}
+
+export async function updateRiskItem(matrixId: number, riskId: number, data: Partial<CostControlRiskItem>): Promise<CostControlRiskItem> {
+  const res = await api.put(`/cost-control/${matrixId}/risks/${riskId}`, data);
+  return res.data;
+}
+
+export async function deleteRiskItem(matrixId: number, riskId: number): Promise<void> {
+  await api.delete(`/cost-control/${matrixId}/risks/${riskId}`);
+}
+
+export function calcRiskTotals(risks: CostControlRiskItem[]) {
+  const openRisks = risks.filter(r => r.type === 'risk' && r.status === 'open');
+  const openOpps  = risks.filter(r => r.type === 'opportunity' && r.status === 'open');
+  const riskEV  = openRisks.reduce((s, r) => s + (r.probability != null && r.impact != null ? (r.probability / 100) * Number(r.impact) : 0), 0);
+  const oppEV   = openOpps.reduce((s,  r) => s + (r.probability != null && r.impact != null ? (r.probability / 100) * Number(r.impact) : 0), 0);
+  return { riskEV, oppEV, netEV: riskEV - oppEV };
 }
 
 // Bulk save values for a version
