@@ -714,22 +714,19 @@ const EstimateDetail: React.FC = () => {
           >
             {ccmId ? 'Open CCM →' : convertingToCCM ? 'Creating...' : 'Cost Control Matrix'}
           </button>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-secondary)' }}>Status:</label>
-            <select
-              value={estimate.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="form-input"
-              style={{ fontSize: '0.8rem', padding: '0.35rem 0.5rem' }}
-              disabled={updateStatusMutation.isPending}
-            >
-              <option value="in progress">In Progress</option>
-              <option value="submitted">Submitted</option>
-              <option value="awarded">Awarded</option>
-              <option value="lost">Lost</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+          <select
+            value={estimate.status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            className="btn btn-sm btn-secondary"
+            style={{ cursor: 'pointer', fontWeight: 500 }}
+            disabled={updateStatusMutation.isPending}
+          >
+            <option value="in progress">In Progress</option>
+            <option value="submitted">Submitted</option>
+            <option value="awarded">Awarded</option>
+            <option value="lost">Lost</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
       </div>
 

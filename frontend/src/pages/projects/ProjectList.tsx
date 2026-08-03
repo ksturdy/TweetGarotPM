@@ -174,6 +174,10 @@ const ProjectList: React.FC = () => {
     return { width: `${w}px` };
   };
 
+  const tableMinWidth = COLUMN_KEYS
+    .filter(k => columnWidths[k] > 0)
+    .reduce((sum, k) => sum + columnWidths[k], 0) + 200; // 200px reserved for flex project column
+
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll().then((res) => res.data),
@@ -1143,7 +1147,8 @@ const ProjectList: React.FC = () => {
             </button>
           )}
         </div>
-        <table className="sales-table" ref={tableRef}>
+        <div style={{ overflowX: 'auto' }}>
+        <table className="sales-table" ref={tableRef} style={{ minWidth: tableMinWidth }}>
           <colgroup>
             {COLUMN_KEYS.map(key => (
               <col key={key} style={getColStyle(key)} />
@@ -1366,6 +1371,7 @@ const ProjectList: React.FC = () => {
             </tfoot>
           )}
         </table>
+        </div>
       </div>
     </div>
   );
