@@ -8,6 +8,7 @@ import {
   calcRiskTotals,
 } from '../../services/costControl';
 import { exportCCMComparePdf } from '../../utils/costControlPdf';
+import { loadImageAsDataUrl } from '../../utils/gcScheduleDiffPdf';
 
 interface Props {
   matrix: CCMatrix;
@@ -96,7 +97,13 @@ export default function CostControlCompare({ matrix, onClose, logoUrl }: Props) 
             <button
               className="btn btn-primary"
               disabled={selVersions.length === 0}
-              onClick={() => exportCCMComparePdf(matrix, selVersions, { logoUrl })}
+              onClick={async () => {
+                let logoDataUrl: string | undefined;
+                if (logoUrl) {
+                  try { logoDataUrl = await loadImageAsDataUrl(logoUrl); } catch { /* skip */ }
+                }
+                exportCCMComparePdf(matrix, selVersions, { logoDataUrl });
+              }}
             >
               Export PDF
             </button>

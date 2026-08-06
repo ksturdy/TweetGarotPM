@@ -75,37 +75,12 @@ interface TableRow {
   _ncp?: number | null;
 }
 
-function loadImageAsDataUrl(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'blob';
-    const token = localStorage.getItem('token');
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.onload = () => {
-      if (xhr.status !== 200) { reject(new Error(`Failed: ${xhr.status}`)); return; }
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(xhr.response);
-    };
-    xhr.onerror = () => reject(new Error('Failed to load image'));
-    xhr.send();
-  });
-}
-
-export async function exportCCMComparePdf(
+export function exportCCMComparePdf(
   matrix: CostControlMatrix,
   selectedVersions: CostControlVersion[],
-  options: { logoUrl?: string } = {}
-): Promise<void> {
+  options: { logoDataUrl?: string } = {}
+): void {
   if (selectedVersions.length === 0) return;
-
-  // Load logo before building the PDF
-  let logoDataUrl: string | undefined;
-  if (options.logoUrl) {
-    try { logoDataUrl = await loadImageAsDataUrl(options.logoUrl); } catch { /* skip */ }
-  }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -117,15 +92,9 @@ export async function exportCCMComparePdf(
   doc.rect(0, 0, pageW, 4, 'F');
 
   // ── Logo (upper right) ───────────────────────────────────────────────
-  if (logoDataUrl) {
+  if (options.logoDataUrl) {
     try {
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; img.src = logoDataUrl!; });
-      const maxW = 120; const maxH = 32;
-      const aspect = img.width / img.height;
-      let drawW = maxW; let drawH = drawW / aspect;
-      if (drawH > maxH) { drawH = maxH; drawW = drawH * aspect; }
-      doc.addImage(logoDataUrl, pageW - 40 - drawW, 8, drawW, drawH);
+      doc.addImage(options.logoDataUrl, 'PNG', pageW - 160, 8, 120, 32);
     } catch { /* skip */ }
   }
 
