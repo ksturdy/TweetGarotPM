@@ -12,6 +12,7 @@ import {
   Legend,
 } from 'chart.js';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+import { useAuth } from '../../context/AuthContext';
 import CostControlCompare from './CostControlCompare';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -94,6 +95,8 @@ const VER_COLORS = [
 export default function CostControlMatrixPage() {
   const { matrixId } = useParams<{ matrixId: string }>();
   const { toast, confirm } = useTitanFeedback();
+  const { tenant } = useAuth();
+  const logoUrl = tenant?.settings?.branding?.logo_url ? '/api/tenant/logo' : undefined;
 
   const [matrix, setMatrix] = useState<CCMatrix | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1052,7 +1055,7 @@ export default function CostControlMatrixPage() {
 
       {/* Compare modal */}
       {showCompare && (
-        <CostControlCompare matrix={matrix} onClose={() => setShowCompare(false)} />
+        <CostControlCompare matrix={matrix} onClose={() => setShowCompare(false)} logoUrl={logoUrl} />
       )}
 
       {/* Estimate Progression line chart */}

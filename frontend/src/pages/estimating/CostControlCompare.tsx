@@ -12,6 +12,7 @@ import { exportCCMComparePdf } from '../../utils/costControlPdf';
 interface Props {
   matrix: CCMatrix;
   onClose: () => void;
+  logoUrl?: string;
 }
 
 const VER_COLORS = [
@@ -28,7 +29,7 @@ const fmt = (n: number | null | undefined) =>
 const fmtChg = (n: number) => (n >= 0 ? '+' : '') + fmt(n);
 const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
 
-export default function CostControlCompare({ matrix, onClose }: Props) {
+export default function CostControlCompare({ matrix, onClose, logoUrl }: Props) {
   const [selected, setSelected] = useState<Set<number>>(
     new Set(matrix.versions.map(v => v.id))
   );
@@ -95,7 +96,7 @@ export default function CostControlCompare({ matrix, onClose }: Props) {
             <button
               className="btn btn-primary"
               disabled={selVersions.length === 0}
-              onClick={() => exportCCMComparePdf(matrix, selVersions)}
+              onClick={() => exportCCMComparePdf(matrix, selVersions, { logoUrl })}
             >
               Export PDF
             </button>

@@ -343,9 +343,15 @@
 /* ------------------------------------------------------------------ */
 .ccm-add-type-btns {
   display: flex;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 5px;
+  margin-top: 10px;
   flex-wrap: wrap;
+}
+
+.ccm-add-type-btns .btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
 }
 
 /* ------------------------------------------------------------------ */

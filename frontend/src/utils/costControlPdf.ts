@@ -75,11 +75,37 @@ interface TableRow {
   _ncp?: number | null;
 }
 
-export function exportCCMComparePdf(
+function loadImageAsDataUrl(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'blob';
+    const token = localStorage.getItem('token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      if (xhr.status !== 200) { reject(new Error(`Failed: ${xhr.status}`)); return; }
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(xhr.response);
+    };
+    xhr.onerror = () => reject(new Error('Failed to load image'));
+    xhr.send();
+  });
+}
+
+export async function exportCCMComparePdf(
   matrix: CostControlMatrix,
-  selectedVersions: CostControlVersion[]
-): void {
+  selectedVersions: CostControlVersion[],
+  options: { logoUrl?: string } = {}
+): Promise<void> {
   if (selectedVersions.length === 0) return;
+
+  // Load logo before building the PDF
+  let logoDataUrl: string | undefined;
+  if (options.logoUrl) {
+    try { logoDataUrl = await loadImageAsDataUrl(options.logoUrl); } catch { /* skip */ }
+  }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -89,6 +115,15 @@ export function exportCCMComparePdf(
   // ── Accent bar ──────────────────────────────────────────────────────
   doc.setFillColor(...ACCENT);
   doc.rect(0, 0, pageW, 4, 'F');
+
+  // ── Logo (upper right) ───────────────────────────────────────────────
+  if (logoDataUrl) {
+    try {
+      const logoH = 32;
+      const logoW = 120;
+      doc.addImage(logoDataUrl, 'PNG', pageW - 40 - logoW, 8, logoW, logoH);
+    } catch { /* skip if image format unsupported */ }
+  }
 
   // ── Title ────────────────────────────────────────────────────────────
   let y = 34;
@@ -461,6 +496,19 @@ export function exportCCMComparePdf(
     }
   }
 
+  // ── Estimate Progression chart ────────────────────────────────────────
+  if (matrix.versions.length >= 2) {
+    const finalY: number = (doc as any).lastAutoTable?.finalY ?? y;
+    let chartStartY = finalY + 20;
+    if (chartStartY + 160 > pageH - 40) {
+      doc.addPage();
+      doc.setFillColor(...ACCENT);
+      doc.rect(0, 0, pageW, 4, 'F');
+      chartStartY = 40;
+    }
+    drawProgressionChart(doc, matrix, chartStartY, marginL, marginR, pageW, pageH);
+  }
+
   const safeName = matrix.name.replace(/[^a-z0-9]/gi, '_').replace(/_+/g, '_').toLowerCase();
   doc.save(`${safeName}_version_comparison.pdf`);
 }
@@ -476,4 +524,147 @@ function applyChangeColorOnDark(cell: any, nc: number | null) {
   // Lighter tints on dark background
   if (nc > 0)      cell.styles.textColor = [252, 165, 165]; // red-300
   else if (nc < 0) cell.styles.textColor = [110, 231, 183]; // emerald-300
+}
+
+function drawProgressionChart(
+  doc: jsPDF,
+  matrix: CostControlMatrix,
+  startY: number,
+  marginL: number,
+  marginR: number,
+  pageW: number,
+  _pageH: number
+) {
+  const versions = matrix.versions;
+  const n = versions.length;
+
+  const estimateData = versions.map(v => calcVersionTotals(matrix, v.id).grand_total);
+  const targetData: (number | null)[] = versions.map(v =>
+    v.target_cost != null ? Number(v.target_cost)
+    : matrix.target_cost != null ? Number(matrix.target_cost)
+    : null
+  );
+  const hasTarget = targetData.some(t => t != null);
+
+  // ── Layout ────────────────────────────────────────────────────────────
+  const labelColW = 60;  // left gutter for Y-axis labels
+  const bottomGutter = 28; // room for X-axis labels
+  const plotX = marginL + labelColW;
+  const plotW = pageW - marginL - marginR - labelColW;
+  const plotH = 100;
+  const plotY = startY + 22; // room for title
+
+  // ── Section title ─────────────────────────────────────────────────────
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...SLATE);
+  doc.text('Estimate Progression', marginL, startY + 11);
+
+  // Legend
+  const legendX = plotX + plotW - (hasTarget ? 180 : 90);
+  doc.setFillColor(59, 130, 246);
+  doc.rect(legendX, startY + 5, 16, 3, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...SLATE);
+  doc.text('Estimate Cost', legendX + 20, startY + 9);
+  if (hasTarget) {
+    doc.setDrawColor(245, 158, 11);
+    doc.setLineWidth(1);
+    doc.setLineDashPattern([3, 2], 0);
+    doc.line(legendX + 100, startY + 6.5, legendX + 116, startY + 6.5);
+    doc.setLineDashPattern([], 0);
+    doc.setTextColor(...SLATE);
+    doc.text('Target Cost', legendX + 120, startY + 9);
+  }
+
+  // ── Scale ─────────────────────────────────────────────────────────────
+  const allVals = [...estimateData, ...targetData.filter(t => t != null) as number[]];
+  const maxVal = Math.max(...allVals) * 1.12;
+  const minVal = 0;
+
+  const toX = (i: number) => n === 1 ? plotX + plotW / 2 : plotX + (plotW / (n - 1)) * i;
+  const toY = (v: number) => plotY + plotH - ((v - minVal) / (maxVal - minVal || 1)) * plotH;
+
+  // ── Plot background ───────────────────────────────────────────────────
+  doc.setFillColor(248, 249, 250);
+  doc.setDrawColor(224, 226, 231);
+  doc.setLineWidth(0.3);
+  doc.rect(plotX, plotY, plotW, plotH, 'FD');
+
+  // ── Y-axis gridlines + labels ─────────────────────────────────────────
+  const gridLines = 4;
+  for (let i = 0; i <= gridLines; i++) {
+    const gy = plotY + (plotH / gridLines) * i;
+    const val = maxVal - (maxVal - minVal) * (i / gridLines);
+    doc.setDrawColor(224, 226, 231);
+    doc.setLineWidth(0.3);
+    if (i > 0) doc.line(plotX, gy, plotX + plotW, gy);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...MUTED);
+    doc.text('$' + Math.round(val / 1000).toLocaleString() + 'k', plotX - 4, gy + 2, { align: 'right' });
+  }
+
+  // ── Target line (amber dashed) ────────────────────────────────────────
+  if (hasTarget) {
+    doc.setDrawColor(245, 158, 11);
+    doc.setLineWidth(1.2);
+    doc.setLineDashPattern([4, 2], 0);
+    let px: number | null = null; let py: number | null = null;
+    versions.forEach((_, i) => {
+      const t = targetData[i];
+      if (t == null) { px = null; py = null; return; }
+      const cx = toX(i); const cy = toY(t);
+      if (px != null && py != null) doc.line(px, py, cx, cy);
+      px = cx; py = cy;
+    });
+    doc.setLineDashPattern([], 0);
+
+    // Target points
+    versions.forEach((_, i) => {
+      const t = targetData[i];
+      if (t == null) return;
+      doc.setFillColor(245, 158, 11);
+      doc.setDrawColor(245, 158, 11);
+      doc.circle(toX(i), toY(t), 2, 'F');
+    });
+  }
+
+  // ── Estimate line (blue) ──────────────────────────────────────────────
+  doc.setDrawColor(59, 130, 246);
+  doc.setLineWidth(1.8);
+  for (let i = 1; i < n; i++) {
+    doc.line(toX(i - 1), toY(estimateData[i - 1]), toX(i), toY(estimateData[i]));
+  }
+
+  // Estimate points + value labels
+  versions.forEach((_, i) => {
+    const cx = toX(i); const cy = toY(estimateData[i]);
+    doc.setFillColor(59, 130, 246);
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.8);
+    doc.circle(cx, cy, 3, 'FD');
+    // Value above point
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 64, 175);
+    doc.text('$' + Math.round(estimateData[i] / 1000).toLocaleString() + 'k', cx, cy - 6, { align: 'center' });
+  });
+
+  // ── X-axis labels ─────────────────────────────────────────────────────
+  versions.forEach((v, i) => {
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...SLATE);
+    const lx = toX(i);
+    doc.text(sanitize(v.version_name), lx, plotY + plotH + 11, { align: 'center', maxWidth: Math.max(plotW / n - 6, 40) });
+    if (v.version_date) {
+      doc.setFontSize(6);
+      doc.setTextColor(...MUTED);
+      doc.text(new Date(v.version_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        lx, plotY + plotH + 19, { align: 'center' });
+    }
+  });
+
 }
