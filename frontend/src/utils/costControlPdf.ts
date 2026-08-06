@@ -119,10 +119,14 @@ export async function exportCCMComparePdf(
   // ── Logo (upper right) ───────────────────────────────────────────────
   if (logoDataUrl) {
     try {
-      const logoH = 32;
-      const logoW = 120;
-      doc.addImage(logoDataUrl, 'PNG', pageW - 40 - logoW, 8, logoW, logoH);
-    } catch { /* skip if image format unsupported */ }
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; img.src = logoDataUrl!; });
+      const maxW = 120; const maxH = 32;
+      const aspect = img.width / img.height;
+      let drawW = maxW; let drawH = drawW / aspect;
+      if (drawH > maxH) { drawH = maxH; drawW = drawH * aspect; }
+      doc.addImage(logoDataUrl, pageW - 40 - drawW, 8, drawW, drawH);
+    } catch { /* skip */ }
   }
 
   // ── Title ────────────────────────────────────────────────────────────
