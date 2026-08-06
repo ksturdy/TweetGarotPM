@@ -489,7 +489,7 @@ router.post('/:matrixId/promote', async (req, res) => {
 // ------------------------------------------------------------------
 router.post('/:matrixId/versions', async (req, res) => {
   try {
-    const { version_name, version_date, sort_order, is_execution_phase, notes } = req.body;
+    const { version_name, version_date, sort_order, is_execution_phase, notes, target_cost, fee_pct, overhead_pct } = req.body;
     const matrixId = req.params.matrixId;
 
     // Verify ownership
@@ -500,9 +500,11 @@ router.post('/:matrixId/versions', async (req, res) => {
     if (!check.rows.length) return res.status(404).json({ error: 'Matrix not found' });
 
     const { rows } = await pool.query(
-      `INSERT INTO cost_control_versions (matrix_id, version_name, version_date, sort_order, is_execution_phase, notes)
-       VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, false), $6) RETURNING *`,
-      [matrixId, version_name, version_date || null, sort_order, is_execution_phase, notes || null]
+      `INSERT INTO cost_control_versions
+         (matrix_id, version_name, version_date, sort_order, is_execution_phase, notes, target_cost, fee_pct, overhead_pct)
+       VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, false), $6, $7, $8, $9) RETURNING *`,
+      [matrixId, version_name, version_date || null, sort_order, is_execution_phase, notes || null,
+       target_cost ?? null, fee_pct ?? null, overhead_pct ?? null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -513,18 +515,23 @@ router.post('/:matrixId/versions', async (req, res) => {
 
 router.put('/:matrixId/versions/:versionId', async (req, res) => {
   try {
-    const { version_name, version_date, sort_order, is_execution_phase, notes } = req.body;
+    const { version_name, version_date, sort_order, is_execution_phase, notes, target_cost, fee_pct, overhead_pct } = req.body;
     const { rows } = await pool.query(
       `UPDATE cost_control_versions ccv
-       SET version_name = COALESCE($1, ccv.version_name),
-           version_date = COALESCE($2, ccv.version_date),
-           sort_order = COALESCE($3, ccv.sort_order),
+       SET version_name     = COALESCE($1, ccv.version_name),
+           version_date     = COALESCE($2, ccv.version_date),
+           sort_order       = COALESCE($3, ccv.sort_order),
            is_execution_phase = COALESCE($4, ccv.is_execution_phase),
-           notes = COALESCE($5, ccv.notes)
+           notes            = COALESCE($5, ccv.notes),
+           target_cost      = $9,
+           fee_pct          = $10,
+           overhead_pct     = $11
        FROM cost_control_matrices ccm
        WHERE ccv.id = $6 AND ccv.matrix_id = $7 AND ccm.id = ccv.matrix_id AND ccm.tenant_id = $8
        RETURNING ccv.*`,
-      [version_name, version_date, sort_order, is_execution_phase, notes, req.params.versionId, req.params.matrixId, req.user.tenantId]
+      [version_name, version_date, sort_order, is_execution_phase, notes,
+       req.params.versionId, req.params.matrixId, req.user.tenantId,
+       target_cost ?? null, fee_pct ?? null, overhead_pct ?? null]
     );
     if (!rows.length) return res.status(404).json({ error: 'Version not found' });
     res.json(rows[0]);

@@ -40,6 +40,9 @@ export interface CostControlVersion {
   sort_order: number;
   is_execution_phase: boolean;
   notes: string | null;
+  target_cost: number | null;
+  fee_pct: number | null;
+  overhead_pct: number | null;
 }
 
 export type RiskStatus = 'open' | 'realized' | 'mitigated' | 'closed';
@@ -259,9 +262,14 @@ export function calcVersionTotals(matrix: CostControlMatrix, versionId: number) 
   }
 
   totals.subtotal = totals.labor + totals.material + totals.equipment + totals.subcontract + totals.gen_conditions;
-  totals.fee = totals.subtotal * (Number(matrix.fee_pct) || 0);
-  totals.overhead = totals.subtotal * (Number(matrix.overhead_pct) || 0);
+  const ver = matrix.versions.find(v => v.id === versionId);
+  const feePct = ver?.fee_pct != null ? Number(ver.fee_pct) : Number(matrix.fee_pct) || 0;
+  const ovhPct = ver?.overhead_pct != null ? Number(ver.overhead_pct) : Number(matrix.overhead_pct) || 0;
+  totals.fee = totals.subtotal * feePct;
+  totals.overhead = totals.subtotal * ovhPct;
   totals.grand_total = totals.subtotal + totals.fee + totals.overhead;
+  totals.fee_pct = feePct;
+  totals.overhead_pct = ovhPct;
 
   return totals;
 }

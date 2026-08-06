@@ -1,7 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import CostControlCompare from './CostControlCompare';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 import {
   CostControlMatrix as CCMatrix,
   CostControlVersion,
@@ -93,6 +106,9 @@ export default function CostControlMatrixPage() {
   const [newVersionName, setNewVersionName] = useState('');
   const [newVersionDate, setNewVersionDate] = useState(new Date().toISOString().split('T')[0]);
   const [newVersionExec, setNewVersionExec] = useState(false);
+  const [newVersionTarget, setNewVersionTarget] = useState('');
+  const [newVersionFee, setNewVersionFee] = useState('');
+  const [newVersionOverhead, setNewVersionOverhead] = useState('');
 
   // Settings
   const [editingHeader, setEditingHeader] = useState(false);
@@ -184,11 +200,39 @@ export default function CostControlMatrixPage() {
   };
 
   // --- Version management ---
+  const openAddVersion = () => {
+    // Pre-populate from the most recent version, or fall back to matrix-level settings
+    const last = matrix?.versions[matrix.versions.length - 1];
+    const feePct = last?.fee_pct != null ? last.fee_pct : matrix?.fee_pct;
+    const ovhPct = last?.overhead_pct != null ? last.overhead_pct : matrix?.overhead_pct;
+    const tgt = last?.target_cost != null ? last.target_cost : matrix?.target_cost;
+    setNewVersionFee(feePct != null ? String(Math.round(Number(feePct) * 100)) : '');
+    setNewVersionOverhead(ovhPct != null ? String(Math.round(Number(ovhPct) * 100)) : '');
+    setNewVersionTarget(tgt != null ? String(Math.round(Number(tgt))) : '');
+    setNewVersionName('');
+    setNewVersionDate(new Date().toISOString().split('T')[0]);
+    setNewVersionExec(false);
+    setShowAddVersion(true);
+  };
+
   const handleAddVersion = async () => {
     if (!matrix || !newVersionName.trim()) return;
     try {
-      await addVersion(matrix.id, { version_name: newVersionName, version_date: newVersionDate || undefined, sort_order: matrix.versions.length, is_execution_phase: newVersionExec });
-      setNewVersionName(''); setNewVersionDate(new Date().toISOString().split('T')[0]); setNewVersionExec(false); setShowAddVersion(false);
+      const feePctVal = newVersionFee !== '' ? parseFloat(newVersionFee) / 100 : null;
+      const ovhPctVal = newVersionOverhead !== '' ? parseFloat(newVersionOverhead) / 100 : null;
+      const tgtVal = newVersionTarget !== '' ? parseFloat(newVersionTarget.replace(/[$,]/g, '')) : null;
+      await addVersion(matrix.id, {
+        version_name: newVersionName,
+        version_date: newVersionDate || undefined,
+        sort_order: matrix.versions.length,
+        is_execution_phase: newVersionExec,
+        target_cost: tgtVal ?? undefined,
+        fee_pct: feePctVal ?? undefined,
+        overhead_pct: ovhPctVal ?? undefined,
+      });
+      setNewVersionName(''); setNewVersionDate(new Date().toISOString().split('T')[0]);
+      setNewVersionExec(false); setNewVersionTarget(''); setNewVersionFee(''); setNewVersionOverhead('');
+      setShowAddVersion(false);
       await load();
       toast.success('Version added');
     } catch { toast.error('Failed to add version'); }
@@ -494,7 +538,7 @@ export default function CostControlMatrixPage() {
               Compare Versions
             </button>
           )}
-          <button className="btn btn-secondary" onClick={() => setShowAddVersion(!showAddVersion)}>
+          <button className="btn btn-secondary" onClick={openAddVersion}>
             + Add Version
           </button>
         </div>
@@ -523,6 +567,9 @@ export default function CostControlMatrixPage() {
               <option value="exec">Execution (Actuals)</option>
             </select>
           </label>
+          <label>Target Cost ($)<input value={newVersionTarget} onChange={e => setNewVersionTarget(e.target.value)} placeholder="e.g. 500000" style={{ minWidth: 120 }} /></label>
+          <label>Fee %<input value={newVersionFee} type="number" min="0" max="100" step="0.5" onChange={e => setNewVersionFee(e.target.value)} style={{ minWidth: 70 }} /></label>
+          <label>Overhead %<input value={newVersionOverhead} type="number" min="0" max="100" step="0.5" onChange={e => setNewVersionOverhead(e.target.value)} style={{ minWidth: 70 }} /></label>
           <button className="btn btn-primary" onClick={handleAddVersion} disabled={!newVersionName.trim()}>Add Version</button>
           <button className="btn btn-secondary" onClick={() => setShowAddVersion(false)}>Cancel</button>
         </div>
@@ -545,7 +592,7 @@ export default function CostControlMatrixPage() {
               </div>
             );
           })}
-          <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: '2px 10px' }} onClick={() => setShowAddVersion(true)}>+ Version</button>
+          <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: '2px 10px' }} onClick={openAddVersion}>+ Version</button>
         </div>
       )}
 
@@ -554,7 +601,7 @@ export default function CostControlMatrixPage() {
         <div className="ccm-nudge">
           <strong>No versions yet.</strong> A version represents a design milestone (e.g. Conceptual, IFP Set, 100% CDs).
           Each version gives you a column of editable cost cells per line item.{' '}
-          <button className="btn-link" onClick={() => setShowAddVersion(true)}>Add your first version →</button>
+          <button className="btn-link" onClick={openAddVersion}>Add your first version →</button>
         </div>
       )}
 
@@ -963,19 +1010,19 @@ export default function CostControlMatrixPage() {
                   })}
                 </tr>
                 <tr className="summary-sub-row">
-                  <td className="col-left">Fee ({Math.round(Number(matrix.fee_pct) * 100)}%)</td>
+                  <td className="col-left">Fee</td>
                   {matrix.versions.map((v, vi) => {
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
-                    return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.fee)}</td>;
+                    return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.fee)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.fee_pct * 100)}%</div></td>;
                   })}
                 </tr>
                 <tr className="summary-sub-row">
-                  <td className="col-left">Overhead ({Math.round(Number(matrix.overhead_pct) * 100)}%)</td>
+                  <td className="col-left">Overhead</td>
                   {matrix.versions.map((v, vi) => {
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
-                    return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.overhead)}</td>;
+                    return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.overhead)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.overhead_pct * 100)}%</div></td>;
                   })}
                 </tr>
                 <tr className="summary-grand-row">
@@ -983,13 +1030,14 @@ export default function CostControlMatrixPage() {
                   {matrix.versions.map((v, vi) => {
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
-                    const overTarget = matrix.target_cost && t.grand_total > Number(matrix.target_cost);
+                    const vTarget = v.target_cost ?? matrix.target_cost;
+                    const overTarget = vTarget && t.grand_total > Number(vTarget);
                     return (
                       <td key={v.id} className="cell-num" style={{ background: col.cell, color: overTarget ? '#ef4444' : undefined }}>
                         {fmt(t.grand_total)}
-                        {matrix.target_cost && (
+                        {vTarget && (
                           <div style={{ fontSize: 10, color: overTarget ? '#ef4444' : '#8888a0' }}>
-                            {overTarget ? '+' : ''}{fmt(t.grand_total - Number(matrix.target_cost))} vs target
+                            {overTarget ? '+' : ''}{fmt(t.grand_total - Number(vTarget))} vs target
                           </div>
                         )}
                       </td>
@@ -1007,13 +1055,42 @@ export default function CostControlMatrixPage() {
         <CostControlCompare matrix={matrix} onClose={() => setShowCompare(false)} />
       )}
 
-      {/* Trend chart */}
+      {/* Estimate Progression line chart */}
       {matrix.versions.length > 1 && (() => {
+        const labels = matrix.versions.map(v => v.version_name);
+        const estimateData = matrix.versions.map(v => calcVersionTotals(matrix, v.id).grand_total);
+        const targetData = matrix.versions.map(v =>
+          v.target_cost != null ? Number(v.target_cost) : (matrix.target_cost != null ? Number(matrix.target_cost) : null)
+        );
+        const hasTarget = targetData.some(t => t != null);
         const { riskEV, oppEV } = calcRiskTotals(matrix.risks);
-        const lastGrand = calcVersionTotals(matrix, matrix.versions[matrix.versions.length - 1].id).grand_total;
-        const worstCase = lastGrand + riskEV;
-        const chartMax = Math.max(...grandTotals, matrix.target_cost ? Number(matrix.target_cost) : 0, worstCase, 1);
-        const BAR_H = 100;
+
+        const datasets: any[] = [
+          {
+            label: 'Estimate Cost',
+            data: estimateData,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.10)',
+            pointBackgroundColor: '#3b82f6',
+            pointRadius: 5,
+            tension: 0.3,
+            fill: false,
+          },
+        ];
+        if (hasTarget) {
+          datasets.push({
+            label: 'Target Cost',
+            data: targetData,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.08)',
+            pointBackgroundColor: '#f59e0b',
+            pointRadius: 5,
+            borderDash: [6, 3],
+            tension: 0.3,
+            fill: false,
+            spanGaps: true,
+          });
+        }
 
         return (
           <div className="ccm-card">
@@ -1021,49 +1098,37 @@ export default function CostControlMatrixPage() {
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#5a5a72' }}>Estimate Progression</h3>
               {(riskEV > 0 || oppEV > 0) && (
                 <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#5a5a72' }}>
-                  {riskEV > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#fca5a5', borderRadius: 2, display: 'inline-block' }} />Risk exposure {fmt(riskEV)}</span>}
-                  {oppEV > 0  && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, background: '#86efac', borderRadius: 2, display: 'inline-block' }} />Opportunity upside {fmt(oppEV)}</span>}
+                  {riskEV > 0 && <span>Risk exposure: <strong style={{ color: '#dc2626' }}>{fmt(riskEV)}</strong></span>}
+                  {oppEV > 0  && <span>Opportunity upside: <strong style={{ color: '#16a34a' }}>{fmt(oppEV)}</strong></span>}
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              {matrix.versions.map((v, vi) => {
-                const col = VER_COLORS[vi % VER_COLORS.length];
-                const t = calcVersionTotals(matrix, v.id);
-                const isLast = vi === matrix.versions.length - 1;
-                const barPct   = Math.min((t.grand_total / chartMax) * 100, 100);
-                const riskPct  = isLast && riskEV > 0 ? Math.min((riskEV / chartMax) * 100, 100 - barPct) : 0;
-                const oppPct   = isLast && oppEV > 0  ? Math.min((oppEV  / chartMax) * 100, barPct) : 0;
-                const overTarget = matrix.target_cost && t.grand_total > Number(matrix.target_cost);
-                return (
-                  <div key={v.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: overTarget ? '#ef4444' : '#1a1a2e', fontVariantNumeric: 'tabular-nums' }}>{fmt(t.grand_total)}</div>
-                    <div style={{ width: 48, height: BAR_H, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', position: 'relative', overflow: 'hidden' }}>
-                      {/* Risk band on top */}
-                      {riskPct > 0 && (
-                        <div style={{ position: 'absolute', bottom: `${barPct}%`, left: 0, right: 0, height: `${riskPct}%`, background: '#fca5a5', opacity: 0.8 }} title={`Risk exposure: ${fmt(riskEV)}`} />
-                      )}
-                      {/* Base bar */}
-                      <div style={{ width: '100%', height: `${barPct}%`, background: overTarget ? '#ef4444' : col.border, minHeight: 2, transition: 'height 0.3s', position: 'relative' }}>
-                        {/* Opportunity notch at bottom of bar */}
-                        {oppPct > 0 && (
-                          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${Math.min((oppPct / barPct) * 100, 30)}%`, background: '#86efac', opacity: 0.7 }} title={`Opportunity upside: ${fmt(oppEV)}`} />
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center', maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.version_name}</div>
-                  </div>
-                );
-              })}
-              {matrix.target_cost && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 70 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#8888a0', fontVariantNumeric: 'tabular-nums' }}>{fmt(Number(matrix.target_cost))}</div>
-                  <div style={{ width: 48, height: BAR_H, background: '#f0f1f3', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end' }}>
-                    <div style={{ width: '100%', height: `${Math.min((Number(matrix.target_cost) / chartMax) * 100, 100)}%`, background: '#e0e2e7', borderRadius: '4px 4px 0 0', minHeight: 2 }} />
-                  </div>
-                  <div style={{ fontSize: 10, color: '#8888a0', textAlign: 'center' }}>Target</div>
-                </div>
-              )}
+            <div style={{ height: 260 }}>
+              <Line
+                data={{ labels, datasets }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { position: 'top', labels: { font: { size: 12 }, boxWidth: 14 } },
+                    tooltip: {
+                      callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y != null ? '$' + Math.round(ctx.parsed.y).toLocaleString() : '—'}`,
+                      },
+                    },
+                  },
+                  scales: {
+                    x: { grid: { color: '#f0f1f3' }, ticks: { font: { size: 11 } } },
+                    y: {
+                      grid: { color: '#f0f1f3' },
+                      ticks: {
+                        font: { size: 11 },
+                        callback: (v: any) => '$' + Math.round(Number(v)).toLocaleString(),
+                      },
+                    },
+                  },
+                }}
+              />
             </div>
           </div>
         );
