@@ -46,6 +46,9 @@ import './CostControlMatrix.css';
 const fmt = (n: number | null | undefined) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString();
 
+const fmtChg = (n: number) => (n >= 0 ? '+' : '') + fmt(n);
+const fmtPct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+
 // Format a raw string value as $1,234 for display in dollar inputs
 function fmtNum(raw: string): string {
   if (!raw) return '';
@@ -139,6 +142,14 @@ export default function CostControlMatrixPage() {
   const [hiddenVersionIds, setHiddenVersionIds] = useState<Set<number>>(new Set());
   const toggleVersionVisibility = (id: number) =>
     setHiddenVersionIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  // Hidden notes per version
+  const [hiddenNotesVersionIds, setHiddenNotesVersionIds] = useState<Set<number>>(new Set());
+  const toggleNotesVisibility = (id: number) =>
+    setHiddenNotesVersionIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  // Net change column visibility
+  const [showNetChange, setShowNetChange] = useState(true);
 
   const load = useCallback(async () => {
     if (!matrixId) return;
@@ -426,6 +437,11 @@ export default function CostControlMatrixPage() {
 
   const hasPending = Object.keys(pending).length > 0;
   const allItems = matrix.areas.flatMap(a => a.items);
+  const visibleVersions = matrix.versions.filter(v => !hiddenVersionIds.has(v.id));
+  const hasNetChange = visibleVersions.length >= 2;
+  const renderNetChange = hasNetChange && showNetChange;
+  const ncBase = visibleVersions[0];
+  const ncComp = visibleVersions[visibleVersions.length - 1];
 
   const SUMMARY_GROUPS: { label: string; types: CostType[] }[] = [
     { label: 'Total Labor',            types: ['labor_field', 'labor_shop'] },
@@ -479,26 +495,29 @@ export default function CostControlMatrixPage() {
         );
       }
 
+      const notesHidden = hiddenNotesVersionIds.has(v.id);
       return (
         <React.Fragment key={v.id}>
           <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input qty-input" value={fmtQty(getField('qty'))} onChange={e => handleCellChange(item.id, v.id, 'qty', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="" /></td>
           <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input val-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="$0" /></td>
-          <td style={{ background: col.cell }}>
-            <input
-              className="ccm-cell-input notes-input"
-              value={getField('notes')}
-              onChange={e => handleCellChange(item.id, v.id, 'notes', e.target.value)}
-              onKeyDown={handleCellKeyDown}
-              placeholder="notes"
-              onMouseEnter={e => {
-                const text = getField('notes');
-                if (!text) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                setNotesTooltip({ text, x: rect.left + rect.width / 2, y: rect.bottom + 8 });
-              }}
-              onMouseLeave={() => setNotesTooltip(null)}
-            />
-          </td>
+          {!notesHidden && (
+            <td style={{ background: col.cell }}>
+              <input
+                className="ccm-cell-input notes-input"
+                value={getField('notes')}
+                onChange={e => handleCellChange(item.id, v.id, 'notes', e.target.value)}
+                onKeyDown={handleCellKeyDown}
+                placeholder="notes"
+                onMouseEnter={e => {
+                  const text = getField('notes');
+                  if (!text) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setNotesTooltip({ text, x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+                }}
+                onMouseLeave={() => setNotesTooltip(null)}
+              />
+            </td>
+          )}
         </React.Fragment>
       );
     });
@@ -596,10 +615,37 @@ export default function CostControlMatrixPage() {
                 <button className="strip-toggle" title={isHidden ? 'Show in table' : 'Hide from table'} onClick={() => toggleVersionVisibility(v.id)}>
                   {isHidden ? '⊕' : '⊘'}
                 </button>
+                {!isHidden && (
+                  <button
+                    className="strip-toggle"
+                    title={hiddenNotesVersionIds.has(v.id) ? 'Show notes column' : 'Hide notes column'}
+                    onClick={() => toggleNotesVisibility(v.id)}
+                    style={{ opacity: hiddenNotesVersionIds.has(v.id) ? 0.35 : 0.6, textDecoration: hiddenNotesVersionIds.has(v.id) ? 'line-through' : undefined }}
+                  >
+                    N
+                  </button>
+                )}
                 <button className="strip-del" title="Delete version" onClick={() => handleDeleteVersion(v)}>✕</button>
               </div>
             );
           })}
+          {hasNetChange && (
+            <div
+              className="strip-badge"
+              style={{
+                background: showNetChange ? '#e2e8f0' : '#f0f1f3',
+                borderColor: showNetChange ? '#cbd5e1' : '#d0d0e0',
+                color: showNetChange ? '#475569' : '#9999b0',
+                opacity: showNetChange ? 1 : 0.75,
+                cursor: 'pointer',
+              }}
+              title={showNetChange ? 'Hide net change columns' : 'Show net change columns'}
+              onClick={() => setShowNetChange(v => !v)}
+            >
+              <span style={{ textDecoration: showNetChange ? undefined : 'line-through' }}>Net Chg</span>
+              <span style={{ fontSize: 11, marginLeft: 2 }}>{showNetChange ? '⊘' : '⊕'}</span>
+            </div>
+          )}
           <button className="btn btn-sm btn-secondary" style={{ fontSize: 11, padding: '2px 10px' }} onClick={openAddVersion}>+ Version</button>
         </div>
       )}
@@ -667,7 +713,7 @@ export default function CostControlMatrixPage() {
                     {matrix.versions.map((v, vi) => {
                       if (hiddenVersionIds.has(v.id)) return null;
                       const col = VER_COLORS[vi % VER_COLORS.length];
-                      const span = v.is_execution_phase ? 5 : 3;
+                      const span = v.is_execution_phase ? 5 : (hiddenNotesVersionIds.has(v.id) ? 2 : 3);
                       return (
                         <th key={v.id} colSpan={span} className="ver-group-header" style={{ background: col.header, color: col.text, borderBottom: `2px solid ${col.border}` }}>
                           {v.version_name}
@@ -675,6 +721,7 @@ export default function CostControlMatrixPage() {
                         </th>
                       );
                     })}
+                    {renderNetChange && <th colSpan={2} className="ver-group-header" style={{ background: '#e2e8f0', color: '#475569' }}>Net Change</th>}
                     <th style={{ width: 32 }} />
                   </tr>
                   <tr>
@@ -693,10 +740,14 @@ export default function CostControlMatrixPage() {
                         <React.Fragment key={v.id}>
                           <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Qty</th>
                           <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Value</th>
-                          <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Notes</th>
+                          {!hiddenNotesVersionIds.has(v.id) && <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Notes</th>}
                         </React.Fragment>
                       );
                     })}
+                    {renderNetChange && <>
+                      <th className="cell-num sub-header" style={{ background: '#e2e8f0', color: '#475569' }}>$</th>
+                      <th className="cell-num sub-header" style={{ background: '#e2e8f0', color: '#475569' }}>%</th>
+                    </>}
                     <th />
                   </tr>
                 </thead>
@@ -726,6 +777,21 @@ export default function CostControlMatrixPage() {
                           </select>
                         </td>
                         {renderVersionCells(item)}
+                        {renderNetChange && (() => {
+                          const baseKey = pendingKey(item.id, ncBase.id);
+                          const compKey = pendingKey(item.id, ncComp.id);
+                          const base = Number(pending[baseKey]?.value ?? item.values[ncBase.id]?.value ?? 0);
+                          const comp = Number(pending[compKey]?.value ?? item.values[ncComp.id]?.value ?? 0);
+                          const delta = comp - base;
+                          const pct = base !== 0 ? (delta / base) * 100 : null;
+                          const color = delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : '#8888a0';
+                          return (
+                            <>
+                              <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 600 : 400, fontSize: 12 }}>{delta !== 0 ? fmtChg(delta) : '—'}</td>
+                              <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 600 : 400, fontSize: 12 }}>{delta > 0 && base === 0 ? '+100.0%' : delta < 0 && base === 0 ? '-100.0%' : pct != null && delta !== 0 ? fmtPct(pct) : '—'}</td>
+                            </>
+                          );
+                        })()}
                         <td className="col-del">
                           <button
                             className="ccm-icon-btn danger"
@@ -738,7 +804,7 @@ export default function CostControlMatrixPage() {
                   })}
                   {area.items.length === 0 && matrix.versions.length > 0 && (
                     <tr>
-                      <td colSpan={2 + matrix.versions.filter(v => !hiddenVersionIds.has(v.id)).reduce((s, v) => s + (v.is_execution_phase ? 5 : 3), 0) + 1}
+                      <td colSpan={2 + matrix.versions.filter(v => !hiddenVersionIds.has(v.id)).reduce((s, v) => s + (v.is_execution_phase ? 5 : hiddenNotesVersionIds.has(v.id) ? 2 : 3), 0) + (renderNetChange ? 2 : 0) + 1}
                           style={{ textAlign: 'center', color: '#8888a0', padding: '16px', fontStyle: 'italic', fontSize: 13 }}>
                         No line items yet — use the buttons below to add some.
                       </td>
@@ -998,6 +1064,10 @@ export default function CostControlMatrixPage() {
                       </th>
                     );
                   })}
+                  {renderNetChange && <>
+                    <th className="cell-num" style={{ background: '#e2e8f0', color: '#475569', minWidth: 100 }}>Net Chg $</th>
+                    <th className="cell-num" style={{ background: '#e2e8f0', color: '#475569', minWidth: 80 }}>Net Chg %</th>
+                  </>}
                 </tr>
               </thead>
               <tbody>
@@ -1010,6 +1080,17 @@ export default function CostControlMatrixPage() {
                       const total = groupTotal(v.id, group.types);
                       return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{total ? fmt(total) : '—'}</td>;
                     })}
+                    {renderNetChange && (() => {
+                      const base = groupTotal(ncBase.id, group.types);
+                      const comp = groupTotal(ncComp.id, group.types);
+                      const delta = comp - base;
+                      const pct = base !== 0 ? (delta / base) * 100 : null;
+                      const color = delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : '#8888a0';
+                      return (<>
+                        <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 600 : 400 }}>{delta !== 0 ? fmtChg(delta) : '—'}</td>
+                        <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 600 : 400 }}>{delta > 0 && base === 0 ? '+100.0%' : delta < 0 && base === 0 ? '-100.0%' : pct != null && delta !== 0 ? fmtPct(pct) : '—'}</td>
+                      </>);
+                    })()}
                   </tr>
                 ))}
                 <tr className="summary-total-row">
@@ -1020,6 +1101,17 @@ export default function CostControlMatrixPage() {
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.subtotal)}</td>;
                   })}
+                  {renderNetChange && (() => {
+                    const base = calcVersionTotals(matrix, ncBase.id).subtotal;
+                    const comp = calcVersionTotals(matrix, ncComp.id).subtotal;
+                    const delta = comp - base;
+                    const pct = base !== 0 ? (delta / base) * 100 : null;
+                    const color = delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : '#8888a0';
+                    return (<>
+                      <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 700 : 400 }}>{delta !== 0 ? fmtChg(delta) : '—'}</td>
+                      <td className="cell-num" style={{ background: '#f1f5f9', color, fontWeight: delta !== 0 ? 700 : 400 }}>{delta > 0 && base === 0 ? '+100.0%' : delta < 0 && base === 0 ? '-100.0%' : pct != null && delta !== 0 ? fmtPct(pct) : '—'}</td>
+                    </>);
+                  })()}
                 </tr>
                 <tr className="summary-sub-row">
                   <td className="col-left">Fee</td>
@@ -1029,6 +1121,7 @@ export default function CostControlMatrixPage() {
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.fee)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.fee_pct * 100)}%</div></td>;
                   })}
+                  {renderNetChange && <td colSpan={2} style={{ background: '#f1f5f9' }} />}
                 </tr>
                 <tr className="summary-sub-row">
                   <td className="col-left">Overhead</td>
@@ -1038,6 +1131,7 @@ export default function CostControlMatrixPage() {
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.overhead)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.overhead_pct * 100)}%</div></td>;
                   })}
+                  {renderNetChange && <td colSpan={2} style={{ background: '#f1f5f9' }} />}
                 </tr>
                 <tr className="summary-grand-row">
                   <td className="col-left">Grand Total</td>
@@ -1058,6 +1152,17 @@ export default function CostControlMatrixPage() {
                       </td>
                     );
                   })}
+                  {renderNetChange && (() => {
+                    const base = calcVersionTotals(matrix, ncBase.id).grand_total;
+                    const comp = calcVersionTotals(matrix, ncComp.id).grand_total;
+                    const delta = comp - base;
+                    const pct = base !== 0 ? (delta / base) * 100 : null;
+                    const color = delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : '#8888a0';
+                    return (<>
+                      <td className="cell-num" style={{ color, fontWeight: 700 }}>{delta !== 0 ? fmtChg(delta) : '—'}</td>
+                      <td className="cell-num" style={{ color, fontWeight: 700 }}>{delta > 0 && base === 0 ? '+100.0%' : delta < 0 && base === 0 ? '-100.0%' : pct != null && delta !== 0 ? fmtPct(pct) : '—'}</td>
+                    </>);
+                  })()}
                 </tr>
               </tbody>
             </table>
