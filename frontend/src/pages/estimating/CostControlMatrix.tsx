@@ -28,7 +28,6 @@ import {
   calcRiskTotals,
   addVersion,
   deleteVersion,
-  updateVersion,
   saveVersionValues,
   getMatrix,
   updateMatrix,
@@ -135,6 +134,11 @@ export default function CostControlMatrixPage() {
 
   // Notes hover tooltip
   const [notesTooltip, setNotesTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  // Hidden versions (client-side visibility toggle)
+  const [hiddenVersionIds, setHiddenVersionIds] = useState<Set<number>>(new Set());
+  const toggleVersionVisibility = (id: number) =>
+    setHiddenVersionIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   const load = useCallback(async () => {
     if (!matrixId) return;
@@ -252,12 +256,6 @@ export default function CostControlMatrixPage() {
     });
     if (!ok) return;
     try { await deleteVersion(matrix.id, v.id); await load(); } catch { toast.error('Failed to delete version'); }
-  };
-
-  const handleToggleExecution = async (v: CostControlVersion) => {
-    if (!matrix) return;
-    try { await updateVersion(matrix.id, v.id, { is_execution_phase: !v.is_execution_phase }); await load(); }
-    catch { toast.error('Failed to update version'); }
   };
 
   const handleSaveHeader = async () => {
@@ -452,6 +450,7 @@ export default function CostControlMatrixPage() {
 
   function renderVersionCells(item: typeof allItems[0]) {
     return matrix!.versions.map((v, vi) => {
+      if (hiddenVersionIds.has(v.id)) return null;
       const col = VER_COLORS[vi % VER_COLORS.length];
       const key = pendingKey(item.id, v.id);
       const pval = pending[key];
@@ -482,7 +481,7 @@ export default function CostControlMatrixPage() {
 
       return (
         <React.Fragment key={v.id}>
-          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtQty(getField('qty'))} onChange={e => handleCellChange(item.id, v.id, 'qty', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="" /></td>
+          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input qty-input" value={fmtQty(getField('qty'))} onChange={e => handleCellChange(item.id, v.id, 'qty', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="" /></td>
           <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input val-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="$0" /></td>
           <td style={{ background: col.cell }}>
             <input
@@ -584,12 +583,18 @@ export default function CostControlMatrixPage() {
           <span className="strip-label">Versions:</span>
           {matrix.versions.map((v, vi) => {
             const col = VER_COLORS[vi % VER_COLORS.length];
+            const isHidden = hiddenVersionIds.has(v.id);
             return (
-              <div key={v.id} className="strip-badge" style={{ background: col.header, borderColor: col.border, color: col.text }}>
-                <span>{v.version_name}</span>
+              <div key={v.id} className="strip-badge" style={{
+                background: isHidden ? '#f0f1f3' : col.header,
+                borderColor: isHidden ? '#d0d0e0' : col.border,
+                color: isHidden ? '#9999b0' : col.text,
+                opacity: isHidden ? 0.75 : 1,
+              }}>
+                <span style={{ textDecoration: isHidden ? 'line-through' : undefined }}>{v.version_name}</span>
                 {v.version_date && <span className="strip-date">{new Date(v.version_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>}
-                <button className="strip-toggle" title={v.is_execution_phase ? 'Switch to Estimate' : 'Switch to Execution'} onClick={() => handleToggleExecution(v)}>
-                  {v.is_execution_phase ? '📊' : '📐'}
+                <button className="strip-toggle" title={isHidden ? 'Show in table' : 'Hide from table'} onClick={() => toggleVersionVisibility(v.id)}>
+                  {isHidden ? '⊕' : '⊘'}
                 </button>
                 <button className="strip-del" title="Delete version" onClick={() => handleDeleteVersion(v)}>✕</button>
               </div>
@@ -640,22 +645,14 @@ export default function CostControlMatrixPage() {
                 <button className="btn btn-sm btn-secondary" onClick={() => setEditingAreaId(null)}>Cancel</button>
               </div>
             ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <h3 className="ccm-section-name">{area.name}</h3>
-                  <button
-                    className="ccm-icon-btn"
-                    title="Rename section"
-                    onClick={() => { setEditingAreaId(area.id); setAreaNameDraft(area.name); }}
-                  >✏</button>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h3 className="ccm-section-name">{area.name}</h3>
                 <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => handleDeleteArea(area.id, area.name)}
-                >
-                  Delete Section
-                </button>
-              </>
+                  className="ccm-icon-btn"
+                  title="Rename section"
+                  onClick={() => { setEditingAreaId(area.id); setAreaNameDraft(area.name); }}
+                >✏</button>
+              </div>
             )}
           </div>
 
@@ -668,6 +665,7 @@ export default function CostControlMatrixPage() {
                     <th className="col-desc col-left">Description</th>
                     <th className="col-type col-left">Type</th>
                     {matrix.versions.map((v, vi) => {
+                      if (hiddenVersionIds.has(v.id)) return null;
                       const col = VER_COLORS[vi % VER_COLORS.length];
                       const span = v.is_execution_phase ? 5 : 3;
                       return (
@@ -683,6 +681,7 @@ export default function CostControlMatrixPage() {
                     <th className="col-desc col-left" />
                     <th className="col-type col-left" />
                     {matrix.versions.map((v, vi) => {
+                      if (hiddenVersionIds.has(v.id)) return null;
                       const col = VER_COLORS[vi % VER_COLORS.length];
                       return v.is_execution_phase ? (
                         <React.Fragment key={v.id}>
@@ -692,9 +691,9 @@ export default function CostControlMatrixPage() {
                         </React.Fragment>
                       ) : (
                         <React.Fragment key={v.id}>
-                          {[['Qty','cell-num'],['Value','cell-num'],['Notes','']].map(([h, cls]) => (
-                            <th key={h} className={`${cls} sub-header`} style={{ background: col.header }}>{h}</th>
-                          ))}
+                          <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Qty</th>
+                          <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Value</th>
+                          <th className="sub-header" style={{ background: col.header, textAlign: 'center' }}>Notes</th>
                         </React.Fragment>
                       );
                     })}
@@ -739,7 +738,7 @@ export default function CostControlMatrixPage() {
                   })}
                   {area.items.length === 0 && matrix.versions.length > 0 && (
                     <tr>
-                      <td colSpan={2 + matrix.versions.reduce((s, v) => s + (v.is_execution_phase ? 5 : 3), 0) + 1}
+                      <td colSpan={2 + matrix.versions.filter(v => !hiddenVersionIds.has(v.id)).reduce((s, v) => s + (v.is_execution_phase ? 5 : 3), 0) + 1}
                           style={{ textAlign: 'center', color: '#8888a0', padding: '16px', fontStyle: 'italic', fontSize: 13 }}>
                         No line items yet — use the buttons below to add some.
                       </td>
@@ -750,7 +749,7 @@ export default function CostControlMatrixPage() {
             </div>
           )}
 
-          {/* Add type buttons */}
+          {/* Add type buttons + delete section */}
           <div className="ccm-add-type-btns">
             {ADD_TYPE_BUTTONS.map(({ label, type }) => (
               <button
@@ -761,6 +760,13 @@ export default function CostControlMatrixPage() {
                 + {label}
               </button>
             ))}
+            <button
+              className="btn btn-sm btn-danger"
+              style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, marginLeft: 'auto' }}
+              onClick={() => handleDeleteArea(area.id, area.name)}
+            >
+              Delete Section
+            </button>
           </div>
         </div>
       ))}
@@ -984,6 +990,7 @@ export default function CostControlMatrixPage() {
                 <tr>
                   <th className="col-left summary-label-col">Category</th>
                   {matrix.versions.map((v, vi) => {
+                    if (hiddenVersionIds.has(v.id)) return null;
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     return (
                       <th key={v.id} className="cell-num" style={{ background: col.header, color: col.text, minWidth: 120 }}>
@@ -998,6 +1005,7 @@ export default function CostControlMatrixPage() {
                   <tr key={group.label} className="summary-sub-row">
                     <td className="col-left">{group.label}</td>
                     {matrix.versions.map((v, vi) => {
+                      if (hiddenVersionIds.has(v.id)) return null;
                       const col = VER_COLORS[vi % VER_COLORS.length];
                       const total = groupTotal(v.id, group.types);
                       return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{total ? fmt(total) : '—'}</td>;
@@ -1007,6 +1015,7 @@ export default function CostControlMatrixPage() {
                 <tr className="summary-total-row">
                   <td className="col-left">Subtotal</td>
                   {matrix.versions.map((v, vi) => {
+                    if (hiddenVersionIds.has(v.id)) return null;
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.subtotal)}</td>;
@@ -1015,6 +1024,7 @@ export default function CostControlMatrixPage() {
                 <tr className="summary-sub-row">
                   <td className="col-left">Fee</td>
                   {matrix.versions.map((v, vi) => {
+                    if (hiddenVersionIds.has(v.id)) return null;
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.fee)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.fee_pct * 100)}%</div></td>;
@@ -1023,6 +1033,7 @@ export default function CostControlMatrixPage() {
                 <tr className="summary-sub-row">
                   <td className="col-left">Overhead</td>
                   {matrix.versions.map((v, vi) => {
+                    if (hiddenVersionIds.has(v.id)) return null;
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
                     return <td key={v.id} className="cell-num" style={{ background: col.cell }}>{fmt(t.overhead)}<div style={{ fontSize: 10, color: '#8888a0' }}>{Math.round(t.overhead_pct * 100)}%</div></td>;
@@ -1031,6 +1042,7 @@ export default function CostControlMatrixPage() {
                 <tr className="summary-grand-row">
                   <td className="col-left">Grand Total</td>
                   {matrix.versions.map((v, vi) => {
+                    if (hiddenVersionIds.has(v.id)) return null;
                     const col = VER_COLORS[vi % VER_COLORS.length];
                     const t = calcVersionTotals(matrix, v.id);
                     const vTarget = v.target_cost ?? matrix.target_cost;
