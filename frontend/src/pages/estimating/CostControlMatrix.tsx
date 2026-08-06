@@ -33,12 +33,20 @@ import './CostControlMatrix.css';
 const fmt = (n: number | null | undefined) =>
   n == null ? '—' : '$' + Math.round(n).toLocaleString();
 
-// Format a raw string value as $1,234 for display in inputs
+// Format a raw string value as $1,234 for display in dollar inputs
 function fmtNum(raw: string): string {
   if (!raw) return '';
   const n = parseFloat(raw.replace(/[^0-9.-]/g, ''));
   if (isNaN(n)) return '';
   return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+// Format a raw string value as 1,234 (no $) for quantity inputs
+function fmtQty(raw: string): string {
+  if (!raw) return '';
+  const n = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+  if (isNaN(n)) return '';
+  return Math.round(n).toLocaleString('en-US');
 }
 
 type PendingKey = string;
@@ -106,6 +114,9 @@ export default function CostControlMatrixPage() {
   // Risk / Opportunity edits — keyed by riskId
   const [riskDrafts, setRiskDrafts] = useState<Record<number, Partial<CostControlRiskItem>>>({});
 
+  // Notes hover tooltip
+  const [notesTooltip, setNotesTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
   const load = useCallback(async () => {
     if (!matrixId) return;
     try {
@@ -141,8 +152,16 @@ export default function CostControlMatrixPage() {
 
   const handleCellChange = (itemId: number, versionId: number, field: keyof PendingChange, rawValue: string) => {
     const key = pendingKey(itemId, versionId);
+    const storedValues = matrix?.areas.flatMap(a => a.items).find(i => i.id === itemId)?.values[versionId];
     setPending(prev => {
-      const existing = prev[key] ?? { line_item_id: itemId, version_id: versionId, qty: null, value: null, notes: null, actual_cost: null, pct_complete: null };
+      const existing = prev[key] ?? {
+        line_item_id: itemId, version_id: versionId,
+        qty: storedValues?.qty ?? null,
+        value: storedValues?.value ?? null,
+        notes: storedValues?.notes ?? null,
+        actual_cost: storedValues?.actual_cost ?? null,
+        pct_complete: storedValues?.pct_complete ?? null,
+      };
       const numFields: (keyof PendingChange)[] = ['qty', 'value', 'actual_cost', 'pct_complete'];
       const parsed = numFields.includes(field)
         ? (rawValue === '' ? null : parseFloat(rawValue.replace(/[$,]/g, '')) || null)
@@ -157,7 +176,11 @@ export default function CostControlMatrixPage() {
 
   const handleSaveNow = () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (matrix) flushPending(pending, matrix);
+    setPending(current => { if (matrix) flushPending(current, matrix); return current; });
+  };
+
+  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.currentTarget.blur(); handleSaveNow(); }
   };
 
   // --- Version management ---
@@ -401,9 +424,9 @@ export default function CostControlMatrixPage() {
         const variance = budget && projected != null ? budget - projected : null;
         return (
           <React.Fragment key={v.id}>
-            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} placeholder="0" /></td>
-            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtNum(getField('actual_cost'))} onChange={e => handleCellChange(item.id, v.id, 'actual_cost', e.target.value)} placeholder="0" /></td>
-            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={getField('pct_complete')} onChange={e => handleCellChange(item.id, v.id, 'pct_complete', e.target.value)} placeholder="0" style={{ width: 50 }} /></td>
+            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="0" /></td>
+            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtNum(getField('actual_cost'))} onChange={e => handleCellChange(item.id, v.id, 'actual_cost', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="0" /></td>
+            <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={getField('pct_complete')} onChange={e => handleCellChange(item.id, v.id, 'pct_complete', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="0" style={{ width: 50 }} /></td>
             <td className="cell-num" style={{ background: col.cell }}>{projected != null ? fmt(projected) : '—'}</td>
             <td className={`cell-num ${variance != null ? (variance >= 0 ? 'var-pos' : 'var-neg') : ''}`} style={{ background: col.cell }}>{variance != null ? fmt(variance) : '—'}</td>
           </React.Fragment>
@@ -412,9 +435,24 @@ export default function CostControlMatrixPage() {
 
       return (
         <React.Fragment key={v.id}>
-          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtNum(getField('qty'))} onChange={e => handleCellChange(item.id, v.id, 'qty', e.target.value)} placeholder="" /></td>
-          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input val-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} placeholder="$0" /></td>
-          <td style={{ background: col.cell }}><input className="ccm-cell-input notes-input" value={getField('notes')} onChange={e => handleCellChange(item.id, v.id, 'notes', e.target.value)} placeholder="notes" /></td>
+          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input" value={fmtQty(getField('qty'))} onChange={e => handleCellChange(item.id, v.id, 'qty', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="" /></td>
+          <td className="cell-num" style={{ background: col.cell }}><input className="ccm-cell-input val-input" value={fmtNum(getField('value'))} onChange={e => handleCellChange(item.id, v.id, 'value', e.target.value)} onKeyDown={handleCellKeyDown} placeholder="$0" /></td>
+          <td style={{ background: col.cell }}>
+            <input
+              className="ccm-cell-input notes-input"
+              value={getField('notes')}
+              onChange={e => handleCellChange(item.id, v.id, 'notes', e.target.value)}
+              onKeyDown={handleCellKeyDown}
+              placeholder="notes"
+              onMouseEnter={e => {
+                const text = getField('notes');
+                if (!text) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                setNotesTooltip({ text, x: rect.left + rect.width / 2, y: rect.bottom + 8 });
+              }}
+              onMouseLeave={() => setNotesTooltip(null)}
+            />
+          </td>
         </React.Fragment>
       );
     });
@@ -1030,6 +1068,39 @@ export default function CostControlMatrixPage() {
           </div>
         );
       })()}
+
+      {/* Notes hover tooltip — fixed position so it escapes overflow:auto containers */}
+      {notesTooltip && (
+        <div style={{
+          position: 'fixed',
+          top: notesTooltip.y,
+          left: notesTooltip.x,
+          transform: 'translateX(-50%)',
+          background: '#1a1a2e',
+          color: '#fff',
+          fontSize: 12,
+          lineHeight: 1.5,
+          padding: '7px 11px',
+          borderRadius: 7,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          maxWidth: 280,
+          minWidth: 120,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+        }}>
+          {notesTooltip.text}
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            border: '5px solid transparent',
+            borderBottomColor: '#1a1a2e',
+          }} />
+        </div>
+      )}
     </div>
   );
 }
