@@ -3278,7 +3278,8 @@ const VistaData = {
           est_hours = $4, est_cost = $5, jtd_hours = $6, jtd_cost = $7,
           committed_cost = $8, projected_cost = $9, percent_complete = $10,
           import_batch_id = $11, prior_week_cost = $13,
-          change_from_last_projection = $14, updated_at = CURRENT_TIMESTAMP
+          change_from_last_projection = COALESCE($14, change_from_last_projection),
+          updated_at = CURRENT_TIMESTAMP
         WHERE id = $12
         RETURNING *`,
         [
@@ -3286,7 +3287,7 @@ const VistaData = {
           data.est_hours, data.est_cost, data.jtd_hours, data.jtd_cost,
           data.committed_cost, data.projected_cost, data.percent_complete,
           batchId, before.id, data.prior_week_cost || 0,
-          data.change_from_last_projection || 0
+          data.change_from_last_projection
         ]
       );
 

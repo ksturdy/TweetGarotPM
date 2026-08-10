@@ -507,10 +507,12 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
       console.log(`[Vista Auto-Import] ${phaseCodesSheetName}: ${validRows.length} valid rows (${data.length} total)`);
 
       if (validRows.length > 0) {
-        if (validRows[0]) {
-          const columns = Object.keys(validRows[0]);
-          console.log(`[Vista Auto-Import] ${phaseCodesSheetName} columns: ${columns.join(', ')}`);
-        }
+        const phaseCodeHeaders = Object.keys(validRows[0]);
+        console.log(`[Vista Auto-Import] ${phaseCodesSheetName} columns: ${phaseCodeHeaders.join(', ')}`);
+        // Column Q (index 16) is Vista's "Change From Last Projection" — use as positional fallback
+        const changeColByPosition = phaseCodeHeaders[16] || null;
+        console.log(`[Vista Auto-Import] Phase Codes column Q (index 16): "${changeColByPosition}"`);
+
         const batch = await VistaData.createImportBatch({
           file_name: req.file.originalname,
           file_type: 'phase_codes',
@@ -539,7 +541,9 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
             projected_cost: parseNumber(row[' Projected At Completion Cost '] ?? row['Projected At Completion Cost']),
             percent_complete: parseNumber(row['Percent Complete'] ?? row[' Percent Complete ']),
             prior_week_cost: parseNumber(row['Previous Week Cost'] ?? row[' Previous Week Cost ']),
-            change_from_last_projection: parseNumber(pickColumn(row, 'Change From Last Projection'))
+            change_from_last_projection: parseNumber(pickColumn(row,
+              'Change From Last Projection', 'Chg From Last Proj', 'Chg Fm Last Proj',
+              'Change Since Last Proj', 'Change Since Last Projection', changeColByPosition))
           };
 
           if (!phaseData.job || !phaseData.phase) continue;
