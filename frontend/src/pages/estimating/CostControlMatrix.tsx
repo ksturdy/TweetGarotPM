@@ -14,6 +14,7 @@ import {
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import { useAuth } from '../../context/AuthContext';
 import CostControlCompare from './CostControlCompare';
+import RateAnalysisPanel from './RateAnalysisPanel';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 import {
@@ -150,6 +151,9 @@ export default function CostControlMatrixPage() {
 
   // Net change column visibility
   const [showNetChange, setShowNetChange] = useState(true);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'matrix' | 'rate'>('matrix');
 
   const load = useCallback(async () => {
     if (!matrixId) return;
@@ -564,6 +568,35 @@ export default function CostControlMatrixPage() {
           </button>
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#ffffff', border: '1px solid #e0e2e7', borderRadius: 10, padding: '6px 8px', width: 'fit-content' }}>
+        {([['matrix', 'Cost Matrix'], ['rate', 'Rate/Fee Analysis']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            style={{
+              padding: '6px 18px',
+              borderRadius: 7,
+              border: 'none',
+              fontSize: 13,
+              fontWeight: activeTab === key ? 700 : 500,
+              cursor: 'pointer',
+              background: activeTab === key ? '#1a1a2e' : 'transparent',
+              color: activeTab === key ? '#ffffff' : '#5a5a72',
+              transition: 'all 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Rate/Fee Analysis tab */}
+      {activeTab === 'rate' && <RateAnalysisPanel matrixId={matrix.id} />}
+
+      {/* Matrix tab content */}
+      {activeTab === 'matrix' && <>
 
       {/* Settings panel */}
       {editingHeader && headerDraft && (
@@ -1286,6 +1319,8 @@ export default function CostControlMatrixPage() {
           }} />
         </div>
       )}
+
+      </>}
     </div>
   );
 }

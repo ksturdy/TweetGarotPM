@@ -805,4 +805,213 @@ router.delete('/:matrixId/risks/:riskId', async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------------
+// Rate / Fee Analysis
+// Default labor rows (Rate Level D from standard schedule)
+// ------------------------------------------------------------------
+const DEFAULT_LABOR_ROWS = [
+  // Sheet Metal — Field
+  { trade: 'sm_field', classification: 'journeyman',            actual_rate: 85.25, billable_rate: 115.00, sort_order: 0 },
+  { trade: 'sm_field', classification: 'superintendent',        actual_rate: 92.73, billable_rate: 128.23, sort_order: 1 },
+  { trade: 'sm_field', classification: 'general_foreman',       actual_rate: 91.00, billable_rate: 125.88, sort_order: 2 },
+  { trade: 'sm_field', classification: 'foreman',               actual_rate: 89.85, billable_rate: 124.31, sort_order: 3 },
+  { trade: 'sm_field', classification: 'app_5th',               actual_rate: 72.39, billable_rate: 101.20, sort_order: 4 },
+  { trade: 'sm_field', classification: 'app_4th',               actual_rate: 69.55, billable_rate:  97.54, sort_order: 5 },
+  { trade: 'sm_field', classification: 'app_3rd',               actual_rate: 62.14, billable_rate:  87.66, sort_order: 6 },
+  { trade: 'sm_field', classification: 'app_2nd',               actual_rate: 54.78, billable_rate:  77.84, sort_order: 7 },
+  { trade: 'sm_field', classification: 'app_1st',               actual_rate: 51.09, billable_rate:  72.92, sort_order: 8 },
+  // Sheet Metal — Shop
+  { trade: 'sm_shop',  classification: 'journeyman',            actual_rate: 89.25, billable_rate: 128.00, sort_order: 0 },
+  { trade: 'sm_shop',  classification: 'superintendent',        actual_rate: 96.73, billable_rate: 141.23, sort_order: 1 },
+  { trade: 'sm_shop',  classification: 'general_foreman',       actual_rate: 95.00, billable_rate: 138.88, sort_order: 2 },
+  { trade: 'sm_shop',  classification: 'foreman',               actual_rate: 93.85, billable_rate: 137.31, sort_order: 3 },
+  { trade: 'sm_shop',  classification: 'app_5th',               actual_rate: 76.39, billable_rate: 114.20, sort_order: 4 },
+  { trade: 'sm_shop',  classification: 'app_4th',               actual_rate: 73.55, billable_rate: 110.54, sort_order: 5 },
+  { trade: 'sm_shop',  classification: 'app_3rd',               actual_rate: 66.14, billable_rate: 100.66, sort_order: 6 },
+  { trade: 'sm_shop',  classification: 'app_2nd',               actual_rate: 58.78, billable_rate:  90.84, sort_order: 7 },
+  { trade: 'sm_shop',  classification: 'app_1st',               actual_rate: 55.09, billable_rate:  85.92, sort_order: 8 },
+  // Pipefitter — Field
+  { trade: 'pf_field', classification: 'journeyman',            actual_rate: 84.70, billable_rate: 118.15, sort_order: 0 },
+  { trade: 'pf_field', classification: 'superintendent',        actual_rate: 91.57, billable_rate: 127.47, sort_order: 1 },
+  { trade: 'pf_field', classification: 'general_foreman',       actual_rate: 90.42, billable_rate: 125.92, sort_order: 2 },
+  { trade: 'pf_field', classification: 'foreman',               actual_rate: 87.91, billable_rate: 122.50, sort_order: 3 },
+  { trade: 'pf_field', classification: 'app_5th',               actual_rate: 73.21, billable_rate: 102.54, sort_order: 4 },
+  { trade: 'pf_field', classification: 'app_4th',               actual_rate: 71.82, billable_rate: 100.66, sort_order: 5 },
+  { trade: 'pf_field', classification: 'app_3rd',               actual_rate: 65.50, billable_rate:  92.07, sort_order: 6 },
+  { trade: 'pf_field', classification: 'app_2nd',               actual_rate: 51.34, billable_rate:  74.30, sort_order: 7 },
+  { trade: 'pf_field', classification: 'app_1st',               actual_rate: 48.18, billable_rate:  70.01, sort_order: 8 },
+  // Pipefitter — Shop
+  { trade: 'pf_shop',  classification: 'journeyman',            actual_rate: 88.70, billable_rate: 131.15, sort_order: 0 },
+  { trade: 'pf_shop',  classification: 'superintendent',        actual_rate: 95.57, billable_rate: 140.47, sort_order: 1 },
+  { trade: 'pf_shop',  classification: 'general_foreman',       actual_rate: 94.42, billable_rate: 138.92, sort_order: 2 },
+  { trade: 'pf_shop',  classification: 'foreman',               actual_rate: 91.91, billable_rate: 135.50, sort_order: 3 },
+  { trade: 'pf_shop',  classification: 'app_5th',               actual_rate: 77.21, billable_rate: 115.54, sort_order: 4 },
+  { trade: 'pf_shop',  classification: 'app_4th',               actual_rate: 75.82, billable_rate: 113.66, sort_order: 5 },
+  { trade: 'pf_shop',  classification: 'app_3rd',               actual_rate: 69.50, billable_rate: 105.07, sort_order: 6 },
+  { trade: 'pf_shop',  classification: 'app_2nd',               actual_rate: 55.34, billable_rate:  87.30, sort_order: 7 },
+  { trade: 'pf_shop',  classification: 'app_1st',               actual_rate: 52.18, billable_rate:  83.01, sort_order: 8 },
+  // Plumber — Field
+  { trade: 'pl_field', classification: 'journeyman',            actual_rate: 84.70, billable_rate: 118.15, sort_order: 0 },
+  { trade: 'pl_field', classification: 'superintendent',        actual_rate: 91.57, billable_rate: 127.47, sort_order: 1 },
+  { trade: 'pl_field', classification: 'general_foreman',       actual_rate: 90.42, billable_rate: 125.92, sort_order: 2 },
+  { trade: 'pl_field', classification: 'foreman',               actual_rate: 87.91, billable_rate: 122.50, sort_order: 3 },
+  { trade: 'pl_field', classification: 'app_5th',               actual_rate: 73.21, billable_rate: 102.54, sort_order: 4 },
+  { trade: 'pl_field', classification: 'app_4th',               actual_rate: 71.82, billable_rate: 100.66, sort_order: 5 },
+  { trade: 'pl_field', classification: 'app_3rd',               actual_rate: 65.50, billable_rate:  92.07, sort_order: 6 },
+  { trade: 'pl_field', classification: 'app_2nd',               actual_rate: 51.34, billable_rate:  74.30, sort_order: 7 },
+  { trade: 'pl_field', classification: 'app_1st',               actual_rate: 48.18, billable_rate:  70.01, sort_order: 8 },
+  // Plumber — Shop
+  { trade: 'pl_shop',  classification: 'journeyman',            actual_rate: 88.70, billable_rate: 131.15, sort_order: 0 },
+  { trade: 'pl_shop',  classification: 'superintendent',        actual_rate: 95.57, billable_rate: 140.47, sort_order: 1 },
+  { trade: 'pl_shop',  classification: 'general_foreman',       actual_rate: 94.42, billable_rate: 138.92, sort_order: 2 },
+  { trade: 'pl_shop',  classification: 'foreman',               actual_rate: 91.91, billable_rate: 135.50, sort_order: 3 },
+  { trade: 'pl_shop',  classification: 'app_5th',               actual_rate: 77.21, billable_rate: 115.54, sort_order: 4 },
+  { trade: 'pl_shop',  classification: 'app_4th',               actual_rate: 75.82, billable_rate: 113.66, sort_order: 5 },
+  { trade: 'pl_shop',  classification: 'app_3rd',               actual_rate: 69.50, billable_rate: 105.07, sort_order: 6 },
+  { trade: 'pl_shop',  classification: 'app_2nd',               actual_rate: 55.34, billable_rate:  87.30, sort_order: 7 },
+  { trade: 'pl_shop',  classification: 'app_1st',               actual_rate: 52.18, billable_rate:  83.01, sort_order: 8 },
+  // General / Admin
+  { trade: 'general', classification: 'project_manager',        actual_rate:  76.75, billable_rate: 126.00, sort_order: 0 },
+  { trade: 'general', classification: 'project_engineer',       actual_rate:  76.75, billable_rate: 158.00, sort_order: 1 },
+  { trade: 'general', classification: 'project_administrator',  actual_rate:  51.75, billable_rate: 104.00, sort_order: 2 },
+  { trade: 'general', classification: 'project_coordinator',    actual_rate:  51.75, billable_rate: 104.00, sort_order: 3 },
+  // Service
+  { trade: 'service', classification: 'rts',                    actual_rate: 125.25, billable_rate: 115.00, sort_order: 0 },
+  { trade: 'service', classification: 'service_tech',           actual_rate: 106.57, billable_rate: 159.00, sort_order: 1 },
+];
+
+// GET /api/cost-control/:matrixId/rate-analysis
+router.get('/:matrixId/rate-analysis', async (req, res) => {
+  try {
+    const { matrixId } = req.params;
+    const check = await pool.query(
+      'SELECT id FROM cost_control_matrices WHERE id = $1 AND tenant_id = $2',
+      [matrixId, req.user.tenantId]
+    );
+    if (!check.rows.length) return res.status(404).json({ error: 'Matrix not found' });
+
+    const [configRes, laborRes] = await Promise.all([
+      pool.query('SELECT * FROM cost_control_rate_config WHERE matrix_id = $1', [matrixId]),
+      pool.query('SELECT * FROM cost_control_rate_labor WHERE matrix_id = $1 ORDER BY trade, sort_order', [matrixId]),
+    ]);
+
+    const config = configRes.rows[0] || {
+      matrix_id: Number(matrixId),
+      construction_fee_pct: 0.06,
+      material_markup_pct: 0.05,
+      equipment_markup_pct: 0.05,
+      sub_markup_pct: 0.05,
+      material_cost: 0,
+      equipment_cost: 0,
+      subcontract_cost: 0,
+      gen_conditions_cost: 0,
+      fee_applies_labor: true,
+      fee_applies_material: true,
+      fee_applies_equipment: true,
+      fee_applies_subcontract: true,
+      fee_applies_gc: true,
+      notes: null,
+    };
+
+    const labor = laborRes.rows.length > 0
+      ? laborRes.rows
+      : DEFAULT_LABOR_ROWS.map((r, i) => ({ ...r, matrix_id: Number(matrixId), id: null, estimated_hours: 0 }));
+
+    res.json({ config, labor });
+  } catch (err) {
+    console.error('Error fetching rate analysis:', err);
+    res.status(500).json({ error: 'Failed to fetch rate analysis' });
+  }
+});
+
+// PUT /api/cost-control/:matrixId/rate-analysis
+router.put('/:matrixId/rate-analysis', async (req, res) => {
+  const client = await pool.getClient();
+  try {
+    await client.query('BEGIN');
+    const { matrixId } = req.params;
+
+    const check = await client.query(
+      'SELECT id FROM cost_control_matrices WHERE id = $1 AND tenant_id = $2',
+      [matrixId, req.user.tenantId]
+    );
+    if (!check.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Matrix not found' });
+    }
+
+    const { config, labor } = req.body;
+
+    if (config) {
+      await client.query(
+        `INSERT INTO cost_control_rate_config
+           (matrix_id, construction_fee_pct, material_markup_pct, equipment_markup_pct, sub_markup_pct,
+            material_cost, equipment_cost, subcontract_cost, gen_conditions_cost,
+            fee_applies_labor, fee_applies_material, fee_applies_equipment, fee_applies_subcontract, fee_applies_gc,
+            notes, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+         ON CONFLICT (matrix_id) DO UPDATE SET
+           construction_fee_pct  = EXCLUDED.construction_fee_pct,
+           material_markup_pct   = EXCLUDED.material_markup_pct,
+           equipment_markup_pct  = EXCLUDED.equipment_markup_pct,
+           sub_markup_pct        = EXCLUDED.sub_markup_pct,
+           material_cost         = EXCLUDED.material_cost,
+           equipment_cost        = EXCLUDED.equipment_cost,
+           subcontract_cost      = EXCLUDED.subcontract_cost,
+           gen_conditions_cost   = EXCLUDED.gen_conditions_cost,
+           fee_applies_labor     = EXCLUDED.fee_applies_labor,
+           fee_applies_material  = EXCLUDED.fee_applies_material,
+           fee_applies_equipment = EXCLUDED.fee_applies_equipment,
+           fee_applies_subcontract = EXCLUDED.fee_applies_subcontract,
+           fee_applies_gc        = EXCLUDED.fee_applies_gc,
+           notes                 = EXCLUDED.notes,
+           updated_at            = NOW()`,
+        [
+          matrixId,
+          config.construction_fee_pct       ?? 0.06,
+          config.material_markup_pct        ?? 0.05,
+          config.equipment_markup_pct       ?? 0.05,
+          config.sub_markup_pct             ?? 0.05,
+          config.material_cost              ?? 0,
+          config.equipment_cost             ?? 0,
+          config.subcontract_cost           ?? 0,
+          config.gen_conditions_cost        ?? 0,
+          config.fee_applies_labor          ?? true,
+          config.fee_applies_material       ?? true,
+          config.fee_applies_equipment      ?? true,
+          config.fee_applies_subcontract    ?? true,
+          config.fee_applies_gc             ?? true,
+          config.notes ?? null,
+        ]
+      );
+    }
+
+    if (Array.isArray(labor)) {
+      for (const row of labor) {
+        await client.query(
+          `INSERT INTO cost_control_rate_labor
+             (matrix_id, trade, classification, estimated_hours, actual_rate, billable_rate, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (matrix_id, trade, classification) DO UPDATE SET
+             estimated_hours = EXCLUDED.estimated_hours,
+             actual_rate     = EXCLUDED.actual_rate,
+             billable_rate   = EXCLUDED.billable_rate,
+             sort_order      = EXCLUDED.sort_order`,
+          [matrixId, row.trade, row.classification,
+           row.estimated_hours ?? 0, row.actual_rate ?? 0, row.billable_rate ?? 0, row.sort_order ?? 0]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Rate analysis saved' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error saving rate analysis:', err);
+    res.status(500).json({ error: 'Failed to save rate analysis' });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

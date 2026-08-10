@@ -244,6 +244,53 @@ export const COST_TYPE_GROUPS: Record<string, CostType[]> = {
   'General Conditions': ['gen_conditions'],
 };
 
+// ------------------------------------------------------------------
+// Rate / Fee Analysis types and API
+// ------------------------------------------------------------------
+
+export interface RateAnalysisConfig {
+  matrix_id: number;
+  construction_fee_pct: number;  // decimal (0.06 = 6%)
+  material_markup_pct: number;
+  equipment_markup_pct: number;
+  sub_markup_pct: number;
+  material_cost: number;
+  equipment_cost: number;
+  subcontract_cost: number;
+  gen_conditions_cost: number;
+  fee_applies_labor: boolean;
+  fee_applies_material: boolean;
+  fee_applies_equipment: boolean;
+  fee_applies_subcontract: boolean;
+  fee_applies_gc: boolean;
+  notes: string | null;
+}
+
+export interface RateAnalysisLaborRow {
+  id: number | null;
+  matrix_id: number;
+  trade: string;
+  classification: string;
+  estimated_hours: number;
+  actual_rate: number;
+  billable_rate: number;
+  sort_order: number;
+}
+
+export interface RateAnalysis {
+  config: RateAnalysisConfig;
+  labor: RateAnalysisLaborRow[];
+}
+
+export async function getRateAnalysis(matrixId: number): Promise<RateAnalysis> {
+  const res = await api.get(`/cost-control/${matrixId}/rate-analysis`);
+  return res.data;
+}
+
+export async function saveRateAnalysis(matrixId: number, data: RateAnalysis): Promise<void> {
+  await api.put(`/cost-control/${matrixId}/rate-analysis`, data);
+}
+
 export function calcVersionTotals(matrix: CostControlMatrix, versionId: number) {
   const totals: Record<string, number> = {
     labor: 0, material: 0, equipment: 0, subcontract: 0, gen_conditions: 0, subtotal: 0,
