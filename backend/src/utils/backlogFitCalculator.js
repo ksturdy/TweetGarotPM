@@ -249,10 +249,10 @@ function calcBacklogSnapshot(contracts, gmOverrideMap) {
     const backlog = parseNum(c.backlog);
     if (backlog <= 0) continue;
 
-    // Apply GM override: when real GM is ~100% and override exists, use override
+    // Apply GM override: when real GM is ~100% or exactly 0% and override exists, use override
     let gm = parseNum(c.gross_profit_percent); // decimal (0.15 = 15%)
     let hasGm = c.gross_profit_percent != null;
-    if (gm >= 0.995 && overrides[c.id] != null) {
+    if ((gm >= 0.995 || gm === 0) && overrides[c.id] != null) {
       gm = overrides[c.id];
       hasGm = true;
     }

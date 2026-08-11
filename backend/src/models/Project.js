@@ -53,12 +53,14 @@ const Project = {
               vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
               vc.projected_revenue, vc.projected_cost, vc.actual_cost,
               COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-              CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+              CASE WHEN (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                         OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
                         AND p.override_gm_percent IS NOT NULL
                    THEN p.override_gm_percent
                    ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
               END as gross_margin_percent,
-              (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+              ((COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
                AND p.override_gm_percent IS NOT NULL) as gm_overridden,
               CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
               COALESCE(p.market, vc.primary_market) as market,
@@ -93,12 +95,14 @@ const Project = {
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-             CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+             CASE WHEN (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                        OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
                        AND p.override_gm_percent IS NOT NULL
                   THEN p.override_gm_percent
                   ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
              END as gross_margin_percent,
-             (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+             ((COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+               OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
              COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
@@ -146,12 +150,14 @@ const Project = {
              vc.ship_address, vc.ship_city, vc.ship_state, vc.ship_zip,
              vc.projected_revenue, vc.projected_cost, vc.actual_cost,
              COALESCE(vc.contract_amount, p.contract_value) as contract_value,
-             CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+             CASE WHEN (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                        OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
                        AND p.override_gm_percent IS NOT NULL
                   THEN p.override_gm_percent
                   ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent)
              END as gross_margin_percent,
-             (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+             ((COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+               OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
               AND p.override_gm_percent IS NOT NULL) as gm_overridden,
              CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END as backlog,
              COALESCE(NULLIF(p.market, ''), vc.primary_market) as market,
@@ -358,7 +364,8 @@ const Project = {
         FROM projects p2
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p2.id
         WHERE p2.tenant_id = $1
-          AND COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) >= 0.995
+          AND (COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) >= 0.995
+               OR COALESCE(vc.gross_profit_percent, p2.gross_margin_percent) = 0)
           AND p2.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
       ) sub
       WHERE p.id = sub.id
@@ -387,7 +394,8 @@ const Project = {
       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
       WHERE p.tenant_id = $1
         AND p.override_gm_percent IS NOT NULL
-        AND COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+        AND (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+             OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
     `, [tenantId]);
     return parseInt(result.rows[0].count, 10);
   },

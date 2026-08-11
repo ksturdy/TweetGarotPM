@@ -1313,7 +1313,7 @@ const ProjectList: React.FC = () => {
                   <td style={{
                     color: project.gm_overridden ? '#f59e0b' : project.gross_margin_percent && project.gross_margin_percent > 0 ? '#10b981' : project.gross_margin_percent && project.gross_margin_percent < 0 ? '#ef4444' : 'inherit',
                     fontStyle: project.gm_overridden ? 'italic' : undefined,
-                  }} title={project.gm_overridden ? 'Overridden from 100% (no cost projection yet)' : undefined}>
+                  }} title={project.gm_overridden ? 'Overridden from 0% or 100% (no cost projection yet)' : undefined}>
                     {project.gross_margin_percent !== undefined && project.gross_margin_percent !== null
                       ? `${(Number(project.gross_margin_percent) * 100).toFixed(1)}%${project.gm_overridden ? '*' : ''}`
                       : '-'}

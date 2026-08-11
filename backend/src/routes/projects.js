@@ -332,8 +332,9 @@ router.get('/backlog-snapshot', async (req, res, next) => {
       if (parsed.length > 0) managerIds = parsed;
     }
 
-    // Use effective GM%: apply override when real GM is ~100%
-    const GM_EXPR = `CASE WHEN COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+    // Use effective GM%: apply override when real GM is ~100% or exactly 0%
+    const GM_EXPR = `CASE WHEN (COALESCE(vc.gross_profit_percent, p.gross_margin_percent) >= 0.995
+                               OR COALESCE(vc.gross_profit_percent, p.gross_margin_percent) = 0)
                           AND p.override_gm_percent IS NOT NULL
                      THEN p.override_gm_percent
                      ELSE COALESCE(vc.gross_profit_percent, p.gross_margin_percent) END`;
