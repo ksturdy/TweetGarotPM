@@ -131,6 +131,28 @@ const ProjectPerformance: React.FC = () => {
     ],
   };
 
+  const gmByPercentCompleteData = {
+    labels: snapshots.map(s => `${((s.percent_complete || 0) * 100).toFixed(0)}%`),
+    datasets: [
+      {
+        label: 'Actual GM%',
+        data: snapshots.map(s => (s.gross_profit_percent || 0) * 100),
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.3,
+        fill: true,
+      },
+      {
+        label: 'Estimated GM%',
+        data: snapshots.map(() => targetMarginPct),
+        borderColor: '#10b981',
+        backgroundColor: 'transparent',
+        borderDash: [5, 5],
+        tension: 0,
+      },
+    ],
+  };
+
   const gmVsCompleteData = {
     labels: dates,
     datasets: [
@@ -279,6 +301,22 @@ const ProjectPerformance: React.FC = () => {
     },
   };
 
+  const gmByPercentCompleteOptions = {
+    ...percentChartOptions,
+    scales: {
+      ...percentChartOptions.scales,
+      x: {
+        ticks: { font: { size: 10 } },
+        title: {
+          display: true,
+          text: '% Complete',
+          font: { size: 10 },
+          color: '#64748b',
+        },
+      },
+    },
+  };
+
   if (isLoading || isLoadingSnapshots) return <div className="loading">Loading...</div>;
 
   if (!project) return <div className="card">Project not found</div>;
@@ -363,16 +401,13 @@ const ProjectPerformance: React.FC = () => {
           </div>
         </div>
 
-        {/* GM% × % Complete */}
+        {/* GM% vs % Complete (x-axis = % complete) */}
         <div className="card" style={{ padding: '0.75rem' }}>
           <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            📈 GM% × % Complete
+            📊 GM% by % Complete
           </h3>
           <div style={{ height: '180px' }}>
-            <Line data={gmVsCompleteData} options={chartOptions} />
-          </div>
-          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
-            Higher = better margin vs completion
+            <Line data={gmByPercentCompleteData} options={gmByPercentCompleteOptions} />
           </div>
         </div>
 
@@ -399,6 +434,19 @@ const ProjectPerformance: React.FC = () => {
           </div>
           <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
             Hours per $1000 revenue (lower is better)
+          </div>
+        </div>
+
+        {/* GM% × % Complete — row 3 */}
+        <div className="card" style={{ padding: '0.75rem' }}>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
+            📈 GM% × % Complete
+          </h3>
+          <div style={{ height: '180px' }}>
+            <Line data={gmVsCompleteData} options={chartOptions} />
+          </div>
+          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
+            Higher = better margin vs completion
           </div>
         </div>
       </div>
