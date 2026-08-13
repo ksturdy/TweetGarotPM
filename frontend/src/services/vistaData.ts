@@ -101,6 +101,7 @@ export interface VPContract {
   linked_project_name?: string;
   linked_project_number?: string;
   linked_employee_name?: string;
+  linked_employee_email?: string | null;
   linked_customer_name?: string;
   linked_customer_facility?: string;
   linked_customer_owner?: string;

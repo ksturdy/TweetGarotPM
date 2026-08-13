@@ -342,6 +342,69 @@ const ProjectFinancials: React.FC = () => {
   // Cost type colors for the numbered badges (matching Vista's color coding)
   const costTypeColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
 
+  const handleEmailPM = () => {
+    if (!c || !project) return;
+    const today = format(new Date(), 'MM/dd/yyyy');
+    const projectLabel = `${project.number} – ${project.name}`;
+    const contractLabel = `${c.contract_number}${c.description ? ` – ${c.description}` : ''}`;
+
+    const col = (s: string, w: number) => s.padEnd(w).slice(0, w);
+    const r = (s: string, w: number) => s.padStart(w).slice(-w);
+
+    let body = `${c.project_manager_name || 'Hi'},\n\n`;
+    body += `This contract has been flagged for review. The numbers below show notable changes since the last projection — including costs tracking over estimate, line-item overages, and week-over-week variances that require explanation. Please add a note in Titan documenting the cause, and update your projection in Vista accordingly.\n\n`;
+    body += `Project:  ${projectLabel}\n`;
+    body += `Contract: ${contractLabel}\n`;
+    body += `Customer: ${c.customer_name || '-'}\n`;
+    body += `Date:     ${today}\n`;
+    body += `\n`;
+
+    // Contract / Progress / Cash Flow
+    body += `── CONTRACT ──────────────────────\n`;
+    body += `  Original Contract:   ${r(fmt(c.orig_contract_amount), 12)}\n`;
+    body += `  Approved Changes:    ${r(fmt(c.approved_changes), 12)}\n`;
+    body += `  Revised Contract:    ${r(fmt(c.contract_amount), 12)}\n`;
+    body += `  Pending COs:         ${r(fmt(c.pending_change_orders), 12)}\n`;
+    body += `  Est Revenue:         ${r(fmt(c.projected_revenue), 12)}\n`;
+    body += `\n`;
+    body += `── PROGRESS ──────────────────────\n`;
+    body += `  % Complete:          ${r(calcPctComplete(c.earned_revenue, c.projected_revenue), 12)}\n`;
+    body += `  % Billed:            ${r(fmtPctRaw(pctBilled), 12)}\n`;
+    body += `  Billed to Date:      ${r(fmt(c.billed_amount), 12)}\n`;
+    body += `  Earned Revenue:      ${r(fmt(c.earned_revenue), 12)}\n`;
+    body += `  Over/(Under) Billed: ${r(fmt(overUnderBilled), 12)}\n`;
+    body += `\n`;
+    body += `── NET CASH FLOW ─────────────────\n`;
+    body += `  Cash Received:       ${r(fmt(c.received_amount), 12)}\n`;
+    body += `  Cash Paid:           ${r(fmt(c.actual_cost), 12)}\n`;
+    body += `  Net Cash Flow:       ${r(fmt(c.cash_flow), 12)}\n`;
+    body += `  Open Receivables:    ${r(fmt(c.open_receivables), 12)}\n`;
+    body += `\n`;
+
+    // Cost type table
+    if (costRows && totals) {
+      body += `── COST SUMMARY ─────────────────────────────────────────────────────────────\n`;
+      body += `  ${col('Cost Type', 18)} ${r('Est Cost', 12)} ${r('JTD Cost', 12)} ${r('Projected', 12)} ${r('Chg vs Last', 12)}\n`;
+      body += `  ${'─'.repeat(70)}\n`;
+      for (const row of costRows) {
+        const chg = row.change_from_last_projection || 0;
+        body += `  ${col(row.label, 18)} ${r(fmt(row.est_cost), 12)} ${r(fmt(row.jtd_cost), 12)} ${r(fmt(row.projected), 12)} ${r(fmt(chg), 12)}\n`;
+      }
+      body += `  ${'─'.repeat(70)}\n`;
+      const totalChg = totals.change_from_last_projection || 0;
+      body += `  ${col('TOTAL', 18)} ${r(fmt(totals.est_cost), 12)} ${r(fmt(totals.jtd_cost), 12)} ${r(fmt(totals.projected), 12)} ${r(fmt(totalChg), 12)}\n`;
+    }
+
+    body += `\nPlease log into Titan and update your projection and notes:\n`;
+    body += `${window.location.href}\n\n`;
+    body += `Thank you,\n`;
+
+    const pmEmail = c.linked_employee_email || '';
+    const subject = `Financial Update Request – ${project.number} ${project.name}`;
+    const mailto = `mailto:${pmEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
+  };
+
   return (
     <div>
       {/* ===== HEADER ===== */}
@@ -354,6 +417,14 @@ const ProjectFinancials: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
           {c && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={handleEmailPM}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                title={c.linked_employee_email ? `Email ${c.project_manager_name} (${c.linked_employee_email})` : `Email ${c.project_manager_name || 'PM'}`}
+              >
+                ✉ Email PM
+              </button>
               <button
                 onClick={() => setNotesDrawerOpen(true)}
                 className="btn btn-secondary"

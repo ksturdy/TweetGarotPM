@@ -251,6 +251,7 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         e.first_name || ' ' || e.last_name as linked_employee_name,
+        e.email as linked_employee_email,
         COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
         c.customer_owner as linked_customer_owner,
