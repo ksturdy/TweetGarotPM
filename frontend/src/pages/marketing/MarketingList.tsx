@@ -22,7 +22,7 @@ const MarketingList: React.FC = () => {
       ready: false,
     },
     {
-      name: 'Trade Shows',
+      name: 'Conferences and Trade Shows',
       icon: '🎪',
       path: '/marketing/trade-shows',
       desc: 'Events, booths & conferences',

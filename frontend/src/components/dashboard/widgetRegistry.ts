@@ -59,7 +59,7 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
   },
   trade_shows: {
     id: 'trade_shows',
-    title: 'Trade Shows',
+    title: 'Conferences and Trade Shows',
     category: 'marketing',
     defaultColumn: 'right',
     component: TradeShowsWidget,

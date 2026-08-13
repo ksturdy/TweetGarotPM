@@ -626,7 +626,7 @@ const TradeShowDetail: React.FC = () => {
         <div className="sales-page-title">
           <div>
             <Link to="/marketing/trade-shows" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              &larr; Back to Trade Shows
+              &larr; Back to Conferences and Trade Shows
             </Link>
             <h1>🎪 {show.name}</h1>
             <div style={{ marginTop: '0.5rem' }}>

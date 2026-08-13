@@ -163,7 +163,7 @@ const TradeShowList: React.FC = () => {
 
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('Trade Shows', 40, 40);
+    doc.text('Conferences and Trade Shows', 40, 40);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100);
@@ -220,7 +220,7 @@ const TradeShowList: React.FC = () => {
             <Link to="/marketing" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Marketing
             </Link>
-            <h1>🎪 Trade Shows</h1>
+            <h1>🎪 Conferences and Trade Shows</h1>
             <div className="sales-subtitle">{filtered.length} trade show{filtered.length === 1 ? '' : 's'}</div>
           </div>
         </div>

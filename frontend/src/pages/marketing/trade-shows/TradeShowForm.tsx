@@ -237,7 +237,7 @@ const TradeShowForm: React.FC = () => {
               to={isEdit ? `/marketing/trade-shows/${id}` : '/marketing/trade-shows'}
               style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}
             >
-              &larr; {isEdit ? 'Back to Trade Show' : 'Back to Trade Shows'}
+              &larr; {isEdit ? 'Back to Conference / Trade Show' : 'Back to Conferences and Trade Shows'}
             </Link>
             <h1>{isEdit ? 'Edit Trade Show' : '🎪 New Trade Show'}</h1>
           </div>

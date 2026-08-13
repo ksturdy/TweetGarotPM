@@ -65,7 +65,7 @@ const TradeShowsWidget: React.FC<WidgetProps> = ({
       <div className="card-header">
         <h2 className="card-title">
           <StorefrontIcon className="card-title-icon" />
-          Trade Shows
+          Conferences and Trade Shows
         </h2>
         <Link to="/marketing/trade-shows" className="card-link">View all</Link>
       </div>
