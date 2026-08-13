@@ -19,6 +19,10 @@ const upload = createUploadMiddleware({
     'image/heif',
     'image/webp',
     'application/pdf',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/msword', // .doc
   ],
   maxSize: 20 * 1024 * 1024, // 20MB
 });

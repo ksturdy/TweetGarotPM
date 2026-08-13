@@ -15,7 +15,14 @@ interface FeedbackFormProps {
 }
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB — matches backend attachments cap
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'application/pdf'];
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword', // .doc
+];
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -292,7 +299,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({ onSubmit }) => {
             ref={fileInputRef}
             id="feedback-attachments"
             type="file"
-            accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf"
+            accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf,.xlsx,.xls,.docx,.doc"
             multiple
             onChange={handleFilesChange}
             className="form-control feedback-file-input"
