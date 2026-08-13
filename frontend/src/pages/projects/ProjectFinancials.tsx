@@ -329,9 +329,11 @@ const ProjectFinancials: React.FC = () => {
         monthlyHours.set(key, { pf: pfH, sm: smH, pl: plH, total: pfH + smH + plH });
       }
     }
-    const columns = Array.from(monthlyHours.keys()).map(key => ({
-      key, label: format(parseISO(key + '-01'), 'MMM yy'),
-    }));
+    const displayMonths = Math.max(12, endOff + 2);
+    const columns = Array.from({ length: displayMonths }, (_, i) => {
+      const key = format(addMonths(now, i), 'yyyy-MM');
+      return { key, label: format(addMonths(now, i), 'MMM yy') };
+    });
     return { monthlyHours, columns, contour, tradeHours, totalRem, pctComplete };
   }, [costSummary, c]);
 
