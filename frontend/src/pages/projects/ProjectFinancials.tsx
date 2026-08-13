@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
@@ -207,6 +207,14 @@ const ProjectFinancials: React.FC = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
   const [laborForecastExpanded, setLaborForecastExpanded] = useState(true);
+  const projRevScrollRef = useRef<HTMLDivElement>(null);
+  const laborFcScrollRef = useRef<HTMLDivElement>(null);
+  const syncFromProjRev = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (laborFcScrollRef.current) laborFcScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+  }, []);
+  const syncFromLabor = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (projRevScrollRef.current) projRevScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+  }, []);
 
   const { data: noteCounts = [] } = useQuery({
     queryKey: ['projectionNoteCounts', projectId],
@@ -706,11 +714,11 @@ const ProjectFinancials: React.FC = () => {
           </div>
 
           {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
-          <ContractProjectionStrip contract={c} />
+          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} />
 
           {/* ===== LABOR FORECAST (expandable) ===== */}
           {laborForecastData && (
-            <div className="card" style={{ padding: 0, overflow: laborForecastExpanded ? 'auto' : 'hidden', marginBottom: '0.75rem' }}>
+            <div ref={laborFcScrollRef} onScroll={syncFromLabor} className="card" style={{ padding: 0, overflow: laborForecastExpanded ? 'auto' : 'hidden', marginBottom: '0.75rem' }}>
               <div
                 onClick={() => setLaborForecastExpanded(v => !v)}
                 style={{
@@ -744,13 +752,20 @@ const ProjectFinancials: React.FC = () => {
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '1rem' }}>{laborForecastExpanded ? '▲' : '▼'}</span>
               </div>
               {laborForecastExpanded && (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '290px' }} />
+                    <col style={{ width: '70px' }} />
+                    {laborForecastData.columns.map(col => (
+                      <col key={col.key} style={{ width: '60px' }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
-                      <th style={{ ...thStyle, textAlign: 'left', minWidth: '140px', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Trade</th>
-                      <th style={{ ...thStyle, minWidth: '72px' }}>Rem. Hrs</th>
+                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc', position: 'sticky', left: 0, zIndex: 1 }}>Trade</th>
+                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. Hrs</th>
                       {laborForecastData.columns.map(col => (
-                        <th key={col.key} style={{ ...thStyle, minWidth: '56px' }}>{col.label}</th>
+                        <th key={col.key} style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>{col.label}</th>
                       ))}
                     </tr>
                   </thead>

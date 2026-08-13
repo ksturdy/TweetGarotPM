@@ -37,9 +37,11 @@ const defaultDurationForValue = (contractValue: number): number => {
 
 interface Props {
   contract: VPContract;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: React.UIEventHandler<HTMLDivElement>;
 }
 
-const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
+const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll }) => {
   const queryClient = useQueryClient();
 
   const initialStart = dateToMonthOffset(contract.user_adjusted_start_date);
@@ -182,7 +184,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
   };
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'auto', marginBottom: '0.75rem' }}>
+    <div className="card" ref={scrollRef} onScroll={onScroll} style={{ padding: 0, overflow: 'auto', marginBottom: '0.75rem' }}>
       <div style={{
         padding: '0.4rem 0.75rem',
         borderBottom: '1px solid #e2e8f0',
@@ -198,7 +200,17 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
           Synced with Projected Revenue report
         </span>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '70px' }} />
+          <col style={{ width: '60px' }} />
+          <col style={{ width: '70px' }} />
+          <col style={{ width: '70px' }} />
+          <col style={{ width: '90px' }} />
+          {columns.map(col => (
+            <col key={col.key} style={{ width: col.isYear ? '70px' : '60px' }} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             <th style={{ ...headerCellStyle, textAlign: 'right', minWidth: '70px' }}>Backlog</th>
