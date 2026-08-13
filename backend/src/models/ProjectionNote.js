@@ -72,7 +72,7 @@ const ProjectionNote = {
   async create(data) {
     const {
       tenantId, projectId, snapshotId = null, costType = null, trade = null,
-      type, body,
+      type, body, reasoning = null,
       category = null, groupsAffected = null,
       assignedTo = null, dueDate = null,
       amount = null, recognizedInFinancials = false, recognizedAt = null,
@@ -82,16 +82,16 @@ const ProjectionNote = {
     const result = await db.query(
       `INSERT INTO projection_notes (
         tenant_id, project_id, snapshot_id, cost_type, trade,
-        type, body,
+        type, body, reasoning,
         category, groups_affected,
         assigned_to, due_date,
         amount, recognized_in_financials, recognized_at,
         created_by
-      ) VALUES ($1,$2,$3,$4,$5, $6,$7, $8,$9, $10,$11, $12,$13,$14, $15)
+      ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8, $9,$10, $11,$12, $13,$14,$15, $16)
       RETURNING id`,
       [
         tenantId, projectId, snapshotId, costType, trade,
-        type, body,
+        type, body, reasoning,
         category, groupsAffected,
         assignedTo, dueDate,
         amount, recognizedInFinancials, recognizedAt,
@@ -105,7 +105,7 @@ const ProjectionNote = {
   async update(id, tenantId, userId, data) {
     const fields = [];
     const params = [];
-    const allowed = ['body', 'cost_type', 'trade', 'assigned_to', 'due_date',
+    const allowed = ['body', 'reasoning', 'cost_type', 'trade', 'assigned_to', 'due_date',
                      'amount', 'recognized_in_financials', 'recognized_at',
                      'category', 'groups_affected'];
 

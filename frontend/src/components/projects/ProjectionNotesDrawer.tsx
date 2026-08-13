@@ -360,6 +360,8 @@ const NotesTab: React.FC<{
 
 /* ============ GAIN/FADE TAB ============ */
 
+const BODY_MAX = 150;
+
 const GainFadeTab: React.FC<{
   items: ProjectionNote[];
   onCreate: (p: CreateProjectionNotePayload) => void;
@@ -368,6 +370,7 @@ const GainFadeTab: React.FC<{
   creating: boolean;
 }> = ({ items, onCreate, onUpdate, onDelete, creating }) => {
   const [body, setBody] = useState('');
+  const [reasoning, setReasoning] = useState('');
   const [amount, setAmount] = useState('');
   const [direction, setDirection] = useState<'gain' | 'fade'>('gain');
   const [costType, setCostType] = useState<number | null>(null);
@@ -376,6 +379,7 @@ const GainFadeTab: React.FC<{
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editBody, setEditBody] = useState('');
+  const [editReasoning, setEditReasoning] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editDirection, setEditDirection] = useState<'gain' | 'fade'>('gain');
   const [editCostType, setEditCostType] = useState<number | null>(null);
@@ -385,6 +389,7 @@ const GainFadeTab: React.FC<{
     const v = typeof n.amount === 'string' ? parseFloat(n.amount) : (n.amount || 0);
     setEditingId(n.id);
     setEditBody(n.body);
+    setEditReasoning(n.reasoning ?? '');
     setEditAmount(String(Math.abs(v)));
     setEditDirection(v >= 0 ? 'gain' : 'fade');
     setEditCostType(n.cost_type ?? null);
@@ -395,10 +400,11 @@ const GainFadeTab: React.FC<{
 
   const saveEdit = (n: ProjectionNote) => {
     const num = parseFloat(editAmount.replace(/,/g, ''));
-    if (isNaN(num) || !editBody.trim()) return;
+    if (isNaN(num) || !editBody.trim() || !editReasoning.trim()) return;
     const signed = editDirection === 'gain' ? Math.abs(num) : -Math.abs(num);
     onUpdate(n.id, {
       body: editBody.trim(),
+      reasoning: editReasoning.trim(),
       amount: signed,
       cost_type: editCostType,
       groups_affected: editGroups.length > 0 ? editGroups : null,
@@ -410,19 +416,22 @@ const GainFadeTab: React.FC<{
     setGroups(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
 
+  const canSubmit = body.trim().length > 0 && body.length <= BODY_MAX && reasoning.trim().length > 0 && !!amount;
+
   const submit = () => {
-    if (!body.trim() || !amount) return;
+    if (!canSubmit) return;
     const num = parseFloat(amount.replace(/,/g, ''));
     if (isNaN(num)) return;
     const signed = direction === 'gain' ? Math.abs(num) : -Math.abs(num);
     onCreate({
       type: 'gain_fade', body: body.trim(),
+      reasoning: reasoning.trim(),
       amount: signed, cost_type: costType,
       groups_affected: groups.length > 0 ? groups : null,
       recognized_in_financials: recognized,
       recognized_at: recognized ? new Date().toISOString().split('T')[0] : null,
     });
-    setBody(''); setAmount(''); setDirection('gain'); setCostType(null);
+    setBody(''); setReasoning(''); setAmount(''); setDirection('gain'); setCostType(null);
     setRecognized(false); setGroups([]);
   };
 
@@ -439,10 +448,21 @@ const GainFadeTab: React.FC<{
   return (
     <div>
       <div style={cardStyle}>
-        <label style={labelStyle}>Description</label>
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={2}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.2rem' }}>
+          <label style={labelStyle}>Description</label>
+          <span style={{ fontSize: '0.65rem', color: body.length > BODY_MAX ? '#ef4444' : '#94a3b8' }}>
+            {body.length}/{BODY_MAX}
+          </span>
+        </div>
+        <textarea value={body} onChange={e => setBody(e.target.value.slice(0, BODY_MAX))} rows={2}
           placeholder="Describe the gain or fade..."
-          style={{ ...inputStyle, resize: 'vertical', minHeight: '50px' }} />
+          style={{ ...inputStyle, resize: 'vertical', minHeight: '50px', borderColor: body.length >= BODY_MAX ? '#fca5a5' : undefined }} />
+        <label style={{ ...labelStyle, marginTop: '0.5rem' }}>
+          Reasoning <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <textarea value={reasoning} onChange={e => setReasoning(e.target.value)} rows={3}
+          placeholder="Explain the basis for this gain or fade — what changed, why it's expected, and how it was estimated..."
+          style={{ ...inputStyle, resize: 'vertical', minHeight: '70px', borderColor: reasoning.trim().length === 0 && body.trim().length > 0 ? '#fca5a5' : undefined }} />
         <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
           <div>
             <label style={labelStyle}>Type</label>
@@ -486,7 +506,7 @@ const GainFadeTab: React.FC<{
           <input type="checkbox" checked={recognized} onChange={e => setRecognized(e.target.checked)} />
           Already recognized in financials
         </label>
-        <button onClick={submit} disabled={creating || !body.trim() || !amount}
+        <button onClick={submit} disabled={creating || !canSubmit}
           className="btn btn-primary" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
           {creating ? 'Adding...' : 'Add Item'}
         </button>
@@ -525,8 +545,18 @@ const GainFadeTab: React.FC<{
                         </select>
                       </td>
                       <td style={{ ...gfTd, textAlign: 'left' }}>
-                        <textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={2}
-                          style={{ fontSize: '0.7rem', width: '100%', padding: '0.15rem', border: '1px solid #cbd5e1', borderRadius: '4px', resize: 'vertical' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#475569', fontWeight: 600, textTransform: 'uppercase' }}>Description</span>
+                          <span style={{ fontSize: '0.6rem', color: editBody.length > BODY_MAX ? '#ef4444' : '#94a3b8' }}>{editBody.length}/{BODY_MAX}</span>
+                        </div>
+                        <textarea value={editBody} onChange={e => setEditBody(e.target.value.slice(0, BODY_MAX))} rows={2}
+                          style={{ fontSize: '0.7rem', width: '100%', padding: '0.15rem', border: '1px solid #cbd5e1', borderRadius: '4px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        <div style={{ fontSize: '0.6rem', color: '#475569', fontWeight: 600, textTransform: 'uppercase', margin: '0.25rem 0 0.15rem' }}>
+                          Reasoning <span style={{ color: '#ef4444' }}>*</span>
+                        </div>
+                        <textarea value={editReasoning} onChange={e => setEditReasoning(e.target.value)} rows={3}
+                          placeholder="Explain the reasoning..."
+                          style={{ fontSize: '0.7rem', width: '100%', padding: '0.15rem', border: `1px solid ${editReasoning.trim().length === 0 ? '#fca5a5' : '#cbd5e1'}`, borderRadius: '4px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       </td>
                       <td style={{ ...gfTd, textAlign: 'left' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
@@ -580,8 +610,11 @@ const GainFadeTab: React.FC<{
                     <td style={gfTd}>{format(new Date(n.created_at), 'MM/dd')}</td>
                     <td style={gfTd}>{costTypeLabel(n.cost_type)}</td>
                     <td style={{ ...gfTd, textAlign: 'left' }}>
-                      <div style={{ color: '#1e293b' }}>{n.body}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>by {n.created_by_name}</div>
+                      <div style={{ color: '#1e293b', fontWeight: 500 }}>{n.body}</div>
+                      {n.reasoning && (
+                        <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.2rem', whiteSpace: 'pre-wrap' }}>{n.reasoning}</div>
+                      )}
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>by {n.created_by_name}</div>
                     </td>
                     <td style={{ ...gfTd, textAlign: 'left' }}>
                       {n.groups_affected && n.groups_affected.length > 0 ? (
@@ -699,7 +732,7 @@ const labelStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   width: '100%', fontSize: '0.8rem', padding: '0.35rem 0.5rem',
   border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff',
-  boxSizing: 'border-box',
+  boxSizing: 'border-box', fontFamily: 'inherit',
 };
 
 const gfTh: React.CSSProperties = {

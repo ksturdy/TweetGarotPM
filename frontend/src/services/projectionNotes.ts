@@ -17,6 +17,7 @@ export interface ProjectionNote {
 
   type: ProjectionNoteType;
   body: string;
+  reasoning: string | null;
 
   // Homework
   assigned_to: number | null;
@@ -52,6 +53,7 @@ export interface ProjectionNoteCount {
 export interface CreateProjectionNotePayload {
   type: ProjectionNoteType;
   body: string;
+  reasoning?: string | null;
   cost_type?: number | null;
   trade?: string | null;
   category?: string | null;
@@ -66,6 +68,7 @@ export interface CreateProjectionNotePayload {
 
 export interface UpdateProjectionNotePayload {
   body?: string;
+  reasoning?: string | null;
   cost_type?: number | null;
   trade?: string | null;
   category?: string | null;

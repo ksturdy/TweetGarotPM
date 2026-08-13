@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { projectionNotesApi } from '../../services/projectionNotes';
-import { format } from 'date-fns';
+import { format, addMonths, differenceInMonths, parseISO, startOfMonth } from 'date-fns';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ProjectionNotesDrawer from '../../components/projects/ProjectionNotesDrawer';
 import ContractProjectionStrip from '../../components/projects/ContractProjectionStrip';
@@ -120,6 +120,80 @@ const SRow: React.FC<{ label: string; value: string; highlight?: boolean; valueC
   </div>
 );
 
+// ── Labor Forecast helpers ────────────────────────────────────────────────────
+
+type ContourType = 'flat'|'front'|'back'|'bell'|'turtle'|'double'|'early'|'late'|'scurve'|'rampup'|'rampdown'|'gradual';
+
+const laborContourMultipliers = (months: number, contour: ContourType): number[] => {
+  const mults: number[] = [];
+  for (let i = 0; i < months; i++) {
+    const pos = months > 1 ? i / (months - 1) : 0.5;
+    let w: number;
+    switch (contour) {
+      case 'front': w = 2 - pos * 1.5; break;
+      case 'back': w = 0.5 + pos * 1.5; break;
+      case 'bell': w = Math.exp(-Math.pow((pos - 0.5) * 3, 2)) * 1.5 + 0.5; break;
+      case 'turtle': w = Math.exp(-Math.pow((pos - 0.5) * 2, 2)) * 0.8 + 0.6; break;
+      case 'double': { const p1 = Math.exp(-Math.pow((pos - 0.25) * 5, 2)); const p2 = Math.exp(-Math.pow((pos - 0.75) * 5, 2)); w = (p1 + p2) * 0.8 + 0.4; break; }
+      case 'early': w = Math.exp(-Math.pow((pos - 0.2) * 4, 2)) * 1.8 + 0.2; break;
+      case 'late': w = Math.exp(-Math.pow((pos - 0.8) * 4, 2)) * 1.8 + 0.2; break;
+      case 'scurve': w = Math.exp(-Math.pow((pos - 0.5) * 2.5, 2)) * 1.2 + 0.4; break;
+      case 'rampup': w = 0.1 + pos * 1.9; break;
+      case 'rampdown': w = 2 - pos * 1.9; break;
+      case 'gradual': w = Math.pow(Math.sin(pos * Math.PI), 2) * 1.5 + 0.2; break;
+      default: w = 1; break;
+    }
+    mults.push(w);
+  }
+  const sum = mults.reduce((a, b) => a + b, 0);
+  return mults.map(w => (w / sum) * months);
+};
+
+const laborAutoContour = (pct: number): ContourType => {
+  if (pct < 15) return 'scurve';
+  if (pct < 40) return 'bell';
+  if (pct < 70) return 'back';
+  if (pct < 90) return 'rampdown';
+  return 'flat';
+};
+
+const LABOR_DURATION_RULES = [
+  { min: 0, max: 500000, months: 3 }, { min: 500000, max: 2000000, months: 6 },
+  { min: 2000000, max: 5000000, months: 8 }, { min: 5000000, max: 10000000, months: 12 },
+  { min: 10000000, max: Infinity, months: 24 },
+];
+const laborDuration = (val: number) => LABOR_DURATION_RULES.find(r => val >= r.min && val < r.max)?.months ?? 6;
+
+const dateToMonthOff = (dateStr: string | null | undefined): number | null => {
+  if (!dateStr) return null;
+  const d = parseISO(dateStr.slice(0, 10));
+  if (isNaN(d.getTime())) return null;
+  return differenceInMonths(startOfMonth(d), startOfMonth(new Date()));
+};
+
+const CONTOUR_POINTS: Record<ContourType, string> = {
+  flat: '0,8 24,8', front: '0,2 24,14', back: '0,14 24,2',
+  bell: '0,14 6,10 12,2 18,10 24,14', turtle: '0,12 4,10 8,6 12,5 16,6 20,10 24,12',
+  double: '0,12 4,6 8,10 12,14 16,10 20,6 24,12', early: '0,10 4,2 8,6 12,10 18,12 24,14',
+  late: '0,14 6,12 12,10 16,6 20,2 24,10', scurve: '0,13 4,12 8,8 12,4 16,4 20,8 24,13',
+  rampup: '0,14 24,2', rampdown: '0,2 24,14', gradual: '0,15 3,14 6,12 10,6 14,3 18,6 21,12 24,15',
+};
+const ContourIcon: React.FC<{ contour: ContourType }> = ({ contour }) => (
+  <svg width="24" height="16" style={{ verticalAlign: 'middle', marginRight: '3px' }}>
+    <polyline points={CONTOUR_POINTS[contour] ?? '0,8 24,8'} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const HPP = 173;
+const fmtHC = (hrs: number) => hrs < 0.05 ? '-' : hrs.toFixed(1);
+const TRADE_META = [
+  { key: 'pf' as const, label: 'Pipefitter (PF)', color: '#3b82f6' },
+  { key: 'sm' as const, label: 'Sheet Metal (SM)', color: '#10b981' },
+  { key: 'pl' as const, label: 'Plumbing (PL)', color: '#f59e0b' },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const ProjectFinancials: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -131,6 +205,7 @@ const ProjectFinancials: React.FC = () => {
   const [marginPctOverride, setMarginPctOverride] = useState('');
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+  const [laborForecastExpanded, setLaborForecastExpanded] = useState(false);
 
   const { data: noteCounts = [] } = useQuery({
     queryKey: ['projectionNoteCounts', projectId],
@@ -207,6 +282,58 @@ const ProjectFinancials: React.FC = () => {
         : 0;
     return rate > 0 ? summary.projected_cost / rate : 0;
   };
+
+  const laborForecastData = useMemo(() => {
+    if (!costSummary || !c) return null;
+    const pn = (v: number | string | null | undefined) => { const n = typeof v === 'string' ? parseFloat(v) : (v ?? 0); return isNaN(n as number) ? 0 : (n as number); };
+    const tradeHours = TRADE_META.map(({ key }) => {
+      const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === key);
+      const estH = rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
+      const jtdH = rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_hours, 0);
+      const estC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_cost, 0);
+      const jtdC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_cost, 0);
+      const projC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0);
+      const rate = jtdH > 0 ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
+      const projH = rate > 0 ? projC / rate : estH;
+      return { key, remaining: Math.max(0, projH - jtdH) };
+    });
+    const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
+    if (totalRem <= 0) return null;
+
+    const startOff = Math.max(0, dateToMonthOff(c.user_adjusted_start_date) ?? 0);
+    const earned = pn(c.earned_revenue); const proj = pn(c.projected_revenue);
+    const backlog = pn(c.backlog); const contractVal = pn(c.contract_amount) || proj;
+    const userEndOff = dateToMonthOff(c.user_adjusted_end_date);
+    let endOff: number;
+    if (userEndOff != null) {
+      endOff = Math.max(startOff + 1, Math.min(36, userEndOff));
+    } else if (backlog > 0) {
+      const pct = proj > 0 ? earned / proj : 0;
+      endOff = startOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - pct))));
+    } else {
+      endOff = startOff + 3;
+    }
+    const remMonths = endOff - startOff;
+    const pctComplete = proj > 0 ? (earned / proj) * 100 : 0;
+    const contour: ContourType = (c.user_selected_contour as ContourType) || laborAutoContour(pctComplete);
+
+    const now = new Date();
+    const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+    if (remMonths > 0) {
+      const mults = laborContourMultipliers(remMonths, contour);
+      for (let i = 0; i < remMonths; i++) {
+        const key = format(addMonths(now, startOff + i), 'yyyy-MM');
+        const pfH = (tradeHours[0].remaining / remMonths) * mults[i];
+        const smH = (tradeHours[1].remaining / remMonths) * mults[i];
+        const plH = (tradeHours[2].remaining / remMonths) * mults[i];
+        monthlyHours.set(key, { pf: pfH, sm: smH, pl: plH, total: pfH + smH + plH });
+      }
+    }
+    const columns = Array.from(monthlyHours.keys()).map(key => ({
+      key, label: format(parseISO(key + '-01'), 'MMM yy'),
+    }));
+    return { monthlyHours, columns, contour, tradeHours, totalRem, pctComplete };
+  }, [costSummary, c]);
 
   const captureSnapshotMutation = useMutation({
     mutationFn: () => projectSnapshotsApi.create(Number(projectId)),
@@ -571,6 +698,101 @@ const ProjectFinancials: React.FC = () => {
 
           {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
           <ContractProjectionStrip contract={c} />
+
+          {/* ===== LABOR FORECAST (expandable) ===== */}
+          {laborForecastData && (
+            <div className="card" style={{ padding: 0, overflow: laborForecastExpanded ? 'auto' : 'hidden', marginBottom: '0.75rem' }}>
+              <div
+                onClick={() => setLaborForecastExpanded(v => !v)}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  borderBottom: laborForecastExpanded ? '2px solid #e2e8f0' : undefined,
+                  backgroundColor: '#f8fafc', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  userSelect: 'none', whiteSpace: 'nowrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Labor Forecast</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <ContourIcon contour={laborForecastData.contour} />
+                    {laborForecastData.contour.charAt(0).toUpperCase() + laborForecastData.contour.slice(1)}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#3b82f6' }}>
+                    Rem: <strong>{fmtNum(laborForecastData.totalRem)} hrs</strong>
+                    {' '}({fmtHC(laborForecastData.totalRem / HPP)} people)
+                  </span>
+                  {TRADE_META.map(({ key, color }) => {
+                    const t = laborForecastData.tradeHours.find(h => h.key === key);
+                    if (!t || t.remaining < 0.5) return null;
+                    return (
+                      <span key={key} style={{ fontSize: '0.75rem', color }}>
+                        {key.toUpperCase()}: {fmtNum(t.remaining)} hrs
+                      </span>
+                    );
+                  })}
+                </div>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '1rem' }}>{laborForecastExpanded ? '▲' : '▼'}</span>
+              </div>
+              {laborForecastExpanded && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <th style={{ ...thStyle, textAlign: 'left', minWidth: '140px', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Trade</th>
+                      <th style={{ ...thStyle, minWidth: '72px' }}>Rem. Hrs</th>
+                      {laborForecastData.columns.map(col => (
+                        <th key={col.key} style={{ ...thStyle, minWidth: '56px' }}>{col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TRADE_META.map(({ key, label, color }) => {
+                      const t = laborForecastData.tradeHours.find(h => h.key === key);
+                      if (!t || t.remaining < 0.5) return null;
+                      return (
+                        <tr
+                          key={key}
+                          onClick={() => drillIn(1, key)}
+                          style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
+                        >
+                          <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>{label}</td>
+                          <td style={tdStyle}>{fmtNum(t.remaining)}</td>
+                          {laborForecastData.columns.map(col => {
+                            const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
+                            const hc = hrs / HPP;
+                            return (
+                              <td key={col.key} title={hc >= 0.05 ? `${fmtNum(hrs)} hrs` : undefined}
+                                style={{ ...tdStyle, color: hc >= 0.05 ? color : '#cbd5e1', fontWeight: hc >= 0.05 ? 600 : 400 }}>
+                                {fmtHC(hc)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Total</td>
+                      <td style={tfStyle}>{fmtNum(laborForecastData.totalRem)}</td>
+                      {laborForecastData.columns.map(col => {
+                        const h = laborForecastData.monthlyHours.get(col.key);
+                        const hc = (h?.total ?? 0) / HPP;
+                        return (
+                          <td key={col.key} title={hc >= 0.05 ? `${fmtNum(h?.total ?? 0)} hrs` : undefined}
+                            style={{ ...tfStyle, color: hc >= 0.05 ? '#1e293b' : '#cbd5e1' }}>
+                            {fmtHC(hc)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          )}
 
           {/* ===== COST TYPE TABLE ===== */}
           <div className="card" style={{ padding: 0, overflow: 'auto', marginBottom: '0.75rem' }}>
