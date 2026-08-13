@@ -205,7 +205,7 @@ const ProjectFinancials: React.FC = () => {
   const [marginPctOverride, setMarginPctOverride] = useState('');
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
-  const [laborForecastExpanded, setLaborForecastExpanded] = useState(false);
+  const [laborForecastExpanded, setLaborForecastExpanded] = useState(true);
 
   const { data: noteCounts = [] } = useQuery({
     queryKey: ['projectionNoteCounts', projectId],
