@@ -80,7 +80,9 @@ router.post('/:projectId/snapshots', async (req, res) => {
 
         // Margin
         gross_profit_dollars: vistaContract.gross_profit_dollars,
-        gross_profit_percent: vistaContract.gross_profit_percent,
+        gross_profit_percent: (vistaContract.gross_profit_percent >= 0.995 && project.override_gm_percent != null)
+          ? project.override_gm_percent
+          : vistaContract.gross_profit_percent,
         original_estimated_margin: project.override_original_estimated_margin ?? vistaContract.original_estimated_margin,
         original_estimated_margin_pct: project.override_original_estimated_margin_pct ?? vistaContract.original_estimated_margin_pct,
 
