@@ -186,6 +186,7 @@ const ContourIcon: React.FC<{ contour: ContourType }> = ({ contour }) => (
 
 const HPP = 173;
 const fmtHC = (hrs: number) => hrs < 0.05 ? '-' : hrs.toFixed(1);
+const fmtK = (v: number) => v < 500 ? '-' : v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
 const TRADE_META = [
   { key: 'pf' as const, label: 'Pipefitter (PF)', color: '#3b82f6' },
   { key: 'sm' as const, label: 'Sheet Metal (SM)', color: '#10b981' },
@@ -295,7 +296,7 @@ const ProjectFinancials: React.FC = () => {
       const projC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0);
       const rate = jtdH > 0 ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
-      return { key, remaining: Math.max(0, projH - jtdH) };
+      return { key, remaining: Math.max(0, projH - jtdH), rate };
     });
     const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
     if (totalRem <= 0) return null;
@@ -319,6 +320,7 @@ const ProjectFinancials: React.FC = () => {
 
     const now = new Date();
     const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+    const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
     if (remMonths > 0) {
       const mults = laborContourMultipliers(remMonths, contour);
       for (let i = 0; i < remMonths; i++) {
@@ -327,14 +329,19 @@ const ProjectFinancials: React.FC = () => {
         const smH = (tradeHours[1].remaining / remMonths) * mults[i];
         const plH = (tradeHours[2].remaining / remMonths) * mults[i];
         monthlyHours.set(key, { pf: pfH, sm: smH, pl: plH, total: pfH + smH + plH });
+        const pfC = pfH * tradeHours[0].rate;
+        const smC = smH * tradeHours[1].rate;
+        const plC = plH * tradeHours[2].rate;
+        monthlyCosts.set(key, { pf: pfC, sm: smC, pl: plC, total: pfC + smC + plC });
       }
     }
+    const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
     const displayMonths = Math.max(12, endOff + 2);
     const columns = Array.from({ length: displayMonths }, (_, i) => {
       const key = format(addMonths(now, i), 'yyyy-MM');
       return { key, label: format(addMonths(now, i), 'MMM yy') };
     });
-    return { monthlyHours, columns, contour, tradeHours, totalRem, pctComplete };
+    return { monthlyHours, monthlyCosts, columns, contour, tradeHours, totalRem, pctComplete, prevWeekCost };
   }, [costSummary, c]);
 
   const captureSnapshotMutation = useMutation({
@@ -752,32 +759,47 @@ const ProjectFinancials: React.FC = () => {
                       const t = laborForecastData.tradeHours.find(h => h.key === key);
                       if (!t || t.remaining < 0.5) return null;
                       return (
-                        <tr
-                          key={key}
-                          onClick={() => drillIn(1, key)}
-                          style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
-                        >
-                          <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>{label}</td>
-                          <td style={tdStyle}>{fmtNum(t.remaining)}</td>
-                          {laborForecastData.columns.map(col => {
-                            const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
-                            const hc = hrs / HPP;
-                            return (
-                              <td key={col.key} title={hc >= 0.05 ? `${fmtNum(hrs)} hrs` : undefined}
-                                style={{ ...tdStyle, color: hc >= 0.05 ? color : '#cbd5e1', fontWeight: hc >= 0.05 ? 600 : 400 }}>
-                                {fmtHC(hc)}
-                              </td>
-                            );
-                          })}
-                        </tr>
+                        <React.Fragment key={key}>
+                          <tr
+                            onClick={() => drillIn(1, key)}
+                            style={{ cursor: 'pointer' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = ''; }}
+                          >
+                            <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>{label}</td>
+                            <td style={tdStyle}>{fmtNum(t.remaining)}</td>
+                            {laborForecastData.columns.map(col => {
+                              const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
+                              const hc = hrs / HPP;
+                              return (
+                                <td key={col.key} title={hc >= 0.05 ? `${fmtNum(hrs)} hrs` : undefined}
+                                  style={{ ...tdStyle, color: hc >= 0.05 ? color : '#cbd5e1', fontWeight: hc >= 0.05 ? 600 : 400 }}>
+                                  {fmtHC(hc)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ ...tdStyle, textAlign: 'left', fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '1.2rem', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>
+                              {t.rate > 0 ? `@ $${t.rate.toFixed(0)}/hr` : ''}
+                            </td>
+                            <td style={{ ...tdStyle, fontSize: '0.7rem', color: '#94a3b8' }}>—</td>
+                            {laborForecastData.columns.map(col => {
+                              const cost = laborForecastData.monthlyCosts.get(col.key)?.[key] ?? 0;
+                              return (
+                                <td key={col.key} style={{ ...tdStyle, fontSize: '0.7rem', color: cost > 500 ? '#64748b' : '#cbd5e1', fontStyle: 'italic' }}>
+                                  {fmtK(cost)}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
-                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Total</td>
+                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Total Headcount</td>
                       <td style={tfStyle}>{fmtNum(laborForecastData.totalRem)}</td>
                       {laborForecastData.columns.map(col => {
                         const h = laborForecastData.monthlyHours.get(col.key);
@@ -786,6 +808,42 @@ const ProjectFinancials: React.FC = () => {
                           <td key={col.key} title={hc >= 0.05 ? `${fmtNum(h?.total ?? 0)} hrs` : undefined}
                             style={{ ...tfStyle, color: hc >= 0.05 ? '#1e293b' : '#cbd5e1' }}>
                             {fmtHC(hc)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Proj Monthly Cost</td>
+                      <td style={{ ...tfStyle, color: '#64748b' }}>—</td>
+                      {laborForecastData.columns.map(col => {
+                        const cost = laborForecastData.monthlyCosts.get(col.key)?.total ?? 0;
+                        return (
+                          <td key={col.key} style={{ ...tfStyle, color: cost > 500 ? '#1e293b' : '#cbd5e1' }}>
+                            {fmtK(cost)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr style={{ backgroundColor: '#eff6ff' }}>
+                      <td style={{ ...tfStyle, textAlign: 'left', color: '#2563eb', position: 'sticky', left: 0, backgroundColor: '#eff6ff', zIndex: 1 }}>
+                        Proj Weekly Cost
+                        {laborForecastData.prevWeekCost > 0 && (
+                          <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.7rem', marginLeft: '0.4rem' }}>
+                            (Prev Wk: {fmtK(laborForecastData.prevWeekCost)})
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...tfStyle, color: '#64748b' }}>—</td>
+                      {laborForecastData.columns.map(col => {
+                        const monthlyCost = laborForecastData.monthlyCosts.get(col.key)?.total ?? 0;
+                        const weeklyCost = monthlyCost / 4.33;
+                        const prevWk = laborForecastData.prevWeekCost;
+                        const isHigh = prevWk > 0 && weeklyCost > prevWk * 1.1;
+                        const isLow = prevWk > 0 && weeklyCost > 0 && weeklyCost < prevWk * 0.9;
+                        return (
+                          <td key={col.key} title={weeklyCost > 0 ? `${fmtK(monthlyCost)}/mo ÷ 4.33 wks` : undefined}
+                            style={{ ...tfStyle, color: weeklyCost > 100 ? (isHigh ? '#ef4444' : isLow ? '#10b981' : '#2563eb') : '#cbd5e1', fontWeight: 700 }}>
+                            {fmtK(weeklyCost)}
                           </td>
                         );
                       })}
