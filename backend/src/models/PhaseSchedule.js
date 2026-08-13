@@ -207,6 +207,11 @@ const PhaseSchedule = {
 
     if (fields.length === 0) return null;
 
+    // Mark name as manually customized so Vista syncs don't overwrite it
+    if (data.name !== undefined) {
+      fields.push(`name_is_auto = FALSE`);
+    }
+
     fields.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id, tenantId);
 
@@ -225,6 +230,57 @@ const PhaseSchedule = {
       [id, tenantId]
     );
     return result.rows[0];
+  },
+
+  // After a Vista sync, rebuild names for auto-generated schedule items so
+  // description changes in Vista propagate to the phase schedule grid.
+  // Only touches items where name_is_auto = true (user-renamed items are left alone).
+  // Handles both "individual" items (1 phase code, name = "Desc (CostType)") and
+  // "phase" items (multiple cost types, name = phase_description).
+  async syncNamesFromPhaseCodes(tenantId) {
+    // Single-phase-code items — name format is "{phase_description} ({CostTypeName})"
+    const singleResult = await db.query(
+      `UPDATE phase_schedule_items psi
+       SET name = pc.phase_description || ' (' ||
+         CASE pc.cost_type
+           WHEN 1 THEN 'Labor'
+           WHEN 2 THEN 'Material'
+           WHEN 3 THEN 'Subcontracts'
+           WHEN 4 THEN 'Rentals'
+           WHEN 5 THEN 'MEP Equipment'
+           WHEN 6 THEN 'General Conditions'
+           ELSE 'CT' || pc.cost_type::text
+         END || ')',
+         updated_at = CURRENT_TIMESTAMP
+       FROM vp_phase_codes pc
+       WHERE psi.tenant_id = $1
+         AND pc.tenant_id = $1
+         AND psi.name_is_auto = TRUE
+         AND array_length(psi.phase_code_ids, 1) = 1
+         AND pc.id = psi.phase_code_ids[1]
+         AND pc.phase_description IS NOT NULL
+         AND pc.phase_description != ''`,
+      [tenantId]
+    );
+
+    // Multi-phase-code items grouped by phase — name is just the phase_description.
+    // Use the first phase code's description (they share the same phase within a job).
+    const multiResult = await db.query(
+      `UPDATE phase_schedule_items psi
+       SET name = pc.phase_description,
+           updated_at = CURRENT_TIMESTAMP
+       FROM vp_phase_codes pc
+       WHERE psi.tenant_id = $1
+         AND pc.tenant_id = $1
+         AND psi.name_is_auto = TRUE
+         AND array_length(psi.phase_code_ids, 1) > 1
+         AND pc.id = psi.phase_code_ids[1]
+         AND pc.phase_description IS NOT NULL
+         AND pc.phase_description != ''`,
+      [tenantId]
+    );
+
+    return singleResult.rowCount + multiResult.rowCount;
   },
 
   async bulkCreateFromPhaseCodes(projectId, phaseCodeIds, groupBy, tenantId, userId) {

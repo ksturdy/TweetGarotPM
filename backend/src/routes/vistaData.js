@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const VistaData = require('../models/VistaData');
+const PhaseSchedule = require('../models/PhaseSchedule');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const fs = require('fs');
@@ -646,6 +647,10 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
         // Auto-link phase codes to projects via contracts
         const linkedCount = await VistaData.linkPhaseCodesByContract(req.tenantId);
         console.log(`[Vista Import] Phase codes auto-linked to projects: ${linkedCount}`);
+
+        // Propagate any description changes from Vista into phase schedule item names
+        const namesSynced = await PhaseSchedule.syncNamesFromPhaseCodes(req.tenantId);
+        console.log(`[Vista Import] Phase schedule item names synced: ${namesSynced}`);
 
         results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, reconciliations_staged: reconciliationCount, batch_id: batch.id };
         results.sheetsProcessed.push(phaseCodesSheetName);

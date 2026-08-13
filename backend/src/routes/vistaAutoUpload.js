@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const VistaData = require('../models/VistaData');
+const PhaseSchedule = require('../models/PhaseSchedule');
 
 // Helper function to convert Excel serial date to JS Date
 const excelDateToJS = (excelDate) => {
@@ -576,6 +577,10 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
 
         const linkedCount = await VistaData.linkPhaseCodesByContract(req.tenantId);
         console.log(`[Vista Auto-Import] Phase codes auto-linked to projects: ${linkedCount}`);
+
+        // Propagate any description changes from Vista into phase schedule item names
+        const namesSynced = await PhaseSchedule.syncNamesFromPhaseCodes(req.tenantId);
+        console.log(`[Vista Auto-Import] Phase schedule item names synced: ${namesSynced}`);
 
         results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, reconciliations_staged: reconciliationCount, batch_id: batch.id };
         results.sheetsProcessed.push(phaseCodesSheetName);
