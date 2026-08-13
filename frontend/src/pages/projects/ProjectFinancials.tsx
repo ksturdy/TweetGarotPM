@@ -752,7 +752,7 @@ const ProjectFinancials: React.FC = () => {
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '1rem' }}>{laborForecastExpanded ? '▲' : '▼'}</span>
               </div>
               {laborForecastExpanded && (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
+                <table style={{ width: `${360 + laborForecastData.columns.length * 60}px`, borderCollapse: 'collapse', fontSize: '0.75rem', tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '290px' }} />
                     <col style={{ width: '70px' }} />

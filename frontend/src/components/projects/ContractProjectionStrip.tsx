@@ -200,7 +200,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
           Synced with Projected Revenue report
         </span>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <table style={{ width: `${360 + columns.reduce((s, col) => s + (col.isYear ? 70 : 60), 0)}px`, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '70px' }} />
           <col style={{ width: '60px' }} />
