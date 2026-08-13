@@ -101,6 +101,7 @@ const EmployeeResumeForm: React.FC = () => {
   const [templateId, setTemplateId] = useState<number | null>(null);
 
   const [linkedEmployeeId, setLinkedEmployeeId] = useState<number | null>(null);
+  const [linkedEmployeeHireDate, setLinkedEmployeeHireDate] = useState<string | null>(null);
   const [empSearch, setEmpSearch] = useState('');
   const [empPickerOpen, setEmpPickerOpen] = useState(false);
   const empPickerRef = useRef<HTMLDivElement>(null);
@@ -147,6 +148,23 @@ const EmployeeResumeForm: React.FC = () => {
     },
     enabled: empPickerOpen && empSearch.trim().length >= 1,
   });
+
+  // Fetch linked employee details to get hire_date (needed in edit mode where link is pre-saved)
+  const { data: linkedEmployeeData } = useQuery<any>({
+    queryKey: ['employee', linkedEmployeeId],
+    queryFn: async () => {
+      const res = await api.get(`/employees/${linkedEmployeeId}`);
+      return res.data.data ?? res.data;
+    },
+    enabled: !!linkedEmployeeId,
+  });
+
+  // When linked employee data loads (edit mode), surface the hire_date for display
+  useEffect(() => {
+    if (linkedEmployeeData?.hire_date) {
+      setLinkedEmployeeHireDate(linkedEmployeeData.hire_date);
+    }
+  }, [linkedEmployeeData?.hire_date]);
 
   // Close employee picker on outside click
   useEffect(() => {
@@ -746,7 +764,7 @@ const EmployeeResumeForm: React.FC = () => {
                   type="button"
                   className="btnSecondary"
                   style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem' }}
-                  onClick={() => { setLinkedEmployeeId(null); setEmpSearch(''); }}
+                  onClick={() => { setLinkedEmployeeId(null); setEmpSearch(''); setLinkedEmployeeHireDate(null); }}
                 >
                   Unlink
                 </button>
@@ -789,12 +807,22 @@ const EmployeeResumeForm: React.FC = () => {
                           setLinkedEmployeeId(emp.id);
                           setEmpPickerOpen(false);
                           setEmpSearch('');
+                          const hireDate = emp.hire_date || null;
+                          setLinkedEmployeeHireDate(hireDate);
+                          let computedYears = '';
+                          if (hireDate) {
+                            const [y, m, d] = hireDate.split('T')[0].split('-').map(Number);
+                            const hire = new Date(y, m - 1, d);
+                            const years = Math.floor((Date.now() - hire.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                            computedYears = years >= 0 ? String(years) : '';
+                          }
                           setFormData(prev => ({
                             ...prev,
                             employee_name: `${emp.first_name} ${emp.last_name}`.trim(),
                             job_title: prev.job_title || emp.job_title || emp.title || '',
                             phone: prev.phone || formatPhoneNumber(emp.mobile_phone || emp.phone || ''),
                             email: prev.email || (emp.email || ''),
+                            years_experience: computedYears || prev.years_experience,
                           }));
                         }}
                       >
@@ -854,6 +882,15 @@ const EmployeeResumeForm: React.FC = () => {
                 min="0"
                 max="99"
               />
+              {linkedEmployeeHireDate && (() => {
+                const [y, m, d] = linkedEmployeeHireDate.split('T')[0].split('-').map(Number);
+                const formatted = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                return (
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.3rem' }}>
+                    Hire date: {formatted}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
