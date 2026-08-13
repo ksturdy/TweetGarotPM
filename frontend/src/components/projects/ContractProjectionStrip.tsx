@@ -117,7 +117,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
     if (backlog > 0) {
       if (endMonths != null) {
         const endMonthsFromNow = Math.max(1, Math.min(36, endMonths));
-        remainingMonths = Math.max(1, endMonthsFromNow - startOffset);
+        remainingMonths = Math.max(1, endMonthsFromNow - startOffset + 1);
       } else {
         const totalDuration = defaultDurationForValue(contractValue);
         const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -233,7 +233,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
                   onChange={(e) => {
                     const newStart = parseInt(e.target.value);
                     setStartMonths(newStart);
-                    const currentEnd = startOffset + remainingMonths;
+                    const currentEnd = endMonths ?? (startOffset + remainingMonths - 1);
                     if (newStart >= currentEnd) {
                       const newEnd = newStart + 1;
                       setEndMonths(newEnd);
@@ -264,7 +264,7 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract }) => {
             <td style={{ ...cellStyle, textAlign: 'center' }}>
               {backlog > 0 ? (
                 <select
-                  value={startOffset + remainingMonths}
+                  value={endMonths ?? (startOffset + remainingMonths - 1)}
                   onChange={(e) => {
                     const newEndMonths = parseInt(e.target.value);
                     setEndMonths(newEndMonths);

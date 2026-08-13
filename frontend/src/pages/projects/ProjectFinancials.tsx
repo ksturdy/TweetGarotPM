@@ -306,7 +306,7 @@ const ProjectFinancials: React.FC = () => {
     const userEndOff = dateToMonthOff(c.user_adjusted_end_date);
     let endOff: number;
     if (userEndOff != null) {
-      endOff = Math.max(startOff + 1, Math.min(36, userEndOff));
+      endOff = Math.max(startOff + 1, Math.min(37, userEndOff + 1));
     } else if (backlog > 0) {
       const pct = proj > 0 ? earned / proj : 0;
       endOff = startOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - pct))));

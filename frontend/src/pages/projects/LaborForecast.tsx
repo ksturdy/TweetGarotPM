@@ -767,7 +767,7 @@ const LaborForecast: React.FC = () => {
       let endOffset: number;
 
       if (userAdjustedEnd !== undefined) {
-        endOffset = Math.max(startOffset + 1, Math.min(36, userAdjustedEnd));
+        endOffset = Math.max(startOffset + 1, Math.min(37, userAdjustedEnd + 1));
       } else if (backlog > 0) {
         const totalDuration = getDurationForValue(contractValue);
         const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -2248,7 +2248,7 @@ const LaborForecast: React.FC = () => {
                       </td>
                       <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
                         <select
-                          value={p.startOffset + p.remainingMonths}
+                          value={adjustedEndMonths[p.contract.id] ?? (p.startOffset + p.remainingMonths - 1)}
                           onChange={(e) => {
                             const v = parseInt(e.target.value);
                             setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: v }));
