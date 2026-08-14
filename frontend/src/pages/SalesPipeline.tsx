@@ -1467,6 +1467,49 @@ const SalesPipeline: React.FC = () => {
             </tbody>
           </table>
           </div>
+
+          {/* Mobile card list — shown only on small screens via CSS */}
+          <div className="sales-mobile-cards">
+            {sortedOpportunities.map((opp) => {
+              const apiOpp = apiOpportunities.find(a => a.id === opp.id);
+              return (
+                <div
+                  key={opp.id}
+                  className="sales-mobile-card"
+                  onClick={() => {
+                    if (apiOpp) {
+                      setSelectedOpportunity(apiOpp);
+                      setIsModalOpen(true);
+                    }
+                  }}
+                >
+                  <div className="sales-mobile-card-main">
+                    <div className="sales-project-icon" style={{ background: opp.iconGradient }}>
+                      {opp.icon}
+                    </div>
+                    <div className="sales-mobile-card-info">
+                      <div className="sales-mobile-card-name">{opp.name}</div>
+                      {opp.company && <div className="sales-mobile-card-company">{opp.company}</div>}
+                      {apiOpp?.general_contractor && (
+                        <div className="sales-mobile-card-gc">GC: {apiOpp.general_contractor}</div>
+                      )}
+                    </div>
+                    <div className="sales-mobile-card-right">
+                      <div className="sales-mobile-card-value">{formatCurrency(opp.value)}</div>
+                      <span className={`sales-stage-badge ${opp.stage}`}>{opp.stageName}</span>
+                    </div>
+                  </div>
+                  <div className="sales-mobile-card-footer">
+                    <span>{new Date(opp.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    {opp.salesperson.name !== 'Unassigned' && <span>{opp.salesperson.name}</span>}
+                  </div>
+                </div>
+              );
+            })}
+            {sortedOpportunities.length === 0 && (
+              <div className="sales-mobile-empty">No opportunities match the current filters.</div>
+            )}
+          </div>
         </div>
       )}
 
