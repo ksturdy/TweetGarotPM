@@ -76,6 +76,8 @@ const TradeShowList: React.FC = () => {
   const [salesLeadFilter, setSalesLeadFilter] = useState<string>('');
   const [coordinatorFilter, setCoordinatorFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortKey, setSortKey] = useState<string>('event_start_date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const { data: tradeShows, isLoading, error } = useQuery({
     queryKey: ['trade-shows'],
@@ -130,6 +132,40 @@ const TradeShowList: React.FC = () => {
       return true;
     });
   }, [tradeShows, statusFilter, yearFilter, salesLeadFilter, coordinatorFilter, searchQuery]);
+
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      let av: string | number | null = null;
+      let bv: string | number | null = null;
+      switch (sortKey) {
+        case 'name':       av = a.name?.toLowerCase() ?? ''; bv = b.name?.toLowerCase() ?? ''; break;
+        case 'status':     av = a.status ?? ''; bv = b.status ?? ''; break;
+        case 'event_start_date': av = a.event_start_date ?? ''; bv = b.event_start_date ?? ''; break;
+        case 'city':       av = [a.city, a.state].filter(Boolean).join(', ').toLowerCase(); bv = [b.city, b.state].filter(Boolean).join(', ').toLowerCase(); break;
+        case 'sales_lead': av = a.sales_lead_name?.toLowerCase() ?? ''; bv = b.sales_lead_name?.toLowerCase() ?? ''; break;
+        case 'cost':       av = totalCost(a) ?? -1; bv = totalCost(b) ?? -1; break;
+        case 'attendees':  av = a.attendee_count ?? 0; bv = b.attendee_count ?? 0; break;
+        default: return 0;
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortIcon = (key: string) => (
+    <span className="sales-sort-icon">{sortKey === key ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+  );
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => tradeShowsApi.delete(id),
@@ -330,21 +366,21 @@ const TradeShowList: React.FC = () => {
             <table className="sales-table" style={{ tableLayout: 'auto' }}>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Event Date</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>Name {sortIcon('name')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('event_start_date')}>Event Date {sortIcon('event_start_date')}</th>
                   <th>Venue</th>
-                  <th>City / State</th>
-                  <th>Sales Lead</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('city')}>City / State {sortIcon('city')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('sales_lead')}>Sales Lead {sortIcon('sales_lead')}</th>
                   <th>Coordinator</th>
-                  <th style={{ textAlign: 'center' }}>Attendees</th>
-                  <th style={{ textAlign: 'right' }}>Total Cost</th>
+                  <th style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('attendees')}>Attendees {sortIcon('attendees')}</th>
+                  <th style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('cost')}>Total Cost {sortIcon('cost')}</th>
                   <th>Reg. Deadline</th>
                   <th style={{ width: '60px' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(show => {
+                {sorted.map(show => {
                   const cost = totalCost(show);
                   return (
                     <tr
