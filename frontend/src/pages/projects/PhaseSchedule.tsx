@@ -3991,6 +3991,12 @@ const PhaseSchedule: React.FC = () => {
     queryFn: () => projectLaborRatesApi.list(Number(projectId)).then(r => r.data),
   });
 
+  const { data: projectJobs = [] } = useQuery({
+    queryKey: ['projectJobs', projectId],
+    queryFn: () => vistaDataService.getProjectJobs(Number(projectId)),
+    enabled: !!projectId,
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: { projectId: number; phaseCodeIds: number[]; groupBy: string }) => phaseScheduleApi.createItems(data),
     onSuccess: () => {
@@ -4086,8 +4092,18 @@ const PhaseSchedule: React.FC = () => {
     return Array.from(set).sort();
   }, [scheduleItems]);
 
+  const jobFilteredPhaseCodeIds = useMemo(() => {
+    if (selectedJobFilter.size === 0) return null;
+    const ids = new Set<number>();
+    phaseCodes.forEach(pc => { if (selectedJobFilter.has(pc.job)) ids.add(pc.id); });
+    return ids;
+  }, [phaseCodes, selectedJobFilter]);
+
   const filteredItems = useMemo(() => {
     let result = scheduleItems;
+    if (jobFilteredPhaseCodeIds) {
+      result = result.filter(i => i.phase_code_ids?.some(id => jobFilteredPhaseCodeIds.has(id)));
+    }
     if (costTypeFilter.size > 0) {
       result = result.filter(i => i.cost_types?.some(ct => costTypeFilter.has(ct)));
     }
@@ -4122,7 +4138,7 @@ const PhaseSchedule: React.FC = () => {
       });
     }
     return result;
-  }, [scheduleItems, filterText, sortDir, costTypeFilter, prefixFilter]);
+  }, [scheduleItems, filterText, sortDir, costTypeFilter, prefixFilter, jobFilteredPhaseCodeIds]);
 
   const costTypeGroups = useMemo((): CostTypeGroup[] => {
     const groupMap = new Map<number, PhaseScheduleItem[]>();
@@ -4665,6 +4681,47 @@ const PhaseSchedule: React.FC = () => {
           ↓ Export
         </button>
       </div>
+
+      {/* Job filter row */}
+      {projectJobs.length > 1 && (
+        <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Jobs:</span>
+          <button
+            onClick={() => setSelectedJobFilter(new Set())}
+            style={{
+              fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+              border: selectedJobFilter.size === 0 ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+              background: selectedJobFilter.size === 0 ? '#eff6ff' : '#fff',
+              cursor: 'pointer', fontWeight: selectedJobFilter.size === 0 ? 600 : 400,
+            }}
+          >
+            All Jobs ({projectJobs.length})
+          </button>
+          {projectJobs.map(j => (
+            <button
+              key={j.job}
+              onClick={() => toggleJobFilter(j.job)}
+              title={j.job_description}
+              style={{
+                fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+                border: selectedJobFilter.has(j.job) ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                background: selectedJobFilter.has(j.job) ? '#eff6ff' : '#fff',
+                cursor: 'pointer', fontWeight: selectedJobFilter.has(j.job) ? 600 : 400,
+              }}
+            >
+              {j.job}
+            </button>
+          ))}
+          {selectedJobFilter.size > 0 && selectedJobFilter.size <= 2 && (() => {
+            const descs = projectJobs.filter(j => selectedJobFilter.has(j.job)).map(j => j.job_description).filter(Boolean);
+            return descs.length ? (
+              <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic', marginLeft: '0.25rem' }}>
+                — {descs.join(', ')}
+              </span>
+            ) : null;
+          })()}
+        </div>
+      )}
 
       {/* Reconciliation review banner */}
       {pendingReconciliations.length > 0 && (
