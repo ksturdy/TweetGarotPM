@@ -1,6 +1,9 @@
 const express = require('express');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 const EmployeeResume = require('../models/EmployeeResume');
 const ResumeProject = require('../models/ResumeProject');
 const ResumeTemplate = require('../models/ResumeTemplate');
@@ -9,6 +12,7 @@ const { tenantContext } = require('../middleware/tenant');
 const { createUploadMiddleware } = require('../middleware/uploadHandler');
 const { deleteFile, getFileUrl, getFileStream } = require('../utils/fileStorage');
 const { isR2Enabled } = require('../config/r2Client');
+const config = require('../config');
 const { generateResumeHtml } = require('../utils/resumePdfGenerator');
 const { generateResumePdfBuffer } = require('../utils/resumePdfBuffer');
 
@@ -50,6 +54,18 @@ async function resolvePhotoUrl(photoPath) {
  * Read a photo from R2 or local disk and return a data:URL suitable for embedding
  * inside the generated resume HTML/PDF. Returns '' on any failure.
  */
+function fetchUrl(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    client.get(url, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
 async function readPhotoAsDataUrl(photoPath) {
   if (!photoPath) return '';
   const ext = (photoPath.split('.').pop() || '').toLowerCase();
@@ -66,10 +82,23 @@ async function readPhotoAsDataUrl(photoPath) {
       for await (const chunk of stream) chunks.push(chunk);
       buffer = Buffer.concat(chunks);
     } else {
+      const normalized = photoPath.replace(/\\/g, '/');
+      const idx = normalized.indexOf('uploads/');
+      const relativePath = idx !== -1 ? normalized.substring(idx) : normalized;
       const fullPath = path.isAbsolute(photoPath)
         ? photoPath
-        : path.join(__dirname, '../../', photoPath);
-      buffer = await fs.readFile(fullPath);
+        : path.join(__dirname, '../../', relativePath);
+
+      if (fsSync.existsSync(fullPath)) {
+        buffer = await fs.readFile(fullPath);
+      } else if (config.r2.publicUrl) {
+        // Photo lives in R2 (uploaded on production); fetch via public URL.
+        const url = `${config.r2.publicUrl}/${photoPath}`;
+        console.log('[Resume Photos] Local file missing, fetching from R2 public URL:', url);
+        buffer = await fetchUrl(url);
+      } else {
+        throw new Error(`File not found locally and no R2 public URL configured: ${fullPath}`);
+      }
     }
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
   } catch (err) {

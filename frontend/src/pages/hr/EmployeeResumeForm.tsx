@@ -5,7 +5,6 @@ import { employeeResumesApi, Certification, Language, Reference, ResumeProject, 
 import { resumeTemplatesApi, ResumeTemplate } from '../../services/resumeTemplates';
 import api from '../../services/api';
 import ResumeProjectManager from '../../components/resumes/ResumeProjectManager';
-import ResumePreviewModal from '../../components/resumes/ResumePreviewModal';
 import ResumePreview from '../../components/resumes/ResumePreview';
 import RankableSectionList from '../../components/resumes/RankableSectionList';
 import ImageCropper from '../../components/common/ImageCropper';
@@ -97,7 +96,6 @@ const EmployeeResumeForm: React.FC = () => {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
   const [templateId, setTemplateId] = useState<number | null>(null);
 
   const [linkedEmployeeId, setLinkedEmployeeId] = useState<number | null>(null);
@@ -604,6 +602,24 @@ const EmployeeResumeForm: React.FC = () => {
   // Section limits from selected template
   const limits = selectedTemplate?.section_limits || {};
 
+  const handleDownloadPdf = async () => {
+    if (!id) return;
+    try {
+      const response = await employeeResumesApi.downloadPdf(Number(id));
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Resume-${formData.employee_name.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to download PDF.');
+    }
+  };
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -711,14 +727,16 @@ const EmployeeResumeForm: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <button
-            type="button"
-            className="btnSecondary"
-            onClick={() => setShowPreview(true)}
-            style={{ marginRight: '0.5rem' }}
-          >
-            👁️ Full Preview
-          </button>
+          {isEditing && (
+            <button
+              type="button"
+              className="btnSecondary"
+              onClick={handleDownloadPdf}
+              style={{ marginRight: '0.5rem' }}
+            >
+              Download PDF
+            </button>
+          )}
           <button className="btnSecondary" onClick={() => navigate('/employee-resumes')}>
             Cancel
           </button>
@@ -1536,16 +1554,6 @@ const EmployeeResumeForm: React.FC = () => {
         </div>
       </aside>
       </div>
-
-      {/* Full-screen Preview Modal */}
-      <ResumePreviewModal
-        resume={previewResume}
-        projects={projects}
-        isOpen={showPreview}
-        onClose={() => setShowPreview(false)}
-        photoPreviewUrl={photoPreview || undefined}
-        template={selectedTemplate}
-      />
 
       {/* Photo Crop Modal */}
       {cropImageSrc && (

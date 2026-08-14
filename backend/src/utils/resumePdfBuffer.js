@@ -19,12 +19,21 @@ async function generateResumePdfBuffer(resume, projects, photoBase64, template =
     await page.setViewport({ width: 816, height: 1056 }); // Letter size
 
     await page.setContent(html, {
-      waitUntil: ['load', 'domcontentloaded'],
+      waitUntil: 'networkidle0',
       timeout: 30000,
     });
 
-    // Wait for images to load (especially the employee photo)
-    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
+    // Wait for all images to finish decoding before capturing the PDF.
+    // img.decode() resolves only when the image is decoded and ready to paint,
+    // which is more reliable than a fixed timeout for large base64 data URLs.
+    await page.evaluate(async () => {
+      const imgs = Array.from(document.querySelectorAll('img'));
+      await Promise.all(
+        imgs.map(img =>
+          img.decode ? img.decode().catch(() => {}) : Promise.resolve()
+        )
+      );
+    });
 
     const pdfBuffer = await page.pdf({
       format: 'Letter',
