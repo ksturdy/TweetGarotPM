@@ -477,31 +477,17 @@ const PhaseSchedule = {
           continue;
         }
 
-        // If user set UOM, honor it; otherwise infer from the data.
+        // Infer UOM for auto-set and LF cache selection (explicit UOM only affects PI, not quantity).
         const useUom = explicitUom || (a.pipe_count > 0 ? 'LF' : 'EA');
         const inferred = !explicitUom;
-        let newQty;
-        let newInstalled;
-        if (useUom === 'LF') {
-          if (!inferred) {
-            // User explicitly chose LF — sum length across all parts for this phase,
-            // not just pipe-classified ones (fittings etc. may carry lengths too).
-            newQty = Number(a.all_length);
-            newInstalled = Number(a.all_length_installed);
-          } else {
-            // Auto-inferred LF means we found pipe-classified parts; use pipe length only.
-            newQty = Number(a.pipe_length);
-            newInstalled = Number(a.pipe_length_installed);
-          }
-        } else {
-          newQty = a.total_count;
-          newInstalled = a.installed_count;
-        }
 
+        // quantity/quantity_installed always store the EA count — UOM controls PI, not this column.
+        const newQty = a.total_count;
+        const newInstalled = a.installed_count;
+
+        // LF cache: explicit LF sums all parts; inferred LF uses pipe-classified only.
         const cachedLf = inferred ? Number(a.pipe_length) : Number(a.all_length);
         const cachedLfInstalled = inferred ? Number(a.pipe_length_installed) : Number(a.all_length_installed);
-        const cachedCount = a.total_count;
-        const cachedCountInstalled = a.installed_count;
 
         await client.query(
           `UPDATE phase_schedule_items
@@ -512,7 +498,7 @@ const PhaseSchedule = {
                updated_at = NOW()
            WHERE id = $4 AND tenant_id = $5`,
           [newQty, newInstalled, useUom, item.id, tenantId,
-           cachedLf, cachedLfInstalled, cachedCount, cachedCountInstalled]
+           cachedLf, cachedLfInstalled, a.total_count, a.installed_count]
         );
 
         updated.push({
