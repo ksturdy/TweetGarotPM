@@ -281,6 +281,7 @@
 @media (max-width: 768px) {
   .header {
     padding: 0 0.5rem;
+    padding-top: env(safe-area-inset-top, 0px);
   }
 
   .header-content {
