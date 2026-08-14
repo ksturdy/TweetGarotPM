@@ -83,6 +83,8 @@ const PhaseSchedule = {
          COALESCE(pc_agg.has_provisional, FALSE) as has_provisional,
          CASE WHEN psi.percent_complete > 0 THEN psi.percent_complete ELSE COALESCE(pc_agg.weighted_pct, 0) END as percent_complete,
          psi.quantity, psi.quantity_uom, psi.quantity_installed,
+         psi.stratus_qty_lf, psi.stratus_installed_lf,
+         psi.stratus_qty_count, psi.stratus_installed_count,
          psi.use_manual_qty_values, psi.manual_monthly_qty,
          psi.billable_rate_id,
          psi.sort_order, psi.created_by, psi.created_at, psi.updated_at,
@@ -184,6 +186,10 @@ const PhaseSchedule = {
       quantity: 'quantity',
       quantity_uom: 'quantity_uom',
       quantity_installed: 'quantity_installed',
+      stratus_qty_lf: 'stratus_qty_lf',
+      stratus_installed_lf: 'stratus_installed_lf',
+      stratus_qty_count: 'stratus_qty_count',
+      stratus_installed_count: 'stratus_installed_count',
       use_manual_qty_values: 'use_manual_qty_values',
       manual_monthly_qty: 'manual_monthly_qty',
       sort_order: 'sort_order',
@@ -456,7 +462,9 @@ const PhaseSchedule = {
              COUNT(*) FILTER (WHERE part_tracking_status = 'Field Installed')::int AS installed_count,
              COUNT(*) FILTER (WHERE COALESCE(material_type_override, material_type) = 'pipe')::int AS pipe_count,
              COALESCE(SUM(CASE WHEN COALESCE(material_type_override, material_type) = 'pipe' THEN length ELSE 0 END), 0)::numeric AS pipe_length,
-             COALESCE(SUM(CASE WHEN COALESCE(material_type_override, material_type) = 'pipe' AND part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS pipe_length_installed
+             COALESCE(SUM(CASE WHEN COALESCE(material_type_override, material_type) = 'pipe' AND part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS pipe_length_installed,
+             COALESCE(SUM(length), 0)::numeric AS all_length,
+             COALESCE(SUM(CASE WHEN part_tracking_status = 'Field Installed' THEN length ELSE 0 END), 0)::numeric AS all_length_installed
            FROM stratus_parts
            WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3
              AND RTRIM(TRIM(part_field_phase_code), '- ') = ANY($4::text[])`,
@@ -475,26 +483,36 @@ const PhaseSchedule = {
         let newQty;
         let newInstalled;
         if (useUom === 'LF') {
-          newQty = Number(a.pipe_length);
-          newInstalled = Number(a.pipe_length_installed);
-          // Possible: phase has parts but none classified pipe. Fall back to count.
-          if (newQty === 0 && a.total_count > 0) {
-            newQty = a.total_count;
-            newInstalled = a.installed_count;
-            // override the UOM since LF would have written 0
+          if (!inferred) {
+            // User explicitly chose LF — sum length across all parts for this phase,
+            // not just pipe-classified ones (fittings etc. may carry lengths too).
+            newQty = Number(a.all_length);
+            newInstalled = Number(a.all_length_installed);
+          } else {
+            // Auto-inferred LF means we found pipe-classified parts; use pipe length only.
+            newQty = Number(a.pipe_length);
+            newInstalled = Number(a.pipe_length_installed);
           }
         } else {
           newQty = a.total_count;
           newInstalled = a.installed_count;
         }
 
+        const cachedLf = inferred ? Number(a.pipe_length) : Number(a.all_length);
+        const cachedLfInstalled = inferred ? Number(a.pipe_length_installed) : Number(a.all_length_installed);
+        const cachedCount = a.total_count;
+        const cachedCountInstalled = a.installed_count;
+
         await client.query(
           `UPDATE phase_schedule_items
            SET quantity = $1, quantity_installed = $2,
                quantity_uom = COALESCE(quantity_uom, $3),
+               stratus_qty_lf = $6, stratus_installed_lf = $7,
+               stratus_qty_count = $8, stratus_installed_count = $9,
                updated_at = NOW()
            WHERE id = $4 AND tenant_id = $5`,
-          [newQty, newInstalled, useUom, item.id, tenantId]
+          [newQty, newInstalled, useUom, item.id, tenantId,
+           cachedLf, cachedLfInstalled, cachedCount, cachedCountInstalled]
         );
 
         updated.push({

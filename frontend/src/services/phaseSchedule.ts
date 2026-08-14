@@ -55,6 +55,10 @@ export interface PhaseScheduleItem {
   quantity: number | null;
   quantity_uom: string | null;
   quantity_installed: number;
+  stratus_qty_lf: number | null;
+  stratus_installed_lf: number | null;
+  stratus_qty_count: number | null;
+  stratus_installed_count: number | null;
   use_manual_qty_values: boolean;
   manual_monthly_qty: Record<string, number> | null;
   billable_rate_id: number | null;
