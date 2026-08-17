@@ -99,6 +99,8 @@ import LaborEmployeeDetail from './pages/labor/LaborEmployeeDetail';
 import LaborCalendar from './pages/labor/LaborCalendar';
 import LaborAssignments from './pages/labor/LaborAssignments';
 import LaborProjectGantt from './pages/labor/LaborProjectGantt';
+import LaborAccounts from './pages/labor/LaborAccounts';
+import LaborUnfilledRoles from './pages/labor/LaborUnfilledRoles';
 import UserManagement from './pages/UserManagement';
 import RolesPermissions from './pages/RolesPermissions';
 import SecuritySettings from './pages/SecuritySettings';
@@ -488,6 +490,8 @@ const App: React.FC = () => {
                 <Route path="/labor/calendar" element={<LaborCalendar />} />
                 <Route path="/labor/project-gantt" element={<LaborProjectGantt />} />
                 <Route path="/labor/assignments" element={<LaborAssignments />} />
+                <Route path="/labor/accounts" element={<LaborAccounts />} />
+                <Route path="/labor/unfilled-roles" element={<LaborUnfilledRoles />} />
                 <Route path="/labor/employee/:id" element={<LaborEmployeeDetail />} />
                 <Route path="/safety" element={<SafetyDashboard />} />
                 <Route path="/users" element={<UserManagement />} />

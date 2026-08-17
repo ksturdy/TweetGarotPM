@@ -14,14 +14,18 @@ const SELECT_WITH_JOINS = `
   e.employee_group,
   e.profile_type,
   e.user_id as emp_user_id,
-  p.name as project_name,
-  p.number as project_number,
-  p.address as project_address,
+  COALESCE(p.name, la.name) as project_name,
+  COALESCE(p.number, la.department_code) as project_number,
+  COALESCE(p.address, la.location) as project_address,
   NULL as project_city,
   NULL as project_state,
   NULL as project_zip,
   p.start_date as project_start_date,
-  p.end_date as project_end_date
+  p.end_date as project_end_date,
+  la.id as labor_account_id,
+  la.name as labor_account_name,
+  la.department_code as labor_account_code,
+  la.location as labor_account_location
 `;
 
 const ProjectAssignment = {
@@ -42,7 +46,8 @@ const ProjectAssignment = {
       `SELECT ${SELECT_WITH_JOINS}
        FROM project_assignments pa
        JOIN employees e ON e.id = pa.employee_id
-       JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
        WHERE pa.project_id = $1 AND pa.tenant_id = $2
        ORDER BY pa.start_date DESC NULLS LAST, e.last_name, e.first_name`,
       [projectId, tenantId]
@@ -55,7 +60,8 @@ const ProjectAssignment = {
       `SELECT ${SELECT_WITH_JOINS}
        FROM project_assignments pa
        JOIN employees e ON e.id = pa.employee_id
-       JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
        WHERE pa.id = $1 AND pa.tenant_id = $2`,
       [id, tenantId]
     );
@@ -79,7 +85,8 @@ const ProjectAssignment = {
       `SELECT ${SELECT_WITH_JOINS}
        FROM project_assignments pa
        JOIN employees e ON e.id = pa.employee_id
-       JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
        WHERE pa.employee_id = $1 AND pa.tenant_id = $2
        ${dateClause}
        ORDER BY pa.start_date ${scope === 'past' ? 'DESC' : 'ASC'} NULLS LAST`,
@@ -98,7 +105,8 @@ const ProjectAssignment = {
               vc.earned_revenue
        FROM project_assignments pa
        JOIN employees e ON e.id = pa.employee_id
-       JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id AND vc.tenant_id = $1
        WHERE pa.tenant_id = $1
          AND pa.status NOT IN ('cancelled')
@@ -142,9 +150,16 @@ const ProjectAssignment = {
 
     const sql = `
       WITH current_a AS (
-        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.end_date, pa.role, pa.trade, pa.start_date, p.name as project_name, p.number as project_number
+        SELECT DISTINCT ON (pa.employee_id)
+          pa.employee_id,
+          pa.project_id,
+          pa.labor_account_id,
+          pa.end_date, pa.role, pa.trade, pa.start_date,
+          COALESCE(p.name, la.name) as project_name,
+          COALESCE(p.number, la.department_code) as project_number
         FROM project_assignments pa
-        JOIN projects p ON p.id = pa.project_id
+        LEFT JOIN projects p ON p.id = pa.project_id
+        LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
         WHERE pa.tenant_id = $1
           AND pa.status NOT IN ('cancelled', 'completed')
           AND (pa.start_date IS NULL OR pa.start_date <= CURRENT_DATE)
@@ -152,13 +167,28 @@ const ProjectAssignment = {
         ORDER BY pa.employee_id, pa.start_date NULLS LAST
       ),
       next_a AS (
-        SELECT DISTINCT ON (pa.employee_id) pa.employee_id, pa.project_id, pa.start_date, pa.end_date, pa.role, pa.trade, p.name as project_name, p.number as project_number
+        SELECT DISTINCT ON (pa.employee_id)
+          pa.employee_id,
+          pa.project_id,
+          pa.labor_account_id,
+          pa.start_date, pa.end_date, pa.role, pa.trade,
+          COALESCE(p.name, la.name) as project_name,
+          COALESCE(p.number, la.department_code) as project_number
         FROM project_assignments pa
-        JOIN projects p ON p.id = pa.project_id
+        LEFT JOIN projects p ON p.id = pa.project_id
+        LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
         WHERE pa.tenant_id = $1
           AND pa.status NOT IN ('cancelled', 'completed')
           AND pa.start_date > CURRENT_DATE
         ORDER BY pa.employee_id, pa.start_date ASC
+      ),
+      current_to AS (
+        SELECT DISTINCT ON (eto.employee_id) eto.employee_id, eto.type, eto.end_date
+        FROM employee_time_off eto
+        WHERE eto.tenant_id = $1
+          AND eto.start_date <= CURRENT_DATE
+          AND eto.end_date   >= CURRENT_DATE
+        ORDER BY eto.employee_id, eto.end_date DESC
       )
       SELECT e.id, e.first_name, e.last_name, e.email, e.phone, e.mobile_phone,
              e.job_title,
@@ -167,20 +197,29 @@ const ProjectAssignment = {
              e.employee_group, e.profile_type,
              e.hire_date,
              ca.project_id as current_project_id,
+             ca.labor_account_id as current_account_id,
              ca.project_name as current_project_name,
              ca.project_number as current_project_number,
              ca.end_date as current_end_date,
              ca.start_date as current_start_date,
              ca.role as current_role,
              na.project_id as next_project_id,
+             na.labor_account_id as next_account_id,
              na.project_name as next_project_name,
              na.project_number as next_project_number,
              na.start_date as next_start_date,
              na.role as next_role,
-             CASE WHEN ca.employee_id IS NULL THEN 'available' ELSE 'assigned' END as availability
+             CASE
+               WHEN cto.employee_id IS NOT NULL THEN 'time_off'
+               WHEN ca.employee_id IS NULL THEN 'available'
+               ELSE 'assigned'
+             END as availability,
+             cto.type as time_off_type,
+             cto.end_date as time_off_end_date
       FROM employees e
       LEFT JOIN current_a ca ON ca.employee_id = e.id
       LEFT JOIN next_a na ON na.employee_id = e.id
+      LEFT JOIN current_to cto ON cto.employee_id = e.id
       ${where}
       ORDER BY e.last_name, e.first_name
     `;
@@ -289,6 +328,157 @@ const ProjectAssignment = {
         shiftEndTime || null,
         status || 'planned',
         notes || null,
+        tags && tags.length ? tags : null,
+        assignedBy,
+      ]
+    );
+    return result.rows[0];
+  },
+
+  async findUnfilledRoles(tenantId) {
+    const result = await db.query(
+      `SELECT pa.*,
+              COALESCE(p.name, la.name) as project_name,
+              COALESCE(p.number, la.department_code) as project_number,
+              COALESCE(p.address, la.location) as project_address,
+              p.start_date as project_start_date,
+              p.end_date as project_end_date,
+              la.name as labor_account_name,
+              la.department_code as labor_account_code
+       FROM project_assignments pa
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
+       WHERE pa.tenant_id = $1
+         AND pa.is_unfilled = TRUE
+         AND pa.status NOT IN ('cancelled', 'completed')
+       ORDER BY pa.start_date NULLS LAST, project_name`,
+      [tenantId]
+    );
+    return result.rows;
+  },
+
+  async findCandidatesForRole(assignmentId, tenantId) {
+    // Returns employees who: match the required trade, have no overlapping assignment
+    // or time-off block during the window, ordered by trade match + availability.
+    const roleResult = await db.query(
+      `SELECT pa.trade, pa.role, pa.start_date, pa.end_date
+       FROM project_assignments pa
+       WHERE pa.id = $1 AND pa.tenant_id = $2`,
+      [assignmentId, tenantId]
+    );
+    const role = roleResult.rows[0];
+    if (!role) return [];
+
+    const { trade, start_date, end_date } = role;
+
+    const result = await db.query(
+      `SELECT e.id, e.first_name, e.last_name, e.email, e.phone, e.mobile_phone,
+              e.trade as employee_trade, e.title, e.employee_group,
+              -- is_available: no overlapping active assignment and no time-off in window
+              NOT EXISTS (
+                SELECT 1 FROM project_assignments pa2
+                WHERE pa2.employee_id = e.id
+                  AND pa2.tenant_id = $1
+                  AND pa2.is_unfilled = FALSE
+                  AND pa2.status NOT IN ('cancelled', 'completed')
+                  AND COALESCE(pa2.start_date, $3::date) <= COALESCE($4::date, '2099-12-31'::date)
+                  AND COALESCE(pa2.end_date, '2099-12-31'::date) >= COALESCE($3::date, CURRENT_DATE)
+              ) AND NOT EXISTS (
+                SELECT 1 FROM employee_time_off eto
+                WHERE eto.employee_id = e.id
+                  AND eto.tenant_id = $1
+                  AND eto.start_date <= COALESCE($4::date, '2099-12-31'::date)
+                  AND eto.end_date >= COALESCE($3::date, CURRENT_DATE)
+              ) AS is_available,
+              CASE WHEN COALESCE(e.trade, '') = COALESCE($2, '') THEN 1 ELSE 0 END AS trade_match
+       FROM employees e
+       WHERE e.tenant_id = $1
+         AND e.employment_status = 'active'
+       ORDER BY trade_match DESC, is_available DESC, e.last_name, e.first_name`,
+      [tenantId, trade || null, start_date || null, end_date || null]
+    );
+    return result.rows;
+  },
+
+  async addUnfilledRole(payload, tenantId, assignedBy) {
+    const { projectId, laborAccountId, trade, role, startDate, endDate, fillNotes, shiftPattern, shiftStartTime, shiftEndTime, status } = payload;
+
+    let resolvedStart = startDate || null;
+    let resolvedEnd = endDate || null;
+    if (projectId && (!resolvedStart || !resolvedEnd)) {
+      const defaults = await getProjectEffectiveDates(projectId, tenantId);
+      if (!resolvedStart) resolvedStart = defaults.start_date;
+      if (!resolvedEnd) resolvedEnd = defaults.end_date;
+    }
+
+    const result = await db.query(
+      `INSERT INTO project_assignments (
+         project_id, labor_account_id, tenant_id,
+         trade, role, start_date, end_date,
+         shift_pattern, shift_start_time, shift_end_time,
+         status, fill_notes, is_unfilled, assigned_by
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE,$13)
+       RETURNING *`,
+      [
+        projectId || null, laborAccountId || null, tenantId,
+        trade || null, role || null,
+        resolvedStart, resolvedEnd,
+        shiftPattern || null, shiftStartTime || null, shiftEndTime || null,
+        status || 'planned', fillNotes || null,
+        assignedBy,
+      ]
+    );
+    return result.rows[0];
+  },
+
+  async fillRole(assignmentId, employeeId, tenantId) {
+    const empResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [employeeId]);
+    const userId = empResult.rows[0]?.user_id || null;
+    const result = await db.query(
+      `UPDATE project_assignments
+       SET employee_id = $1, user_id = $2, is_unfilled = FALSE
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [employeeId, userId, assignmentId, tenantId]
+    );
+    return result.rows[0];
+  },
+
+  async addToAccount(payload, tenantId, assignedBy) {
+    const {
+      employeeId,
+      laborAccountId,
+      trade,
+      role,
+      startDate,
+      endDate,
+      shiftPattern,
+      shiftStartTime,
+      shiftEndTime,
+      status,
+      notes,
+      tags,
+    } = payload;
+
+    const empResult = await db.query('SELECT user_id FROM employees WHERE id = $1', [employeeId]);
+    const userId = empResult.rows[0]?.user_id || null;
+
+    const result = await db.query(
+      `INSERT INTO project_assignments (
+         employee_id, user_id, labor_account_id, tenant_id,
+         trade, role, start_date, end_date,
+         shift_pattern, shift_start_time, shift_end_time,
+         status, notes, tags, assigned_by
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       RETURNING *`,
+      [
+        employeeId, userId, laborAccountId, tenantId,
+        trade || null, role || null,
+        startDate || null, endDate || null,
+        shiftPattern || null, shiftStartTime || null, shiftEndTime || null,
+        status || 'planned', notes || null,
         tags && tags.length ? tags : null,
         assignedBy,
       ]
@@ -481,17 +671,25 @@ const ProjectAssignment = {
          (SELECT COUNT(*) FROM employees WHERE tenant_id = $1 AND employment_status = 'active') AS total_employees,
          (SELECT COUNT(DISTINCT pa.employee_id) FROM project_assignments pa
             WHERE pa.tenant_id = $1
+              AND pa.is_unfilled = FALSE
+              AND pa.employee_id IS NOT NULL
               AND pa.status NOT IN ('cancelled','completed')
               AND (pa.start_date IS NULL OR pa.start_date <= CURRENT_DATE)
               AND (pa.end_date IS NULL OR pa.end_date >= CURRENT_DATE)) AS currently_assigned,
          (SELECT COUNT(*) FROM project_assignments pa
             WHERE pa.tenant_id = $1
+              AND pa.is_unfilled = FALSE
               AND pa.status NOT IN ('cancelled','completed')
               AND pa.start_date > CURRENT_DATE) AS upcoming_assignments,
          (SELECT COUNT(*) FROM project_assignments pa
             WHERE pa.tenant_id = $1
+              AND pa.is_unfilled = FALSE
               AND pa.status NOT IN ('cancelled','completed')
-              AND pa.end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '14 days')) AS ending_within_two_weeks`,
+              AND pa.end_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '14 days')) AS ending_within_two_weeks,
+         (SELECT COUNT(*) FROM project_assignments pa
+            WHERE pa.tenant_id = $1
+              AND pa.is_unfilled = TRUE
+              AND pa.status NOT IN ('cancelled','completed')) AS unfilled_roles`,
       [tenantId]
     );
     return result.rows[0];

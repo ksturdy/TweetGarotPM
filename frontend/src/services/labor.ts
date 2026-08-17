@@ -1,6 +1,7 @@
 import api from './api';
 
 export type AssignmentStatus = 'planned' | 'active' | 'completed' | 'cancelled';
+export type TimeOffType = 'vacation' | 'fmla' | 'laid_off' | 'light_duty';
 export type NotificationChannel = 'email' | 'sms';
 
 export interface AssignmentRecord {
@@ -56,24 +57,114 @@ export interface LaborBoardRow {
   profile_type: string | null;
   hire_date: string | null;
   current_project_id: number | null;
+  current_account_id: number | null;
   current_project_name: string | null;
   current_project_number: string | null;
   current_end_date: string | null;
   current_start_date: string | null;
   current_role: string | null;
   next_project_id: number | null;
+  next_account_id: number | null;
   next_project_name: string | null;
   next_project_number: string | null;
   next_start_date: string | null;
   next_role: string | null;
-  availability: 'available' | 'assigned';
+  availability: 'available' | 'assigned' | 'time_off';
+  time_off_type: TimeOffType | null;
+  time_off_end_date: string | null;
 }
+
+export interface TimeOffRecord {
+  id: number;
+  tenant_id: number;
+  employee_id: number;
+  type: TimeOffType;
+  start_date: string;
+  end_date: string;
+  notes: string | null;
+  created_by: number | null;
+  created_at: string;
+  first_name?: string;
+  last_name?: string;
+  employee_trade?: string | null;
+  employee_group?: string | null;
+}
+
+export interface TimeOffPayload {
+  employeeId: number;
+  type: TimeOffType;
+  startDate: string;
+  endDate: string;
+  notes?: string;
+}
+
+export const TIME_OFF_LABELS: Record<TimeOffType, string> = {
+  vacation:   'Vacation',
+  fmla:       'FMLA',
+  laid_off:   'Laid Off',
+  light_duty: 'Light Duty',
+};
+
+export const TIME_OFF_COLORS: Record<TimeOffType, { bg: string; border: string; color: string }> = {
+  vacation:   { bg: '#fef3c7', border: '#d97706', color: '#92400e' },
+  fmla:       { bg: '#ede9fe', border: '#7c3aed', color: '#4c1d95' },
+  laid_off:   { bg: '#f1f5f9', border: '#64748b', color: '#1e293b' },
+  light_duty: { bg: '#dcfce7', border: '#16a34a', color: '#14532d' },
+};
 
 export interface LaborSummary {
   total_employees: string;
   currently_assigned: string;
   upcoming_assignments: string;
   ending_within_two_weeks: string;
+  unfilled_roles: string;
+}
+
+export interface UnfilledRole {
+  id: number;
+  project_id: number | null;
+  labor_account_id: number | null;
+  project_name: string | null;
+  project_number: string | null;
+  project_address: string | null;
+  project_start_date: string | null;
+  project_end_date: string | null;
+  labor_account_name: string | null;
+  labor_account_code: string | null;
+  trade: string | null;
+  role: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  fill_notes: string | null;
+  status: AssignmentStatus | null;
+}
+
+export interface RoleCandidate {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  mobile_phone: string | null;
+  employee_trade: string | null;
+  title: string | null;
+  employee_group: string | null;
+  is_available: boolean;
+  trade_match: number;
+}
+
+export interface UnfilledRolePayload {
+  projectId?: number;
+  laborAccountId?: number;
+  trade?: string;
+  role?: string;
+  startDate?: string;
+  endDate?: string;
+  fillNotes?: string;
+  shiftPattern?: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
+  status?: AssignmentStatus;
 }
 
 export interface BoardFilters {
@@ -171,6 +262,27 @@ export const SHIFT_PATTERNS = ['M-F', 'M-Th', 'M-Sa', 'T-F', 'Tu-Sa', 'Weekend']
 
 export const ASSIGNMENT_STATUSES: AssignmentStatus[] = ['planned', 'active', 'completed', 'cancelled'];
 
+export interface LaborAccount {
+  id: number;
+  tenant_id: number;
+  name: string;
+  department_code: string | null;
+  location: string | null;
+  customer_id: number | null;
+  customer_name?: string | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface LaborAccountPayload {
+  name: string;
+  departmentCode?: string;
+  location?: string;
+  customerId?: number;
+  notes?: string;
+}
+
 export const laborApi = {
   getBoard: (filters?: BoardFilters) => {
     const params = new URLSearchParams();
@@ -253,4 +365,69 @@ export const laborApi = {
 
   getNotifications: (assignmentId: number) =>
     api.get<NotificationLog[]>(`/project-assignments/${assignmentId}/notifications`).then((r) => r.data),
+
+  getTimeOff: (from: string, to: string) =>
+    api.get<TimeOffRecord[]>(`/labor/time-off?from=${from}&to=${to}`).then((r) => r.data),
+
+  getEmployeeTimeOff: (employeeId: number) =>
+    api.get<TimeOffRecord[]>(`/labor/time-off/employee/${employeeId}`).then((r) => r.data),
+
+  createTimeOff: (payload: TimeOffPayload) =>
+    api.post<TimeOffRecord>('/labor/time-off', {
+      employeeId: payload.employeeId,
+      type: payload.type,
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+      notes: payload.notes,
+    }).then((r) => r.data),
+
+  updateTimeOff: (id: number, patch: Partial<Omit<TimeOffPayload, 'employeeId'>>) =>
+    api.patch<TimeOffRecord>(`/labor/time-off/${id}`, {
+      type: patch.type,
+      start_date: patch.startDate,
+      end_date: patch.endDate,
+      notes: patch.notes,
+    }).then((r) => r.data),
+
+  deleteTimeOff: (id: number) =>
+    api.delete<{ deleted: TimeOffRecord }>(`/labor/time-off/${id}`).then((r) => r.data),
+
+  getAccounts: (includeInactive = false) =>
+    api.get<LaborAccount[]>(`/labor/accounts${includeInactive ? '?include_inactive=true' : ''}`).then((r) => r.data),
+
+  createAccount: (payload: LaborAccountPayload) =>
+    api.post<LaborAccount>('/labor/accounts', payload).then((r) => r.data),
+
+  updateAccount: (id: number, patch: Partial<LaborAccountPayload> & { is_active?: boolean }) =>
+    api.patch<LaborAccount>(`/labor/accounts/${id}`, patch).then((r) => r.data),
+
+  deleteAccount: (id: number) =>
+    api.delete<{ deleted: LaborAccount }>(`/labor/accounts/${id}`).then((r) => r.data),
+
+  getUnfilledRoles: () =>
+    api.get<UnfilledRole[]>('/project-assignments/unfilled').then((r) => r.data),
+
+  createUnfilledRole: (payload: UnfilledRolePayload) =>
+    api.post<UnfilledRole>('/project-assignments/unfilled', payload).then((r) => r.data),
+
+  getCandidates: (assignmentId: number) =>
+    api.get<RoleCandidate[]>(`/project-assignments/${assignmentId}/candidates`).then((r) => r.data),
+
+  fillRole: (assignmentId: number, employeeId: number) =>
+    api.post<AssignmentRecord>(`/project-assignments/${assignmentId}/fill`, { employeeId }).then((r) => r.data),
+
+  assignToAccount: (accountId: number, payload: Omit<AssignPayload, 'projectId'>) =>
+    api.post<AssignmentRecord>(`/labor/accounts/${accountId}/assign`, {
+      employeeId: payload.employeeId,
+      role: payload.role,
+      trade: payload.trade,
+      startDate: payload.startDate,
+      endDate: payload.endDate,
+      shiftPattern: payload.shiftPattern,
+      shiftStartTime: payload.shiftStartTime,
+      shiftEndTime: payload.shiftEndTime,
+      status: payload.status,
+      notes: payload.notes,
+      tags: payload.tags,
+    }).then((r) => r.data),
 };

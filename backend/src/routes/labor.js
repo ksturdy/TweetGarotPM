@@ -1,5 +1,7 @@
 const express = require('express');
 const ProjectAssignment = require('../models/ProjectAssignment');
+const EmployeeTimeOff = require('../models/EmployeeTimeOff');
+const LaborAccount = require('../models/LaborAccount');
 const { getProjectEffectiveDates } = require('../utils/projectDates');
 const { authenticate, authorize } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
@@ -156,6 +158,156 @@ router.get('/assignments', async (req, res, next) => {
       );
     }
     res.json(filtered.map((r) => ({ ...r, ...computeEffectiveDates(r) })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Labor account routes (/api/labor/accounts) ─────────────────────────
+
+// GET /api/labor/accounts
+router.get('/accounts', async (req, res, next) => {
+  try {
+    const includeInactive = req.query.include_inactive === 'true';
+    const rows = await LaborAccount.findAll(req.tenantId, includeInactive);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/labor/accounts/:id
+router.get('/accounts/:id', async (req, res, next) => {
+  try {
+    const row = await LaborAccount.findById(req.params.id, req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/labor/accounts
+router.post('/accounts', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const row = await LaborAccount.create(req.body, req.tenantId, req.user.id);
+    res.status(201).json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/labor/accounts/:id
+router.patch('/accounts/:id', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const updated = await LaborAccount.updateById(req.params.id, req.tenantId, req.body);
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/labor/accounts/:id
+router.delete('/accounts/:id', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const deleted = await LaborAccount.deleteById(req.params.id, req.tenantId);
+    if (!deleted) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/labor/accounts/:accountId/assign  (assign a crew member to an account)
+router.post('/accounts/:accountId/assign', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const accountId = parseInt(req.params.accountId, 10);
+    const account = await LaborAccount.findById(accountId, req.tenantId);
+    if (!account) return res.status(404).json({ error: 'Labor account not found' });
+
+    const assignment = await ProjectAssignment.addToAccount({
+      employeeId: req.body.employeeId,
+      laborAccountId: accountId,
+      trade: req.body.trade,
+      role: req.body.role,
+      startDate: req.body.startDate || req.body.start_date,
+      endDate: req.body.endDate || req.body.end_date,
+      shiftPattern: req.body.shiftPattern || req.body.shift_pattern,
+      shiftStartTime: req.body.shiftStartTime || req.body.shift_start_time,
+      shiftEndTime: req.body.shiftEndTime || req.body.shift_end_time,
+      status: req.body.status,
+      notes: req.body.notes,
+      tags: req.body.tags,
+    }, req.tenantId, req.user.id);
+
+    res.status(201).json(assignment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Time-off routes (/api/labor/time-off) ──────────────────────────────
+
+// GET /api/labor/time-off?from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/time-off', async (req, res, next) => {
+  try {
+    const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const to   = req.query.to   || new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+    const rows = await EmployeeTimeOff.findByDateRange(req.tenantId, from, to);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/labor/time-off/employee/:employeeId
+router.get('/time-off/employee/:employeeId', async (req, res, next) => {
+  try {
+    const rows = await EmployeeTimeOff.findByEmployee(req.params.employeeId, req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/labor/time-off
+router.post('/time-off', async (req, res, next) => {
+  try {
+    const { employeeId, type, startDate, endDate, notes } = req.body;
+    if (!employeeId || !type || !startDate || !endDate) {
+      return res.status(400).json({ error: 'employeeId, type, startDate, endDate are required' });
+    }
+    const row = await EmployeeTimeOff.create(
+      { employeeId, type, startDate, endDate, notes },
+      req.tenantId,
+      req.user.id
+    );
+    res.status(201).json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/labor/time-off/:id
+router.patch('/time-off/:id', async (req, res, next) => {
+  try {
+    const updated = await EmployeeTimeOff.updateById(req.params.id, req.tenantId, req.body);
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/labor/time-off/:id
+router.delete('/time-off/:id', async (req, res, next) => {
+  try {
+    const deleted = await EmployeeTimeOff.deleteById(req.params.id, req.tenantId);
+    if (!deleted) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted });
   } catch (error) {
     next(error);
   }

@@ -8,6 +8,7 @@ import {
   SHIFT_PATTERNS,
   AssignmentRecord,
   AssignmentStatus,
+  LaborAccount,
 } from '../../services/labor';
 import { projectsApi, Project } from '../../services/projects';
 import api from '../../services/api';
@@ -45,7 +46,11 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
   invalidateKeys,
 }) => {
   const qc = useQueryClient();
+  const [assignTarget, setAssignTarget] = useState<'project' | 'account'>(lockedProjectId ? 'project' : 'project');
   const [projectId, setProjectId] = useState<number | undefined>(lockedProjectId || editing?.project_id);
+  const [accountId, setAccountId] = useState<number | undefined>();
+  const [accountSearch, setAccountSearch] = useState('');
+  const [pickedAccountLabel, setPickedAccountLabel] = useState('');
   const [employeeId, setEmployeeId] = useState<number | undefined>(lockedEmployeeId || editing?.employee_id);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
@@ -83,7 +88,11 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setNotes(editing.notes || '');
       setTagsText((editing.tags || []).join(', '));
     } else {
+      setAssignTarget(lockedProjectId ? 'project' : 'project');
       setProjectId(lockedProjectId);
+      setAccountId(undefined);
+      setAccountSearch('');
+      setPickedAccountLabel('');
       setEmployeeId(lockedEmployeeId);
       setPickedEmployeeLabel(lockedEmployeeName || '');
       setPickedProjectLabel(lockedProjectName || '');
@@ -142,6 +151,23 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
     enabled: !lockedProjectId && open,
   });
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['labor-accounts'],
+    queryFn: () => laborApi.getAccounts(),
+    enabled: open && assignTarget === 'account',
+  });
+
+  const filteredAccounts = useMemo(() => {
+    if (!accountSearch) return accounts.slice(0, 25) as LaborAccount[];
+    const q = accountSearch.toLowerCase();
+    return accounts.filter(
+      (a) =>
+        (a.name || '').toLowerCase().includes(q) ||
+        (a.department_code || '').toLowerCase().includes(q) ||
+        (a.location || '').toLowerCase().includes(q)
+    ).slice(0, 25);
+  }, [accounts, accountSearch]);
+
   const filteredProjects = useMemo(() => {
     if (!projects) return [] as Project[];
     if (!projectSearch) return projects.slice(0, 25);
@@ -174,7 +200,24 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
           tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : null,
         });
       }
-      if (!projectId || !employeeId) throw new Error('Project and employee are required.');
+      if (!employeeId) throw new Error('Employee is required.');
+      if (assignTarget === 'account') {
+        if (!accountId) throw new Error('Account is required.');
+        return laborApi.assignToAccount(accountId, {
+          employeeId,
+          role: role || undefined,
+          trade: trade || undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          shiftPattern: shiftPattern || undefined,
+          shiftStartTime: shiftStart || undefined,
+          shiftEndTime: shiftEnd || undefined,
+          status,
+          notes: notes || undefined,
+          tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
+        });
+      }
+      if (!projectId) throw new Error('Project is required.');
       return laborApi.assign({
         projectId,
         employeeId,
@@ -232,6 +275,33 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
             </div>
           )}
 
+          {/* Assignment target toggle (project vs account) — hidden when editing or locked to a project */}
+          {!editing && !lockedProjectId && (
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+              {(['project', 'account'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setAssignTarget(t);
+                    setProjectId(undefined); setPickedProjectLabel('');
+                    setAccountId(undefined); setPickedAccountLabel('');
+                    setStartDate(''); setEndDate('');
+                  }}
+                  style={{
+                    padding: '0.4rem 1rem', borderRadius: 6,
+                    border: `2px solid ${assignTarget === t ? '#002356' : '#e2e8f0'}`,
+                    background: assignTarget === t ? '#002356' : 'white',
+                    color: assignTarget === t ? 'white' : '#475569',
+                    fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+                  }}
+                >
+                  {t === 'project' ? 'Project Assignment' : 'Accounts Work'}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             {/* Employee */}
             <div>
@@ -283,23 +353,47 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
               )}
             </div>
 
-            {/* Project */}
+            {/* Project or Account picker */}
             <div>
-              <label style={lblStyle}>Project</label>
-              {lockedProjectId ? (
+              <label style={lblStyle}>{assignTarget === 'account' ? 'Labor Account' : 'Project'}</label>
+              {assignTarget === 'account' ? (
+                accountId ? (
+                  <div style={lockedStyle}>
+                    {pickedAccountLabel}
+                    <button onClick={() => { setAccountId(undefined); setPickedAccountLabel(''); setAccountSearch(''); }} style={chipClearStyle}>×</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Search accounts..."
+                      value={accountSearch}
+                      onChange={(e) => setAccountSearch(e.target.value)}
+                      style={inputStyle}
+                    />
+                    {filteredAccounts.length > 0 && (
+                      <div style={dropdownStyle}>
+                        {filteredAccounts.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => { setAccountId(a.id); setPickedAccountLabel(`${a.department_code ? a.department_code + ' — ' : ''}${a.name}`); setAccountSearch(''); }}
+                            style={dropdownItemStyle}
+                          >
+                            <span style={{ fontWeight: 500 }}>{a.department_code ? `${a.department_code} — ` : ''}{a.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{a.location}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              ) : lockedProjectId ? (
                 <div style={lockedStyle}>{pickedProjectLabel || `#${lockedProjectId}`}</div>
               ) : projectId ? (
                 <div style={lockedStyle}>
                   {pickedProjectLabel}{' '}
                   <button
-                    onClick={() => {
-                      setProjectId(undefined);
-                      setPickedProjectLabel('');
-                      setStartDate('');
-                      setEndDate('');
-                      setStartOverridden(false);
-                      setEndOverridden(false);
-                    }}
+                    onClick={() => { setProjectId(undefined); setPickedProjectLabel(''); setStartDate(''); setEndDate(''); setStartOverridden(false); setEndOverridden(false); }}
                     style={chipClearStyle}
                   >×</button>
                 </div>
@@ -317,10 +411,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
                       {filteredProjects.map((p) => (
                         <div
                           key={p.id}
-                          onClick={() => {
-                            setProjectId(p.id);
-                            setPickedProjectLabel(`${p.number ? p.number + ' — ' : ''}${p.name}`);
-                          }}
+                          onClick={() => { setProjectId(p.id); setPickedProjectLabel(`${p.number ? p.number + ' — ' : ''}${p.name}`); }}
                           style={dropdownItemStyle}
                         >
                           <span style={{ fontWeight: 500 }}>{p.number} {p.name}</span>

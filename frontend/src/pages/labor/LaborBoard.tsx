@@ -7,9 +7,13 @@ import {
   LaborBoardRow,
   ASSIGNMENT_TRADES,
   ASSIGNMENT_ROLES,
+  TIME_OFF_LABELS,
+  TIME_OFF_COLORS,
+  TimeOffType,
 } from '../../services/labor';
 import { employeesApi } from '../../services/employees';
 import AssignDialog from '../../components/labor/AssignDialog';
+import TimeOffDialog from '../../components/labor/TimeOffDialog';
 import PillFilter from '../../components/labor/PillFilter';
 import '../../styles/SalesPipeline.css';
 
@@ -64,6 +68,7 @@ const LaborBoard: React.FC = () => {
   const [filters, setFilters] = useState<BoardFilters>({});
   const [search, setSearch] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
+  const [timeOffTarget, setTimeOffTarget] = useState<{ id: number; name: string } | null>(null);
   const [columns, setColumns] = useState<ColumnDef[]>(loadColumnPrefs);
   const [sort, setSort] = useState<{ key: ColumnKey; dir: 'asc' | 'desc' } | null>(() => {
     try {
@@ -190,12 +195,23 @@ const LaborBoard: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI cards omitted from this re-render for brevity; preserved below */}
+      {/* KPI cards */}
       <div className="sales-kpi-grid">
         <Kpi tone="blue" label="Total Active Employees" loader={() => laborApi.getSummary().then(s => s.total_employees)} />
         <Kpi tone="green" label="Currently Assigned" loader={() => laborApi.getSummary().then(s => s.currently_assigned)} />
         <Kpi tone="amber" label="Upcoming Assignments" loader={() => laborApi.getSummary().then(s => s.upcoming_assignments)} />
         <Kpi tone="purple" label="Ending in 2 Weeks" loader={() => laborApi.getSummary().then(s => s.ending_within_two_weeks)} />
+        <KpiLink tone="amber" label="Unfilled Roles" to="/labor/unfilled-roles" loader={() => laborApi.getSummary().then(s => s.unfilled_roles)} />
+      </div>
+
+      {/* Quick navigation */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0 0 0' }}>
+        <Link to="/labor/accounts" style={{ fontSize: '0.8rem', color: '#002356', textDecoration: 'none', padding: '0.3rem 0.75rem', background: '#ede9fe', borderRadius: 6, fontWeight: 600 }}>
+          🏭 Labor Accounts
+        </Link>
+        <Link to="/labor/unfilled-roles" style={{ fontSize: '0.8rem', color: '#92400e', textDecoration: 'none', padding: '0.3rem 0.75rem', background: '#fef3c7', borderRadius: 6, fontWeight: 600 }}>
+          🔓 Unfilled Roles
+        </Link>
       </div>
 
       <div className="sales-table-section">
@@ -266,6 +282,7 @@ const LaborBoard: React.FC = () => {
                     trades={trades}
                     profiles={profiles}
                     onPatch={(patch) => patchEmployee.mutate({ id: r.id, patch })}
+                    onAddTimeOff={() => setTimeOffTarget({ id: r.id, name: `${r.first_name} ${r.last_name}` })}
                   />
                 ))}
               </tbody>
@@ -279,11 +296,19 @@ const LaborBoard: React.FC = () => {
         onClose={() => setAssignOpen(false)}
         invalidateKeys={[['labor-board'], ['labor-summary']]}
       />
+
+      <TimeOffDialog
+        open={timeOffTarget !== null}
+        onClose={() => setTimeOffTarget(null)}
+        employeeId={timeOffTarget?.id}
+        employeeName={timeOffTarget?.name}
+        invalidateKeys={[['labor-board'], ['labor-summary'], ['labor-time-off']]}
+      />
     </div>
   );
 };
 
-// ─── KPI card (kept as a tiny component so the page render stays clean) ──
+// ─── KPI card ──────────────────────────────────────────────────────────
 const Kpi: React.FC<{ tone: 'blue' | 'green' | 'amber' | 'purple'; label: string; loader: () => Promise<string> }> = ({ tone, label }) => {
   const { data: summary } = useQuery({ queryKey: ['labor-summary'], queryFn: () => laborApi.getSummary() });
   const value = summary
@@ -297,6 +322,19 @@ const Kpi: React.FC<{ tone: 'blue' | 'green' | 'amber' | 'purple'; label: string
       <div className="sales-kpi-label">{label}</div>
       <div className="sales-kpi-value">{value}</div>
     </div>
+  );
+};
+
+const KpiLink: React.FC<{ tone: 'blue' | 'green' | 'amber' | 'purple'; label: string; to: string; loader: () => Promise<string> }> = ({ tone, label, to }) => {
+  const { data: summary } = useQuery({ queryKey: ['labor-summary'], queryFn: () => laborApi.getSummary() });
+  const value = summary?.unfilled_roles ?? '—';
+  return (
+    <Link to={to} style={{ textDecoration: 'none' }}>
+      <div className={`sales-kpi-card ${tone}`} style={{ cursor: 'pointer' }}>
+        <div className="sales-kpi-label">{label}</div>
+        <div className="sales-kpi-value">{value}</div>
+      </div>
+    </Link>
   );
 };
 
@@ -386,7 +424,8 @@ const BoardRow: React.FC<{
   trades: string[];
   profiles: string[];
   onPatch: (patch: Partial<{ trade: string | null; employee_group: string | null; title: string | null; profile_type: string | null; phone: string | null }>) => void;
-}> = ({ row, columns, titles, trades, profiles, onPatch }) => {
+  onAddTimeOff: () => void;
+}> = ({ row, columns, titles, trades, profiles, onPatch, onAddTimeOff }) => {
   const initials = `${row.first_name?.[0] || ''}${row.last_name?.[0] || ''}`.toUpperCase();
 
   const renderCell = (c: ColumnDef) => {
@@ -408,21 +447,64 @@ const BoardRow: React.FC<{
             </span>
           </Link>
         );
-      case 'availability':
-        return row.availability === 'available' ? (
-          <span style={{ ...pill, background: '#dcfce7', color: '#15803d' }}>Available</span>
-        ) : (
-          <span style={{ ...pill, background: '#dbeafe', color: '#1d4ed8' }}>
-            Assigned{row.current_end_date ? ` · until ${fmtDate(row.current_end_date)}` : ''}
-          </span>
+      case 'availability': {
+        let badge: React.ReactNode;
+        if (row.availability === 'time_off' && row.time_off_type) {
+          const colors = TIME_OFF_COLORS[row.time_off_type as TimeOffType];
+          badge = (
+            <span style={{ ...pill, background: colors.bg, color: colors.color, border: `1px solid ${colors.border}` }}>
+              {TIME_OFF_LABELS[row.time_off_type as TimeOffType]}
+              {row.time_off_end_date ? ` · until ${fmtDate(row.time_off_end_date)}` : ''}
+            </span>
+          );
+        } else if (row.availability === 'available') {
+          badge = <span style={{ ...pill, background: '#dcfce7', color: '#15803d' }}>Available</span>;
+        } else {
+          badge = (
+            <span style={{ ...pill, background: '#dbeafe', color: '#1d4ed8' }}>
+              Assigned{row.current_end_date ? ` · until ${fmtDate(row.current_end_date)}` : ''}
+            </span>
+          );
+        }
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {badge}
+            <button
+              title="Add / manage time off"
+              onClick={(e) => { e.stopPropagation(); onAddTimeOff(); }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.75rem', padding: '2px 4px', borderRadius: 4, lineHeight: 1 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#475569'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+            >
+              +
+            </button>
+          </div>
         );
+      }
       case 'current_project':
+        if (row.current_account_id) {
+          return (
+            <span style={{ color: '#7c3aed' }}>
+              <span style={{ fontSize: '0.65rem', background: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: 4, fontWeight: 700, marginRight: 4 }}>ACCT</span>
+              {row.current_project_name}
+            </span>
+          );
+        }
         return row.current_project_id ? (
           <Link to={`/projects/${row.current_project_id}`} style={{ color: '#002356', textDecoration: 'none' }}>
             {row.current_project_name}
           </Link>
         ) : <span style={{ color: '#cbd5e1' }}>—</span>;
       case 'next_project':
+        if (row.next_account_id) {
+          return (
+            <span style={{ color: '#7c3aed' }}>
+              <span style={{ fontSize: '0.65rem', background: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: 4, fontWeight: 700, marginRight: 4 }}>ACCT</span>
+              {row.next_project_name}
+              {row.next_start_date && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Starts {fmtDate(row.next_start_date)}</div>}
+            </span>
+          );
+        }
         return row.next_project_id ? (
           <Link to={`/projects/${row.next_project_id}`} style={{ color: '#002356', textDecoration: 'none' }}>
             {row.next_project_name}

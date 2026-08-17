@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import TuneIcon from '@mui/icons-material/Tune';
-import { laborApi, AssignmentRecord, ASSIGNMENT_TRADES } from '../../services/labor';
+import { laborApi, AssignmentRecord, TimeOffRecord, ASSIGNMENT_TRADES, TIME_OFF_LABELS, TIME_OFF_COLORS, TimeOffType } from '../../services/labor';
 import PillFilter from '../../components/labor/PillFilter';
 import '../../styles/SalesPipeline.css';
 import '../Dashboard.css';
@@ -93,6 +93,11 @@ const LaborCalendar: React.FC = () => {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['labor-calendar', from, to, trade, group],
     queryFn: () => laborApi.getCalendar(from, to, { trade, group }),
+  });
+
+  const { data: timeOffRows = [] } = useQuery({
+    queryKey: ['labor-time-off', from, to],
+    queryFn: () => laborApi.getTimeOff(from, to),
   });
 
   const { data: allRows } = useQuery({
@@ -204,27 +209,42 @@ const LaborCalendar: React.FC = () => {
     };
   }, [viewDef, viewStart, viewEnd]);
 
-  // ── Group assignments by employee ─────────────────────────────────────
+  // ── Group assignments + time-off blocks by employee ──────────────────
   const byEmployee = useMemo(() => {
-    const map = new Map<number, { name: string; bars: AssignmentRecord[] }>();
+    const map = new Map<number, { name: string; bars: AssignmentRecord[]; timeOff: TimeOffRecord[] }>();
+
     for (const a of rows) {
       const key = a.employee_id;
       if (!map.has(key)) {
         map.set(key, {
           name: `${a.first_name || ''} ${a.last_name || ''}`.trim() || `#${key}`,
           bars: [],
+          timeOff: [],
         });
       }
       map.get(key)!.bars.push(a);
     }
-    return [...map.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
-  }, [rows]);
 
-  // ── Bar position calculator ─────────────────────────────────────────
-  const barPos = (a: AssignmentRecord) => {
-    if (!a.start_date) return null;
-    const start = startOfDay(new Date(a.start_date));
-    const end = a.end_date ? startOfDay(new Date(a.end_date)) : viewEnd;
+    for (const t of timeOffRows) {
+      const key = t.employee_id;
+      if (!map.has(key)) {
+        map.set(key, {
+          name: `${t.first_name || ''} ${t.last_name || ''}`.trim() || `#${key}`,
+          bars: [],
+          timeOff: [],
+        });
+      }
+      map.get(key)!.timeOff.push(t);
+    }
+
+    return [...map.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
+  }, [rows, timeOffRows]);
+
+  // ── Bar position calculator (shared for assignments and time-off) ────
+  const barPos = (startIso: string | null, endIso: string | null) => {
+    if (!startIso) return null;
+    const start = startOfDay(new Date(startIso));
+    const end = endIso ? startOfDay(new Date(endIso)) : viewEnd;
 
     // Clamp to visible window
     const clampedStart = start < viewStart ? viewStart : start;
@@ -388,7 +408,7 @@ const LaborCalendar: React.FC = () => {
               )}
 
               {/* Employee rows */}
-              {byEmployee.map(([empId, { name, bars }]) => (
+              {byEmployee.map(([empId, { name, bars, timeOff }]) => (
                 <div
                   key={empId}
                   style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', height: ROW_HEIGHT }}
@@ -413,9 +433,9 @@ const LaborCalendar: React.FC = () => {
                     {gridLines.map((x, i) => (
                       <div key={i} style={{ position: 'absolute', left: x, top: 0, bottom: 0, width: 1, background: '#f1f5f9' }} />
                     ))}
-                    {/* Bars */}
+                    {/* Assignment bars */}
                     {bars.map((a) => {
-                      const pos = barPos(a);
+                      const pos = barPos(a.start_date, a.end_date);
                       if (!pos) return null;
                       const today = new Date(); today.setHours(0,0,0,0);
                       const s = a.start_date ? new Date(a.start_date) : null;
@@ -424,7 +444,7 @@ const LaborCalendar: React.FC = () => {
                       const colors = STATUS_COLORS[autoStatus] || STATUS_DEFAULT;
                       return (
                         <Link
-                          key={a.id}
+                          key={`a-${a.id}`}
                           to={`/projects/${a.project_id}`}
                           title={`${a.project_name}${a.project_number ? ` (#${a.project_number})` : ''}\n${a.role || ''}${a.trade ? ' · ' + a.trade : ''}\n${a.start_date ? new Date(a.start_date).toLocaleDateString() : '?'} → ${a.end_date ? new Date(a.end_date).toLocaleDateString() : 'open'}`}
                           style={{
@@ -455,6 +475,42 @@ const LaborCalendar: React.FC = () => {
                         </Link>
                       );
                     })}
+                    {/* Time-off bars */}
+                    {timeOff.map((t) => {
+                      const pos = barPos(t.start_date, t.end_date);
+                      if (!pos) return null;
+                      const colors = TIME_OFF_COLORS[t.type as TimeOffType] || TIME_OFF_COLORS.vacation;
+                      return (
+                        <div
+                          key={`to-${t.id}`}
+                          title={`${TIME_OFF_LABELS[t.type as TimeOffType]}\n${new Date(t.start_date).toLocaleDateString()} → ${new Date(t.end_date).toLocaleDateString()}${t.notes ? '\n' + t.notes : ''}`}
+                          style={{
+                            position: 'absolute',
+                            left: pos.left + 1,
+                            width: Math.max(2, pos.width - 2),
+                            top: 5,
+                            bottom: 5,
+                            background: colors.bg,
+                            border: `1px dashed ${colors.border}`,
+                            borderLeftWidth: pos.extendsLeft ? 0 : 1,
+                            borderRightWidth: pos.extendsRight ? 0 : 1,
+                            borderRadius: 4,
+                            color: colors.color,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            padding: '0 6px',
+                            display: 'flex', alignItems: 'center',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {TIME_OFF_LABELS[t.type as TimeOffType]}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -468,6 +524,11 @@ const LaborCalendar: React.FC = () => {
         <LegendChip color={STATUS_COLORS.planned}>Planned</LegendChip>
         <LegendChip color={STATUS_COLORS.active}>Active</LegendChip>
         <LegendChip color={STATUS_COLORS.completed}>Completed</LegendChip>
+        <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+        <LegendChip color={TIME_OFF_COLORS.vacation} dashed>Vacation</LegendChip>
+        <LegendChip color={TIME_OFF_COLORS.fmla} dashed>FMLA</LegendChip>
+        <LegendChip color={TIME_OFF_COLORS.laid_off} dashed>Laid Off</LegendChip>
+        <LegendChip color={TIME_OFF_COLORS.light_duty} dashed>Light Duty</LegendChip>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <span style={{ display: 'inline-block', width: 2, height: 14, background: '#ef4444' }} /> Today
         </span>
@@ -561,9 +622,9 @@ const LaborCalendar: React.FC = () => {
   );
 };
 
-const LegendChip: React.FC<{ color: { bg: string; border: string; color: string }; children: React.ReactNode }> = ({ color, children }) => (
+const LegendChip: React.FC<{ color: { bg: string; border: string; color: string }; dashed?: boolean; children: React.ReactNode }> = ({ color, dashed, children }) => (
   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-    <span style={{ display: 'inline-block', width: 24, height: 14, background: color.bg, border: `1px solid ${color.border}`, borderRadius: 3 }} />
+    <span style={{ display: 'inline-block', width: 24, height: 14, background: color.bg, border: `1px ${dashed ? 'dashed' : 'solid'} ${color.border}`, borderRadius: 3 }} />
     {children}
   </span>
 );

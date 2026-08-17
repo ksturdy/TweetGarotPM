@@ -12,6 +12,55 @@ const router = express.Router();
 router.use(authenticate);
 router.use(tenantContext);
 
+// GET /api/project-assignments/unfilled  — all open roles across all projects
+router.get('/unfilled', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const rows = await ProjectAssignment.findUnfilledRoles(req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/project-assignments/:id/candidates  — available employees for an unfilled role
+router.get('/:id/candidates', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const candidates = await ProjectAssignment.findCandidatesForRole(req.params.id, req.tenantId);
+    res.json(candidates);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/project-assignments/unfilled  — create an unfilled role
+router.post('/unfilled', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { projectId, laborAccountId, trade, role, startDate, endDate, fillNotes, shiftPattern, shiftStartTime, shiftEndTime, status } = req.body;
+    if (!projectId && !laborAccountId) return res.status(400).json({ error: 'projectId or laborAccountId is required' });
+    const assignment = await ProjectAssignment.addUnfilledRole(
+      { projectId, laborAccountId, trade, role, startDate, endDate, fillNotes, shiftPattern, shiftStartTime, shiftEndTime, status },
+      req.tenantId,
+      req.user.id
+    );
+    res.status(201).json(assignment);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/project-assignments/:id/fill  — fill an unfilled role with an employee
+router.post('/:id/fill', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { employeeId } = req.body;
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+    const updated = await ProjectAssignment.fillRole(req.params.id, employeeId, req.tenantId);
+    if (!updated) return res.status(404).json({ error: 'Assignment not found' });
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/project-assignments/search-employees?q=name
 router.get('/search-employees', authorize('admin', 'manager'), async (req, res, next) => {
   try {
