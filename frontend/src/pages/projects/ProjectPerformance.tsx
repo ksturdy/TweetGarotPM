@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import html2canvas from 'html2canvas';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
@@ -63,6 +64,10 @@ interface SortableCardProps {
 }
 
 const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, children }) => {
+  const [copied, setCopied] = useState(false);
+  const cardDivRef = useRef<HTMLDivElement | null>(null);
+  const copyBtnRef = useRef<HTMLButtonElement>(null);
+
   const {
     attributes,
     listeners,
@@ -73,9 +78,33 @@ const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, 
     isDragging,
   } = useSortable({ id });
 
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    cardDivRef.current = node;
+  }, [setNodeRef]);
+
+  const handleCopy = async () => {
+    if (!cardDivRef.current) return;
+    try {
+      const canvas = await html2canvas(cardDivRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        ignoreElements: (el) => el === copyBtnRef.current,
+      });
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    } catch (err) {
+      console.error('Failed to copy chart', err);
+    }
+  };
+
   return (
     <div
-      ref={setNodeRef}
+      ref={setRefs}
       className="card"
       style={{
         padding: '0.75rem',
@@ -106,6 +135,24 @@ const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, 
         <h3 style={{ margin: 0, fontSize: '0.85rem', color: '#475569', flex: 1 }}>
           {icon} {title}
         </h3>
+        <button
+          ref={copyBtnRef}
+          onClick={handleCopy}
+          title="Copy chart to clipboard"
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '2px 5px',
+            borderRadius: '4px',
+            fontSize: '0.75rem',
+            color: copied ? '#10b981' : '#94a3b8',
+            flexShrink: 0,
+            transition: 'color 0.2s',
+          }}
+        >
+          {copied ? '✓ Copied' : '⎘ Copy'}
+        </button>
       </div>
       <div style={{ height: '180px' }}>
         {children}
