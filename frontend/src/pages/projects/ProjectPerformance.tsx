@@ -122,7 +122,7 @@ const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, 
 const ProjectPerformance: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
 
-  const storageKey = `performanceCardOrder_${projectId}`;
+  const storageKey = 'performanceCardOrder';
 
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     try {
