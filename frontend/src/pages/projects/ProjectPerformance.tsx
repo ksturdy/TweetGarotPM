@@ -153,6 +153,39 @@ const ProjectPerformance: React.FC = () => {
     ],
   };
 
+  const estRevenueVsCostData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Estimated Revenue',
+        data: snapshots.map(s => s.projected_revenue || 0),
+        borderColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        tension: 0.3,
+        fill: true,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Projected Cost',
+        data: snapshots.map(s => s.current_est_cost || 0),
+        borderColor: '#ef4444',
+        backgroundColor: 'transparent',
+        borderDash: [5, 5],
+        tension: 0.3,
+        yAxisID: 'y',
+      },
+      {
+        label: 'GM%',
+        data: snapshots.map(s => (s.gross_profit_percent || 0) * 100),
+        borderColor: '#3b82f6',
+        backgroundColor: 'transparent',
+        borderDash: [3, 3],
+        tension: 0.3,
+        yAxisID: 'y1',
+      },
+    ],
+  };
+
   const gmVsCompleteData = {
     labels: dates,
     datasets: [
@@ -317,6 +350,36 @@ const ProjectPerformance: React.FC = () => {
     },
   };
 
+  const estRevenueVsCostOptions = {
+    ...chartOptions,
+    scales: {
+      x: { ticks: { font: { size: 10 } } },
+      y: {
+        type: 'linear' as const,
+        position: 'left' as const,
+        beginAtZero: false,
+        ticks: {
+          font: { size: 10 },
+          callback: (value: any) => {
+            const num = Number(value);
+            if (Math.abs(num) >= 1000000) return `$${(num / 1000000).toFixed(1)}M`;
+            return `$${(num / 1000).toFixed(0)}K`;
+          },
+        },
+      },
+      y1: {
+        type: 'linear' as const,
+        position: 'right' as const,
+        beginAtZero: false,
+        grid: { drawOnChartArea: false },
+        ticks: {
+          font: { size: 10 },
+          callback: (value: any) => `${Number(value).toFixed(1)}%`,
+        },
+      },
+    },
+  };
+
   if (isLoading || isLoadingSnapshots) return <div className="loading">Loading...</div>;
 
   if (!project) return <div className="card">Project not found</div>;
@@ -447,6 +510,19 @@ const ProjectPerformance: React.FC = () => {
           </div>
           <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
             Higher = better margin vs completion
+          </div>
+        </div>
+
+        {/* Estimated Revenue vs Projected Cost */}
+        <div className="card" style={{ padding: '0.75rem' }}>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
+            💵 Est. Revenue vs Projected Cost
+          </h3>
+          <div style={{ height: '180px' }}>
+            <Line data={estRevenueVsCostData} options={estRevenueVsCostOptions} />
+          </div>
+          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
+            Gap between lines = estimated gross profit
           </div>
         </div>
       </div>
