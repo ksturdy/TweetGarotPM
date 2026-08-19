@@ -1,10 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { format } from 'date-fns';
 import { Line } from 'react-chartjs-2';
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -17,7 +32,6 @@ import {
   Filler,
 } from 'chart.js';
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -29,8 +43,116 @@ ChartJS.register(
   Filler
 );
 
+const DEFAULT_CARD_ORDER = [
+  'gm-percent',
+  'labor-rate',
+  'revenue',
+  'gm-by-complete',
+  'budget-variance',
+  'productivity',
+  'gm-vs-complete',
+  'est-revenue-cost',
+];
+
+interface SortableCardProps {
+  id: string;
+  title: string;
+  icon: string;
+  footnote?: string;
+  children: React.ReactNode;
+}
+
+const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="card"
+      style={{
+        padding: '0.75rem',
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.35 : 1,
+        position: 'relative',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+        <span
+          ref={setActivatorNodeRef}
+          {...listeners}
+          {...attributes}
+          title="Drag to reorder"
+          style={{
+            cursor: isDragging ? 'grabbing' : 'grab',
+            color: '#cbd5e1',
+            fontSize: '1rem',
+            lineHeight: 1,
+            flexShrink: 0,
+            userSelect: 'none',
+            touchAction: 'none',
+          }}
+        >
+          ⠿
+        </span>
+        <h3 style={{ margin: 0, fontSize: '0.85rem', color: '#475569', flex: 1 }}>
+          {icon} {title}
+        </h3>
+      </div>
+      <div style={{ height: '180px' }}>
+        {children}
+      </div>
+      {footnote && (
+        <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
+          {footnote}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ProjectPerformance: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
+
+  const storageKey = `performanceCardOrder_${projectId}`;
+
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        // Append any newly added cards not yet in saved order
+        const merged = [...parsed, ...DEFAULT_CARD_ORDER.filter(id => !parsed.includes(id))];
+        return merged;
+      }
+    } catch {}
+    return DEFAULT_CARD_ORDER;
+  });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setCardOrder(prev => {
+        const oldIndex = prev.indexOf(String(active.id));
+        const newIndex = prev.indexOf(String(over.id));
+        const next = arrayMove(prev, oldIndex, newIndex);
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        return next;
+      });
+    }
+  };
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', projectId],
@@ -43,7 +165,6 @@ const ProjectPerformance: React.FC = () => {
     enabled: !!projectId,
   });
 
-  // Transform snapshot data for charts
   const dates = snapshots.map(s => {
     if (!s.snapshot_date) return '';
     const d = new Date(String(s.snapshot_date).slice(0, 10) + 'T00:00:00');
@@ -51,13 +172,10 @@ const ProjectPerformance: React.FC = () => {
   });
   const hasData = snapshots.length > 0;
 
-  // Original estimated margin is a constant — use project override or latest non-zero snapshot value
   const targetMarginPct = (() => {
-    // Prefer the project-level override
     if (project?.override_original_estimated_margin_pct != null && project.override_original_estimated_margin_pct !== 0) {
       return Number(project.override_original_estimated_margin_pct) * 100;
     }
-    // Fall back to the last non-zero value from snapshots
     for (let i = snapshots.length - 1; i >= 0; i--) {
       const val = snapshots[i].original_estimated_margin_pct;
       if (val != null && val !== 0) return Number(val) * 100;
@@ -153,39 +271,6 @@ const ProjectPerformance: React.FC = () => {
     ],
   };
 
-  const estRevenueVsCostData = {
-    labels: dates,
-    datasets: [
-      {
-        label: 'Estimated Revenue',
-        data: snapshots.map(s => s.projected_revenue || 0),
-        borderColor: '#f59e0b',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        tension: 0.3,
-        fill: true,
-        yAxisID: 'y',
-      },
-      {
-        label: 'Projected Cost',
-        data: snapshots.map(s => s.current_est_cost || 0),
-        borderColor: '#ef4444',
-        backgroundColor: 'transparent',
-        borderDash: [5, 5],
-        tension: 0.3,
-        yAxisID: 'y',
-      },
-      {
-        label: 'GM%',
-        data: snapshots.map(s => (s.gross_profit_percent || 0) * 100),
-        borderColor: '#3b82f6',
-        backgroundColor: 'transparent',
-        borderDash: [3, 3],
-        tension: 0.3,
-        yAxisID: 'y1',
-      },
-    ],
-  };
-
   const gmVsCompleteData = {
     labels: dates,
     datasets: [
@@ -252,6 +337,39 @@ const ProjectPerformance: React.FC = () => {
     ],
   };
 
+  const estRevenueVsCostData = {
+    labels: dates,
+    datasets: [
+      {
+        label: 'Estimated Revenue',
+        data: snapshots.map(s => s.projected_revenue || 0),
+        borderColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        tension: 0.3,
+        fill: true,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Projected Cost',
+        data: snapshots.map(s => s.current_est_cost || 0),
+        borderColor: '#ef4444',
+        backgroundColor: 'transparent',
+        borderDash: [5, 5],
+        tension: 0.3,
+        yAxisID: 'y',
+      },
+      {
+        label: 'GM%',
+        data: snapshots.map(s => (s.gross_profit_percent || 0) * 100),
+        borderColor: '#3b82f6',
+        backgroundColor: 'transparent',
+        borderDash: [3, 3],
+        tension: 0.3,
+        yAxisID: 'y1',
+      },
+    ],
+  };
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -274,14 +392,10 @@ const ProjectPerformance: React.FC = () => {
     scales: {
       y: {
         beginAtZero: false,
-        ticks: {
-          font: { size: 10 },
-        },
+        ticks: { font: { size: 10 } },
       },
       x: {
-        ticks: {
-          font: { size: 10 },
-        },
+        ticks: { font: { size: 10 } },
       },
     },
   };
@@ -310,9 +424,7 @@ const ProjectPerformance: React.FC = () => {
           ...chartOptions.scales.y.ticks,
           callback: (value: any) => {
             const num = Number(value);
-            if (Math.abs(num) >= 1000000) {
-              return `$${(num / 1000000).toFixed(1)}M`;
-            }
+            if (Math.abs(num) >= 1000000) return `$${(num / 1000000).toFixed(1)}M`;
             return `$${(num / 1000).toFixed(0)}K`;
           },
         },
@@ -380,6 +492,53 @@ const ProjectPerformance: React.FC = () => {
     },
   };
 
+  const cardDefs: Record<string, { title: string; icon: string; footnote?: string; chart: React.ReactNode }> = {
+    'gm-percent': {
+      title: 'Gross Margin % Trend',
+      icon: '📊',
+      chart: <Line data={gmPercentData} options={percentChartOptions} />,
+    },
+    'labor-rate': {
+      title: 'Labor Rate Trend',
+      icon: '⚙️',
+      chart: <Line data={laborRateData} options={rateChartOptions} />,
+    },
+    'revenue': {
+      title: 'Revenue Trend',
+      icon: '💰',
+      chart: <Line data={revenueData} options={currencyChartOptions} />,
+    },
+    'gm-by-complete': {
+      title: 'GM% by % Complete',
+      icon: '📊',
+      chart: <Line data={gmByPercentCompleteData} options={gmByPercentCompleteOptions} />,
+    },
+    'budget-variance': {
+      title: 'Budget Variance %',
+      icon: '📉',
+      footnote: 'Positive = under budget, Negative = over budget',
+      chart: <Line data={costVarianceData} options={percentChartOptions} />,
+    },
+    'productivity': {
+      title: 'Labor Productivity',
+      icon: '⚡',
+      footnote: 'Hours per $1000 revenue (lower is better)',
+      chart: <Line data={productivityData} options={chartOptions} />,
+    },
+    'gm-vs-complete': {
+      title: 'GM% × % Complete',
+      icon: '📈',
+      footnote: 'Higher = better margin vs completion',
+      chart: <Line data={gmVsCompleteData} options={chartOptions} />,
+    },
+    'est-revenue-cost': {
+      title: 'Est. Revenue vs Projected Cost',
+      icon: '💵',
+      footnote: 'Gap between lines = estimated gross profit',
+      chart: <Line data={estRevenueVsCostData} options={estRevenueVsCostOptions} />,
+    },
+  };
+
   if (isLoading || isLoadingSnapshots) return <div className="loading">Loading...</div>;
 
   if (!project) return <div className="card">Project not found</div>;
@@ -433,99 +592,21 @@ const ProjectPerformance: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
-        {/* GM% Trend */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            📊 Gross Margin % Trend
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={gmPercentData} options={percentChartOptions} />
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={cardOrder} strategy={rectSortingStrategy}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+            {cardOrder.map(id => {
+              const def = cardDefs[id];
+              if (!def) return null;
+              return (
+                <SortableCard key={id} id={id} title={def.title} icon={def.icon} footnote={def.footnote}>
+                  {def.chart}
+                </SortableCard>
+              );
+            })}
           </div>
-        </div>
-
-        {/* Labor Rate Trend */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            ⚙️ Labor Rate Trend
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={laborRateData} options={rateChartOptions} />
-          </div>
-        </div>
-
-        {/* Revenue Trend */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            💰 Revenue Trend
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={revenueData} options={currencyChartOptions} />
-          </div>
-        </div>
-
-        {/* GM% vs % Complete (x-axis = % complete) */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            📊 GM% by % Complete
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={gmByPercentCompleteData} options={gmByPercentCompleteOptions} />
-          </div>
-        </div>
-
-        {/* Budget Variance */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            📉 Budget Variance %
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={costVarianceData} options={percentChartOptions} />
-          </div>
-          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
-            Positive = under budget, Negative = over budget
-          </div>
-        </div>
-
-        {/* Productivity Index */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            ⚡ Labor Productivity
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={productivityData} options={chartOptions} />
-          </div>
-          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
-            Hours per $1000 revenue (lower is better)
-          </div>
-        </div>
-
-        {/* GM% × % Complete — row 3 */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            📈 GM% × % Complete
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={gmVsCompleteData} options={chartOptions} />
-          </div>
-          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
-            Higher = better margin vs completion
-          </div>
-        </div>
-
-        {/* Estimated Revenue vs Projected Cost */}
-        <div className="card" style={{ padding: '0.75rem' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: '#475569' }}>
-            💵 Est. Revenue vs Projected Cost
-          </h3>
-          <div style={{ height: '180px' }}>
-            <Line data={estRevenueVsCostData} options={estRevenueVsCostOptions} />
-          </div>
-          <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.35rem' }}>
-            Gap between lines = estimated gross profit
-          </div>
-        </div>
-      </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 };
