@@ -311,6 +311,13 @@ const ScheduledReports: React.FC = () => {
     );
   }, [users, recipientSearch]);
 
+  const inactiveSelectedUsers = useMemo(() => {
+    const activeIds = new Set(users.map((u: User) => u.id));
+    return (allUsers as User[]).filter(
+      (u: User) => !u.is_active && form.recipient_user_ids.includes(u.id) && !activeIds.has(u.id)
+    );
+  }, [allUsers, users, form.recipient_user_ids]);
+
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...DEFAULT_FORM });
@@ -1210,6 +1217,44 @@ const ScheduledReports: React.FC = () => {
                   </div>
                   {/* User list */}
                   <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+                    {/* Inactive recipients pinned at top so they can be removed */}
+                    {inactiveSelectedUsers.map(user => (
+                      <div
+                        key={`inactive-${user.id}`}
+                        onClick={() => toggleRecipient(user.id)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.75rem',
+                          padding: '0.5rem 0.75rem', cursor: 'pointer',
+                          background: '#fff7ed',
+                          borderBottom: '1px solid #fed7aa',
+                        }}
+                      >
+                        <div style={{
+                          width: '18px', height: '18px', borderRadius: '4px',
+                          border: '2px solid #f97316',
+                          background: '#f97316',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#9a3412' }}>
+                            {user.first_name} {user.last_name}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#c2410c' }}>{user.email}</div>
+                        </div>
+                        <span style={{
+                          fontSize: '0.625rem', fontWeight: 600, padding: '2px 6px',
+                          borderRadius: '4px', background: '#fed7aa', color: '#9a3412',
+                          textTransform: 'uppercase',
+                        }}>
+                          Inactive
+                        </span>
+                      </div>
+                    ))}
                     {users.length === 0 ? (
                       <div style={{ padding: '1rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.875rem' }}>
                         No active users found

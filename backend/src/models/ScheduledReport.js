@@ -108,7 +108,7 @@ class ScheduledReport {
       `SELECT sr.*,
         u.first_name || ' ' || u.last_name AS created_by_name,
         COALESCE(
-          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email))
+          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email, 'is_active', ru.is_active))
            FROM scheduled_report_recipients srr
            JOIN users ru ON srr.user_id = ru.id
            WHERE srr.scheduled_report_id = sr.id),
@@ -136,7 +136,7 @@ class ScheduledReport {
       `SELECT sr.*,
         u.first_name || ' ' || u.last_name AS created_by_name,
         COALESCE(
-          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email))
+          (SELECT json_agg(json_build_object('user_id', srr.user_id, 'first_name', ru.first_name, 'last_name', ru.last_name, 'email', ru.email, 'is_active', ru.is_active))
            FROM scheduled_report_recipients srr
            JOIN users ru ON srr.user_id = ru.id
            WHERE srr.scheduled_report_id = sr.id),
@@ -309,7 +309,7 @@ class ScheduledReport {
         COALESCE(
           (SELECT json_agg(json_build_object('user_id', srr.user_id, 'email', u.email, 'first_name', u.first_name, 'last_name', u.last_name))
            FROM scheduled_report_recipients srr
-           JOIN users u ON srr.user_id = u.id
+           JOIN users u ON srr.user_id = u.id AND u.is_active = true
            WHERE srr.scheduled_report_id = sr.id),
           '[]'::json
         ) AS recipients,

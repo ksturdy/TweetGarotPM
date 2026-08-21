@@ -133,7 +133,9 @@ class Team {
       JOIN employees e ON tm.employee_id = e.id
       LEFT JOIN departments d ON e.department_id = d.id
       JOIN teams t ON tm.team_id = t.id
+      LEFT JOIN users u ON e.user_id = u.id
       WHERE tm.team_id = $1 AND t.tenant_id = $2
+        AND (e.user_id IS NULL OR u.is_active = true)
       ORDER BY tm.role = 'lead' DESC, e.last_name ASC
     `, [teamId, tenantId]);
     return result.rows;
