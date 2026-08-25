@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -50,6 +50,40 @@ const getInitialExpandedSections = (): string[] => {
     }
   }
   return DEFAULT_EXPANDED;
+};
+
+interface FlyoutMenuProps {
+  item: NavItem;
+  top: number;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  isChildPathActive: (path: string, siblings: string[]) => boolean;
+  onNavigate: () => void;
+}
+
+const FlyoutMenu: React.FC<FlyoutMenuProps> = ({ item, top, onMouseEnter, onMouseLeave, isChildPathActive, onNavigate }) => {
+  if (!item?.children) return null;
+  const siblingPaths = item.children.map(c => c.path);
+  return (
+    <div
+      className="sidebar-flyout"
+      style={{ top }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="sidebar-flyout-header">{item.label}</div>
+      {item.children.map(child => (
+        <Link
+          key={child.path}
+          to={child.path}
+          className={`sidebar-flyout-item ${isChildPathActive(child.path, siblingPaths) ? 'active' : ''}`}
+          onClick={onNavigate}
+        >
+          {child.label}
+        </Link>
+      ))}
+    </div>
+  );
 };
 
 interface SidebarProps {
@@ -192,6 +226,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
     },
   ];
 
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [megaMenuTop, setMegaMenuTop] = useState(0);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleNavMouseEnter = useCallback((label: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMegaMenuTop(rect.top);
+    setHoveredItem(label);
+  }, []);
+
+  const handleNavMouseLeave = useCallback(() => {
+    hoverTimeout.current = setTimeout(() => setHoveredItem(null), 80);
+  }, []);
+
+  const handleMegaMenuMouseEnter = useCallback(() => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+  }, []);
+
+  const handleMegaMenuMouseLeave = useCallback(() => {
+    setHoveredItem(null);
+  }, []);
+
   const toggleSection = (label: string) => {
     setExpandedSections((prev) =>
       prev.includes(label) ? prev.filter((s) => s !== label) : [...prev, label]
@@ -254,8 +311,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
         <div key={item.label} className="nav-section">
           <button
             className={`nav-item nav-item-expandable ${isActive ? 'active' : ''}`}
-            onClick={() => toggleSection(item.label)}
+            onClick={() => !isCollapsed && toggleSection(item.label)}
             title={isCollapsed ? item.label : undefined}
+            onMouseEnter={isCollapsed ? (e) => handleNavMouseEnter(item.label, e) : undefined}
+            onMouseLeave={isCollapsed ? handleNavMouseLeave : undefined}
           >
             <span className="nav-icon">{item.icon}</span>
             {!isCollapsed && (
@@ -315,6 +374,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
           </>
         )}
       </div>
+
+      {isCollapsed && hoveredItem && (
+        <FlyoutMenu
+          item={[...navItems, ...adminItems].find(i => i.label === hoveredItem)!}
+          top={megaMenuTop}
+          onMouseEnter={handleMegaMenuMouseEnter}
+          onMouseLeave={handleMegaMenuMouseLeave}
+          isChildPathActive={isChildPathActive}
+          onNavigate={() => { setHoveredItem(null); onClose(); }}
+        />
+      )}
 
       <button
         className="sidebar-toggle"
