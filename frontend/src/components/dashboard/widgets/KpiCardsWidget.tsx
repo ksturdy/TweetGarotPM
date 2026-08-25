@@ -6,9 +6,10 @@ import opportunitiesService from '../../../services/opportunities';
 import { cashFlowReportApi } from '../../../services/cashFlowReport';
 import FolderIcon from '@mui/icons-material/Folder';
 import AssignmentIcon from '@mui/icons-material/Assignment';
-import InventoryIcon from '@mui/icons-material/Inventory';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { WidgetProps } from '../types';
@@ -21,6 +22,13 @@ const fmtSignedCurrency = (n: number) => {
   else if (abs >= 1_000) body = `$${(abs / 1_000).toFixed(0)}K`;
   else body = `$${Math.round(abs)}`;
   return n < 0 ? `-${body}` : body;
+};
+
+const getProbabilityPct = (probability: string | null | undefined): number => {
+  if (probability === 'High') return 80;
+  if (probability === 'Medium') return 40;
+  if (probability === 'Low') return 15;
+  return 0;
 };
 
 const KpiCardsWidget: React.FC<WidgetProps> = ({
@@ -83,17 +91,12 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
 
   const cashFlowMetrics = React.useMemo(() => {
     if (!cashFlowData) return { totalCashFlow: 0 };
-
     const teamIds = teamMemberEmployeeIds.map(Number);
     const scoped = cashFlowData.filter((p) => {
       switch (viewScope) {
-        case 'my':
-          return Number(p.manager_id) === Number(currentEmployeeId);
-        case 'team':
-          return teamIds.includes(Number(p.manager_id));
-        case 'company':
-        default:
-          return true;
+        case 'my': return Number(p.manager_id) === Number(currentEmployeeId);
+        case 'team': return teamIds.includes(Number(p.manager_id));
+        case 'company': default: return true;
       }
     }).filter((p) => p.status === 'Open' || p.status === 'Soft-Closed');
 
@@ -108,24 +111,26 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
   const activeProjects = projects?.filter((p: any) =>
     p.status === 'active' || p.status === 'Open'
   ) || [];
-  const totalProjects = projects?.length || 0;
 
-  const pipelineValue = opportunities?.reduce((sum: number, opp: any) => {
-    const stageName = opp.stage_name?.toLowerCase() || '';
-    if (stageName !== 'won' && stageName !== 'lost') {
-      return sum + (parseFloat(opp.estimated_value) || 0);
-    }
-    return sum;
-  }, 0) || 0;
-
-  const openOpportunities = opportunities?.filter((o: any) => {
+  const activeOpportunities = opportunities?.filter((o: any) => {
     const stageName = o.stage_name?.toLowerCase() || '';
-    return stageName !== 'won' && stageName !== 'lost';
-  }).length || 0;
+    return stageName !== 'won' && stageName !== 'lost' && stageName !== 'passed';
+  }) || [];
+
+  const pipelineValue = activeOpportunities.reduce((sum: number, opp: any) =>
+    sum + (parseFloat(opp.estimated_value) || 0), 0);
+
+  const weightedValue = activeOpportunities.reduce((sum: number, opp: any) =>
+    sum + (parseFloat(opp.estimated_value) || 0) * getProbabilityPct(opp.probability) / 100, 0);
 
   const backlogTotal = backlogSnapshot?.total_backlog ?? 0;
   const gmPct = backlogSnapshot?.weighted_gm_pct ?? null;
   const gmDisplay = gmPct == null ? '—' : `${gmPct.toFixed(1)}%`;
+
+  const backlog6mo = backlogSnapshot?.backlog_6mo ?? null;
+  const gm6mo = backlogSnapshot?.backlog_6mo_gm_pct ?? null;
+  const gm6moDisplay = gm6mo == null ? '—' : `${gm6mo.toFixed(1)}%`;
+
   const cashFlowClass =
     cashFlowMetrics.totalCashFlow > 0 ? 'kpi-icon-green' :
     cashFlowMetrics.totalCashFlow < 0 ? 'kpi-icon-red' :
@@ -134,14 +139,14 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
   return (
     <div className="kpi-grid">
       <div className="kpi-card">
-        <div className="kpi-icon kpi-icon-blue">
-          <FolderIcon />
+        <div className="kpi-icon kpi-icon-green">
+          <AssignmentIcon />
         </div>
         <div className="kpi-content">
-          <div className="kpi-value">{activeProjects.length}</div>
-          <div className="kpi-label">Active Projects</div>
+          <div className="kpi-value">{activeOpportunities.length}</div>
+          <div className="kpi-label">Active Opportunities</div>
         </div>
-        <Link to="/projects" className="kpi-link">
+        <Link to="/sales" className="kpi-link">
           <ArrowForwardIcon fontSize="small" />
         </Link>
       </div>
@@ -160,12 +165,12 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
       </div>
 
       <div className="kpi-card">
-        <div className="kpi-icon kpi-icon-green">
-          <AssignmentIcon />
+        <div className="kpi-icon kpi-icon-amber">
+          <ShowChartIcon />
         </div>
         <div className="kpi-content">
-          <div className="kpi-value">{openOpportunities}</div>
-          <div className="kpi-label">Active Opportunities</div>
+          <div className="kpi-value">{formatCurrency(weightedValue)}</div>
+          <div className="kpi-label">Weighted Value</div>
         </div>
         <Link to="/sales" className="kpi-link">
           <ArrowForwardIcon fontSize="small" />
@@ -173,12 +178,12 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
       </div>
 
       <div className="kpi-card">
-        <div className="kpi-icon kpi-icon-purple">
-          <InventoryIcon />
+        <div className="kpi-icon kpi-icon-blue">
+          <FolderIcon />
         </div>
         <div className="kpi-content">
-          <div className="kpi-value">{totalProjects}</div>
-          <div className="kpi-label">Total Projects</div>
+          <div className="kpi-value">{activeProjects.length}</div>
+          <div className="kpi-label">Active Projects</div>
         </div>
         <Link to="/projects" className="kpi-link">
           <ArrowForwardIcon fontSize="small" />
@@ -195,6 +200,22 @@ const KpiCardsWidget: React.FC<WidgetProps> = ({
             <span className="kpi-subvalue"> / {gmDisplay}</span>
           </div>
           <div className="kpi-label">Backlog $ / GM%</div>
+        </div>
+        <Link to="/projects" className="kpi-link">
+          <ArrowForwardIcon fontSize="small" />
+        </Link>
+      </div>
+
+      <div className="kpi-card" title="Projected backlog remaining 6 months from today based on revenue contour.">
+        <div className="kpi-icon kpi-icon-purple">
+          <DateRangeIcon />
+        </div>
+        <div className="kpi-content">
+          <div className="kpi-value">
+            {backlog6mo != null ? formatCurrency(backlog6mo) : '—'}
+            {gm6mo != null && <span className="kpi-subvalue"> / {gm6moDisplay}</span>}
+          </div>
+          <div className="kpi-label">Backlog 6 Mo Out</div>
         </div>
         <Link to="/projects" className="kpi-link">
           <ArrowForwardIcon fontSize="small" />
