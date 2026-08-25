@@ -220,10 +220,6 @@ const ProjectList: React.FC = () => {
     queryFn: () => teamsApi.getMembers(Number(teamFilter)),
     enabled: !!teamFilter,
   });
-  const { data: backlogSnapshot } = useQuery({
-    queryKey: ['projects', 'backlog-snapshot'],
-    queryFn: () => projectsApi.getBacklogSnapshot(),
-  });
 
   // GM Override state
   const [gmOverridePercent, setGmOverridePercent] = useState('16.5');
@@ -494,6 +490,16 @@ const ProjectList: React.FC = () => {
     );
   });
 
+  const filteredManagerIds = useMemo(() => {
+    return [...new Set(filteredProjects.map(p => p.manager_id).filter((id): id is number => id != null))].sort((a, b) => a - b);
+  }, [filteredProjects]);
+
+  const { data: filteredSnapshot } = useQuery({
+    queryKey: ['projects', 'backlog-snapshot', filteredManagerIds],
+    queryFn: () => projectsApi.getBacklogSnapshot({ managerIds: filteredManagerIds }),
+    enabled: filteredManagerIds.length > 0,
+  });
+
   // Sort projects - isFavoriteds at top on initial load
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     // On initial load (before user sorts), put isFavoriteds at top
@@ -583,22 +589,25 @@ const ProjectList: React.FC = () => {
   const kpis = (() => {
     const projectCount = filteredProjects.length;
     const totalContractValue = filteredProjects.reduce((sum, p) => sum + (Number(p.contract_value) || 0), 0);
-    const totalBacklog = filteredProjects.reduce((sum, p) => sum + (Number(p.backlog) || 0), 0);
+    const totalBacklog = filteredProjects.reduce((sum, p) => {
+      const bl = Number(p.backlog) || 0;
+      return bl > 0 ? sum + bl : sum;
+    }, 0);
     const projectsWithGm = filteredProjects.filter(p => p.gross_margin_percent !== undefined && p.gross_margin_percent !== null);
     const avgGrossMargin = projectsWithGm.length > 0
       ? projectsWithGm.reduce((sum, p) => sum + (Number(p.gross_margin_percent) || 0), 0) / projectsWithGm.length
       : 0;
-    // Backlog-weighted GM%: each project's GM weighted by its backlog dollars
+    // Backlog-weighted GM%: only projects with positive backlog (matches backlog-snapshot API behavior)
     const backlogGmNumerator = filteredProjects.reduce((sum, p) => {
       const bl = Number(p.backlog) || 0;
       const gm = Number(p.gross_margin_percent);
-      if (!bl || gm === null || gm === undefined || isNaN(gm)) return sum;
+      if (bl <= 0 || gm === null || gm === undefined || isNaN(gm)) return sum;
       return sum + bl * gm;
     }, 0);
     const backlogGmDenominator = filteredProjects.reduce((sum, p) => {
       const bl = Number(p.backlog) || 0;
       const gm = Number(p.gross_margin_percent);
-      if (!bl || gm === null || gm === undefined || isNaN(gm)) return sum;
+      if (bl <= 0 || gm === null || gm === undefined || isNaN(gm)) return sum;
       return sum + bl;
     }, 0);
     const gmInBacklog = backlogGmDenominator > 0 ? backlogGmNumerator / backlogGmDenominator : 0;
@@ -841,14 +850,14 @@ const ProjectList: React.FC = () => {
         {[
           { label: 'Projects', value: kpis.projectCount.toLocaleString(), color: '#1e293b' },
           { label: 'Contract Value', value: `$${(kpis.totalContractValue / 1000000).toFixed(1)}M`, color: '#3b82f6' },
-          { label: 'Total Backlog', value: backlogSnapshot ? `$${(backlogSnapshot.total_backlog / 1000000).toFixed(1)}M` : '-', color: '#002356',
-            gm: backlogSnapshot?.weighted_gm_pct, gmColor: backlogSnapshot?.weighted_gm_pct != null && backlogSnapshot.weighted_gm_pct >= 15 ? '#059669' : '#dc2626' },
-          { label: 'Backlog 6 Mo', value: backlogSnapshot ? `$${(backlogSnapshot.backlog_6mo / 1000000).toFixed(1)}M` : '-', color: '#0369a1',
-            gm: backlogSnapshot?.backlog_6mo_gm_pct, gmColor: backlogSnapshot?.backlog_6mo_gm_pct != null && backlogSnapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
-          { label: 'Backlog 12 Mo', value: backlogSnapshot ? `$${(backlogSnapshot.backlog_12mo / 1000000).toFixed(1)}M` : '-', color: '#6366f1',
-            gm: backlogSnapshot?.backlog_12mo_gm_pct, gmColor: backlogSnapshot?.backlog_12mo_gm_pct != null && backlogSnapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
-          { label: 'Avg Project GM%', value: backlogSnapshot?.avg_project_gm_pct != null ? `${backlogSnapshot.avg_project_gm_pct.toFixed(1)}%` : '-',
-            color: backlogSnapshot?.avg_project_gm_pct != null && backlogSnapshot.avg_project_gm_pct >= 15 ? '#10b981' : '#ef4444' },
+          { label: 'Total Backlog', value: `$${(kpis.totalBacklog / 1000000).toFixed(1)}M`, color: '#002356',
+            gm: kpis.totalBacklog > 0 ? kpis.gmInBacklog * 100 : null, gmColor: kpis.gmInBacklog * 100 >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Backlog 6 Mo', value: filteredSnapshot ? `$${(filteredSnapshot.backlog_6mo / 1000000).toFixed(1)}M` : '-', color: '#0369a1',
+            gm: filteredSnapshot?.backlog_6mo_gm_pct, gmColor: filteredSnapshot?.backlog_6mo_gm_pct != null && filteredSnapshot.backlog_6mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Backlog 12 Mo', value: filteredSnapshot ? `$${(filteredSnapshot.backlog_12mo / 1000000).toFixed(1)}M` : '-', color: '#6366f1',
+            gm: filteredSnapshot?.backlog_12mo_gm_pct, gmColor: filteredSnapshot?.backlog_12mo_gm_pct != null && filteredSnapshot.backlog_12mo_gm_pct >= 15 ? '#059669' : '#dc2626' },
+          { label: 'Avg Project GM%', value: `${(kpis.avgGrossMargin * 100).toFixed(1)}%`,
+            color: kpis.avgGrossMargin * 100 >= 15 ? '#10b981' : '#ef4444' },
           { label: 'Avg Project Value', value: `$${Math.round(kpis.avgProjectValue).toLocaleString()}`, color: '#f59e0b' },
         ].map((kpi, i) => (
           <React.Fragment key={i}>
