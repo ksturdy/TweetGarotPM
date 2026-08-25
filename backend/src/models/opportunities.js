@@ -455,35 +455,38 @@ const opportunities = {
   },
 
   /**
-   * Get pipeline trend over time for a tenant
+   * Get pipeline trend over time for a tenant.
+   * Shows the cumulative active pipeline value at the end of each month
+   * (all opportunities created on or before that month, excluding Lost/Passed).
    */
   async getPipelineTrend(months = 7, tenantId) {
     const query = `
-      WITH RECURSIVE months AS (
-        SELECT
-          DATE_TRUNC('month', CURRENT_DATE - (generate_series(0, $1 - 1) || ' months')::interval) as month
+      WITH month_series AS (
+        SELECT DATE_TRUNC('month', CURRENT_DATE - (gs.n || ' months')::interval) AS month_start
+        FROM generate_series(0, $1 - 1) AS gs(n)
       ),
-      monthly_pipeline AS (
+      excluded_stage_ids AS (
+        SELECT id FROM pipeline_stages
+        WHERE tenant_id = $2 AND name IN ('Lost', 'Passed')
+      ),
+      active_opps AS (
         SELECT
-          DATE_TRUNC('month', o.created_at) as month,
-          SUM(o.estimated_value) as pipeline_value,
-          COUNT(*) as opportunity_count
-        FROM opportunities o
-        WHERE
-          o.tenant_id = $2
-          AND o.created_at >= DATE_TRUNC('month', CURRENT_DATE - ($1 || ' months')::interval)
-          AND o.stage_id != (SELECT id FROM pipeline_stages WHERE name = 'Lost' AND tenant_id = $2 LIMIT 1)
-        GROUP BY DATE_TRUNC('month', o.created_at)
+          DATE_TRUNC('month', created_at) AS created_month,
+          COALESCE(estimated_value, 0) AS estimated_value
+        FROM opportunities
+        WHERE tenant_id = $2
+          AND stage_id NOT IN (SELECT id FROM excluded_stage_ids)
       )
       SELECT
-        TO_CHAR(m.month, 'Mon') as month_label,
-        EXTRACT(YEAR FROM m.month) as year,
-        EXTRACT(MONTH FROM m.month) as month_num,
-        COALESCE(mp.pipeline_value, 0) as pipeline_value,
-        COALESCE(mp.opportunity_count, 0) as opportunity_count
-      FROM months m
-      LEFT JOIN monthly_pipeline mp ON m.month = mp.month
-      ORDER BY m.month ASC
+        TO_CHAR(ms.month_start, 'Mon') AS month_label,
+        EXTRACT(YEAR FROM ms.month_start) AS year,
+        EXTRACT(MONTH FROM ms.month_start) AS month_num,
+        COALESCE(SUM(ao.estimated_value), 0) AS pipeline_value,
+        COUNT(ao.estimated_value) AS opportunity_count
+      FROM month_series ms
+      LEFT JOIN active_opps ao ON ao.created_month <= ms.month_start
+      GROUP BY ms.month_start
+      ORDER BY ms.month_start ASC
     `;
 
     const result = await pool.query(query, [months, tenantId]);

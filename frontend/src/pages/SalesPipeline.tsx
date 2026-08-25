@@ -100,11 +100,6 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => opportunitiesService.getAll()
   });
 
-  // Fetch pipeline trend data
-  const { data: trendData = [], isLoading: isTrendLoading } = useQuery({
-    queryKey: ['opportunities-trend'],
-    queryFn: () => opportunitiesService.getTrend(7)
-  });
 
   // Fetch pipeline stages
   const { data: pipelineStages = [], isLoading: isStagesLoading } = useQuery({
@@ -519,20 +514,39 @@ const SalesPipeline: React.FC = () => {
 
   const maxStageValue = Math.max(...Object.values(stageDataMap).map(s => s.value), 1);
 
-  // Chart data - use real trend data from API
-  const trendChartData = {
-    labels: trendData.map(d => d.month_label),
-    datasets: [
-      {
+  // Compute pipeline trend from filtered opportunities so the current month
+  // always matches the Pipeline Value KPI exactly.
+  const trendChartData = useMemo(() => {
+    const MONTHS = 7;
+    const points: { label: string; cutoff: Date }[] = [];
+    for (let i = MONTHS - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - i + 1); // first day of next month = end of target month
+      d.setHours(0, 0, 0, 0);
+      const label = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+        .toLocaleString('en-US', { month: 'short' });
+      points.push({ label, cutoff: d });
+    }
+
+    const values = points.map(({ cutoff }) =>
+      filteredApiOpportunities
+        .filter(opp => new Date(opp.created_at) < cutoff)
+        .reduce((sum, opp) => sum + (Number(opp.estimated_value) || 0), 0) / 1_000_000
+    );
+
+    return {
+      labels: points.map(p => p.label),
+      datasets: [{
         label: 'Pipeline Value',
-        data: trendData.map(d => d.pipeline_value / 1000000), // Convert to millions
+        data: values,
         borderColor: '#3b82f6',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         tension: 0.4,
         fill: true
-      }
-    ]
-  };
+      }]
+    };
+  }, [filteredApiOpportunities]);
 
   const getSectorColor = (sector: string): string => {
     const colors: { [key: string]: string } = {
