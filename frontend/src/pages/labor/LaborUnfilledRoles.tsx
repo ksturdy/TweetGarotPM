@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -241,6 +241,8 @@ const AddUnfilledRoleDialog: React.FC<{ onClose: () => void; onSaved: () => void
 // ── Fill Role Dialog — candidate picker ────────────────────────────────
 const FillRoleDialog: React.FC<{ role: UnfilledRole; onClose: () => void; onFilled: () => void }> = ({ role, onClose, onFilled }) => {
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filterTrade, setFilterTrade] = useState('');
 
   const { data: candidates = [], isLoading } = useQuery({
     queryKey: ['role-candidates', role.id],
@@ -253,8 +255,18 @@ const FillRoleDialog: React.FC<{ role: UnfilledRole; onClose: () => void; onFill
     onError: (e: any) => setError(e?.response?.data?.error || e?.message || 'Failed to fill role'),
   });
 
-  const available = candidates.filter((c) => c.is_available);
-  const unavailable = candidates.filter((c) => !c.is_available);
+  const filtered = useMemo(() => {
+    if (!search && !filterTrade) return candidates;
+    const q = search.toLowerCase();
+    return candidates.filter((c) => {
+      const nameMatch = !search || `${c.first_name} ${c.last_name}`.toLowerCase().includes(q);
+      const tradeMatch = !filterTrade || (c.employee_trade || '') === filterTrade;
+      return nameMatch && tradeMatch;
+    });
+  }, [candidates, search, filterTrade]);
+
+  const available = filtered.filter((c) => c.is_available);
+  const unavailable = filtered.filter((c) => !c.is_available);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
@@ -271,6 +283,23 @@ const FillRoleDialog: React.FC<{ role: UnfilledRole; onClose: () => void; onFill
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.5rem' }}>
           {error && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.5rem 0.75rem', borderRadius: 6, fontSize: '0.85rem', marginBottom: 12 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <input
+              type="text"
+              placeholder="Search by name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ flex: 1, padding: '0.4rem 0.6rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: 6 }}
+            />
+            <select
+              value={filterTrade}
+              onChange={(e) => setFilterTrade(e.target.value)}
+              style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', border: '1px solid #e2e8f0', borderRadius: 6, color: filterTrade ? '#1e293b' : '#94a3b8' }}
+            >
+              <option value="">All trades</option>
+              {ASSIGNMENT_TRADES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
           {isLoading ? (
             <div style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>Loading candidates…</div>
           ) : (
@@ -297,6 +326,9 @@ const FillRoleDialog: React.FC<{ role: UnfilledRole; onClose: () => void; onFill
               )}
               {candidates.length === 0 && (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No employees found.</div>
+              )}
+              {candidates.length > 0 && filtered.length === 0 && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>No employees match your search.</div>
               )}
             </>
           )}

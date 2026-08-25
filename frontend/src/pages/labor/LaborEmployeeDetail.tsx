@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { laborApi, AssignmentRecord, ASSIGNMENT_TRADES } from '../../services/labor';
+import { laborApi, AssignmentRecord, ASSIGNMENT_TRADES, TimeOffRecord, TIME_OFF_LABELS, TIME_OFF_COLORS } from '../../services/labor';
 import { employeesApi } from '../../services/employees';
 import AssignDialog from '../../components/labor/AssignDialog';
 import NotifyDialog from '../../components/labor/NotifyDialog';
@@ -55,6 +55,11 @@ const LaborEmployeeDetail: React.FC = () => {
   const { data: past = [] } = useQuery({
     queryKey: ['employee-assignments', employeeId, 'past'],
     queryFn: () => laborApi.getEmployeeAssignments(employeeId, 'past'),
+  });
+
+  const { data: timeOff = [] } = useQuery({
+    queryKey: ['employee-time-off', employeeId],
+    queryFn: () => laborApi.getEmployeeTimeOff(employeeId),
   });
 
   const cancelMutation = useMutation({
@@ -213,6 +218,7 @@ const LaborEmployeeDetail: React.FC = () => {
                 onCancel={(a) => setConfirmAssignment(a)}
               />
               <AssignmentSection title="Past Assignments" rows={past} pastMode />
+              <TimeOffSection employeeId={employeeId} timeOff={timeOff} />
             </>
           )}
 
@@ -511,6 +517,92 @@ const AssignmentSection: React.FC<{
 
 const formatDate = (d: string) =>
   new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+const formatTimeOffDate = (d: string) =>
+  new Date(d.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+const TimeOffSection: React.FC<{ employeeId: number; timeOff: TimeOffRecord[] }> = ({ employeeId, timeOff }) => {
+  const qc = useQueryClient();
+
+  const toDay = (s: string) => {
+    const d = new Date(s.slice(0, 10) + 'T12:00:00');
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const current  = timeOff.filter((t) => toDay(t.start_date) <= today && toDay(t.end_date) >= today);
+  const upcoming = timeOff.filter((t) => toDay(t.start_date) > today);
+  const past     = timeOff.filter((t) => toDay(t.end_date) < today);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => laborApi.deleteTimeOff(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['employee-time-off', employeeId] }),
+  });
+
+  if (timeOff.length === 0) return null;
+
+  const renderRows = (rows: TimeOffRecord[], isPast: boolean) =>
+    rows.map((t) => {
+      const colors = TIME_OFF_COLORS[t.type];
+      return (
+        <tr key={t.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+          <td style={td}>
+            <span style={{ display: 'inline-block', padding: '0.15rem 0.6rem', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700, background: colors.bg, color: colors.color, border: `1px solid ${colors.border}` }}>
+              {TIME_OFF_LABELS[t.type]}
+            </span>
+          </td>
+          <td style={td}>{formatTimeOffDate(t.start_date)}</td>
+          <td style={td}>{formatTimeOffDate(t.end_date)}</td>
+          <td style={{ ...td, color: '#64748b' }}>{t.notes || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+          <td style={{ ...td, textAlign: 'right' }}>
+            {!isPast && (
+              <button
+                onClick={() => { if (window.confirm('Delete this time off entry?')) deleteMutation.mutate(t.id); }}
+                style={{ ...iconBtn, color: '#dc2626' }}
+                title="Delete"
+              >
+                ×
+              </button>
+            )}
+          </td>
+        </tr>
+      );
+    });
+
+  const groupHeader = (label: string, dim?: boolean) => (
+    <tr>
+      <td colSpan={5} style={{ padding: '0.3rem 0.75rem', fontSize: '0.7rem', fontWeight: 700, color: dim ? '#94a3b8' : '#475569', textTransform: 'uppercase', letterSpacing: 0.5, background: '#f8fafc' }}>
+        {label}
+      </td>
+    </tr>
+  );
+
+  return (
+    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: '1rem', overflow: 'hidden' }}>
+      <div style={{ padding: '0.7rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>
+        Time Off / Unavailability <span style={{ color: '#94a3b8', fontWeight: 400 }}>({timeOff.length})</span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <thead>
+          <tr style={{ background: '#fafbfc' }}>
+            <th style={th}>Type</th>
+            <th style={th}>Start</th>
+            <th style={th}>End</th>
+            <th style={th}>Notes</th>
+            <th style={th} />
+          </tr>
+        </thead>
+        <tbody>
+          {current.length > 0  && <>{groupHeader('Current')}{renderRows(current, false)}</>}
+          {upcoming.length > 0 && <>{groupHeader('Upcoming')}{renderRows(upcoming, false)}</>}
+          {past.length > 0     && <>{groupHeader('Past', true)}{renderRows(past, true)}</>}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 const renderDateCell = (d: string | null, overridden?: boolean) => {
   if (!d) return <span style={{ color: '#cbd5e1' }}>—</span>;

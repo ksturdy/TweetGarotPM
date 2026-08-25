@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Feedback, FeedbackVote } from '../../services/feedback';
 import { useAuth } from '../../context/AuthContext';
 import './FeedbackList.css';
+
+type SortCol = 'id' | 'created_at' | 'title' | 'submitter_name' | 'status' | 'module' | 'upvotes';
+type SortDir = 'asc' | 'desc';
 
 interface FeedbackListProps {
   feedbackItems: Feedback[];
@@ -21,6 +24,39 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
   selectedFeedbackId
 }) => {
   const { user } = useAuth();
+  const [sortCol, setSortCol] = useState<SortCol>('id');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+  };
+
+  const sorted = useMemo(() => {
+    return [...feedbackItems].sort((a, b) => {
+      let av: any = (a as any)[sortCol] ?? '';
+      let bv: any = (b as any)[sortCol] ?? '';
+      if (sortCol === 'upvotes') { av = Number(av); bv = Number(bv); }
+      else if (sortCol === 'id') { av = Number(av); bv = Number(bv); }
+      const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [feedbackItems, sortCol, sortDir]);
+
+  const SortTh: React.FC<{ col: SortCol; children: React.ReactNode; className?: string }> = ({ col, children, className }) => (
+    <th className={className} onClick={() => handleSort(col)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+      <span className="th-inner">
+        {children}
+        <span className={`sort-indicator ${sortCol === col ? 'active' : ''}`}>
+          {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </span>
+    </th>
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -82,17 +118,17 @@ const FeedbackList: React.FC<FeedbackListProps> = ({
         <table className="feedback-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Date</th>
-              <th>Title</th>
-              <th>Submitted By</th>
-              <th>Status</th>
-              <th>Module</th>
-              <th>Votes</th>
+              <SortTh col="id">#</SortTh>
+              <SortTh col="created_at">Date</SortTh>
+              <SortTh col="title">Title</SortTh>
+              <SortTh col="submitter_name">Submitted By</SortTh>
+              <SortTh col="status">Status</SortTh>
+              <SortTh col="module">Module</SortTh>
+              <SortTh col="upvotes">Votes</SortTh>
             </tr>
           </thead>
           <tbody>
-            {feedbackItems.map((feedback) => {
+            {sorted.map((feedback) => {
               const userVote = userVotes.get(feedback.id);
               const isSelected = selectedFeedbackId === feedback.id;
 

@@ -29,6 +29,28 @@
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  transition: background-color 0.1s;
+}
+
+.feedback-table thead th:hover {
+  background-color: #e6e8ec;
+  color: #1a1a2e;
+}
+
+.th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-indicator {
+  font-size: 10px;
+  color: #c0c2cc;
+  line-height: 1;
+}
+
+.sort-indicator.active {
+  color: #3b82f6;
 }
 
 .feedback-table tbody tr {

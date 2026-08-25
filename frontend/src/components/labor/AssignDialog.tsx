@@ -151,7 +151,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
     enabled: !lockedProjectId && open,
   });
 
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
     queryKey: ['labor-accounts'],
     queryFn: () => laborApi.getAccounts(),
     enabled: open && assignTarget === 'account',
@@ -371,7 +371,14 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
                       onChange={(e) => setAccountSearch(e.target.value)}
                       style={inputStyle}
                     />
-                    {filteredAccounts.length > 0 && (
+                    {accountsLoading ? (
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0.4rem 0.6rem' }}>Loading accounts…</div>
+                    ) : accounts.length === 0 ? (
+                      <div style={{ fontSize: '0.75rem', color: '#b45309', padding: '0.4rem 0.6rem', background: '#fef9c3', borderRadius: 4, marginTop: 4 }}>
+                        No accounts configured.{' '}
+                        <a href="/labor/accounts" style={{ color: '#002356' }}>Go to Labor &gt; Accounts</a> to add some first.
+                      </div>
+                    ) : filteredAccounts.length > 0 ? (
                       <div style={dropdownStyle}>
                         {filteredAccounts.map((a) => (
                           <div
@@ -384,7 +391,9 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
                           </div>
                         ))}
                       </div>
-                    )}
+                    ) : accountSearch ? (
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0.4rem 0.6rem' }}>No accounts match your search.</div>
+                    ) : null}
                   </>
                 )
               ) : lockedProjectId ? (
