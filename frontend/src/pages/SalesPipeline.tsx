@@ -700,6 +700,10 @@ const SalesPipeline: React.FC = () => {
         aValue = a.value;
         bValue = b.value;
         break;
+      case 'weightedValue':
+        aValue = a.value * getProbabilityPercent(a.probability) / 100;
+        bValue = b.value * getProbabilityPercent(b.probability) / 100;
+        break;
       case 'stage':
         aValue = a.stage;
         bValue = b.stage;
@@ -736,6 +740,7 @@ const SalesPipeline: React.FC = () => {
     gc: 0,           // flex
     locationGroup: 90,
     value: 100,
+    weightedValue: 110,
     stage: 130,
     salesperson: 180,
   };
@@ -1314,6 +1319,10 @@ const SalesPipeline: React.FC = () => {
                   Value <span className="sales-sort-icon">{sortColumn === 'value' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('value', e)} />
                 </th>
+                <th className="sales-sortable" onClick={() => handleSort('weightedValue')}>
+                  Weighted <span className="sales-sort-icon">{sortColumn === 'weightedValue' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('weightedValue', e)} />
+                </th>
                 <th className="sales-sortable" onClick={() => handleSort('stage')}>
                   Stage <span className="sales-sort-icon">{sortColumn === 'stage' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('stage', e)} />
@@ -1380,6 +1389,9 @@ const SalesPipeline: React.FC = () => {
                       </select>
                     </td>
                     <td className="sales-value-cell">{formatCurrency(opp.value)}</td>
+                    <td className="sales-value-cell" style={{ color: '#64748b' }}>
+                      {formatCurrency(opp.value * getProbabilityPercent(opp.probability) / 100)}
+                    </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select
                         value={apiOpp?.stage_id || ''}
