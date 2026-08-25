@@ -642,7 +642,10 @@ class Team {
     // Active = not converted to project (still in pipeline)
     let opportunitiesResult = { rows: [{ total: 0, total_value: 0, won: 0, won_value: 0, weighted_value: 0 }] };
     if (employeeIds.length > 0) {
-      const oppFilter = activeOnly ? ' AND o.converted_to_project_id IS NULL' : '';
+      const oppFilter = activeOnly
+        ? ` AND ps.name NOT IN ('Lost', 'Passed')
+            AND NOT (ps.name = 'Awarded' AND o.awarded_status IS NOT NULL AND o.awarded_status IN ('In Progress', 'Completed'))`
+        : '';
       opportunitiesResult = await db.query(`
         SELECT
           COUNT(*) as total,
@@ -782,7 +785,10 @@ class Team {
     const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
     if (employeeIds.length === 0) return [];
 
-    const activeFilter = filter === 'active' ? ' AND o.converted_to_project_id IS NULL' : '';
+    const activeFilter = filter === 'active'
+      ? ` AND ps.name NOT IN ('Lost', 'Passed')
+          AND NOT (ps.name = 'Awarded' AND o.awarded_status IS NOT NULL AND o.awarded_status IN ('In Progress', 'Completed'))`
+      : '';
     const result = await db.query(`
       SELECT o.*,
              ps.name as stage_name, ps.color as stage_color,
