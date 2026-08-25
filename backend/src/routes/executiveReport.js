@@ -158,9 +158,29 @@ async function buildReportData(tenantId, requestedDate) {
        LIMIT 10`,
       [tenantId]
     ),
+    // Live backlog + active project count using same logic as backlog-snapshot API
+    db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE p.status = 'Open') as active_project_count,
+         COALESCE(SUM(
+           CASE WHEN vc.id IS NOT NULL
+             THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+             ELSE p.backlog END
+         ) FILTER (WHERE
+           p.status NOT IN ('completed', 'cancelled', 'Hard-Closed')
+           AND (CASE WHEN vc.id IS NOT NULL
+                  THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+                  ELSE p.backlog END) > 0
+         ), 0) as total_backlog
+       FROM projects p
+       LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+       WHERE p.tenant_id = $1`,
+      [tenantId]
+    ),
   ];
 
-  const [currentResult, previousResult, newProjectsResult, newOppsResult, recentEstResult] = await Promise.all(snapshotQueries);
+  const [currentResult, previousResult, newProjectsResult, newOppsResult, recentEstResult, liveStatsResult] = await Promise.all(snapshotQueries);
+  const liveStats = liveStatsResult.rows[0] || {};
 
   const currentSnapshots = currentResult.rows;
   const previousSnapshots = previousResult.rows;
@@ -176,13 +196,11 @@ async function buildReportData(tenantId, requestedDate) {
 
   // Build summary KPIs
   const summary = {
-    totalProjects: currentSnapshots.length,
+    totalProjects: Number(liveStats.active_project_count) || 0,
     totalContractValue: currentSnapshots.reduce((sum, s) => sum + num(s.contract_amount), 0),
     totalGrossProfit: currentSnapshots.reduce((sum, s) => sum + num(s.gross_profit_dollars), 0),
     avgGrossMarginPct: 0,
-    totalBacklog: currentSnapshots
-      .filter(s => !['completed', 'cancelled', 'Hard-Closed'].includes(s.status) && num(s.backlog) > 0)
-      .reduce((sum, s) => sum + num(s.backlog), 0),
+    totalBacklog: Number(liveStats.total_backlog) || 0,
     totalEarnedRevenue: currentSnapshots.reduce((sum, s) => sum + num(s.earned_revenue), 0),
   };
 
