@@ -180,7 +180,9 @@ async function buildReportData(tenantId, requestedDate) {
     totalContractValue: currentSnapshots.reduce((sum, s) => sum + num(s.contract_amount), 0),
     totalGrossProfit: currentSnapshots.reduce((sum, s) => sum + num(s.gross_profit_dollars), 0),
     avgGrossMarginPct: 0,
-    totalBacklog: currentSnapshots.reduce((sum, s) => sum + num(s.backlog), 0),
+    totalBacklog: currentSnapshots
+      .filter(s => !['completed', 'cancelled', 'Hard-Closed'].includes(s.status) && num(s.backlog) > 0)
+      .reduce((sum, s) => sum + num(s.backlog), 0),
     totalEarnedRevenue: currentSnapshots.reduce((sum, s) => sum + num(s.earned_revenue), 0),
   };
 
