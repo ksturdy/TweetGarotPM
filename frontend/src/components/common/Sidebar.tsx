@@ -71,17 +71,22 @@ const FlyoutMenu: React.FC<FlyoutMenuProps> = ({ item, top, onMouseEnter, onMous
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="sidebar-flyout-header">{item.label}</div>
-      {item.children.map(child => (
-        <Link
-          key={child.path}
-          to={child.path}
-          className={`sidebar-flyout-item ${isChildPathActive(child.path, siblingPaths) ? 'active' : ''}`}
-          onClick={onNavigate}
-        >
-          {child.label}
-        </Link>
-      ))}
+      <div className="sidebar-flyout-header">
+        <span className="sidebar-flyout-header-icon">{item.icon}</span>
+        {item.label}
+      </div>
+      <div className="sidebar-flyout-items">
+        {item.children.map(child => (
+          <Link
+            key={child.path}
+            to={child.path}
+            className={`sidebar-flyout-item ${isChildPathActive(child.path, siblingPaths) ? 'active' : ''}`}
+            onClick={onNavigate}
+          >
+            {child.label}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 };
