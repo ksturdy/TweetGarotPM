@@ -307,13 +307,6 @@ const ExecutiveReport: React.FC = () => {
             <PictureAsPdfIcon style={{ fontSize: '1.125rem' }} />
             {pdfLoading ? 'Generating...' : 'Download PDF'}
           </button>
-          <button
-            className="er-btn er-btn-email"
-            onClick={handleEmailDraft}
-          >
-            <EmailIcon style={{ fontSize: '1.125rem' }} />
-            Email Draft
-          </button>
         </div>
       </div>
 
