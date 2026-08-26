@@ -17,44 +17,6 @@ import { format } from 'date-fns';
 import '../../styles/SalesPipeline.css';
 import { MARKETS as MARKET_OPTIONS } from '../../constants/markets';
 
-const MODULE_ICONS: Record<string, string> = {
-  financials: '💰',
-  companies: '🏗️',
-  specifications: '📋',
-  drawings: '📐',
-  rfis: '❓',
-  submittals: '📦',
-  'change-orders': '📝',
-  'daily-reports': '📅',
-  schedule: '📆',
-  'gc-schedule': '📋',
-  'phase-schedule': '📊',
-  stratus: '☁️',
-  'weekly-goals': '🎯',
-  issues: '⚠️',
-  'cost-model': '🔧',
-  photos: '📷',
-};
-
-const MODULES = [
-  { path: 'financials', label: 'Financials', description: 'Contract financials and billing' },
-  { path: 'companies', label: 'Companies', description: 'Stakeholders and contacts' },
-  { path: 'specifications', label: 'Specifications', description: 'Project specifications with Q&A' },
-  { path: 'drawings', label: 'Drawings', description: 'Construction drawings and plans' },
-  { path: 'rfis', label: 'RFIs', description: 'Requests for Information' },
-  { path: 'submittals', label: 'Submittals', description: 'Shop drawings and product data' },
-  { path: 'change-orders', label: 'Change Orders', description: 'Contract modifications' },
-  { path: 'daily-reports', label: 'Daily Reports', description: 'Field activity logs' },
-  { path: 'issues', label: 'Field Issues', description: 'Issues reported from the field' },
-  { path: 'schedule', label: 'Schedule', description: 'Project timeline and milestones' },
-  { path: 'gc-schedule', label: 'GC Schedule', description: 'Upload, view, and compare GC project schedules' },
-  { path: 'phase-schedule', label: 'Phase Schedule', description: 'Schedule phase codes with work contours' },
-  { path: 'stratus', label: 'Stratus', description: 'Model content and part-level statuses' },
-  { path: 'weekly-goals', label: 'Weekly Goal Plans', description: 'Track weekly goals and daily tasks by trade' },
-  { path: 'cost-model', label: 'Cost Model', description: 'Equipment counts and cost data' },
-  { path: 'photos', label: 'Photos', description: 'Project photos and site images' },
-];
-
 // ── Formatting helpers ──────────────────────────────────────────────
 
 const fmt = (val: number | null | undefined, decimals = 0): string => {
@@ -439,7 +401,7 @@ const ProjectDetail: React.FC = () => {
       </div>
 
       {/* ─── Main 3-column layout ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 280px', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
 
         {/* COLUMN 1: Vista Project Data */}
         <div className="card" style={{ padding: '0.85rem' }}>
@@ -813,40 +775,6 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
 
-        {/* COLUMN 3: Modules sidebar */}
-        <div className="card" style={{ padding: '0.85rem' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            marginBottom: '0.6rem', paddingBottom: '0.5rem', borderBottom: '1px solid #e2e8f0',
-          }}>
-            <span style={{ fontSize: '1rem' }}>📂</span>
-            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Modules</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-            {MODULES.map((module) => (
-              <Link
-                key={module.path}
-                to={`/projects/${id}/${module.path}`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  padding: '0.45rem 0.5rem', borderRadius: '6px',
-                  textDecoration: 'none', color: 'inherit', transition: 'background 0.15s', fontSize: '0.85rem',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span style={{ fontSize: '1rem', width: '1.25rem', textAlign: 'center' }}>
-                  {MODULE_ICONS[module.path] || '📄'}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 500, color: 'var(--primary)', lineHeight: 1.2 }}>{module.label}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.2 }}>{module.description}</div>
-                </div>
-                <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>&rsaquo;</span>
-              </Link>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* ─── Set Goals Dialog ─── */}

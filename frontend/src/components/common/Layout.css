@@ -187,13 +187,23 @@
   min-height: calc(100vh - 64px);
   max-width: 100vw;
   background: var(--light);
-  transition: margin-left 0.2s ease;
+  transition: margin-left 0.2s ease, padding-right 0.2s ease;
   overflow-x: hidden;
 }
 
 /* Main content when sidebar is collapsed */
 .main.sidebar-is-collapsed {
   margin-left: 64px;
+}
+
+/* Project module sidebar — expanded (200px) */
+.main.project-sidebar-visible {
+  padding-right: calc(1.5rem + 200px);
+}
+
+/* Project module sidebar — collapsed (60px) */
+.main.project-sidebar-visible.project-sidebar-collapsed {
+  padding-right: calc(1.5rem + 60px);
 }
 
 /* Sidebar Overlay - backdrop for mobile/tablet */

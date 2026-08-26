@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
 import ScrollToTop from './ScrollToTop';
 import Sidebar from './Sidebar';
+import ProjectModuleSidebar from './ProjectModuleSidebar';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import SyncIcon from '@mui/icons-material/Sync';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -18,6 +19,7 @@ interface LayoutProps {
 }
 
 const COLLAPSED_KEY = 'sidebar-collapsed';
+const PROJECT_SIDEBAR_COLLAPSED_KEY = 'project-modules-sidebar-collapsed';
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, tenant, logout } = useAuth();
@@ -28,6 +30,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem(COLLAPSED_KEY) === 'true';
   });
+  const [projectSidebarCollapsed, setProjectSidebarCollapsed] = useState(() =>
+    localStorage.getItem(PROJECT_SIDEBAR_COLLAPSED_KEY) === 'true'
+  );
+
+  const toggleProjectSidebarCollapse = useCallback(() => {
+    setProjectSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem(PROJECT_SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   const [lastVistaSync, setLastVistaSync] = useState<string | null>(null);
 
@@ -74,6 +87,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const logoUrl = tenant?.settings?.branding?.logo_url;
   const companyName = tenant?.settings?.branding?.company_name || tenant?.name;
 
+
+  // Detect project sub-pages: /projects/123 or /projects/123/anything
+  const PROJECT_ID_RE = /^\/projects\/(\d+)/;
+  const projectMatch = location.pathname.match(PROJECT_ID_RE);
+  const activeProjectId = projectMatch ? projectMatch[1] : null;
 
   return (
     <div className="layout">
@@ -132,7 +150,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
       <div className="layout-body">
         <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebarCollapse} />
-        <main className={`main ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>{children}</main>
+        <main className={`main ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''} ${activeProjectId ? 'project-sidebar-visible' : ''} ${activeProjectId && projectSidebarCollapsed ? 'project-sidebar-collapsed' : ''}`}>
+          {children}
+        </main>
+        {activeProjectId && (
+          <ProjectModuleSidebar
+            projectId={activeProjectId}
+            isCollapsed={projectSidebarCollapsed}
+            onToggleCollapse={toggleProjectSidebarCollapse}
+          />
+        )}
       </div>
       {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
     </div>

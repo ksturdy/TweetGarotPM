@@ -1,0 +1,151 @@
+.project-modules-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.25rem;
+}
+
+.project-modules-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.375rem;
+  color: #4b5563;
+  background: transparent;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.project-modules-item:hover {
+  background: #f3f4f6;
+  color: #002356;
+}
+
+.project-modules-item:hover .project-modules-icon {
+  color: #002356;
+}
+
+.project-modules-item.active {
+  background: linear-gradient(135deg, #002356 0%, #004080 100%);
+  color: #ffffff;
+}
+
+.project-modules-item.active .project-modules-icon {
+  color: #ffffff;
+}
+
+.project-modules-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: #6b7280;
+  transition: color 0.15s ease;
+}
+
+.project-modules-icon svg {
+  font-size: 1.25rem !important;
+}
+
+.project-modules-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Flyout — opens to the left of the right sidebar */
+.project-modules-flyout {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid #d1d9e6;
+  border-radius: 0.625rem;
+  box-shadow: -6px 12px 32px rgba(0, 35, 86, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06);
+  min-width: 200px;
+  z-index: 200;
+  overflow: hidden;
+  animation: project-modules-flyout-in 0.14s ease;
+}
+
+/* Arrow pointing right — back toward the sidebar */
+.project-modules-flyout::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 20px;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 7px solid #002356;
+}
+
+@keyframes project-modules-flyout-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.project-modules-flyout-header {
+  background: linear-gradient(135deg, #002356 0%, #004080 100%);
+  border-bottom: 3px solid #F37B03;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.project-modules-flyout-header-icon {
+  display: flex;
+  align-items: center;
+  opacity: 0.85;
+}
+
+.project-modules-flyout-header-icon svg {
+  font-size: 1.125rem !important;
+}
+
+.project-modules-flyout-items {
+  padding: 0.375rem;
+}
+
+.project-modules-flyout-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5625rem 0.875rem;
+  border-radius: 0.375rem;
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 400;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  border-left: 3px solid transparent;
+}
+
+.project-modules-flyout-item:hover {
+  background: #eef2fb;
+  color: #002356;
+  border-left-color: #002356;
+  text-decoration: none;
+  padding-left: calc(0.875rem - 3px);
+}
+
+.project-modules-flyout-item.active {
+  background: rgba(0, 35, 86, 0.07);
+  color: #002356;
+  font-weight: 600;
+  border-left-color: #F37B03;
+  padding-left: calc(0.875rem - 3px);
+}

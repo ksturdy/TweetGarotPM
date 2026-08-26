@@ -13,10 +13,19 @@ import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import CalendarViewMonthIcon from '@mui/icons-material/CalendarViewMonth';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import '../marketing/MarketingList.css';
 import '../../styles/SalesPipeline.css';
 
 const reports = [
+  {
+    name: 'Company Health',
+    Icon: MonitorHeartIcon,
+    path: '/reports/company-health',
+    desc: 'Backlog, pipeline, labor, and revenue forecast — executive overview of company health',
+    color: '#1a2b4a',
+    bg: '#f0f4ff',
+  },
   {
     name: 'Weekly Sales',
     Icon: TrendingUpIcon,

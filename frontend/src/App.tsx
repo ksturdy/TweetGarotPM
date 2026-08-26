@@ -134,6 +134,7 @@ import Campaigns from './pages/Campaigns';
 import CampaignCreate from './pages/CampaignCreate';
 import CampaignDetail from './pages/CampaignDetail';
 import SafetyDashboard from './pages/safety/SafetyDashboard';
+import CompanyHealthReport from './pages/reports/CompanyHealthReport';
 import ExecutiveReport from './pages/reports/ExecutiveReport';
 import OpportunityProjectedRevenue from './pages/opportunities/OpportunityProjectedRevenue';
 import BacklogFitAnalysis from './pages/reports/BacklogFitAnalysis';
@@ -514,6 +515,7 @@ const App: React.FC = () => {
                 <Route path="/administration" element={<AdministrationDashboard />} />
                 <Route path="/risk-management" element={<RiskManagementDashboard />} />
                 <Route path="/reports" element={<ReportsHub />} />
+                <Route path="/reports/company-health" element={<CompanyHealthReport />} />
                 <Route path="/reports/executive-report" element={<ExecutiveReport />} />
                 <Route path="/reports/backlog-fit" element={<BacklogFitAnalysis />} />
                 <Route path="/reports/cash-flow" element={<CashFlowReport />} />
