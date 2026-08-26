@@ -137,6 +137,7 @@ const orgChartRoutes = require('./routes/orgCharts');
 const tradeShowRoutes = require('./routes/tradeShows');
 const projectPhotoRoutes = require('./routes/projectPhotos');
 const marketingMediaRoutes = require('./routes/marketingMedia');
+const preJobChecklistRoutes = require('./routes/preJobChecklist');
 
 const app = express();
 const server = http.createServer(app);
@@ -317,6 +318,7 @@ app.use('/api/org-charts', orgChartRoutes);
 app.use('/api/trade-shows', tradeShowRoutes);
 app.use('/api/project-photos', projectPhotoRoutes);
 app.use('/api/marketing-media', marketingMediaRoutes);
+app.use('/api/pre-job-checklist', preJobChecklistRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

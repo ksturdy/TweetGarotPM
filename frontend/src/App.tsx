@@ -110,6 +110,7 @@ import SpecificationDetail from './pages/projects/SpecificationDetail';
 import ProjectDrawings from './pages/projects/ProjectDrawings';
 import ProjectCostModel from './pages/projects/ProjectCostModel';
 import ProjectPhotos from './pages/projects/ProjectPhotos';
+import PreJobChecklist from './pages/projects/PreJobChecklist';
 import DrawingDetail from './pages/projects/DrawingDetail';
 import ProjectFinancials from './pages/projects/ProjectFinancials';
 import CostDrillIn from './pages/projects/CostDrillIn';
@@ -536,6 +537,7 @@ const App: React.FC = () => {
                 <Route path="/projects/labor-forecast" element={<LaborForecast />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/projects/:projectId/pre-job-checklist" element={<PreJobChecklist />} />
                 <Route path="/projects/:projectId/companies" element={<ProjectCompanies />} />
                 <Route path="/projects/:projectId/rfis" element={<RFIList />} />
                 <Route path="/projects/:projectId/rfis/new" element={<RFIForm />} />

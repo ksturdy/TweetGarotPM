@@ -283,6 +283,15 @@ export interface LaborAccountPayload {
   notes?: string;
 }
 
+export interface HeadcountChartRow {
+  month: string; // YYYY-MM
+  pf: number;
+  sm: number;
+  pl: number;
+  other: number;
+  total: number;
+}
+
 export const laborApi = {
   getBoard: (filters?: BoardFilters) => {
     const params = new URLSearchParams();
@@ -296,6 +305,9 @@ export const laborApi = {
   },
 
   getSummary: () => api.get<LaborSummary>('/labor/dashboard/summary').then((r) => r.data),
+
+  getHeadcountChart: (months = 12) =>
+    api.get<HeadcountChartRow[]>(`/labor/headcount-chart?months=${months}`).then((r) => r.data),
 
   getCalendar: (from: string, to: string, filters?: { trade?: string; group?: string; title?: string }) => {
     const qs = new URLSearchParams({ from, to });

@@ -63,6 +63,68 @@ const applyEmployeeFilters = (rows, query) => {
   return filtered;
 };
 
+// GET /api/labor/headcount-chart?months=12 — monthly headcount by trade from project assignments
+router.get('/headcount-chart', async (req, res, next) => {
+  try {
+    const months = Math.min(36, Math.max(3, parseInt(req.query.months || '12', 10)));
+    const today = new Date(); today.setDate(1); today.setHours(0, 0, 0, 0);
+    const from = today.toISOString().slice(0, 10);
+    const toDate = new Date(today); toDate.setMonth(toDate.getMonth() + months);
+    const to = toDate.toISOString().slice(0, 10);
+
+    const rows = await ProjectAssignment.findByDateRange(req.tenantId, from, to);
+    const active = rows.filter(r => r.status === 'active' || r.status === 'planned');
+
+    // Build month keys for the window
+    const monthKeys = [];
+    const cur = new Date(today);
+    for (let m = 0; m < months; m++) {
+      monthKeys.push(cur.toISOString().slice(0, 7)); // YYYY-MM
+      cur.setMonth(cur.getMonth() + 1);
+    }
+
+    // Trade key mapping
+    const tradeKey = (trade) => {
+      if (!trade) return 'other';
+      const t = trade.toLowerCase();
+      if (t.includes('pipefitter')) return 'pf';
+      if (t.includes('sheet metal')) return 'sm';
+      if (t.includes('plumb')) return 'pl';
+      return 'other';
+    };
+
+    // Count distinct people per month per trade (one person = 1 headcount for any month they overlap)
+    const buckets = new Map(); // monthKey -> { pf: Set<id>, sm: Set<id>, pl: Set<id>, other: Set<id> }
+    for (const mk of monthKeys) buckets.set(mk, { pf: new Set(), sm: new Set(), pl: new Set(), other: new Set() });
+
+    for (const row of active) {
+      const assignStart = row.start_date ? new Date(row.start_date) : null;
+      const assignEnd   = row.end_date   ? new Date(row.end_date)   : null;
+      if (!assignStart) continue;
+      const tk = tradeKey(row.employee_trade || row.trade);
+      for (const mk of monthKeys) {
+        const mStart = new Date(mk + '-01');
+        const mEnd   = new Date(mStart); mEnd.setMonth(mEnd.getMonth() + 1); mEnd.setDate(mEnd.getDate() - 1);
+        const overlapStart = assignStart <= mEnd;
+        const overlapEnd   = !assignEnd || assignEnd >= mStart;
+        if (overlapStart && overlapEnd) {
+          buckets.get(mk)[tk].add(row.employee_id);
+        }
+      }
+    }
+
+    const result = monthKeys.map(mk => {
+      const b = buckets.get(mk);
+      const pf = b.pf.size; const sm = b.sm.size; const pl = b.pl.size; const other = b.other.size;
+      return { month: mk, pf, sm, pl, other, total: pf + sm + pl + other };
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/labor/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&trade=&group=&title=
 router.get('/calendar', async (req, res, next) => {
   try {

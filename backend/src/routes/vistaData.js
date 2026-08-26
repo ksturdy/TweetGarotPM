@@ -1219,6 +1219,20 @@ router.patch('/contracts/:id/projection', async (req, res, next) => {
     if (!result) {
       return res.status(404).json({ message: 'Contract not found' });
     }
+    // Sync start/end dates back to projects table when a project is linked
+    if (result.linked_project_id) {
+      const projectUpdates = {};
+      if ('user_adjusted_start_date' in overrides && overrides.user_adjusted_start_date) {
+        projectUpdates.start_date = overrides.user_adjusted_start_date;
+      }
+      if ('user_adjusted_end_date' in overrides && overrides.user_adjusted_end_date) {
+        projectUpdates.end_date = overrides.user_adjusted_end_date;
+      }
+      if (Object.keys(projectUpdates).length > 0) {
+        const Project = require('../models/Project');
+        await Project.update(result.linked_project_id, projectUpdates, req.tenantId);
+      }
+    }
     res.json(result);
   } catch (error) {
     next(error);
