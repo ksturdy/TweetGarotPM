@@ -119,7 +119,7 @@ const ProjectionNotesDrawer: React.FC<Props> = ({ projectId, open, onClose }) =>
       <div
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 'min(640px, 100vw)', background: '#fff',
+          width: 'min(820px, 100vw)', background: '#fff',
           boxShadow: '-8px 0 24px rgba(15, 23, 42, 0.15)',
           zIndex: 1001, display: 'flex', flexDirection: 'column',
         }}
@@ -526,6 +526,7 @@ const GainFadeTab: React.FC<{
                 <th style={{ ...gfTh, textAlign: 'left' }}>Groups</th>
                 <th style={{ ...gfTh, textAlign: 'right' }}>Amount</th>
                 <th style={gfTh}>Recog?</th>
+                <th style={gfTh}></th>
               </tr>
             </thead>
             <tbody>
@@ -557,14 +558,6 @@ const GainFadeTab: React.FC<{
                         <textarea value={editReasoning} onChange={e => setEditReasoning(e.target.value)} rows={3}
                           placeholder="Explain the reasoning..."
                           style={{ fontSize: '0.7rem', width: '100%', padding: '0.15rem', border: `1px solid ${editReasoning.trim().length === 0 ? '#fca5a5' : '#cbd5e1'}`, borderRadius: '4px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.35rem' }}>
-                          <button onClick={() => saveEdit(n)}
-                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#2563eb', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                            title="Save">Save</button>
-                          <button onClick={cancelEdit}
-                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                            title="Cancel">Cancel</button>
-                        </span>
                       </td>
                       <td style={{ ...gfTd, textAlign: 'left' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
@@ -602,6 +595,16 @@ const GainFadeTab: React.FC<{
                             recognized_at: e.target.checked ? new Date().toISOString().split('T')[0] : null,
                           })} style={{ cursor: 'pointer' }} />
                       </td>
+                      <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button onClick={() => saveEdit(n)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#2563eb', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Save">Save</button>
+                          <button onClick={cancelEdit}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Cancel">Cancel</button>
+                        </span>
+                      </td>
                     </tr>
                   );
                 }
@@ -617,30 +620,6 @@ const GainFadeTab: React.FC<{
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>{n.body}</div>
                       <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>by {n.created_by_name}</div>
-                      <div style={{ marginTop: '0.3rem' }}>
-                        {confirmDeleteId === n.id ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Delete?</span>
-                            <button onClick={() => { onDelete(n.id); setConfirmDeleteId(null); }}
-                              style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
-                              Yes
-                            </button>
-                            <button onClick={() => setConfirmDeleteId(null)}
-                              style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
-                              No
-                            </button>
-                          </span>
-                        ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <button onClick={() => startEdit(n)}
-                              style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                              title="Edit">Edit</button>
-                            <button onClick={() => setConfirmDeleteId(n.id)}
-                              style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                              title="Delete">Delete</button>
-                          </span>
-                        )}
-                      </div>
                     </td>
                     <td style={{ ...gfTd, textAlign: 'left' }}>
                       {n.groups_affected && n.groups_affected.length > 0 ? (
@@ -670,6 +649,30 @@ const GainFadeTab: React.FC<{
                         style={{ cursor: 'pointer' }}
                       />
                     </td>
+                    <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
+                      {confirmDeleteId === n.id ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Delete?</span>
+                          <button onClick={() => { onDelete(n.id); setConfirmDeleteId(null); }}
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                            Yes
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(null)}
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                            No
+                          </button>
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button onClick={() => startEdit(n)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Edit">Edit</button>
+                          <button onClick={() => setConfirmDeleteId(n.id)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Delete">Delete</button>
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -678,29 +681,29 @@ const GainFadeTab: React.FC<{
               <tr style={{ background: '#f8fafc', borderTop: '2px solid #cbd5e1' }}>
                 <td style={gfTf} colSpan={4}>Total Gain</td>
                 <td style={{ ...gfTf, textAlign: 'right', color: '#10b981' }}>{fmtMoneySigned(totals.gain)}</td>
-                <td style={gfTf}></td>
+                <td style={gfTf} colSpan={2}></td>
               </tr>
               <tr style={{ background: '#f8fafc' }}>
                 <td style={gfTf} colSpan={4}>Total Fade</td>
                 <td style={{ ...gfTf, textAlign: 'right', color: '#ef4444' }}>{fmtMoneySigned(totals.fade)}</td>
-                <td style={gfTf}></td>
+                <td style={gfTf} colSpan={2}></td>
               </tr>
               <tr style={{ background: '#eff6ff', borderTop: '2px solid #cbd5e1' }}>
                 <td style={{ ...gfTf, fontWeight: 700 }} colSpan={4}>Net</td>
                 <td style={{ ...gfTf, textAlign: 'right', fontWeight: 700, color: totals.net >= 0 ? '#10b981' : '#ef4444' }}>
                   {fmtMoneySigned(totals.net)}
                 </td>
-                <td style={gfTf}></td>
+                <td style={gfTf} colSpan={2}></td>
               </tr>
               <tr style={{ background: '#f8fafc' }}>
                 <td style={{ ...gfTf, fontStyle: 'italic', color: '#475569' }} colSpan={4}>Recognized</td>
                 <td style={{ ...gfTf, textAlign: 'right', color: '#475569' }}>{fmtMoneySigned(totals.recognized)}</td>
-                <td style={gfTf}></td>
+                <td style={gfTf} colSpan={2}></td>
               </tr>
               <tr style={{ background: '#f8fafc' }}>
                 <td style={{ ...gfTf, fontStyle: 'italic', color: '#b45309' }} colSpan={4}>Unrecognized</td>
                 <td style={{ ...gfTf, textAlign: 'right', color: '#b45309' }}>{fmtMoneySigned(totals.unrecognized)}</td>
-                <td style={gfTf}></td>
+                <td style={gfTf} colSpan={2}></td>
               </tr>
             </tfoot>
           </table>
