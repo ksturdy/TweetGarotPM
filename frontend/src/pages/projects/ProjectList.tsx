@@ -1265,7 +1265,7 @@ const ProjectList: React.FC = () => {
               sortedProjects.map((project: Project) => (
                 <tr
                   key={project.id}
-                  onClick={() => navigate(`/projects/${project.id}`)}
+                  onClick={() => navigate(`/projects/${project.id}/financials`)}
                   style={{
                     cursor: 'pointer',
                     background: selectedIds.has(project.id) ? 'rgba(59, 130, 246, 0.1)' : undefined
