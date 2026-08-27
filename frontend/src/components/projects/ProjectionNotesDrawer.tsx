@@ -612,11 +612,13 @@ const GainFadeTab: React.FC<{
                   <tr key={n.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={gfTd}>{format(new Date(n.created_at), 'MM/dd')}</td>
                     <td style={gfTd}>{costTypeLabel(n.cost_type)}</td>
-                    <td style={{ ...gfTd, textAlign: 'left' }}>
-                      <div style={{ color: '#1e293b', fontWeight: 500 }}>{n.body}</div>
-                      {n.reasoning && (
-                        <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.2rem', whiteSpace: 'pre-wrap' }}>{n.reasoning}</div>
-                      )}
+                    <td style={{ ...gfTd, textAlign: 'left', maxWidth: 220 }}
+                      title={[n.body, n.reasoning].filter(Boolean).join('\n\n')}
+                    >
+                      <div style={{
+                        color: '#1e293b', fontWeight: 500,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{n.body}</div>
                       <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>by {n.created_by_name}</div>
                     </td>
                     <td style={{ ...gfTd, textAlign: 'left' }}>
