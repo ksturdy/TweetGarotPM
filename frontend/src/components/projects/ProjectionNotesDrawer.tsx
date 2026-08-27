@@ -384,6 +384,7 @@ const GainFadeTab: React.FC<{
   const [editDirection, setEditDirection] = useState<'gain' | 'fade'>('gain');
   const [editCostType, setEditCostType] = useState<number | null>(null);
   const [editGroups, setEditGroups] = useState<string[]>([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const startEdit = (n: ProjectionNote) => {
     const v = typeof n.amount === 'string' ? parseFloat(n.amount) : (n.amount || 0);
@@ -645,12 +646,28 @@ const GainFadeTab: React.FC<{
                       />
                     </td>
                     <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
-                      <button onClick={() => startEdit(n)}
-                        style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.8rem' }}
-                        title="Edit">✎</button>
-                      <button onClick={() => onDelete(n.id)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem' }}
-                        title="Delete">×</button>
+                      {confirmDeleteId === n.id ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Delete?</span>
+                          <button onClick={() => { onDelete(n.id); setConfirmDeleteId(null); }}
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                            Yes
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(null)}
+                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                            No
+                          </button>
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button onClick={() => startEdit(n)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Edit">Edit</button>
+                          <button onClick={() => setConfirmDeleteId(n.id)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Delete">Delete</button>
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
