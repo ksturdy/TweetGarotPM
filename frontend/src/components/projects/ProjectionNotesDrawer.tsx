@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   projectionNotesApi,
@@ -10,6 +10,7 @@ import {
 } from '../../services/projectionNotes';
 import { usersApi } from '../../services/users';
 import SearchableSelect from '../SearchableSelect';
+import ConfirmModal from '../common/ConfirmModal';
 import { format } from 'date-fns';
 
 const COST_TYPES: { value: number | null; label: string }[] = [
@@ -362,6 +363,51 @@ const NotesTab: React.FC<{
 
 const BODY_MAX = 80;
 
+const GainFadeTooltip: React.FC<{ note: ProjectionNote; children: React.ReactNode }> = ({ note, children }) => {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+
+  const handleEnter = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      const left = Math.min(rect.left, window.innerWidth - 340);
+      setPos({ top: rect.bottom + 8, left });
+    }
+    setVisible(true);
+  };
+
+  return (
+    <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={() => setVisible(false)}>
+      {children}
+      {visible && (note.body || note.reasoning) && (
+        <div style={{
+          position: 'fixed', top: pos.top, left: pos.left,
+          zIndex: 9999, width: 320, pointerEvents: 'none',
+          borderRadius: '8px', overflow: 'hidden',
+          boxShadow: '0 12px 32px rgba(15, 23, 42, 0.22)',
+          border: '1px solid #e2e8f0',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+            borderBottom: '2px solid #f97316',
+            padding: '0.55rem 0.8rem',
+          }}>
+            <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.35 }}>{note.body || '—'}</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.65rem', marginTop: '0.2rem' }}>by {note.created_by_name}</div>
+          </div>
+          {note.reasoning && (
+            <div style={{ background: '#fff', padding: '0.6rem 0.8rem' }}>
+              <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', marginBottom: '0.3rem' }}>Reasoning</div>
+              <div style={{ fontSize: '0.73rem', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{note.reasoning}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const GainFadeTab: React.FC<{
   items: ProjectionNote[];
   onCreate: (p: CreateProjectionNotePayload) => void;
@@ -612,14 +658,15 @@ const GainFadeTab: React.FC<{
                   <tr key={n.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={gfTd}>{format(new Date(n.created_at), 'MM/dd')}</td>
                     <td style={gfTd}>{costTypeLabel(n.cost_type)}</td>
-                    <td style={{ ...gfTd, textAlign: 'left', maxWidth: 220 }}
-                      title={[n.body, n.reasoning].filter(Boolean).join('\n\n')}
-                    >
-                      <div style={{
-                        color: '#1e293b', fontWeight: 500,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>{n.body}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>by {n.created_by_name}</div>
+                    <td style={{ ...gfTd, textAlign: 'left', maxWidth: 220 }}>
+                      <GainFadeTooltip note={n}>
+                        <div style={{
+                          color: '#1e293b', fontWeight: 500,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          cursor: 'default',
+                        }}>{n.body}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>by {n.created_by_name}</div>
+                      </GainFadeTooltip>
                     </td>
                     <td style={{ ...gfTd, textAlign: 'left' }}>
                       {n.groups_affected && n.groups_affected.length > 0 ? (
@@ -650,28 +697,14 @@ const GainFadeTab: React.FC<{
                       />
                     </td>
                     <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
-                      {confirmDeleteId === n.id ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Delete?</span>
-                          <button onClick={() => { onDelete(n.id); setConfirmDeleteId(null); }}
-                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
-                            Yes
-                          </button>
-                          <button onClick={() => setConfirmDeleteId(null)}
-                            style={{ padding: '0.15rem 0.4rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
-                            No
-                          </button>
-                        </span>
-                      ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <button onClick={() => startEdit(n)}
-                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                            title="Edit">Edit</button>
-                          <button onClick={() => setConfirmDeleteId(n.id)}
-                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
-                            title="Delete">Delete</button>
-                        </span>
-                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <button onClick={() => startEdit(n)}
+                          style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                          title="Edit">Edit</button>
+                        <button onClick={() => setConfirmDeleteId(n.id)}
+                          style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                          title="Delete">Delete</button>
+                      </span>
                     </td>
                   </tr>
                 );
@@ -709,6 +742,15 @@ const GainFadeTab: React.FC<{
           </table>
         </div>
       )}
+      <ConfirmModal
+        isOpen={confirmDeleteId !== null}
+        title="Delete gain/fade item?"
+        message="This will permanently remove this gain/fade entry. This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeleteId !== null) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 };
