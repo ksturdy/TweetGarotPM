@@ -398,7 +398,7 @@ const ProjectPerformance: React.FC = () => {
       },
       {
         label: 'Projected Cost',
-        data: snapshots.map(s => s.current_est_cost || 0),
+        data: snapshots.map(s => s.projected_cost || 0),
         borderColor: '#ef4444',
         backgroundColor: 'transparent',
         borderDash: [5, 5],
