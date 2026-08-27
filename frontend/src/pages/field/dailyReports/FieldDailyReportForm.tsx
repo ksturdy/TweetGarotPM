@@ -140,7 +140,7 @@ const FieldDailyReportForm: React.FC = () => {
         safety_notes: existingReport.safety_notes || '',
         visitors: existingReport.visitors || '',
         issues: existingReport.issues || '',
-        notes: '',
+        notes: existingReport.notes || '',
       });
       if (existingReport.crews && existingReport.crews.length > 0) {
         setCrews(
@@ -267,6 +267,7 @@ const FieldDailyReportForm: React.FC = () => {
         safety_notes: formData.safety_notes,
         visitors: formData.visitors,
         issues: formData.issues,
+        notes: formData.notes || null,
         status: isEditMode && existingReport?.status === 'revision' ? 'revision' : 'draft',
       };
 

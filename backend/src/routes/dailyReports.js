@@ -119,6 +119,7 @@ router.post(
         delayReason: req.body.delay_reason,
         safetyIncidents: req.body.safety_incidents,
         safetyNotes: req.body.safety_notes,
+        notes: req.body.notes,
         createdBy: req.user.id,
       });
       res.status(201).json(report);

@@ -428,6 +428,18 @@ const FieldDailyReportDetail: React.FC = () => {
         )}
       </div>
 
+      {/* Additional Notes */}
+      {report.notes && (
+        <div className="field-detail-section">
+          <div className="field-detail-section-title">Additional Notes</div>
+          <div className="field-detail-row">
+            <span className="field-detail-value" style={{ whiteSpace: 'pre-wrap' }}>
+              {report.notes}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Other */}
       {(report.visitors || report.issues) && (
         <div className="field-detail-section">

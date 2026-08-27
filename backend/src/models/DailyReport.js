@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 const DailyReport = {
-  async create({ projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours, delayReason, safetyIncidents, safetyNotes, createdBy }) {
+  async create({ projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours, delayReason, safetyIncidents, safetyNotes, notes, createdBy }) {
     const result = await db.query(
-      `INSERT INTO daily_reports (project_id, report_date, weather, temperature, work_performed, materials, equipment, visitors, issues, delay_hours, delay_reason, safety_incidents, safety_notes, created_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')
+      `INSERT INTO daily_reports (project_id, report_date, weather, temperature, work_performed, materials, equipment, visitors, issues, delay_hours, delay_reason, safety_incidents, safety_notes, notes, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'draft')
        RETURNING *`,
-      [projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours || 0, delayReason, safetyIncidents || 0, safetyNotes, createdBy]
+      [projectId, reportDate, weather, temperature, workPerformed, materials, equipment, visitors, issues, delayHours || 0, delayReason, safetyIncidents || 0, safetyNotes, notes || null, createdBy]
     );
     return result.rows[0];
   },

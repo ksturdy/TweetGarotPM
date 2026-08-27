@@ -28,6 +28,7 @@ export interface DailyReport {
   delay_reason: string;
   safety_incidents: number;
   safety_notes: string;
+  notes: string | null;
   submitted_by: number | null;
   submitted_at: string | null;
   approved_by: number | null;
