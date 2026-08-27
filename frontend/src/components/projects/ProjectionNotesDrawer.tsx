@@ -360,7 +360,7 @@ const NotesTab: React.FC<{
 
 /* ============ GAIN/FADE TAB ============ */
 
-const BODY_MAX = 150;
+const BODY_MAX = 80;
 
 const GainFadeTab: React.FC<{
   items: ProjectionNote[];
