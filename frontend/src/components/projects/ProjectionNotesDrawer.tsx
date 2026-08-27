@@ -596,12 +596,14 @@ const GainFadeTab: React.FC<{
                           })} style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ ...gfTd, whiteSpace: 'nowrap' }}>
-                        <button onClick={() => saveEdit(n)}
-                          style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
-                          title="Save">✓</button>
-                        <button onClick={cancelEdit}
-                          style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem' }}
-                          title="Cancel">×</button>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <button onClick={() => saveEdit(n)}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#2563eb', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Save">Save</button>
+                          <button onClick={cancelEdit}
+                            style={{ padding: '0.15rem 0.45rem', fontSize: '0.65rem', fontWeight: 600, background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '3px', cursor: 'pointer' }}
+                            title="Cancel">Cancel</button>
+                        </span>
                       </td>
                     </tr>
                   );
