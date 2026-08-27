@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { useAuth } from '../../context/AuthContext';
 import {
   projectionsReportApi,
   ProjectionProjectSection,
@@ -67,6 +68,10 @@ const costColor = (v: number | null | undefined): string | undefined => {
 };
 
 const ProjectionsReport: React.FC = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const isAdmin = user?.role === 'admin';
+
   const [pmFilter, setPmFilter] = useState<Set<string>>(new Set());
   const [deptFilter, setDeptFilter] = useState<Set<string>>(new Set());
   const [teamFilter, setTeamFilter] = useState<Set<number>>(new Set());
@@ -75,6 +80,9 @@ const ProjectionsReport: React.FC = () => {
   const [view, setView] = useState<'projects' | 'pm' | 'department'>('projects');
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [captureLoading, setCaptureLoading] = useState(false);
+  const [captureResult, setCaptureResult] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   const teamFilterArr = useMemo(() => Array.from(teamFilter), [teamFilter]);
 
@@ -167,30 +175,61 @@ const ProjectionsReport: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
-          <button
-            onClick={async () => {
-              setPdfError(null);
-              setPdfLoading(true);
-              try {
-                await projectionsReportApi.downloadPdf({
-                  pm_employee_no: Array.from(pmFilter),
-                  department_code: Array.from(deptFilter),
-                  team_id: Array.from(teamFilter),
-                  start_date: startDate || undefined,
-                  end_date: endDate || undefined,
-                });
-              } catch (e: any) {
-                setPdfError(e?.response?.data?.error || e?.message || 'PDF export failed');
-              } finally {
-                setPdfLoading(false);
-              }
-            }}
-            className="btn btn-primary"
-            disabled={pdfLoading}
-            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-          >
-            {pdfLoading ? 'Generating PDF…' : 'Export PDF'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                onClick={async () => {
+                  setCaptureError(null);
+                  setCaptureResult(null);
+                  setCaptureLoading(true);
+                  try {
+                    const res = await projectionsReportApi.captureAllSnapshots();
+                    setCaptureResult(res.data);
+                    queryClient.invalidateQueries({ queryKey: ['projectionsReport'] });
+                  } catch (e: any) {
+                    setCaptureError(e?.response?.data?.error || e?.message || 'Snapshot capture failed');
+                  } finally {
+                    setCaptureLoading(false);
+                  }
+                }}
+                className="btn btn-secondary"
+                disabled={captureLoading}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+              >
+                {captureLoading ? 'Capturing…' : 'Take Snapshot Now'}
+              </button>
+            )}
+            <button
+              onClick={async () => {
+                setPdfError(null);
+                setPdfLoading(true);
+                try {
+                  await projectionsReportApi.downloadPdf({
+                    pm_employee_no: Array.from(pmFilter),
+                    department_code: Array.from(deptFilter),
+                    team_id: Array.from(teamFilter),
+                    start_date: startDate || undefined,
+                    end_date: endDate || undefined,
+                  });
+                } catch (e: any) {
+                  setPdfError(e?.response?.data?.error || e?.message || 'PDF export failed');
+                } finally {
+                  setPdfLoading(false);
+                }
+              }}
+              className="btn btn-primary"
+              disabled={pdfLoading}
+              style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
+            >
+              {pdfLoading ? 'Generating PDF…' : 'Export PDF'}
+            </button>
+          </div>
+          {captureResult && (
+            <div style={{ fontSize: '0.7rem', color: '#059669', textAlign: 'right' }}>
+              Snapshot complete — {captureResult.created} captured, {captureResult.skipped} skipped{captureResult.errors > 0 ? `, ${captureResult.errors} errors` : ''}
+            </div>
+          )}
+          {captureError && <div style={{ fontSize: '0.7rem', color: '#b91c1c', textAlign: 'right' }}>{captureError}</div>}
           {pdfError && <div style={{ fontSize: '0.7rem', color: '#b91c1c', maxWidth: '260px', textAlign: 'right' }}>{pdfError}</div>}
         </div>
       </div>

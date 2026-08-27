@@ -129,6 +129,11 @@ export const projectionsReportApi = {
     return api.get<ProjectionsReport>('/reports/projections-report', { params });
   },
 
+  captureAllSnapshots: () =>
+    api.post<{ message: string; created: number; skipped: number; errors: number }>(
+      '/projects/snapshots/capture-all'
+    ),
+
   downloadPdf: async (query: ProjectionsReportQuery = {}) => {
     const params: any = {};
     if (query.pm_employee_no?.length) params.pm_employee_no = query.pm_employee_no.join(',');
