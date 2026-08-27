@@ -417,6 +417,19 @@ router.get('/filters', async (req, res) => {
       params
     );
 
+    // Distinct snapshot dates across all projects for this tenant (not team-scoped
+    // so the full timeline is always visible in the dropdowns).
+    const datesRes = await db.query(
+      `SELECT DISTINCT snapshot_date FROM project_snapshots
+       WHERE tenant_id = $1 ORDER BY snapshot_date DESC`,
+      [tenantId]
+    );
+    const snapshotDates = datesRes.rows.map(r =>
+      r.snapshot_date instanceof Date
+        ? r.snapshot_date.toISOString().split('T')[0]
+        : String(r.snapshot_date).split('T')[0]
+    );
+
     const pms = new Map();
     const departments = new Map();
     for (const r of result.rows) {
@@ -431,6 +444,7 @@ router.get('/filters', async (req, res) => {
     res.json({
       pms: Array.from(pms.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
       departments: Array.from(departments.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      snapshot_dates: snapshotDates,
     });
   } catch (err) {
     console.error('Error fetching projections report filters:', err);

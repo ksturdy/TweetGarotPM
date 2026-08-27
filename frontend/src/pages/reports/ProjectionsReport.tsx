@@ -270,14 +270,29 @@ const ProjectionsReport: React.FC = () => {
           <div>
             <div style={filterLabel}>Compare Snapshots</div>
             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                style={dateInputStyle} title="Prior — snaps to nearest snapshot" />
-              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>to</span>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                style={dateInputStyle} title="Current — snaps to nearest snapshot" />
-            </div>
-            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-              Dates snap to the nearest snapshot per project.
+              <select
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={selectStyle}
+                title="Prior snapshot"
+              >
+                <option value="">Prior (auto)</option>
+                {(filters?.snapshot_dates ?? []).map(d => (
+                  <option key={d} value={d}>{fmtSnapshotDate(d)}</option>
+                ))}
+              </select>
+              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
+              <select
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                style={selectStyle}
+                title="Current snapshot"
+              >
+                <option value="">Current (latest)</option>
+                {(filters?.snapshot_dates ?? []).map(d => (
+                  <option key={d} value={d}>{fmtSnapshotDate(d)}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -336,9 +351,16 @@ const pillStyle = (on: boolean): React.CSSProperties => ({
   cursor: 'pointer', fontWeight: on ? 600 : 400,
 });
 
-const dateInputStyle: React.CSSProperties = {
+const selectStyle: React.CSSProperties = {
   fontSize: '0.8rem', padding: '0.25rem 0.4rem',
   border: '1px solid #cbd5e1', borderRadius: '4px',
+  background: '#fff', cursor: 'pointer',
+};
+
+const fmtSnapshotDate = (iso: string): string => {
+  // Parse as local date to avoid timezone-shifted display
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const filterLabel: React.CSSProperties = {

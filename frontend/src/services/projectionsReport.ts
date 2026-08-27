@@ -4,6 +4,7 @@ import { ProjectionNote } from './projectionNotes';
 export interface ProjectionsReportFilters {
   pms: { employee_no: string; name: string }[];
   departments: { code: string; name: string }[];
+  snapshot_dates: string[];
 }
 
 export interface SnapshotData {
