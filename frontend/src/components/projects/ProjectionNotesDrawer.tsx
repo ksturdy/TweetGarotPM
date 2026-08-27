@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   projectionNotesApi,
@@ -742,15 +743,18 @@ const GainFadeTab: React.FC<{
           </table>
         </div>
       )}
-      <ConfirmModal
-        isOpen={confirmDeleteId !== null}
-        title="Delete gain/fade item?"
-        message="This will permanently remove this gain/fade entry. This action cannot be undone."
-        confirmLabel="Delete"
-        variant="danger"
-        onConfirm={() => { if (confirmDeleteId !== null) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-        onCancel={() => setConfirmDeleteId(null)}
-      />
+      {confirmDeleteId !== null && ReactDOM.createPortal(
+        <ConfirmModal
+          isOpen={true}
+          title="Delete gain/fade item?"
+          message="This will permanently remove this gain/fade entry. This action cannot be undone."
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={() => { onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+          onCancel={() => setConfirmDeleteId(null)}
+        />,
+        document.body
+      )}
     </div>
   );
 };
