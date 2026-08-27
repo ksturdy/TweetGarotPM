@@ -760,7 +760,6 @@ const ProjectFinancials: React.FC = () => {
                   </span>
                   <span style={{ fontSize: '0.75rem', color: '#3b82f6' }}>
                     Rem: <strong>{fmtNum(laborForecastData.totalRem)} hrs</strong>
-                    {' '}({fmtHC(laborForecastData.totalRem / HPP)} people)
                   </span>
                   {TRADE_META.map(({ key, color }) => {
                     const t = laborForecastData.tradeHours.find(h => h.key === key);
