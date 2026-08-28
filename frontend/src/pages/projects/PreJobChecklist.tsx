@@ -409,8 +409,9 @@ const useEmpSearch = () => {
   };
 
   const reset = () => { setEmpQuery(''); setSelectedEmp(null); setEmpResults([]); setShowDropdown(false); };
+  const clearSelection = () => { setSelectedEmp(null); };
 
-  return { empQuery, setEmpQuery, empResults, selectedEmp, showDropdown, select, reset };
+  return { empQuery, setEmpQuery, empResults, selectedEmp, showDropdown, select, reset, clearSelection };
 };
 
 // ── Employee search input with dropdown ────────────────────────────────────────
@@ -510,7 +511,7 @@ const OfficeSection: React.FC<OfficeSectionProps> = ({ assignments, projectId })
                 showDropdown={empSearch.showDropdown}
                 onChange={empSearch.setEmpQuery}
                 onSelect={e => empSearch.select(e)}
-                onClear={() => empSearch.reset()}
+                onClear={empSearch.clearSelection}
               />
             </div>
             <div className="pjc-nominate-field">
@@ -639,7 +640,7 @@ const FieldSection: React.FC<FieldSectionProps> = ({ assignments, projectId }) =
                 showDropdown={empSearch.showDropdown}
                 onChange={empSearch.setEmpQuery}
                 onSelect={e => empSearch.select(e, emp => { if (emp.trade && !trade) setTrade(emp.trade); })}
-                onClear={() => empSearch.reset()}
+                onClear={empSearch.clearSelection}
               />
             </div>
             <div className="pjc-nominate-field">
