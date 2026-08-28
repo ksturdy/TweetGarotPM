@@ -26,23 +26,22 @@ router.get('/project/:projectId/readiness', verifyProject, async (req, res, next
   try {
     const { projectId } = req.params;
 
-    const [vistaResult, projResult] = await Promise.all([
-      db.query(
-        `SELECT id, contract_number FROM vp_contracts WHERE linked_project_id = $1 AND tenant_id = $2 LIMIT 1`,
-        [projectId, req.tenantId]
-      ),
-      db.query(
-        `SELECT pn.id FROM projection_notes pn WHERE pn.project_id = $1 LIMIT 1`,
-        [projectId]
-      ),
-    ]);
+    const vistaResult = await db.query(
+      `SELECT id, contract_number, projected_cost
+       FROM vp_contracts
+       WHERE linked_project_id = $1 AND tenant_id = $2
+       LIMIT 1`,
+      [projectId, req.tenantId]
+    );
 
-    const vistaLinked = vistaResult.rows.length > 0;
-    const hasProjection = projResult.rows.length > 0;
+    const contract = vistaResult.rows[0] ?? null;
+    const vistaLinked = !!contract;
+    // A Vista projection is complete when projected_cost has been populated
+    const hasProjection = vistaLinked && contract.projected_cost != null && Number(contract.projected_cost) !== 0;
 
     res.json({
       vistaLinked,
-      vistaContractNumber: vistaResult.rows[0]?.contract_number || null,
+      vistaContractNumber: contract?.contract_number || null,
       hasProjection,
       ready: vistaLinked && hasProjection,
     });

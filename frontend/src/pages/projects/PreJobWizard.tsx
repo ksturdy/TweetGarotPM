@@ -530,10 +530,10 @@ const PreJobWizard: React.FC = () => {
                 />
                 <GateItem
                   done={projOk}
-                  label="First projection completed"
-                  detail={projOk ? 'At least one projection cycle on record.' : 'Complete the first projection before starting the pre-job checklist.'}
-                  actionLabel={projOk ? undefined : 'Go to Projection Notes'}
-                  actionHref={`/projects/${projectId}`}
+                  label="First Vista projection completed"
+                  detail={projOk ? 'Projected costs are on file from Vista.' : 'The PM needs to complete the first projection in Vista so projected costs are populated before starting the pre-job checklist.'}
+                  actionLabel={undefined}
+                  actionHref={undefined}
                 />
               </div>
             )}
@@ -890,6 +890,11 @@ const GateItem: React.FC<{ done: boolean; label: string; detail: string; actionL
           <Link to={actionHref} style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none', marginTop: 4, display: 'inline-block' }}>
             {actionLabel} →
           </Link>
+        )}
+        {!done && !actionHref && (
+          <div style={{ fontSize: '0.75rem', color: '#92400e', marginTop: 4, fontStyle: 'italic' }}>
+            This is completed in Vista, not Titan.
+          </div>
         )}
       </div>
     </div>
