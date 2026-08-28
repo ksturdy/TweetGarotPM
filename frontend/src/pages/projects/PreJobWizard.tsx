@@ -239,6 +239,8 @@ const PreJobWizard: React.FC = () => {
 
   const noEstCost = phaseCodeDetail.filter(p => !p.est_cost || p.est_cost === 0).length;
   const noProjectedCost = phaseCodeDetail.filter(p => !p.projected_cost || p.projected_cost === 0).length;
+  const withEstCost = phaseCodeDetail.length - noEstCost;
+  const withProjectedCost = phaseCodeDetail.length - noProjectedCost;
   const hasPhaseCodeWarnings = noEstCost > 0 || noProjectedCost > 0;
 
   // Pre-populate drafts from existing checklist
@@ -561,19 +563,23 @@ const PreJobWizard: React.FC = () => {
                   {hasPhaseCodeWarnings ? '⚠️ Phase Code Gaps Detected' : '✅ Phase Codes Look Good'}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.6 }}>
-                  {phaseCodeDetail.length} total phase codes on this project.
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span><strong style={{ color: '#002356' }}>{phaseCodeDetail.length}</strong> phase codes</span>
+                    <span><strong style={{ color: withEstCost === phaseCodeDetail.length ? '#166534' : '#b45309' }}>{withEstCost}</strong> with estimated cost</span>
+                    <span><strong style={{ color: withProjectedCost === phaseCodeDetail.length ? '#166534' : '#b45309' }}>{withProjectedCost}</strong> with projected cost</span>
+                  </div>
                   {noEstCost > 0 && (
-                    <div style={{ color: '#b45309', marginTop: 4 }}>
-                      <strong>{noEstCost}</strong> phase code{noEstCost !== 1 ? 's have' : ' has'} no estimated cost — these won't show up in your labor or material budgets.
+                    <div style={{ color: '#b45309' }}>
+                      {noEstCost} phase code{noEstCost !== 1 ? 's have' : ' has'} no estimated cost — these won't show up in labor or material budgets.
                     </div>
                   )}
                   {noProjectedCost > 0 && (
                     <div style={{ color: '#b45309', marginTop: 4 }}>
-                      <strong>{noProjectedCost}</strong> phase code{noProjectedCost !== 1 ? 's have' : ' has'} no projected cost — the first Vista projection may not cover all codes yet.
+                      {noProjectedCost} phase code{noProjectedCost !== 1 ? 's have' : ' has'} no projected cost — the first Vista projection may not cover all codes yet.
                     </div>
                   )}
                   {!hasPhaseCodeWarnings && (
-                    <div style={{ color: '#166534', marginTop: 4 }}>All phase codes have estimated and projected costs.</div>
+                    <div style={{ color: '#166534' }}>All phase codes have estimated and projected costs.</div>
                   )}
                 </div>
               </div>
