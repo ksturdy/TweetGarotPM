@@ -26,24 +26,29 @@ router.get('/project/:projectId/readiness', verifyProject, async (req, res, next
   try {
     const { projectId } = req.params;
 
-    const vistaResult = await db.query(
-      `SELECT id, contract_number, projected_cost,
-              COALESCE(orig_contract_amount, 0) AS orig_contract_amount,
-              COALESCE(contract_amount, 0) AS contract_amount
-       FROM vp_contracts
-       WHERE linked_project_id = $1 AND tenant_id = $2
-       LIMIT 1`,
-      [projectId, req.tenantId]
-    );
+    const [contractResult, estimateResult, projectionResult] = await Promise.all([
+      db.query(
+        `SELECT id, contract_number FROM vp_contracts
+         WHERE linked_project_id = $1 AND tenant_id = $2 LIMIT 1`,
+        [projectId, req.tenantId]
+      ),
+      // Estimate is uploaded when at least one phase code has est_cost > 0
+      db.query(
+        `SELECT id FROM vp_phase_codes
+         WHERE linked_project_id = $1 AND tenant_id = $2 AND est_cost > 0 LIMIT 1`,
+        [projectId, req.tenantId]
+      ),
+      // Projection is complete when at least one phase code has projected_cost > 0
+      db.query(
+        `SELECT id FROM vp_phase_codes
+         WHERE linked_project_id = $1 AND tenant_id = $2 AND projected_cost > 0 LIMIT 1`,
+        [projectId, req.tenantId]
+      ),
+    ]);
 
-    const contract = vistaResult.rows[0] ?? null;
-    // Estimate is considered uploaded only if the contract has a non-zero value
-    // (a shell contract with all zeros means the estimate hasn't been imported yet)
-    const vistaLinked = !!contract && (
-      Number(contract.orig_contract_amount) !== 0 || Number(contract.contract_amount) !== 0
-    );
-    // A Vista projection is complete when projected_cost has been populated
-    const hasProjection = !!contract && contract.projected_cost != null && Number(contract.projected_cost) !== 0;
+    const contract = contractResult.rows[0] ?? null;
+    const vistaLinked = estimateResult.rows.length > 0;
+    const hasProjection = projectionResult.rows.length > 0;
 
     res.json({
       vistaLinked,
