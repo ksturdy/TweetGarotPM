@@ -43,6 +43,12 @@ export interface AssignmentRecord {
   project_end_date?: string | null;
 }
 
+export interface NominationRecord extends AssignmentRecord {
+  nominator_first_name: string | null;
+  nominator_last_name: string | null;
+  nominator_email: string | null;
+}
+
 export interface LaborBoardRow {
   id: number;
   first_name: string;
@@ -442,4 +448,22 @@ export const laborApi = {
       notes: payload.notes,
       tags: payload.tags,
     }).then((r) => r.data),
+
+  getNominations: (filters?: { project?: string; trade?: string; search?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.project) params.set('project', filters.project);
+    if (filters?.trade) params.set('trade', filters.trade);
+    if (filters?.search) params.set('search', filters.search);
+    const qs = params.toString();
+    return api.get<NominationRecord[]>(`/project-assignments/nominations${qs ? `?${qs}` : ''}`).then((r) => r.data);
+  },
+
+  approveNomination: (id: number) =>
+    api.patch<AssignmentRecord>(`/project-assignments/${id}`, { status: 'active' }).then((r) => r.data),
+
+  declineNomination: (id: number, reason?: string) =>
+    api.patch<AssignmentRecord>(`/project-assignments/${id}`, { status: 'cancelled', ...(reason ? { notes: reason } : {}) }).then((r) => r.data),
+
+  reassignNomination: (id: number, employeeId: number) =>
+    api.post<AssignmentRecord>(`/project-assignments/${id}/reassign`, { employeeId }).then((r) => r.data),
 };

@@ -694,6 +694,67 @@ const ProjectAssignment = {
     );
     return result.rows[0];
   },
+
+  async findNominations(tenantId, { project, trade, search } = {}) {
+    const params = [tenantId];
+    const clauses = [
+      'pa.tenant_id = $1',
+      "pa.status = 'planned'",
+      'COALESCE(pa.is_unfilled, FALSE) = FALSE',
+      'pa.employee_id IS NOT NULL',
+    ];
+
+    if (project) {
+      params.push(`%${project}%`);
+      clauses.push(`(p.name ILIKE $${params.length} OR p.number ILIKE $${params.length})`);
+    }
+    if (trade) {
+      params.push(trade);
+      clauses.push(`pa.trade = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      clauses.push(
+        `(e.first_name ILIKE $${params.length} OR e.last_name ILIKE $${params.length} OR CONCAT(e.first_name, ' ', e.last_name) ILIKE $${params.length})`
+      );
+    }
+
+    const result = await db.query(
+      `SELECT pa.*,
+         e.first_name, e.last_name, e.email, e.phone, e.mobile_phone,
+         e.job_title, e.title AS employee_title, e.trade AS employee_trade,
+         e.employee_group, e.profile_type,
+         p.name AS project_name, p.number AS project_number,
+         p.start_date AS project_start_date, p.end_date AS project_end_date,
+         u.first_name AS nominator_first_name, u.last_name AS nominator_last_name,
+         u.email AS nominator_email
+       FROM project_assignments pa
+       JOIN employees e ON e.id = pa.employee_id
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN users u ON u.id = pa.assigned_by
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY pa.assigned_at DESC`,
+      params
+    );
+    return result.rows;
+  },
+
+  async reassignEmployee(id, employeeId, tenantId) {
+    const empResult = await db.query(
+      `SELECT id, user_id FROM employees WHERE id = $1 AND tenant_id = $2`,
+      [employeeId, tenantId]
+    );
+    if (!empResult.rows[0]) throw new Error('Employee not found');
+    const { user_id } = empResult.rows[0];
+    const result = await db.query(
+      `UPDATE project_assignments
+       SET employee_id = $1, user_id = $2
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING *`,
+      [employeeId, user_id, id, tenantId]
+    );
+    return result.rows[0];
+  },
 };
 
 module.exports = ProjectAssignment;

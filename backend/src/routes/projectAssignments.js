@@ -12,6 +12,17 @@ const router = express.Router();
 router.use(authenticate);
 router.use(tenantContext);
 
+// GET /api/project-assignments/nominations  — all planned (pending) nominations
+router.get('/nominations', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { project, trade, search } = req.query;
+    const rows = await ProjectAssignment.findNominations(req.tenantId, { project, trade, search });
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/project-assignments/unfilled  — all open roles across all projects
 router.get('/unfilled', authorize('admin', 'manager'), async (req, res, next) => {
   try {
@@ -140,6 +151,19 @@ router.post('/project/:projectId', authorize('admin', 'manager'), async (req, re
     await ProjectAssignment.addToProject(payload, req.tenantId, req.user.id);
     const assignments = await ProjectAssignment.findByProjectId(req.params.projectId, req.tenantId);
     res.json(assignments);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/project-assignments/:id/reassign  — swap nominated employee
+router.post('/:id/reassign', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { employeeId } = req.body;
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+    const updated = await ProjectAssignment.reassignEmployee(req.params.id, employeeId, req.tenantId);
+    if (!updated) return res.status(404).json({ error: 'Assignment not found' });
+    res.json(updated);
   } catch (error) {
     next(error);
   }

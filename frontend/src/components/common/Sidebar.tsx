@@ -170,6 +170,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
         { label: 'Calendar', path: '/labor/calendar' },
         { label: 'Project Timeline', path: '/labor/project-gantt' },
         { label: 'Assignments', path: '/labor/assignments' },
+        { label: 'Nominations', path: '/labor/nominations' },
       ],
     },
     {
