@@ -13,6 +13,7 @@ import {
   ProjectInfoData,
 } from '../../services/preJobChecklist';
 import { projectAssignmentsApi, ProjectAssignment } from '../../services/projectAssignments';
+import { ASSIGNMENT_TRADES } from '../../services/labor';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import api from '../../services/api';
 
@@ -26,6 +27,12 @@ const fmtHrs = (n: number | null | undefined) =>
 const MGMT_ROLES = [
   'Project Manager', 'Assistant PM', 'Project Coordinator',
   'Safety Manager', 'BIM Lead', 'BIM Manager', 'Project Engineer',
+] as const;
+
+const FIELD_ROLES = [
+  'Superintendent', 'Foreman', 'Journeyman',
+  'Apprentice 5', 'Apprentice 4', 'Apprentice 3', 'Apprentice 2', 'Apprentice 1',
+  'Pre-Apprentice', 'Helper',
 ] as const;
 
 const DEFAULT_LABOR_TRADES = (): LaborTradeRow[] =>
@@ -76,7 +83,7 @@ const TitanCard: React.FC<{ question: string; hint?: string }> = ({ question, hi
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 const STEPS = [
-  'Key Dates', 'Project Team', 'Site Conditions', 'Scope & Bid',
+  'Key Dates', 'Office Team', 'Field Team', 'Site Conditions', 'Scope & Bid',
   'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
 ];
 
@@ -186,9 +193,17 @@ const PreJobWizard: React.FC = () => {
   const [teamRole, setTeamRole] = useState('');
   const dropRef = useRef<HTMLDivElement>(null);
 
+  // ── Field team nomination state ───────────────────────────────────────────
+  const fieldEmpSearch = useEmpSearch();
+  const [fieldRole, setFieldRole] = useState('');
+  const [fieldTrade, setFieldTrade] = useState('');
+  const [fieldNotes, setFieldNotes] = useState('');
+  const fieldDropRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (dropRef.current && !dropRef.current.contains(e.target as Node)) empSearch.setShowDrop(false);
+      if (fieldDropRef.current && !fieldDropRef.current.contains(e.target as Node)) fieldEmpSearch.setShowDrop(false);
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
@@ -279,6 +294,7 @@ const PreJobWizard: React.FC = () => {
 
   // ── Office team ───────────────────────────────────────────────────────────
   const officeAssignments = assignments.filter(a => a.role && (MGMT_ROLES as readonly string[]).includes(a.role));
+  const fieldNominations = assignments.filter(a => a.role && (FIELD_ROLES as readonly string[]).includes(a.role));
 
   const addTeamMutation = useMutation({
     mutationFn: () => {
@@ -298,6 +314,28 @@ const PreJobWizard: React.FC = () => {
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to add member'),
   });
 
+  const nominateFieldMutation = useMutation({
+    mutationFn: () => {
+      if (!fieldEmpSearch.selected || !fieldRole) throw new Error('Select employee and role');
+      return projectAssignmentsApi.addToProject(Number(projectId), {
+        employeeId: fieldEmpSearch.selected!.id,
+        role: fieldRole,
+        trade: fieldTrade || undefined,
+        notes: fieldNotes || undefined,
+        status: 'planned',
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-assignments', projectId] });
+      fieldEmpSearch.reset();
+      setFieldRole('');
+      setFieldTrade('');
+      setFieldNotes('');
+      toast.success('Field nomination submitted — pending labor coordinator approval');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to submit nomination'),
+  });
+
   // ── Step save handlers ────────────────────────────────────────────────────
   const saveCurrentStep = async () => {
     const pid = Number(projectId);
@@ -314,28 +352,29 @@ const PreJobWizard: React.FC = () => {
         }
         qc.invalidateQueries({ queryKey: ['project', projectId] });
         break;
-      case 2: break; // team saves live per-add, nothing to save on continue
-      case 3:
+      case 2: break; // office team saves live per-add
+      case 3: break; // field nominations save live per-submit
+      case 4:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...existingPi, special_conditions: specialConditions });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 4:
+      case 5:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 5:
+      case 6:
         await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: laborTrades });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 6:
+      case 7:
         await preJobChecklistApi.updateSection(pid, 'material', { approach_notes: materialApproach, items: materialItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 7:
+      case 8:
         await preJobChecklistApi.updateSection(pid, 'subcontracts', { approach_notes: subApproach, items: subItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 8:
+      case 9:
         await Promise.all([
           preJobChecklistApi.updateSection(pid, 'rental', { approach_notes: rentalApproach, items: rentalItems }),
           preJobChecklistApi.updateSection(pid, 'mep_equipment', { approach_notes: mepApproach, items: mepItems }),
@@ -343,7 +382,7 @@ const PreJobWizard: React.FC = () => {
         ]);
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 9:
+      case 10:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), other_contacts: contacts });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
@@ -695,8 +734,110 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 3 — SITE CONDITIONS
-      case 3:
+      // STEP 3 — FIELD TEAM NOMINATIONS
+      case 3: {
+        const STATUS_LABEL: Record<string, string> = {
+          planned: 'Pending Approval',
+          active: 'Active',
+          declined: 'Declined',
+        };
+        return (
+          <div>
+            <TitanCard
+              question="Who are you nominating for the field crew on this project?"
+              hint="Field nominations go to the Labor Coordinator for approval. You can add as many as needed — they'll appear in the Nominations board."
+            />
+
+            {/* Existing nominations list */}
+            {fieldNominations.length > 0 && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                  Submitted Nominations
+                </div>
+                {fieldNominations.map(a => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600 }}>{[a.first_name, a.last_name].filter(Boolean).join(' ')}</span>
+                    <span style={{ color: '#64748b', fontSize: '0.8rem' }}>{a.role}{a.trade ? ` · ${a.trade}` : ''}</span>
+                    <span style={{
+                      marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                      background: a.status === 'active' ? '#dcfce7' : a.status === 'declined' ? '#fee2e2' : '#fef9c3',
+                      color: a.status === 'active' ? '#166534' : a.status === 'declined' ? '#991b1b' : '#92400e',
+                    }}>
+                      {STATUS_LABEL[a.status ?? 'planned'] ?? a.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Nomination form */}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '1rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: 10 }}>
+                Field nominations are sent to the Labor Coordinator for approval before becoming active.
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: 2, minWidth: 180, position: 'relative' }} ref={fieldDropRef}>
+                  <label style={fieldLabel}>Employee</label>
+                  <input
+                    type="text"
+                    style={fieldInput}
+                    placeholder="Search by name…"
+                    value={fieldEmpSearch.query}
+                    onChange={e => { fieldEmpSearch.setQuery(e.target.value); fieldEmpSearch.clearSel(); }}
+                    autoComplete="off"
+                  />
+                  {fieldEmpSearch.showDrop && fieldEmpSearch.results.length > 0 && !fieldEmpSearch.selected && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.1)', zIndex: 50, maxHeight: 200, overflowY: 'auto' }}>
+                      {fieldEmpSearch.results.map(e => (
+                        <button key={e.id} onMouseDown={() => fieldEmpSearch.select(e)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.5rem 0.75rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem' }}>
+                          <strong>{e.first_name} {e.last_name}</strong>
+                          {(e.title || e.trade) && <span style={{ color: '#94a3b8', marginLeft: 6, fontSize: '0.75rem' }}>{[e.title, e.trade].filter(Boolean).join(' · ')}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={fieldLabel}>Role</label>
+                  <select style={fieldInput} value={fieldRole} onChange={e => setFieldRole(e.target.value)}>
+                    <option value="">— select —</option>
+                    {FIELD_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <label style={fieldLabel}>Trade</label>
+                  <select style={fieldInput} value={fieldTrade} onChange={e => setFieldTrade(e.target.value)}>
+                    <option value="">— select —</option>
+                    {([...ASSIGNMENT_TRADES] as string[]).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <label style={fieldLabel}>Notes (optional)</label>
+                <input
+                  type="text"
+                  style={fieldInput}
+                  placeholder="Start date, phase, special skills…"
+                  value={fieldNotes}
+                  onChange={e => setFieldNotes(e.target.value)}
+                />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <button
+                  disabled={!fieldEmpSearch.selected || !fieldRole || nominateFieldMutation.isPending}
+                  onClick={() => nominateFieldMutation.mutate()}
+                  style={{ padding: '0.55rem 1.5rem', background: '#002356', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', opacity: fieldEmpSearch.selected && fieldRole ? 1 : 0.45 }}
+                >
+                  {nominateFieldMutation.isPending ? 'Submitting…' : 'Submit for Approval →'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // STEP 4 — SITE CONDITIONS
+      case 4:
         return (
           <div>
             <TitanCard
@@ -713,8 +854,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 4 — SCOPE & BID NOTES
-      case 4:
+      // STEP 5 — SCOPE & BID NOTES
+      case 5:
         return (
           <div>
             <TitanCard
@@ -731,8 +872,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 5 — LABOR PLAN
-      case 5: {
+      // STEP 6 — LABOR PLAN
+      case 6: {
         const lt = costSummary?.labor_totals;
         return (
           <div>
@@ -763,8 +904,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 6 — MATERIAL PLAN
-      case 6: {
+      // STEP 7 — MATERIAL PLAN
+      case 7: {
         const md = costSummary?.costs?.material;
         return (
           <div>
@@ -787,8 +928,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 7 — SUBCONTRACTS
-      case 7: {
+      // STEP 8 — SUBCONTRACTS
+      case 8: {
         const sd = costSummary?.costs?.subcontracts;
         return (
           <div>
@@ -811,8 +952,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 8 — OTHER COSTS
-      case 8: {
+      // STEP 9 — OTHER COSTS
+      case 9: {
         const rd = costSummary?.costs?.rentals;
         const mpd = costSummary?.costs?.mep_equipment;
         const gcd = costSummary?.costs?.general_conditions;
@@ -840,8 +981,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 9 — OTHER CONTACTS
-      case 9:
+      // STEP 10 — OTHER CONTACTS
+      case 10:
         return (
           <div>
             <TitanCard
@@ -852,8 +993,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 10 — SUMMARY
-      case 10:
+      // STEP 11 — SUMMARY
+      case 11:
         return (
           <div>
             <TitanCard
@@ -862,6 +1003,7 @@ const PreJobWizard: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <SummaryRow label="Dates" value={startDate && endDate ? `${startDate} → ${endDate}` : startDate || endDate || '—'} />
               <SummaryRow label="Office Team" value={officeAssignments.length > 0 ? officeAssignments.map(a => `${[a.first_name, a.last_name].filter(Boolean).join(' ')} (${a.role})`).join(', ') : 'None added'} />
+              <SummaryRow label="Field Nominations" value={fieldNominations.length > 0 ? `${fieldNominations.length} nomination${fieldNominations.length !== 1 ? 's' : ''} submitted — pending coordinator approval` : 'None submitted'} />
               <SummaryRow label="Site Conditions" value={specialConditions || '—'} multiline />
               <SummaryRow label="Scope & Bid Notes" value={bidScopeNotes || '—'} multiline />
               <SummaryRow label="Labor Strategy" value={laborApproach || '—'} multiline />
@@ -908,7 +1050,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 11 && <ProgressBar step={step} />}
+      {step > 0 && step < 12 && <ProgressBar step={step} />}
 
       {/* Content */}
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -916,7 +1058,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Navigation (hide on gate and summary) */}
-      {step > 0 && step < 10 && (
+      {step > 0 && step < 11 && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -924,7 +1066,7 @@ const PreJobWizard: React.FC = () => {
               Skip
             </button>
             <button onClick={handleContinue} disabled={saving} style={navBtn('#002356', 'white')}>
-              {saving ? 'Saving…' : step === 9 ? 'Save & Review →' : 'Save & Continue →'}
+              {saving ? 'Saving…' : step === 10 ? 'Save & Review →' : 'Save & Continue →'}
             </button>
           </div>
         </div>
