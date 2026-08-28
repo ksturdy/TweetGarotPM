@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
-import { vistaDataService } from '../../services/vistaData';
+import { vistaDataService, PhaseCodeDetailRow } from '../../services/vistaData';
 import {
   preJobChecklistApi,
   LaborTradeRow,
@@ -230,6 +230,16 @@ const PreJobWizard: React.FC = () => {
     queryFn: () => preJobChecklistApi.get(Number(projectId)),
     enabled: !!projectId,
   });
+
+  const { data: phaseCodeDetail = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId)),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
+  const noEstCost = phaseCodeDetail.filter(p => !p.est_cost || p.est_cost === 0).length;
+  const noProjectedCost = phaseCodeDetail.filter(p => !p.projected_cost || p.projected_cost === 0).length;
+  const hasPhaseCodeWarnings = noEstCost > 0 || noProjectedCost > 0;
 
   // Pre-populate drafts from existing checklist
   useEffect(() => {
@@ -538,6 +548,35 @@ const PreJobWizard: React.FC = () => {
               </div>
             )}
 
+            {/* Phase code advisory — shown whenever Vista is linked */}
+            {readiness?.vistaLinked && phaseCodeDetail.length > 0 && (
+              <div style={{
+                background: hasPhaseCodeWarnings ? '#fffbeb' : '#f0fdf4',
+                border: `1px solid ${hasPhaseCodeWarnings ? '#fde68a' : '#bbf7d0'}`,
+                borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem',
+              }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: hasPhaseCodeWarnings ? '#92400e' : '#166534', marginBottom: 6 }}>
+                  {hasPhaseCodeWarnings ? '⚠️ Phase Code Gaps Detected' : '✅ Phase Codes Look Good'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.6 }}>
+                  {phaseCodeDetail.length} total phase codes on this project.
+                  {noEstCost > 0 && (
+                    <div style={{ color: '#b45309', marginTop: 4 }}>
+                      <strong>{noEstCost}</strong> phase code{noEstCost !== 1 ? 's have' : ' has'} no estimated cost — these won't show up in your labor or material budgets.
+                    </div>
+                  )}
+                  {noProjectedCost > 0 && (
+                    <div style={{ color: '#b45309', marginTop: 4 }}>
+                      <strong>{noProjectedCost}</strong> phase code{noProjectedCost !== 1 ? 's have' : ' has'} no projected cost — the first Vista projection may not cover all codes yet.
+                    </div>
+                  )}
+                  {!hasPhaseCodeWarnings && (
+                    <div style={{ color: '#166534', marginTop: 4 }}>All phase codes have estimated and projected costs.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div style={{ textAlign: 'center' }}>
               <button
                 disabled={!readiness?.ready}
@@ -694,6 +733,14 @@ const PreJobWizard: React.FC = () => {
               hint="These goals guide your monthly projections and headcount planning."
             />
             {lt && <VistaBox label="Labor" estHrs={lt.est_hours} jtdHrs={lt.jtd_hours} estCost={lt.est_cost} jtdCost={lt.jtd_cost} />}
+            {hasPhaseCodeWarnings && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '0.65rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#92400e' }}>
+                <strong>⚠️ Heads up:</strong>
+                {noEstCost > 0 && <span> {noEstCost} phase code{noEstCost !== 1 ? 's are' : ' is'} missing estimated cost.</span>}
+                {noProjectedCost > 0 && <span> {noProjectedCost} phase code{noProjectedCost !== 1 ? 's are' : ' is'} missing projected cost.</span>}
+                {' '}These gaps may make the labor budget totals above incomplete.
+              </div>
+            )}
             <label style={fieldLabel}>Overall Labor Strategy</label>
             <textarea
               rows={3}
