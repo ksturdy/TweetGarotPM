@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { vistaDataService, PhaseCodeCostSummary, VPContract } from '../../services/vistaData';
@@ -745,6 +745,7 @@ const OtherContactsTable: React.FC<OtherContactsTableProps> = ({ contacts, onCha
 
 const PreJobChecklistPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const { toast } = useTitanFeedback();
 
@@ -841,6 +842,11 @@ const PreJobChecklistPage: React.FC = () => {
   const isSaving = saveMutation.isPending;
 
   if (isLoading) return <div className="pjc-page"><p>Loading...</p></div>;
+
+  const checklistIsEmpty = !checklist?.project_info?.bid_scope_notes
+    && !checklist?.project_info?.special_conditions
+    && !checklist?.labor?.approach_notes
+    && !checklist?.material?.approach_notes;
 
   // ── Date helpers ──
   // Prefer project-level dates; fall back to Vista contract projection overrides
@@ -953,7 +959,53 @@ const PreJobChecklistPage: React.FC = () => {
             </p>
           )}
         </div>
+        <button
+          onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: checklistIsEmpty ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
+            color: checklistIsEmpty ? 'white' : '#475569',
+            border: 'none', borderRadius: 8,
+            padding: '0.55rem 1.1rem', fontSize: '0.85rem', fontWeight: 700,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: '1rem' }}>🚀</span>
+          {checklistIsEmpty ? 'Start Guided Setup' : 'Re-run Guided Setup'}
+        </button>
       </div>
+
+      {/* Titan wizard invite (shown when checklist is empty) */}
+      {checklistIsEmpty && (
+        <div style={{
+          margin: '0 0 1.5rem',
+          background: 'linear-gradient(135deg, #002356 0%, #003580 100%)',
+          borderRadius: 12, padding: '1.25rem 1.5rem',
+          display: 'flex', gap: '1rem', alignItems: 'flex-start',
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #f97316, #ea580c)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 900, color: 'white', fontSize: '1.1rem', flexShrink: 0,
+          }}>T</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Titan</div>
+            <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+              This checklist is empty. Want me to walk you through it?
+            </div>
+            <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginBottom: 12 }}>
+              I'll guide you through key dates, project team, scope notes, and each cost type plan — step by step. Takes about 10–15 minutes.
+            </div>
+            <button
+              onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+              style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+            >
+              Start Guided Setup →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Missing dates banner ── */}
       {missingDates && !editingDates && (

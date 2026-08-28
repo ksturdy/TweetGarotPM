@@ -107,6 +107,13 @@ const EMPTY_CHECKLIST: PreJobChecklist = {
   general_conditions: {},
 };
 
+export interface ReadinessResult {
+  vistaLinked: boolean;
+  vistaContractNumber: string | null;
+  hasProjection: boolean;
+  ready: boolean;
+}
+
 export const preJobChecklistApi = {
   async get(projectId: number): Promise<PreJobChecklist> {
     const { data } = await api.get(`/pre-job-checklist/project/${projectId}`);
@@ -116,5 +123,10 @@ export const preJobChecklistApi = {
   async updateSection(projectId: number, section: ChecklistSection, sectionData: any): Promise<PreJobChecklist> {
     const { data } = await api.put(`/pre-job-checklist/project/${projectId}/section/${section}`, sectionData);
     return { ...EMPTY_CHECKLIST, ...data };
+  },
+
+  async readiness(projectId: number): Promise<ReadinessResult> {
+    const { data } = await api.get(`/pre-job-checklist/project/${projectId}/readiness`);
+    return data;
   },
 };

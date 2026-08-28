@@ -102,6 +102,7 @@ import LaborProjectGantt from './pages/labor/LaborProjectGantt';
 import LaborAccounts from './pages/labor/LaborAccounts';
 import LaborUnfilledRoles from './pages/labor/LaborUnfilledRoles';
 import LaborNominations from './pages/labor/LaborNominations';
+import PreJobWizard from './pages/projects/PreJobWizard';
 import UserManagement from './pages/UserManagement';
 import RolesPermissions from './pages/RolesPermissions';
 import SecuritySettings from './pages/SecuritySettings';
@@ -539,6 +540,7 @@ const App: React.FC = () => {
                 <Route path="/projects/labor-forecast" element={<LaborForecast />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/projects/:projectId/pre-job-checklist/wizard" element={<PreJobWizard />} />
                 <Route path="/projects/:projectId/pre-job-checklist" element={<PreJobChecklist />} />
                 <Route path="/projects/:projectId/companies" element={<ProjectCompanies />} />
                 <Route path="/projects/:projectId/rfis" element={<RFIList />} />
