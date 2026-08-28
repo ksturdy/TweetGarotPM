@@ -23,7 +23,7 @@ import ChangeOrderForm from './pages/changeOrders/ChangeOrderForm';
 import ChangeOrderDetail from './pages/changeOrders/ChangeOrderDetail';
 import DailyReportList from './pages/dailyReports/DailyReportList';
 import DailyReportDetail from './pages/dailyReports/DailyReportDetail';
-import ScheduleView from './pages/schedule/ScheduleView';
+import ScheduleHub from './pages/projects/ScheduleHub';
 import GCScheduleView from './pages/schedule/GCScheduleView';
 import ProjectWeeklyGoals from './pages/projects/ProjectWeeklyGoals';
 import ProjectCompanies from './pages/companies/ProjectCompanies';
@@ -117,7 +117,7 @@ import CostDrillIn from './pages/projects/CostDrillIn';
 import ProjectPerformance from './pages/projects/ProjectPerformance';
 import ProjectedRevenue from './pages/projects/ProjectedRevenue';
 import LaborForecast from './pages/projects/LaborForecast';
-import PhaseSchedule from './pages/projects/PhaseSchedule';
+// PhaseSchedule is lazy-loaded inside ScheduleHub — no top-level import needed
 import Stratus from './pages/projects/Stratus';
 import FeedbackPage from './pages/FeedbackPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -554,9 +554,9 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/daily-reports/:id" element={<DailyReportDetail />} />
                 <Route path="/projects/:projectId/issues" element={<ProjectIssueList />} />
                 <Route path="/projects/:projectId/issues/:id" element={<ProjectIssueDetail />} />
-                <Route path="/projects/:projectId/schedule" element={<ScheduleView />} />
+                <Route path="/projects/:projectId/schedule" element={<ScheduleHub />} />
                 <Route path="/projects/:projectId/gc-schedule" element={<GCScheduleView />} />
-                <Route path="/projects/:projectId/phase-schedule" element={<PhaseSchedule />} />
+                <Route path="/projects/:projectId/phase-schedule" element={<Navigate to="../schedule?tab=phase" replace relative="path" />} />
                 <Route path="/projects/:projectId/stratus" element={<Stratus />} />
                 <Route path="/projects/:projectId/weekly-goals" element={<ProjectWeeklyGoals />} />
                 <Route path="/projects/:id/financials" element={<ProjectFinancials />} />

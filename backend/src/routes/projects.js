@@ -1,9 +1,11 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const db = require('../config/database');
 const Project = require('../models/Project');
 const ProjectAssignment = require('../models/ProjectAssignment');
 const { authenticate, authorize } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
+const { getProjectEffectiveDates } = require('../utils/projectDates');
 
 const router = express.Router();
 
@@ -442,7 +444,13 @@ router.get('/:id', async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    res.json(project);
+    const effectiveDates = await getProjectEffectiveDates(req.params.id, req.tenantId);
+    res.json({
+      ...project,
+      effective_start_date: effectiveDates.start_date,
+      effective_end_date: effectiveDates.end_date,
+      effective_date_source: effectiveDates.end_source,
+    });
   } catch (error) {
     next(error);
   }
@@ -493,6 +501,78 @@ router.put('/:id', authorize('admin', 'manager'), async (req, res, next) => {
     }
 
     res.json(project);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update scheduling mode for a project
+router.put('/:id/scheduling-mode', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { mode } = req.body;
+    const valid = ['summary', 'cost_type', 'phase'];
+    if (!valid.includes(mode)) {
+      return res.status(400).json({ error: 'Invalid scheduling mode' });
+    }
+
+    const { rows } = await db.query(
+      `UPDATE projects SET scheduling_mode = $1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3
+        RETURNING id, scheduling_mode`,
+      [mode, req.params.id, req.tenantId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+    // When upgrading to cost_type, auto-initialize segments from project effective dates
+    if (mode === 'cost_type') {
+      const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
+      const dates = await getProjectEffectiveDates(req.params.id, req.tenantId);
+      await ProjectScheduleSegment.initializeSegments(req.params.id, req.tenantId, dates.start_date, dates.end_date);
+    }
+
+    res.json(rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /:id/summary-dates — bidirectional sync with Labor Forecast
+// Writes to vp_contracts.user_adjusted_start/end_date (same field Labor Forecast uses)
+// so both views always read from the same source of truth.
+router.patch('/:id/summary-dates', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const tenantId = req.tenantId;
+    const parts = [];
+    const vals = [];
+
+    if ('start_date' in req.body) {
+      parts.push(`user_adjusted_start_date = $${vals.push(req.body.start_date || null)}`);
+    }
+    if ('end_date' in req.body) {
+      parts.push(`user_adjusted_end_date = $${vals.push(req.body.end_date || null)}`);
+    }
+
+    if (parts.length > 0) {
+      // Update all vp_contracts linked to this project (mirrors what Labor Forecast does per-contract)
+      await db.query(
+        `UPDATE vp_contracts SET ${parts.join(', ')}, updated_at = NOW()
+         WHERE linked_project_id = $${vals.push(projectId)} AND tenant_id = $${vals.push(tenantId)}`,
+        vals
+      );
+      // Also update the projects table as a fallback for projects with no linked contracts
+      const projectUpdates = {};
+      if ('start_date' in req.body) projectUpdates.start_date = req.body.start_date || null;
+      if ('end_date' in req.body) projectUpdates.end_date = req.body.end_date || null;
+      await Project.update(projectId, projectUpdates, tenantId);
+    }
+
+    const effectiveDates = await getProjectEffectiveDates(projectId, tenantId);
+    res.json({
+      effective_start_date: effectiveDates.start_date,
+      effective_end_date: effectiveDates.end_date,
+      effective_date_source: effectiveDates.end_source,
+    });
   } catch (error) {
     next(error);
   }

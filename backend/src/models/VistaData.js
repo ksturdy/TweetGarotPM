@@ -178,6 +178,7 @@ const VistaData = {
       SELECT vc.*,
         p.name as linked_project_name,
         p.number as linked_project_number,
+        p.scheduling_mode as linked_project_scheduling_mode,
         e.first_name || ' ' || e.last_name as linked_employee_name,
         COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,

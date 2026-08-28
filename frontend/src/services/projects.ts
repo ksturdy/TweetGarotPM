@@ -48,6 +48,11 @@ export interface Project {
   billing_markup_equipment?: number | null;
   billing_markup_genconds?: number | null;
   created_at: string;
+  scheduling_mode?: 'summary' | 'cost_type' | 'phase';
+  // Effective dates resolved from vp_contracts + projects table (server-computed)
+  effective_start_date?: string | null;
+  effective_end_date?: string | null;
+  effective_date_source?: string;
   // Note: favorite is now managed per-user via favoritesService
   isFavorited?: boolean; // Runtime property added by UI
 }
@@ -91,6 +96,16 @@ export const projectsApi = {
   update: (id: number, data: Partial<Project>) => api.put<Project>(`/projects/${id}`, data),
 
   delete: (id: number) => api.delete(`/projects/${id}`),
+
+  // Bidirectional date sync — writes to vp_contracts.user_adjusted_* AND projects table
+  // so Labor Forecast and Schedule Hub always share the same source of truth.
+  updateSummaryDates: (id: number, dates: { start_date?: string; end_date?: string }) =>
+    api.patch<{ effective_start_date: string | null; effective_end_date: string | null; effective_date_source: string }>(
+      `/projects/${id}/summary-dates`, dates
+    ),
+
+  updateSchedulingMode: (id: number, mode: 'summary' | 'cost_type' | 'phase') =>
+    api.put<{ id: number; scheduling_mode: string }>(`/projects/${id}/scheduling-mode`, { mode }),
 
   // Map locations
   getMapLocations: (filters?: { status?: string; managerId?: number }) =>

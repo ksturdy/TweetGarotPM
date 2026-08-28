@@ -1129,3 +1129,8 @@
   height: 100%;
   cursor: pointer;
 }
+
+/* ScheduleHub: suppress the embedded component's own page header when shown as a tab */
+.schedule-hub-embedded > div > .sales-page-header:first-child {
+  display: none;
+}

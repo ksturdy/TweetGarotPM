@@ -32,9 +32,15 @@ a:hover {
   text-decoration: underline;
 }
 
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 button {
   cursor: pointer;
-  font-family: inherit;
 }
 
 .container {

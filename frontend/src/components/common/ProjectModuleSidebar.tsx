@@ -54,7 +54,6 @@ const MODULE_GROUPS: ModuleGroup[] = [
     modules: [
       { path: 'schedule', label: 'Schedule' },
       { path: 'gc-schedule', label: 'GC Schedule' },
-      { path: 'phase-schedule', label: 'Phase Schedule' },
     ],
   },
   {
