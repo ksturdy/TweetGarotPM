@@ -17,8 +17,12 @@ interface EmpResult {
   trade: string | null;
 }
 
-const fmt = (d: string | null | undefined) =>
-  d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const fmt = (d: string | null | undefined) => {
+  if (!d) return '—';
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+};
 
 const LaborNominations: React.FC = () => {
   const { toast } = useTitanFeedback();
@@ -110,16 +114,18 @@ const LaborNominations: React.FC = () => {
   };
 
   const reassignMut = useMutation({
-    mutationFn: ({ id, employeeId }: { id: number; employeeId: number }) =>
-      laborApi.reassignNomination(id, employeeId),
+    mutationFn: async ({ id, employeeId }: { id: number; employeeId: number }) => {
+      await laborApi.reassignNomination(id, employeeId);
+      await laborApi.approveNomination(id);
+    },
     onSuccess: () => {
       invalidate();
-      toast.success('Nomination reassigned to new employee.');
+      toast.success('Assigned to new employee and marked active.');
       setReassignOpen(null);
       setReassignQuery('');
       setReassignSelected(null);
     },
-    onError: () => toast.error('Could not reassign nomination.'),
+    onError: () => toast.error('Could not complete assignment.'),
   });
 
   const pendingCount = rows?.length ?? 0;
@@ -354,11 +360,11 @@ const NominationRow: React.FC<RowProps> = ({
             {isDeclineOpen ? 'Cancel' : '✗ Decline'}
           </button>
           <button
-            title="Reassign to someone else"
+            title="Assign a different person instead"
             onClick={isReassignOpen ? onCancelReassign : onOpenReassign}
             style={actionBtn('#2563eb', '#dbeafe')}
           >
-            {isReassignOpen ? 'Cancel' : '⇄ Reassign'}
+            {isReassignOpen ? 'Cancel' : '👤 Assign Someone Else'}
           </button>
         </td>
       </tr>
@@ -399,7 +405,10 @@ const NominationRow: React.FC<RowProps> = ({
           <td colSpan={8} style={{ padding: '0.75rem 1rem 1rem', background: '#f0f7ff' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 400 }}>
               <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#1e3a8a' }}>
-                Assign a different employee for this role on {nom.project_name ?? 'this project'}
+                Who should fill this role instead of {nom.first_name} {nom.last_name}?
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                The selected person will be assigned and immediately marked active.
               </div>
               <div style={{ position: 'relative' }} ref={dropRef}>
                 <input
@@ -431,8 +440,9 @@ const NominationRow: React.FC<RowProps> = ({
               </div>
               {reassignSelected && (
                 <div style={{ fontSize: '0.8rem', color: '#1e3a8a', background: '#dbeafe', borderRadius: 6, padding: '0.4rem 0.7rem' }}>
-                  Replacing <strong>{nom.first_name} {nom.last_name}</strong> with <strong>{reassignSelected.first_name} {reassignSelected.last_name}</strong>
+                  <strong>{reassignSelected.first_name} {reassignSelected.last_name}</strong>
                   {reassignSelected.trade && ` (${reassignSelected.trade})`}
+                  {' '}will be assigned as <strong>{nom.role ?? 'crew'}</strong> on <strong>{nom.project_name ?? 'this project'}</strong>.
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
@@ -441,7 +451,7 @@ const NominationRow: React.FC<RowProps> = ({
                   disabled={!reassignSelected || isReassigning}
                   style={{ ...actionBtn('#2563eb', '#dbeafe'), fontWeight: 700, opacity: reassignSelected ? 1 : 0.45 }}
                 >
-                  {isReassigning ? 'Reassigning…' : 'Confirm Reassignment'}
+                  {isReassigning ? 'Assigning…' : 'Confirm Assignment'}
                 </button>
                 <button onClick={onCancelReassign} style={actionBtn('#475569', '#f1f5f9')}>Cancel</button>
               </div>
