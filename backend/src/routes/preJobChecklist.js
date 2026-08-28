@@ -27,7 +27,9 @@ router.get('/project/:projectId/readiness', verifyProject, async (req, res, next
     const { projectId } = req.params;
 
     const vistaResult = await db.query(
-      `SELECT id, contract_number, projected_cost
+      `SELECT id, contract_number, projected_cost,
+              COALESCE(orig_contract_amount, 0) AS orig_contract_amount,
+              COALESCE(contract_amount, 0) AS contract_amount
        FROM vp_contracts
        WHERE linked_project_id = $1 AND tenant_id = $2
        LIMIT 1`,
@@ -35,13 +37,17 @@ router.get('/project/:projectId/readiness', verifyProject, async (req, res, next
     );
 
     const contract = vistaResult.rows[0] ?? null;
-    const vistaLinked = !!contract;
+    // Estimate is considered uploaded only if the contract has a non-zero value
+    // (a shell contract with all zeros means the estimate hasn't been imported yet)
+    const vistaLinked = !!contract && (
+      Number(contract.orig_contract_amount) !== 0 || Number(contract.contract_amount) !== 0
+    );
     // A Vista projection is complete when projected_cost has been populated
-    const hasProjection = vistaLinked && contract.projected_cost != null && Number(contract.projected_cost) !== 0;
+    const hasProjection = !!contract && contract.projected_cost != null && Number(contract.projected_cost) !== 0;
 
     res.json({
       vistaLinked,
-      vistaContractNumber: contract?.contract_number || null,
+      vistaContractNumber: vistaLinked ? (contract?.contract_number || null) : null,
       hasProjection,
       ready: vistaLinked && hasProjection,
     });

@@ -534,9 +534,11 @@ const PreJobWizard: React.FC = () => {
                 <GateItem
                   done={vistaOk}
                   label="Vista estimate uploaded"
-                  detail={vistaOk ? `Contract ${readiness?.vistaContractNumber ?? ''}` : 'The estimate needs to be uploaded to Vista and linked to this project.'}
-                  actionLabel={vistaOk ? undefined : 'Go to Vista Data'}
-                  actionHref={`/projects/${projectId}`}
+                  detail={vistaOk
+                    ? `Contract ${readiness?.vistaContractNumber ?? ''} — estimate on file.`
+                    : 'The estimate needs to be uploaded to Vista with a non-zero contract amount and linked to this project.'}
+                  actionLabel={undefined}
+                  actionHref={undefined}
                 />
                 <GateItem
                   done={projOk}
