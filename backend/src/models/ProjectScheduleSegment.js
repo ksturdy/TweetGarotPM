@@ -54,7 +54,11 @@ async function initializeSegments(projectId, tenantId, projectStart, projectEnd)
       `INSERT INTO project_schedule_segments
          (project_id, tenant_id, segment_key, label, start_date, end_date, contour_type)
        VALUES ($1, $2, $3, $4, $5, $6, 'flat')
-       ON CONFLICT (project_id, segment_key) DO NOTHING`,
+       ON CONFLICT (project_id, segment_key) DO UPDATE
+         SET start_date = EXCLUDED.start_date,
+             end_date   = EXCLUDED.end_date
+         WHERE project_schedule_segments.start_date IS NULL
+           AND project_schedule_segments.end_date IS NULL`,
       [projectId, tenantId, seg.key, seg.label, projectStart || null, projectEnd || null]
     );
   }

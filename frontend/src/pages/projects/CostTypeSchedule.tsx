@@ -463,12 +463,10 @@ const CostTypeSchedule: React.FC<Props> = ({
           ))}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {!hasAnyDates && (
-            <button onClick={onInitialize} disabled={initPending}
-              style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#1e293b' }}>
-              {initPending ? 'Initializing…' : 'Initialize from Project Dates'}
-            </button>
-          )}
+          <button onClick={onInitialize} disabled={initPending}
+            style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#1e293b' }}>
+            {initPending ? 'Initializing…' : hasAnyDates ? 'Fill Missing from Project Dates' : 'Initialize from Project Dates'}
+          </button>
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             <button style={viewBtn(viewMode === 'gantt')} onClick={() => setViewMode('gantt')}>Gantt</button>
             <button style={{ ...viewBtn(viewMode === 'table'), borderLeft: '1px solid #e2e8f0' }} onClick={() => setViewMode('table')}>$ Cost</button>
