@@ -167,9 +167,19 @@ const PreJobWizard: React.FC = () => {
   const { toast } = useTitanFeedback();
   const qc = useQueryClient();
 
-  const [step, setStep] = useState(0); // 0 = gate
+  const [step, setStepRaw] = useState(0); // 0 = gate
   const [saving, setSaving] = useState(false);
   const [dateError, setDateError] = useState(false);
+
+  const wizardKey = `pjc_wizard_step_${projectId}`;
+  const setStep = (val: number | ((s: number) => number)) => {
+    setStepRaw(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (next > 0) localStorage.setItem(wizardKey, String(next));
+      else localStorage.removeItem(wizardKey);
+      return next;
+    });
+  };
 
   // ── Draft state per section ──────────────────────────────────────────────
   const [startDate, setStartDate] = useState('');
@@ -236,6 +246,13 @@ const PreJobWizard: React.FC = () => {
     queryFn: () => preJobChecklistApi.readiness(Number(projectId)),
     enabled: !!projectId,
   });
+
+  // Restore saved step once prerequisites are confirmed
+  useEffect(() => {
+    if (!readiness?.ready) return;
+    const saved = parseInt(localStorage.getItem(wizardKey) ?? '', 10);
+    if (saved > 0 && saved <= STEPS.length) setStep(saved);
+  }, [readiness?.ready]);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -1310,7 +1327,7 @@ const PreJobWizard: React.FC = () => {
             </div>
             <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
               <button
-                onClick={() => navigate(`/projects/${projectId}/pre-job-checklist`)}
+                onClick={() => { localStorage.removeItem(wizardKey); navigate(`/projects/${projectId}/pre-job-checklist`); }}
                 style={{ background: 'linear-gradient(135deg, #002356, #003580)', color: 'white', border: 'none', borderRadius: 10, padding: '1rem 2.5rem', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}
               >
                 Open Full Pre-Job Checklist →
