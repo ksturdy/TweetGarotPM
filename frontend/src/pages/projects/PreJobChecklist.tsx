@@ -1027,25 +1027,27 @@ const PreJobChecklistPage: React.FC = () => {
             <div style={{ color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Titan</div>
             {wizardCompleted && !checklistIsEmpty ? (
               <>
-                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 4 }}>
                   ✓ Guided setup complete — your checklist is populated and ready.
                 </div>
-                <div style={{ color: '#86efac', fontSize: '0.82rem', marginBottom: 12 }}>
-                  All 13 steps finished. Review each section below or revisit the wizard any time to update your plan.
+                <div style={{ color: '#86efac', fontSize: '0.82rem', marginBottom: 10 }}>
+                  To make changes, click any section header below to expand and edit it directly. Use "Revisit Guided Setup" to step through the wizard again.
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {WIZARD_STEPS.map(label => (
-                    <span key={label} style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#16a34a', color: 'white' }}>
+                  {WIZARD_STEPS.map((label, i) => (
+                    <button
+                      key={label}
+                      onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard?step=${i + 1}`)}
+                      style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#16a34a', color: 'white', border: 'none', cursor: 'pointer' }}
+                      title={`Edit ${label} step`}
+                    >
                       ✓ {label}
-                    </span>
+                    </button>
                   ))}
                 </div>
-                <button
-                  onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
-                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
-                >
-                  Revisit Guided Setup
-                </button>
+                <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: 10 }}>
+                  ↑ Click any step above to jump directly to that section in the wizard.
+                </div>
               </>
             ) : wizardInProgress ? (
               <>

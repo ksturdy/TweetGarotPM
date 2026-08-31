@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { vistaDataService, PhaseCodeDetailRow } from '../../services/vistaData';
@@ -172,8 +172,11 @@ const tdStyle: React.CSSProperties = { padding: '0.25rem 0.25rem' };
 const PreJobWizard: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useTitanFeedback();
   const qc = useQueryClient();
+
+  const jumpToStep = parseInt(searchParams.get('step') ?? '', 10);
 
   const [step, setStepRaw] = useState(0); // 0 = gate
   const [saving, setSaving] = useState(false);
@@ -253,9 +256,13 @@ const PreJobWizard: React.FC = () => {
     enabled: !!projectId,
   });
 
-  // Restore saved step once prerequisites are confirmed
+  // Jump to a specific step if ?step=N is in the URL, or restore saved progress
   useEffect(() => {
     if (!readiness?.ready) return;
+    if (jumpToStep > 0 && jumpToStep <= STEPS.length) {
+      setStep(jumpToStep);
+      return;
+    }
     const saved = parseInt(localStorage.getItem(wizardKey) ?? '', 10);
     if (saved > 0 && saved <= STEPS.length) setStep(saved);
   }, [readiness?.ready]);
