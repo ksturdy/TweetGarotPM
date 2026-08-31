@@ -943,21 +943,22 @@ const PreJobWizard: React.FC = () => {
 
         return (
           <div>
-            <TitanCard
-              question="How do you want to schedule this project? This choice drives how your revenue and labor forecasts are broken out."
-              hint="Pick the mode that fits this job's complexity. You can always change it later on the Schedule tab."
-            />
-
-            {/* Mode selector */}
-            {modeCard('summary', 'Summary', 'Small / single-trade jobs', 'yellow', 'One date window for the whole project')}
-            {modeCard('cost_type', 'Cost Type', '⭐ Recommended for most projects', 'green', 'Separate date window per trade and cost type')}
-            {modeCard('phase', 'Phase', 'Build later', 'yellow', 'Per-phase-code windows — best set up after project start')}
+            {/* Mode selector — keep capped width */}
+            <div style={{ maxWidth: 780 }}>
+              <TitanCard
+                question="How do you want to schedule this project? This choice drives how your revenue and labor forecasts are broken out."
+                hint="Pick the mode that fits this job's complexity. You can always change it later on the Schedule tab."
+              />
+              {modeCard('summary', 'Summary', 'Small / single-trade jobs', 'yellow', 'One date window for the whole project')}
+              {modeCard('cost_type', 'Cost Type', '⭐ Recommended for most projects', 'green', 'Separate date window per trade and cost type')}
+              {modeCard('phase', 'Phase', 'Build later', 'yellow', 'Per-phase-code windows — best set up after project start')}
+            </div>
 
             <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 20, paddingTop: 20 }}>
 
               {/* SUMMARY: dates already set */}
               {schedulingMode === 'summary' && (
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                <div style={{ maxWidth: 780, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '1rem 1.25rem' }}>
                   <div style={{ fontWeight: 700, color: '#166534', marginBottom: 4 }}>✓ You're all set for Summary scheduling</div>
                   <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
                     Your project window <strong>{startDate || '—'}</strong> → <strong>{endDate || '—'}</strong> (set in Step 1) is all Titan needs.
@@ -967,7 +968,7 @@ const PreJobWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* COST TYPE: full schedule module */}
+              {/* COST TYPE: full-width schedule module */}
               {schedulingMode === 'cost_type' && (
                 <CostTypeSchedule
                   projectId={Number(projectId)}
@@ -981,7 +982,7 @@ const PreJobWizard: React.FC = () => {
 
               {/* PHASE: advisory */}
               {schedulingMode === 'phase' && (
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                <div style={{ maxWidth: 780, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '1rem 1.25rem' }}>
                   <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Phase scheduling is best built after project start</div>
                   <div style={{ fontSize: '0.85rem', color: '#78350f', lineHeight: 1.7 }}>
                     Phase mode gives you maximum forecasting precision — every Vista phase code gets its own start and end date.
@@ -1509,7 +1510,7 @@ const PreJobWizard: React.FC = () => {
       {step > 0 && step < 14 && <ProgressBar step={step} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
 
       {/* Content */}
-      <div style={{ maxWidth: 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ maxWidth: step === 2 && schedulingMode === 'cost_type' ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
         {renderStepContent()}
       </div>
 
