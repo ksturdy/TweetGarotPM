@@ -169,20 +169,14 @@ const GanttLeftRow: React.FC<{
         {fmtCompact(costs?.est_cost)}
       </div>
       {/* Start */}
-      <div style={{ ...cell, width: colWidths.start, justifyContent: 'center', position: 'relative', cursor: 'pointer' }}>
-        <span style={{ fontSize: '0.7rem', color: localStart ? '#1e293b' : '#94a3b8', pointerEvents: 'none' }}>
-          {fmtDateShort(localStart) || '—'}
-        </span>
+      <div style={{ ...cell, width: colWidths.start, justifyContent: 'center', padding: '0 2px' }}>
         <input type="date" value={localStart} onChange={e => setLocalStart(e.target.value)} onBlur={handleBlur}
-          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
+          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: localStart ? '#1e293b' : '#94a3b8' }} />
       </div>
       {/* End */}
-      <div style={{ ...cell, width: colWidths.end, justifyContent: 'center', position: 'relative', cursor: 'pointer' }}>
-        <span style={{ fontSize: '0.7rem', color: localEnd ? '#1e293b' : '#94a3b8', pointerEvents: 'none' }}>
-          {fmtDateShort(localEnd) || '—'}
-        </span>
+      <div style={{ ...cell, width: colWidths.end, justifyContent: 'center', padding: '0 2px' }}>
         <input type="date" value={localEnd} onChange={e => setLocalEnd(e.target.value)} onBlur={handleBlur}
-          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
+          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: localEnd ? '#1e293b' : '#94a3b8' }} />
       </div>
       {/* Dur */}
       <div style={{ ...cell, width: colWidths.dur, justifyContent: 'center', fontSize: '0.65rem', color: '#64748b' }}>
