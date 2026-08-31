@@ -846,7 +846,13 @@ const PreJobChecklistPage: React.FC = () => {
   const checklistIsEmpty = !checklist?.project_info?.bid_scope_notes
     && !checklist?.project_info?.special_conditions
     && !checklist?.labor?.approach_notes
-    && !checklist?.material?.approach_notes;
+    && !checklist?.labor?.trades?.length
+    && !checklist?.material?.approach_notes
+    && !checklist?.material?.items?.length
+    && !checklist?.subcontracts?.items?.length
+    && !checklist?.orientation?.directions
+    && !checklist?.orientation?.badge_required
+    && !checklist?.orientation?.contact_name;
 
   const WIZARD_STEPS = [
     'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
@@ -854,6 +860,7 @@ const PreJobChecklistPage: React.FC = () => {
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
   const savedWizardStep = parseInt(localStorage.getItem(wizardKey) ?? '0', 10);
+  const wizardCompleted = savedWizardStep >= WIZARD_STEPS.length;
   const wizardInProgress = savedWizardStep > 0 && savedWizardStep < WIZARD_STEPS.length;
 
   // ── Date helpers ──
@@ -979,15 +986,17 @@ const PreJobChecklistPage: React.FC = () => {
           }}
         >
           <span style={{ fontSize: '1rem' }}>🚀</span>
-          {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : 'Re-run Guided Setup'}
+          {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : wizardCompleted ? 'Revisit Guided Setup' : 'Re-run Guided Setup'}
         </button>
       </div>
 
       {/* Titan wizard banner */}
-      {(wizardInProgress || checklistIsEmpty) && (
+      {(wizardInProgress || wizardCompleted || checklistIsEmpty) && (
         <div style={{
           margin: '0 0 1.5rem',
-          background: 'linear-gradient(135deg, #002356 0%, #003580 100%)',
+          background: wizardCompleted && !checklistIsEmpty
+            ? 'linear-gradient(135deg, #14532d 0%, #166534 100%)'
+            : 'linear-gradient(135deg, #002356 0%, #003580 100%)',
           borderRadius: 12, padding: '1.25rem 1.5rem',
           display: 'flex', gap: '1rem', alignItems: 'flex-start',
         }}>
@@ -999,16 +1008,36 @@ const PreJobChecklistPage: React.FC = () => {
           }}>T</div>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Titan</div>
-            {wizardInProgress ? (
+            {wizardCompleted && !checklistIsEmpty ? (
+              <>
+                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+                  ✓ Guided setup complete — your checklist is populated and ready.
+                </div>
+                <div style={{ color: '#86efac', fontSize: '0.82rem', marginBottom: 12 }}>
+                  All 13 steps finished. Review each section below or revisit the wizard any time to update your plan.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {WIZARD_STEPS.map(label => (
+                    <span key={label} style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#16a34a', color: 'white' }}>
+                      ✓ {label}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+                  style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                >
+                  Revisit Guided Setup
+                </button>
+              </>
+            ) : wizardInProgress ? (
               <>
                 <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
                   You're {Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}% through the guided setup — pick up where you left off.
                 </div>
-                {/* Progress bar */}
                 <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 99, height: 6, marginBottom: 10, overflow: 'hidden' }}>
                   <div style={{ background: '#f97316', height: '100%', borderRadius: 99, width: `${Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}%`, transition: 'width 0.3s' }} />
                 </div>
-                {/* Step pills */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
                   {WIZARD_STEPS.map((label, i) => {
                     const num = i + 1;
