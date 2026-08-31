@@ -168,6 +168,7 @@ const PreJobWizard: React.FC = () => {
 
   const [step, setStep] = useState(0); // 0 = gate
   const [saving, setSaving] = useState(false);
+  const [dateError, setDateError] = useState(false);
 
   // ── Draft state per section ──────────────────────────────────────────────
   const [startDate, setStartDate] = useState('');
@@ -392,6 +393,11 @@ const PreJobWizard: React.FC = () => {
   };
 
   const handleContinue = async () => {
+    if (step === 1 && (!startDate || !endDate)) {
+      setDateError(true);
+      return;
+    }
+    setDateError(false);
     setSaving(true);
     try {
       await saveCurrentStep();
@@ -665,12 +671,24 @@ const PreJobWizard: React.FC = () => {
             />
             <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={fieldLabel}>Project Start Date</label>
-                <input type="date" style={fieldInput} value={startDate} onChange={e => setStartDate(e.target.value)} />
+                <label style={fieldLabel}>Project Start Date <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="date"
+                  style={{ ...fieldInput, borderColor: dateError && !startDate ? '#ef4444' : undefined }}
+                  value={startDate}
+                  onChange={e => { setStartDate(e.target.value); if (e.target.value) setDateError(false); }}
+                />
+                {dateError && !startDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>Start date is required.</div>}
               </div>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={fieldLabel}>Estimated Completion</label>
-                <input type="date" style={fieldInput} value={endDate} onChange={e => setEndDate(e.target.value)} />
+                <label style={fieldLabel}>Estimated Completion <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="date"
+                  style={{ ...fieldInput, borderColor: dateError && !endDate ? '#ef4444' : undefined }}
+                  value={endDate}
+                  onChange={e => { setEndDate(e.target.value); if (e.target.value) setDateError(false); }}
+                />
+                {dateError && !endDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>End date is required.</div>}
               </div>
             </div>
           </div>
@@ -1074,9 +1092,11 @@ const PreJobWizard: React.FC = () => {
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => { setStep(s => s + 1); window.scrollTo(0, 0); }} style={navBtn('#f1f5f9', '#94a3b8')}>
-              Skip
-            </button>
+            {step !== 1 && (
+              <button onClick={() => { setStep(s => s + 1); window.scrollTo(0, 0); }} style={navBtn('#f1f5f9', '#94a3b8')}>
+                Skip
+              </button>
+            )}
             <button onClick={handleContinue} disabled={saving} style={navBtn('#002356', 'white')}>
               {saving ? 'Saving…' : step === 10 ? 'Save & Review →' : 'Save & Continue →'}
             </button>
