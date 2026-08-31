@@ -209,9 +209,6 @@ const PreJobWizard: React.FC = () => {
   const [gcItems, setGcItems] = useState<GenericItemRow[]>([]);
   const [contacts, setContacts] = useState<OtherContact[]>([]);
 
-  // ── Labor step mode toggles ───────────────────────────────────────────────
-  const [hoursMode, setHoursMode] = useState<'absolute' | 'pct_savings'>('absolute');
-  const [rateMode, setRateMode] = useState<'absolute' | 'pct_below'>('absolute');
 
   // ── Orientation step state ────────────────────────────────────────────────
   const [badgeRequired, setBadgeRequired] = useState(false);
@@ -328,8 +325,6 @@ const PreJobWizard: React.FC = () => {
     if (lb.approach_notes) setLaborApproach(lb.approach_notes);
     if (lb.trades?.length) {
       setLaborTrades(lb.trades);
-      if (lb.trades.some((t: LaborTradeRow) => t.hours_pct_savings != null)) setHoursMode('pct_savings');
-      if (lb.trades.some((t: LaborTradeRow) => t.rate_pct_below != null)) setRateMode('pct_below');
     }
     const mt = checklist.material;
     if (mt.approach_notes) setMaterialApproach(mt.approach_notes);
@@ -497,20 +492,10 @@ const PreJobWizard: React.FC = () => {
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 8: {
-        const tradesToSave = laborTrades.map(row => {
-          const goalHrs = (hoursMode === 'pct_savings' && row.est_hours && row.hours_pct_savings != null)
-            ? Math.round(row.est_hours * (1 - row.hours_pct_savings / 100))
-            : row.goal_hours;
-          const tgtRate = (rateMode === 'pct_below' && row.est_rate && row.rate_pct_below != null)
-            ? Math.round(row.est_rate * (1 - row.rate_pct_below / 100))
-            : row.target_rate;
-          return { ...row, goal_hours: goalHrs, target_rate: tgtRate };
-        });
-        await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: tradesToSave });
+      case 8:
+        await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: laborTrades });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      }
       case 9:
         await preJobChecklistApi.updateSection(pid, 'material', { approach_notes: materialApproach, items: materialItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
@@ -556,13 +541,31 @@ const PreJobWizard: React.FC = () => {
 
   // ── Render helpers for generic item tables ────────────────────────────────
   const renderLaborTable = () => {
-    const modePill = (active: boolean): React.CSSProperties => ({
-      padding: '1px 6px', borderRadius: 4, border: 'none', cursor: 'pointer',
-      fontSize: '0.62rem', fontWeight: 700, lineHeight: '16px',
-      background: active ? '#002356' : '#e2e8f0',
-      color: active ? 'white' : '#64748b',
-    });
     const estCell: React.CSSProperties = { ...tdStyle, background: '#eff6ff', textAlign: 'right', paddingRight: 8, fontWeight: 600, color: '#1d4ed8', fontSize: '0.8rem', whiteSpace: 'nowrap' };
+    const subLabel: React.CSSProperties = { fontSize: '0.65rem', color: '#94a3b8', marginBottom: 1 };
+    const computed: React.CSSProperties = { fontSize: '0.68rem', color: '#059669', marginTop: 2, fontWeight: 600 };
+
+    const updateHours = (i: number, goalHrs: number | undefined) => {
+      const est = laborTrades[i].est_hours;
+      const pct = (goalHrs != null && est) ? Math.round((est - goalHrs) / est * 1000) / 10 : undefined;
+      setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, goal_hours: goalHrs, hours_pct_savings: pct } : r));
+    };
+    const updatePct = (i: number, pct: number | undefined) => {
+      const est = laborTrades[i].est_hours;
+      const hrs = (pct != null && est) ? Math.round(est * (1 - pct / 100)) : undefined;
+      setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, hours_pct_savings: pct, goal_hours: hrs } : r));
+    };
+    const updateRate = (i: number, rate: number | undefined) => {
+      const est = laborTrades[i].est_rate;
+      const pct = (rate != null && est) ? Math.round((est - rate) / est * 1000) / 10 : undefined;
+      setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, target_rate: rate, rate_pct_below: pct } : r));
+    };
+    const updateRatePct = (i: number, pct: number | undefined) => {
+      const est = laborTrades[i].est_rate;
+      const rate = (pct != null && est) ? Math.round(est * (1 - pct / 100) * 100) / 100 : undefined;
+      setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, rate_pct_below: pct, target_rate: rate } : r));
+    };
+
     return (
       <div style={{ overflowX: 'auto', marginTop: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 680 }}>
@@ -571,74 +574,60 @@ const PreJobWizard: React.FC = () => {
               <th style={thStyle}>Trade</th>
               <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Est Hrs</th>
               <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Avg Est $/Hr</th>
-              <th style={thStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <button style={modePill(hoursMode === 'absolute')} onClick={() => setHoursMode('absolute')}>Goal Hrs</button>
-                  <button style={modePill(hoursMode === 'pct_savings')} onClick={() => setHoursMode('pct_savings')}>% Savings</button>
-                </div>
-              </th>
-              <th style={thStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <button style={modePill(rateMode === 'absolute')} onClick={() => setRateMode('absolute')}>Target $/Hr</button>
-                  <button style={modePill(rateMode === 'pct_below')} onClick={() => setRateMode('pct_below')}>% Below</button>
-                </div>
-              </th>
+              <th style={thStyle}>Goal Hrs / % Savings</th>
+              <th style={thStyle}>Target $/Hr / % Below</th>
               <th style={thStyle}>Notes</th>
               <th style={thStyle} />
             </tr>
           </thead>
           <tbody>
-            {laborTrades.map((row, i) => {
-              const computedGoalHrs = (hoursMode === 'pct_savings' && row.est_hours && row.hours_pct_savings != null)
-                ? Math.round(row.est_hours * (1 - row.hours_pct_savings / 100))
-                : null;
-              const computedRate = (rateMode === 'pct_below' && row.est_rate && row.rate_pct_below != null)
-                ? Math.round(row.est_rate * (1 - row.rate_pct_below / 100))
-                : null;
-              return (
-                <tr key={row.id}>
-                  <td style={tdStyle}><input style={colStyle} value={row.trade} onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, trade: e.target.value } : r))} /></td>
-                  <td style={estCell}>{row.est_hours ? row.est_hours.toLocaleString() : '—'}</td>
-                  <td style={estCell}>{row.est_rate ? `$${row.est_rate}` : '—'}</td>
-                  <td style={tdStyle}>
-                    {hoursMode === 'absolute' ? (
+            {laborTrades.map((row, i) => (
+              <tr key={row.id}>
+                <td style={tdStyle}><input style={colStyle} value={row.trade} onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, trade: e.target.value } : r))} /></td>
+                <td style={estCell}>{row.est_hours != null ? Math.round(row.est_hours).toLocaleString('en-US') : '—'}</td>
+                <td style={estCell}>{row.est_rate != null ? `$${row.est_rate.toFixed(2)}` : '—'}</td>
+                <td style={tdStyle}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={subLabel}>Goal Hrs</div>
                       <input style={colStyle} type="number" min={0}
                         value={row.goal_hours ?? ''}
-                        onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, goal_hours: e.target.value ? Number(e.target.value) : undefined } : r))} />
-                    ) : (
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <input style={{ ...colStyle, width: 56 }} type="number" min={0} max={100} step={0.5}
-                            value={row.hours_pct_savings ?? ''}
-                            onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, hours_pct_savings: e.target.value ? Number(e.target.value) : undefined } : r))} />
-                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>%</span>
-                        </div>
-                        {computedGoalHrs != null && <div style={{ color: '#059669', fontSize: '0.68rem', marginTop: 2 }}>= {computedGoalHrs.toLocaleString()} hrs</div>}
+                        onChange={e => updateHours(i, e.target.value ? Number(e.target.value) : undefined)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={subLabel}>% Savings</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <input style={{ ...colStyle, flex: 1 }} type="number" min={0} max={100} step={0.1}
+                          value={row.hours_pct_savings ?? ''}
+                          onChange={e => updatePct(i, e.target.value ? Number(e.target.value) : undefined)} />
+                        <span style={{ color: '#64748b', fontSize: '0.72rem' }}>%</span>
                       </div>
-                    )}
-                  </td>
-                  <td style={tdStyle}>
-                    {rateMode === 'absolute' ? (
-                      <input style={colStyle} type="number" min={0}
+                    </div>
+                  </div>
+                </td>
+                <td style={tdStyle}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={subLabel}>Target $/Hr</div>
+                      <input style={colStyle} type="number" min={0} step={0.01}
                         value={row.target_rate ?? ''}
-                        onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, target_rate: e.target.value ? Number(e.target.value) : undefined } : r))} />
-                    ) : (
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <input style={{ ...colStyle, width: 56 }} type="number" min={0} max={100} step={0.5}
-                            value={row.rate_pct_below ?? ''}
-                            onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, rate_pct_below: e.target.value ? Number(e.target.value) : undefined } : r))} />
-                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>%</span>
-                        </div>
-                        {computedRate != null && <div style={{ color: '#059669', fontSize: '0.68rem', marginTop: 2 }}>= ${computedRate}/hr</div>}
+                        onChange={e => updateRate(i, e.target.value ? Number(e.target.value) : undefined)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={subLabel}>% Below</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <input style={{ ...colStyle, flex: 1 }} type="number" min={0} max={100} step={0.1}
+                          value={row.rate_pct_below ?? ''}
+                          onChange={e => updateRatePct(i, e.target.value ? Number(e.target.value) : undefined)} />
+                        <span style={{ color: '#64748b', fontSize: '0.72rem' }}>%</span>
                       </div>
-                    )}
-                  </td>
-                  <td style={tdStyle}><input style={colStyle} value={row.notes ?? ''} onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
-                  <td style={tdStyle}><button style={delBtn} onClick={() => setLaborTrades(lt => lt.filter((_, j) => j !== i))}>✕</button></td>
-                </tr>
-              );
-            })}
+                    </div>
+                  </div>
+                </td>
+                <td style={tdStyle}><input style={colStyle} value={row.notes ?? ''} onChange={e => setLaborTrades(lt => lt.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
+                <td style={tdStyle}><button style={delBtn} onClick={() => setLaborTrades(lt => lt.filter((_, j) => j !== i))}>✕</button></td>
+              </tr>
+            ))}
           </tbody>
         </table>
         <button style={addRowBtn} onClick={() => setLaborTrades(lt => [...lt, { id: uid(), trade: '', notes: '' }])}>+ Add Trade</button>
