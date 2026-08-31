@@ -984,7 +984,7 @@ const PreJobWizard: React.FC = () => {
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
                 Site Map
               </div>
-              <input ref={siteMapInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={async e => {
+              <input ref={siteMapInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" style={{ display: 'none' }} onChange={async e => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 setSiteMapUploading(true);
