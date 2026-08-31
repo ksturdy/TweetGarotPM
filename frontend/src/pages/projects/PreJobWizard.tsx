@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
@@ -15,6 +15,7 @@ import {
 import { projectAssignmentsApi, ProjectAssignment } from '../../services/projectAssignments';
 import { ASSIGNMENT_TRADES } from '../../services/labor';
 import { scheduleSegmentsService, SegmentCosts, SegmentsResponse, SEGMENT_DEFINITIONS } from '../../services/scheduleSegments';
+import CostTypeSchedule from './CostTypeSchedule';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import api from '../../services/api';
 
@@ -192,7 +193,6 @@ const PreJobWizard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [schedulingMode, setSchedulingMode] = useState<'summary' | 'cost_type' | 'phase'>('cost_type');
-  const [segmentDates, setSegmentDates] = useState<Record<string, { start: string; end: string }>>({});
   const [specialConditions, setSpecialConditions] = useState('');
   const [bidScopeNotes, setBidScopeNotes] = useState('');
   const [laborApproach, setLaborApproach] = useState('');
@@ -360,18 +360,6 @@ const PreJobWizard: React.FC = () => {
     if (or.site_map_filename) setSiteMapFilename(or.site_map_filename);
   }, [checklist]);
 
-  // Pre-populate segment dates from existing schedule segments
-  useEffect(() => {
-    if (!segmentsData?.segments.length) return;
-    const dates: Record<string, { start: string; end: string }> = {};
-    for (const seg of segmentsData.segments) {
-      if (seg.start_date || seg.end_date) {
-        dates[seg.segment_key] = { start: seg.start_date?.slice(0, 10) ?? '', end: seg.end_date?.slice(0, 10) ?? '' };
-      }
-    }
-    if (Object.keys(dates).length > 0) setSegmentDates(dates);
-  }, [segmentsData]);
-
   // Pre-populate labor trades from Vista segment data when no saved trades exist
   useEffect(() => {
     if (!segmentCosts.length || checklist === undefined) return;
@@ -441,6 +429,28 @@ const PreJobWizard: React.FC = () => {
     onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to submit nomination'),
   });
 
+  // ── Schedule segment mutations (used by embedded CostTypeSchedule) ─────────
+  const segmentUpdateMutation = useMutation({
+    mutationFn: ({ key, data }: { key: string; data: { start_date: string | null; end_date: string | null; contour_type?: string } }) =>
+      scheduleSegmentsService.updateSegment(Number(projectId), key, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scheduleSegments', projectId] });
+      qc.invalidateQueries({ queryKey: ['segmentCosts', projectId] });
+    },
+  });
+
+  const initSegmentsMutation = useMutation({
+    mutationFn: () => scheduleSegmentsService.initialize(Number(projectId)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scheduleSegments', projectId] }),
+  });
+
+  const handleSegmentUpdate = useCallback(
+    (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => {
+      segmentUpdateMutation.mutate({ key, data });
+    },
+    [segmentUpdateMutation]
+  );
+
   // ── Step save handlers ────────────────────────────────────────────────────
   const saveCurrentStep = async () => {
     const pid = Number(projectId);
@@ -459,17 +469,6 @@ const PreJobWizard: React.FC = () => {
         break;
       case 2:
         await api.patch(`/projects/${pid}/summary-dates`, { scheduling_mode: schedulingMode });
-        if (schedulingMode === 'cost_type') {
-          await Promise.all(
-            Object.entries(segmentDates)
-              .filter(([, d]) => d.start || d.end)
-              .map(([key, d]) => scheduleSegmentsService.updateSegment(pid, key, {
-                start_date: d.start || null,
-                end_date: d.end || null,
-              }))
-          );
-          qc.invalidateQueries({ queryKey: ['scheduleSegments', projectId] });
-        }
         qc.invalidateQueries({ queryKey: ['project', projectId] });
         break;
       case 3: break; // office team saves live per-add
@@ -942,21 +941,6 @@ const PreJobWizard: React.FC = () => {
           );
         };
 
-        // Segments with estimated costs — only show relevant ones
-        const activeSegKeys = new Set(
-          segmentCosts.filter(c => (c.est_hours ?? 0) > 0 || (c.est_cost ?? 0) > 0).map(c => c.segment_key)
-        );
-        const relevantSegs = SEGMENT_DEFINITIONS.filter(s => activeSegKeys.has(s.key));
-
-        const setSegDate = (key: string, field: 'start' | 'end', val: string) =>
-          setSegmentDates(prev => ({ ...prev, [key]: { ...prev[key], [field]: val } }));
-
-        const fillAllFromProject = () => {
-          const filled: Record<string, { start: string; end: string }> = {};
-          relevantSegs.forEach(s => { filled[s.key] = { start: startDate, end: endDate }; });
-          setSegmentDates(filled);
-        };
-
         return (
           <div>
             <TitanCard
@@ -983,66 +967,16 @@ const PreJobWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* COST TYPE: per-trade date table */}
+              {/* COST TYPE: full schedule module */}
               {schedulingMode === 'cost_type' && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>Set dates per trade and cost type</div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>Only trades with estimated costs are shown. Tip: start with project dates and adjust per trade.</div>
-                    </div>
-                    {startDate && endDate && (
-                      <button
-                        onClick={fillAllFromProject}
-                        style={{ padding: '0.4rem 0.9rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.78rem', fontWeight: 600, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-                      >
-                        Fill all from project dates
-                      </button>
-                    )}
-                  </div>
-
-                  {relevantSegs.length === 0 ? (
-                    <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '1rem', background: '#f8fafc', borderRadius: 8 }}>
-                      No Vista estimated costs found yet. Dates can be set on the Schedule tab once Vista data is uploaded.
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                        <thead>
-                          <tr style={{ background: '#f8fafc' }}>
-                            <th style={thStyle}>Trade / Cost Type</th>
-                            <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8' }}>Est Hrs / Cost</th>
-                            <th style={thStyle}>Start Date</th>
-                            <th style={thStyle}>End Date</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {relevantSegs.map(seg => {
-                            const costs = segmentCosts.find(c => c.segment_key === seg.key);
-                            const ref = seg.isLabor
-                              ? (costs?.est_hours ? `${costs.est_hours.toLocaleString()} hrs` : '—')
-                              : (costs?.est_cost ? `$${Math.round(costs.est_cost).toLocaleString()}` : '—');
-                            const d = segmentDates[seg.key] ?? { start: '', end: '' };
-                            return (
-                              <tr key={seg.key}>
-                                <td style={{ ...tdStyle, fontWeight: 600, paddingLeft: 4 }}>{seg.label}</td>
-                                <td style={{ ...tdStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right', paddingRight: 8, fontWeight: 600 }}>{ref}</td>
-                                <td style={tdStyle}>
-                                  <input type="date" style={colStyle} value={d.start}
-                                    onChange={e => setSegDate(seg.key, 'start', e.target.value)} />
-                                </td>
-                                <td style={tdStyle}>
-                                  <input type="date" style={colStyle} value={d.end}
-                                    onChange={e => setSegDate(seg.key, 'end', e.target.value)} />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                <CostTypeSchedule
+                  projectId={Number(projectId)}
+                  segments={segmentsData?.segments ?? []}
+                  activeKeys={segmentsData?.activeKeys ?? []}
+                  onSegmentUpdate={handleSegmentUpdate}
+                  onInitialize={() => initSegmentsMutation.mutate()}
+                  initPending={initSegmentsMutation.isPending}
+                />
               )}
 
               {/* PHASE: advisory */}
