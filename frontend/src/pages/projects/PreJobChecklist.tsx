@@ -848,6 +848,14 @@ const PreJobChecklistPage: React.FC = () => {
     && !checklist?.labor?.approach_notes
     && !checklist?.material?.approach_notes;
 
+  const WIZARD_STEPS = [
+    'Key Dates', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
+    'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
+  ];
+  const wizardKey = `pjc_wizard_step_${projectId}`;
+  const savedWizardStep = parseInt(localStorage.getItem(wizardKey) ?? '0', 10);
+  const wizardInProgress = savedWizardStep > 0 && savedWizardStep < WIZARD_STEPS.length;
+
   // ── Date helpers ──
   // Prefer project-level dates; fall back to Vista contract projection overrides
   const startDate = project?.start_date ?? contract?.user_adjusted_start_date ?? null;
@@ -963,20 +971,20 @@ const PreJobChecklistPage: React.FC = () => {
           onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            background: checklistIsEmpty ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
-            color: checklistIsEmpty ? 'white' : '#475569',
+            background: (checklistIsEmpty || wizardInProgress) ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
+            color: (checklistIsEmpty || wizardInProgress) ? 'white' : '#475569',
             border: 'none', borderRadius: 8,
             padding: '0.55rem 1.1rem', fontSize: '0.85rem', fontWeight: 700,
             cursor: 'pointer', flexShrink: 0,
           }}
         >
           <span style={{ fontSize: '1rem' }}>🚀</span>
-          {checklistIsEmpty ? 'Start Guided Setup' : 'Re-run Guided Setup'}
+          {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : 'Re-run Guided Setup'}
         </button>
       </div>
 
-      {/* Titan wizard invite (shown when checklist is empty) */}
-      {checklistIsEmpty && (
+      {/* Titan wizard banner */}
+      {(wizardInProgress || checklistIsEmpty) && (
         <div style={{
           margin: '0 0 1.5rem',
           background: 'linear-gradient(135deg, #002356 0%, #003580 100%)',
@@ -991,18 +999,55 @@ const PreJobChecklistPage: React.FC = () => {
           }}>T</div>
           <div style={{ flex: 1 }}>
             <div style={{ color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Titan</div>
-            <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
-              This checklist is empty. Want me to walk you through it?
-            </div>
-            <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginBottom: 12 }}>
-              I'll guide you through key dates, project team, scope notes, and each cost type plan — step by step. Takes about 10–15 minutes.
-            </div>
-            <button
-              onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
-              style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
-            >
-              Start Guided Setup →
-            </button>
+            {wizardInProgress ? (
+              <>
+                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+                  You're {Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}% through the guided setup — pick up where you left off.
+                </div>
+                {/* Progress bar */}
+                <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 99, height: 6, marginBottom: 10, overflow: 'hidden' }}>
+                  <div style={{ background: '#f97316', height: '100%', borderRadius: 99, width: `${Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}%`, transition: 'width 0.3s' }} />
+                </div>
+                {/* Step pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {WIZARD_STEPS.map((label, i) => {
+                    const num = i + 1;
+                    const done = savedWizardStep > num;
+                    const current = savedWizardStep === num;
+                    return (
+                      <span key={label} style={{
+                        fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                        background: done ? '#16a34a' : current ? '#f97316' : 'rgba(255,255,255,0.1)',
+                        color: done || current ? 'white' : '#93c5fd',
+                      }}>
+                        {done ? '✓ ' : current ? '→ ' : ''}{label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+                  style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                >
+                  Continue Guided Setup →
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 6 }}>
+                  This checklist is empty. Want me to walk you through it?
+                </div>
+                <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginBottom: 12 }}>
+                  I'll guide you through key dates, project team, scope notes, and each cost type plan — step by step. Takes about 10–15 minutes.
+                </div>
+                <button
+                  onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+                  style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: 7, padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                >
+                  Start Guided Setup →
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
