@@ -649,12 +649,17 @@ const PreJobWizard: React.FC = () => {
       }
 
       // STEP 1 — KEY DATES
-      case 1:
+      case 1: {
+        const datesAlreadySet = !!(startDate && endDate);
         return (
           <div>
             <TitanCard
-              question="Let's start with the timeline. When does this project kick off, and when do you expect to wrap up?"
-              hint="These dates sync with the project record and Vista contract overrides."
+              question={datesAlreadySet
+                ? "Your project dates are already on file. Review and confirm before continuing."
+                : "Let's start with the timeline. When does this project kick off, and when do you expect to wrap up?"}
+              hint={datesAlreadySet
+                ? "These dates were pulled from the project schedule. Update them here if anything has changed — changes sync to the project record and Vista."
+                : "These dates sync with the project record and Vista contract overrides."}
             />
             <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
@@ -668,13 +673,16 @@ const PreJobWizard: React.FC = () => {
             </div>
           </div>
         );
+      }
 
       // STEP 2 — PROJECT TEAM
       case 2:
         return (
           <div>
             <TitanCard
-              question="Who's managing this project? Add your office and management team."
+              question={officeAssignments.length > 0
+                ? "Your office team is already set up. Review the roster or add anyone who's missing."
+                : "Who's managing this project? Add your office and management team."}
               hint="These go directly to active status. Field crew nominations are handled separately."
             />
             {officeAssignments.length > 0 && (
@@ -744,7 +752,9 @@ const PreJobWizard: React.FC = () => {
         return (
           <div>
             <TitanCard
-              question="Who are you nominating for the field crew on this project?"
+              question={fieldNominations.length > 0
+                ? "Field nominations are already in place. Review or add more below."
+                : "Who are you nominating for the field crew on this project?"}
               hint="Field nominations go to the Labor Coordinator for approval. You can add as many as needed — they'll appear in the Nominations board."
             />
 
