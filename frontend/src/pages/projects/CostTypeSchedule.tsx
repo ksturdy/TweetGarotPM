@@ -27,8 +27,8 @@ const SEGMENT_COLOR: Record<string, string> = {
   rental: '#8b5cf6', equipment: '#ef4444', gc: '#6b7280',
 };
 
-const ROW_H = 36;
-const GROUP_H = 26;
+const ROW_H = 28;
+const GROUP_H = 22;
 
 const GANTT_COL_DEFAULTS = { label: 220, estHrs: 62, estCost: 78, start: 90, end: 90, dur: 48, contour: 72 };
 type GanttColKey = keyof typeof GANTT_COL_DEFAULTS;
