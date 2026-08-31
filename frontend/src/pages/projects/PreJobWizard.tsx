@@ -590,9 +590,9 @@ const PreJobWizard: React.FC = () => {
                   <div style={{ display: 'flex', gap: 6 }}>
                     <div style={{ flex: 1 }}>
                       <div style={subLabel}>Goal Hrs</div>
-                      <input style={colStyle} type="number" min={0}
-                        value={row.goal_hours ?? ''}
-                        onChange={e => updateHours(i, e.target.value ? Number(e.target.value) : undefined)} />
+                      <input style={colStyle} type="text" inputMode="numeric"
+                        value={row.goal_hours != null ? row.goal_hours.toLocaleString('en-US') : ''}
+                        onChange={e => { const n = Number(e.target.value.replace(/,/g, '')); updateHours(i, e.target.value.replace(/,/g, '') ? (isNaN(n) ? undefined : n) : undefined); }} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={subLabel}>% Savings</div>
