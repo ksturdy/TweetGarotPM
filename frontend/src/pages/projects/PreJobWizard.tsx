@@ -14,7 +14,7 @@ import {
 } from '../../services/preJobChecklist';
 import { projectAssignmentsApi, ProjectAssignment } from '../../services/projectAssignments';
 import { ASSIGNMENT_TRADES } from '../../services/labor';
-import { scheduleSegmentsService, SegmentCosts, SEGMENT_DEFINITIONS } from '../../services/scheduleSegments';
+import { scheduleSegmentsService, SegmentCosts, SegmentsResponse, SEGMENT_DEFINITIONS } from '../../services/scheduleSegments';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import api from '../../services/api';
 
@@ -192,6 +192,7 @@ const PreJobWizard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [schedulingMode, setSchedulingMode] = useState<'summary' | 'cost_type' | 'phase'>('cost_type');
+  const [segmentDates, setSegmentDates] = useState<Record<string, { start: string; end: string }>>({});
   const [specialConditions, setSpecialConditions] = useState('');
   const [bidScopeNotes, setBidScopeNotes] = useState('');
   const [laborApproach, setLaborApproach] = useState('');
@@ -304,6 +305,12 @@ const PreJobWizard: React.FC = () => {
     enabled: !!projectId,
   });
 
+  const { data: segmentsData } = useQuery<SegmentsResponse>({
+    queryKey: ['scheduleSegments', projectId],
+    queryFn: () => scheduleSegmentsService.getSegments(Number(projectId)),
+    enabled: !!projectId,
+  });
+
   const noEstCost = phaseCodeDetail.filter(p => !p.est_cost || p.est_cost === 0).length;
   const noProjectedCost = phaseCodeDetail.filter(p => !p.projected_cost || p.projected_cost === 0).length;
   const withEstCost = phaseCodeDetail.length - noEstCost;
@@ -352,6 +359,18 @@ const PreJobWizard: React.FC = () => {
     if (or.site_map_attachment_id) setSiteMapAttachmentId(or.site_map_attachment_id);
     if (or.site_map_filename) setSiteMapFilename(or.site_map_filename);
   }, [checklist]);
+
+  // Pre-populate segment dates from existing schedule segments
+  useEffect(() => {
+    if (!segmentsData?.segments.length) return;
+    const dates: Record<string, { start: string; end: string }> = {};
+    for (const seg of segmentsData.segments) {
+      if (seg.start_date || seg.end_date) {
+        dates[seg.segment_key] = { start: seg.start_date?.slice(0, 10) ?? '', end: seg.end_date?.slice(0, 10) ?? '' };
+      }
+    }
+    if (Object.keys(dates).length > 0) setSegmentDates(dates);
+  }, [segmentsData]);
 
   // Pre-populate labor trades from Vista segment data when no saved trades exist
   useEffect(() => {
@@ -440,6 +459,17 @@ const PreJobWizard: React.FC = () => {
         break;
       case 2:
         await api.patch(`/projects/${pid}/summary-dates`, { scheduling_mode: schedulingMode });
+        if (schedulingMode === 'cost_type') {
+          await Promise.all(
+            Object.entries(segmentDates)
+              .filter(([, d]) => d.start || d.end)
+              .map(([key, d]) => scheduleSegmentsService.updateSegment(pid, key, {
+                start_date: d.start || null,
+                end_date: d.end || null,
+              }))
+          );
+          qc.invalidateQueries({ queryKey: ['scheduleSegments', projectId] });
+        }
         qc.invalidateQueries({ queryKey: ['project', projectId] });
         break;
       case 3: break; // office team saves live per-add
@@ -879,7 +909,6 @@ const PreJobWizard: React.FC = () => {
           badge: string | null,
           badgeColor: string,
           description: string,
-          details: string[],
         ) => {
           const selected = schedulingMode === mode;
           return (
@@ -887,67 +916,152 @@ const PreJobWizard: React.FC = () => {
               onClick={() => setSchedulingMode(mode)}
               style={{
                 border: `2px solid ${selected ? '#002356' : '#e2e8f0'}`,
-                borderRadius: 10, padding: '1rem 1.25rem', marginBottom: 12,
+                borderRadius: 10, padding: '0.85rem 1.1rem', marginBottom: 8,
                 background: selected ? '#eff6ff' : 'white', cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
-                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                   border: `2px solid ${selected ? '#002356' : '#cbd5e1'}`,
                   background: selected ? '#002356' : 'white',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  {selected && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />}
+                  {selected && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'white' }} />}
                 </div>
-                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{title}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>{title}</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 4 }}>— {description}</span>
                 {badge && (
-                  <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: badgeColor === 'green' ? '#dcfce7' : '#fef9c3', color: badgeColor === 'green' ? '#166534' : '#92400e' }}>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', background: badgeColor === 'green' ? '#dcfce7' : '#fef9c3', color: badgeColor === 'green' ? '#166534' : '#92400e' }}>
                     {badge}
                   </span>
                 )}
               </div>
-              <p style={{ margin: '0 0 8px 30px', fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{description}</p>
-              <ul style={{ margin: '0 0 0 30px', padding: '0 0 0 16px', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.7 }}>
-                {details.map(d => <li key={d}>{d}</li>)}
-              </ul>
             </div>
           );
         };
+
+        // Segments with estimated costs — only show relevant ones
+        const activeSegKeys = new Set(
+          segmentCosts.filter(c => (c.est_hours ?? 0) > 0 || (c.est_cost ?? 0) > 0).map(c => c.segment_key)
+        );
+        const relevantSegs = SEGMENT_DEFINITIONS.filter(s => activeSegKeys.has(s.key));
+
+        const setSegDate = (key: string, field: 'start' | 'end', val: string) =>
+          setSegmentDates(prev => ({ ...prev, [key]: { ...prev[key], [field]: val } }));
+
+        const fillAllFromProject = () => {
+          const filled: Record<string, { start: string; end: string }> = {};
+          relevantSegs.forEach(s => { filled[s.key] = { start: startDate, end: endDate }; });
+          setSegmentDates(filled);
+        };
+
         return (
           <div>
             <TitanCard
               question="How do you want to schedule this project? This choice drives how your revenue and labor forecasts are broken out."
-              hint="You can change this later on the Schedule tab, but picking the right mode now means your pre-job plan will be built correctly from day one."
+              hint="Pick the mode that fits this job's complexity. You can always change it later on the Schedule tab."
             />
-            {modeCard('summary', 'Summary', 'Best for small jobs', 'yellow',
-              'One start + end date covers the entire project. All trades and cost types share the same timeline.',
-              [
-                'Simple to set up — no per-trade dates needed',
-                'Revenue and labor forecasts run off the single project window',
-                'Good fit for single-trade jobs, short durations, or T&M work',
-                'Limited visibility into trade-by-trade timing',
-              ]
-            )}
-            {modeCard('cost_type', 'Cost Type', '⭐ Recommended for most projects', 'green',
-              'Each trade group (Sheet Metal, Pipefitter, Plumbing) and non-labor cost type gets its own start and end date.',
-              [
-                'Revenue forecast is broken out per trade — far more accurate on multi-trade jobs',
-                'Labor forecast reflects when each crew is actually on site',
-                'Dates are set on the Schedule → Cost Type tab after wizard completion',
-                'Ideal for most commercial mechanical projects',
-              ]
-            )}
-            {modeCard('phase', 'Phase', 'Best saved for later', 'yellow',
-              'Every Vista phase code drives its own individual forecast window. Maximum scheduling precision.',
-              [
-                'Requires your phase codes to be fully built out and activated in Vista',
-                'Best used once the project is underway and the phase schedule is established',
-                'Most useful for large, long-duration projects with complex phasing',
-                'You can switch to Phase mode at any time from the Schedule tab',
-              ]
-            )}
+
+            {/* Mode selector */}
+            {modeCard('summary', 'Summary', 'Small / single-trade jobs', 'yellow', 'One date window for the whole project')}
+            {modeCard('cost_type', 'Cost Type', '⭐ Recommended for most projects', 'green', 'Separate date window per trade and cost type')}
+            {modeCard('phase', 'Phase', 'Build later', 'yellow', 'Per-phase-code windows — best set up after project start')}
+
+            <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 20, paddingTop: 20 }}>
+
+              {/* SUMMARY: dates already set */}
+              {schedulingMode === 'summary' && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontWeight: 700, color: '#166534', marginBottom: 4 }}>✓ You're all set for Summary scheduling</div>
+                  <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
+                    Your project window <strong>{startDate || '—'}</strong> → <strong>{endDate || '—'}</strong> (set in Step 1) is all Titan needs.
+                    Revenue and labor will be distributed evenly across this window.
+                    {(!startDate || !endDate) && <span style={{ color: '#b45309' }}> Go back to Step 1 to set your project dates first.</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* COST TYPE: per-trade date table */}
+              {schedulingMode === 'cost_type' && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>Set dates per trade and cost type</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>Only trades with estimated costs are shown. Tip: start with project dates and adjust per trade.</div>
+                    </div>
+                    {startDate && endDate && (
+                      <button
+                        onClick={fillAllFromProject}
+                        style={{ padding: '0.4rem 0.9rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: '0.78rem', fontWeight: 600, color: '#475569', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      >
+                        Fill all from project dates
+                      </button>
+                    )}
+                  </div>
+
+                  {relevantSegs.length === 0 ? (
+                    <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '1rem', background: '#f8fafc', borderRadius: 8 }}>
+                      No Vista estimated costs found yet. Dates can be set on the Schedule tab once Vista data is uploaded.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc' }}>
+                            <th style={thStyle}>Trade / Cost Type</th>
+                            <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8' }}>Est Hrs / Cost</th>
+                            <th style={thStyle}>Start Date</th>
+                            <th style={thStyle}>End Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {relevantSegs.map(seg => {
+                            const costs = segmentCosts.find(c => c.segment_key === seg.key);
+                            const ref = seg.isLabor
+                              ? (costs?.est_hours ? `${costs.est_hours.toLocaleString()} hrs` : '—')
+                              : (costs?.est_cost ? `$${Math.round(costs.est_cost).toLocaleString()}` : '—');
+                            const d = segmentDates[seg.key] ?? { start: '', end: '' };
+                            return (
+                              <tr key={seg.key}>
+                                <td style={{ ...tdStyle, fontWeight: 600, paddingLeft: 4 }}>{seg.label}</td>
+                                <td style={{ ...tdStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right', paddingRight: 8, fontWeight: 600 }}>{ref}</td>
+                                <td style={tdStyle}>
+                                  <input type="date" style={colStyle} value={d.start}
+                                    onChange={e => setSegDate(seg.key, 'start', e.target.value)} />
+                                </td>
+                                <td style={tdStyle}>
+                                  <input type="date" style={colStyle} value={d.end}
+                                    onChange={e => setSegDate(seg.key, 'end', e.target.value)} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* PHASE: advisory */}
+              {schedulingMode === 'phase' && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                  <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Phase scheduling is best built after project start</div>
+                  <div style={{ fontSize: '0.85rem', color: '#78350f', lineHeight: 1.7 }}>
+                    Phase mode gives you maximum forecasting precision — every Vista phase code gets its own start and end date.
+                    However, it requires your phase codes to be fully built out and active in Vista before it's useful.
+                  </div>
+                  <ul style={{ fontSize: '0.82rem', color: '#78350f', lineHeight: 1.8, margin: '8px 0 0 0', paddingLeft: 20 }}>
+                    <li>We'll save your Phase mode selection now.</li>
+                    <li>Once the project is underway and your phase schedule is established, go to the <strong>Schedule → Phase</strong> tab to set individual phase dates.</li>
+                    <li>For large jobs with many phase codes, this can take 30–60 minutes — plan accordingly.</li>
+                  </ul>
+                </div>
+              )}
+
+            </div>
           </div>
         );
       }
