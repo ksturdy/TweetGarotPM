@@ -6,8 +6,10 @@ import {
   TradeShow,
   TradeShowStatus,
   TRADE_SHOW_STATUS_OPTIONS,
+  EVENT_TYPE_OPTIONS,
 } from '../../../services/tradeShows';
 import { usersApi, User } from '../../../services/users';
+import { MARKETS } from '../../../constants/markets';
 import SearchableSelect from '../../../components/SearchableSelect';
 import '../../../styles/SalesPipeline.css';
 
@@ -35,6 +37,8 @@ type FormState = {
   notes: string;
   sales_lead_id: string;
   coordinator_id: string;
+  event_type: string;
+  market: string;
 };
 
 const emptyForm: FormState = {
@@ -61,6 +65,8 @@ const emptyForm: FormState = {
   notes: '',
   sales_lead_id: '',
   coordinator_id: '',
+  event_type: '',
+  market: '',
 };
 
 const sectionStyle: React.CSSProperties = {
@@ -146,6 +152,8 @@ const TradeShowForm: React.FC = () => {
       notes: existing.notes || '',
       sales_lead_id: existing.sales_lead_id ? existing.sales_lead_id.toString() : '',
       coordinator_id: existing.coordinator_id ? existing.coordinator_id.toString() : '',
+      event_type: existing.event_type || '',
+      market: existing.market || '',
     });
   }, [existing]);
 
@@ -186,6 +194,8 @@ const TradeShowForm: React.FC = () => {
       notes: form.notes || null,
       sales_lead_id: idOrNull(form.sales_lead_id),
       coordinator_id: idOrNull(form.coordinator_id),
+      event_type: (form.event_type as any) || null,
+      market: form.market || null,
     };
   };
 
@@ -239,7 +249,7 @@ const TradeShowForm: React.FC = () => {
             >
               &larr; {isEdit ? 'Back to Conference / Trade Show' : 'Back to Conferences and Trade Shows'}
             </Link>
-            <h1>{isEdit ? 'Edit Trade Show' : '🎪 New Trade Show'}</h1>
+            <h1>{isEdit ? 'Edit Event' : '🎪 New Event'}</h1>
           </div>
         </div>
       </div>
@@ -270,6 +280,24 @@ const TradeShowForm: React.FC = () => {
               <label className="form-label">Status</label>
               <select className="form-input" value={form.status} onChange={(e) => update('status', e.target.value)}>
                 {TRADE_SHOW_STATUS_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Event Type</label>
+              <select className="form-input" value={form.event_type} onChange={(e) => update('event_type', e.target.value)}>
+                <option value="">-- Select type --</option>
+                {EVENT_TYPE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Market</label>
+              <select className="form-input" value={form.market} onChange={(e) => update('market', e.target.value)}>
+                <option value="">-- Select market --</option>
+                {MARKETS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -462,7 +490,7 @@ const TradeShowForm: React.FC = () => {
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={isPending || !form.name.trim()}>
-            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Trade Show'}
+            {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Event'}
           </button>
         </div>
       </form>

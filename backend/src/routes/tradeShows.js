@@ -16,6 +16,8 @@ router.get('/', async (req, res, next) => {
     if (req.query.year) filters.year = parseInt(req.query.year);
     if (req.query.sales_lead_id) filters.sales_lead_id = parseInt(req.query.sales_lead_id);
     if (req.query.coordinator_id) filters.coordinator_id = parseInt(req.query.coordinator_id);
+    if (req.query.event_type) filters.event_type = req.query.event_type;
+    if (req.query.market) filters.market = req.query.market;
     if (req.query.search) filters.search = req.query.search;
 
     const shows = await TradeShow.findAllByTenant(req.tenantId, filters);

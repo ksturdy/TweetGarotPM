@@ -7,7 +7,9 @@ import {
   tradeShowsApi,
   TradeShow,
   TRADE_SHOW_STATUS_OPTIONS,
+  EVENT_TYPE_OPTIONS,
 } from '../../../services/tradeShows';
+import { MARKETS } from '../../../constants/markets';
 import { usersApi, User } from '../../../services/users';
 import { useTitanFeedback } from '../../../context/TitanFeedbackContext';
 import SearchableSelect from '../../../components/SearchableSelect';
@@ -75,6 +77,8 @@ const TradeShowList: React.FC = () => {
   const [yearFilter, setYearFilter] = useState<string>('');
   const [salesLeadFilter, setSalesLeadFilter] = useState<string>('');
   const [coordinatorFilter, setCoordinatorFilter] = useState<string>('');
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>('');
+  const [marketFilter, setMarketFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortKey, setSortKey] = useState<string>('event_start_date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -123,6 +127,8 @@ const TradeShowList: React.FC = () => {
       }
       if (salesLeadFilter && (s.sales_lead_id?.toString() || '') !== salesLeadFilter) return false;
       if (coordinatorFilter && (s.coordinator_id?.toString() || '') !== coordinatorFilter) return false;
+      if (eventTypeFilter && s.event_type !== eventTypeFilter) return false;
+      if (marketFilter && s.market !== marketFilter) return false;
       if (q) {
         const haystack = [
           s.name, s.venue, s.city, s.state, s.sales_lead_name, s.coordinator_name, s.booth_number
@@ -131,7 +137,7 @@ const TradeShowList: React.FC = () => {
       }
       return true;
     });
-  }, [tradeShows, statusFilter, yearFilter, salesLeadFilter, coordinatorFilter, searchQuery]);
+  }, [tradeShows, statusFilter, yearFilter, salesLeadFilter, coordinatorFilter, eventTypeFilter, marketFilter, searchQuery]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -143,9 +149,11 @@ const TradeShowList: React.FC = () => {
         case 'status':     av = a.status ?? ''; bv = b.status ?? ''; break;
         case 'event_start_date': av = a.event_start_date ?? ''; bv = b.event_start_date ?? ''; break;
         case 'city':       av = [a.city, a.state].filter(Boolean).join(', ').toLowerCase(); bv = [b.city, b.state].filter(Boolean).join(', ').toLowerCase(); break;
-        case 'sales_lead': av = a.sales_lead_name?.toLowerCase() ?? ''; bv = b.sales_lead_name?.toLowerCase() ?? ''; break;
-        case 'cost':       av = totalCost(a) ?? -1; bv = totalCost(b) ?? -1; break;
-        case 'attendees':  av = a.attendee_count ?? 0; bv = b.attendee_count ?? 0; break;
+        case 'sales_lead':  av = a.sales_lead_name?.toLowerCase() ?? ''; bv = b.sales_lead_name?.toLowerCase() ?? ''; break;
+        case 'cost':        av = totalCost(a) ?? -1; bv = totalCost(b) ?? -1; break;
+        case 'attendees':   av = a.attendee_count ?? 0; bv = b.attendee_count ?? 0; break;
+        case 'event_type':  av = a.event_type?.toLowerCase() ?? ''; bv = b.event_type?.toLowerCase() ?? ''; break;
+        case 'market':      av = a.market?.toLowerCase() ?? ''; bv = b.market?.toLowerCase() ?? ''; break;
         default: return 0;
       }
       if (av < bv) return -1 * dir;
@@ -187,11 +195,14 @@ const TradeShowList: React.FC = () => {
     setYearFilter('');
     setSalesLeadFilter('');
     setCoordinatorFilter('');
+    setEventTypeFilter('');
+    setMarketFilter('');
     setSearchQuery('');
   };
 
   const filtersActive =
-    !!statusFilter || !!yearFilter || !!salesLeadFilter || !!coordinatorFilter || !!searchQuery.trim();
+    !!statusFilter || !!yearFilter || !!salesLeadFilter || !!coordinatorFilter ||
+    !!eventTypeFilter || !!marketFilter || !!searchQuery.trim();
 
   const exportPdf = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
@@ -223,15 +234,16 @@ const TradeShowList: React.FC = () => {
 
     autoTable(doc, {
       startY: filterLines.length ? 90 : 76,
-      head: [['Name', 'Status', 'Event Date', 'Venue', 'City/State', 'Sales Lead', 'Coordinator', 'Attendees', 'Total Cost', 'Reg. Deadline']],
+      head: [['Name', 'Status', 'Event Type', 'Market', 'Event Date', 'Venue', 'City/State', 'Sales Lead', 'Attendees', 'Total Cost', 'Reg. Deadline']],
       body: filtered.map(s => [
         s.name || '',
         statusLabel(s.status || ''),
+        s.event_type ? (EVENT_TYPE_OPTIONS.find(o => o.value === s.event_type)?.label ?? s.event_type) : '',
+        s.market ? (MARKETS.find(o => o.value === s.market)?.label ?? s.market) : '',
         formatDateRange(s.event_start_date, s.event_end_date),
         s.venue || '',
         [s.city, s.state].filter(Boolean).join(', '),
         s.sales_lead_name || '',
-        s.coordinator_name || '',
         String(s.attendee_count ?? 0),
         (() => { const t = totalCost(s); return t === null ? '' : fmtMoney(t); })(),
         formatDate(s.registration_deadline),
@@ -265,7 +277,7 @@ const TradeShowList: React.FC = () => {
             📄 Export PDF
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/marketing/trade-shows/create')}>
-            + New Trade Show
+            + New Event
           </button>
         </div>
       </div>
@@ -332,6 +344,26 @@ const TradeShowList: React.FC = () => {
             />
           </div>
 
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Event Type</label>
+            <select className="form-input" value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)}>
+              <option value="">All Types</option>
+              {EVENT_TYPE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Market</label>
+            <select className="form-input" value={marketFilter} onChange={(e) => setMarketFilter(e.target.value)}>
+              <option value="">All Markets</option>
+              {MARKETS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
           {filtersActive && (
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={clearFilters} style={{ width: '100%' }}>
@@ -356,7 +388,7 @@ const TradeShowList: React.FC = () => {
           </p>
           {!filtersActive && (
             <button className="btn btn-primary" onClick={() => navigate('/marketing/trade-shows/create')}>
-              + New Trade Show
+              + New Event
             </button>
           )}
         </div>
@@ -368,6 +400,8 @@ const TradeShowList: React.FC = () => {
                 <tr>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>Name {sortIcon('name')}</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>Status {sortIcon('status')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('event_type')}>Event Type {sortIcon('event_type')}</th>
+                  <th style={{ cursor: 'pointer' }} onClick={() => handleSort('market')}>Market {sortIcon('market')}</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('event_start_date')}>Event Date {sortIcon('event_start_date')}</th>
                   <th>Venue</th>
                   <th style={{ cursor: 'pointer' }} onClick={() => handleSort('city')}>City / State {sortIcon('city')}</th>
@@ -392,6 +426,8 @@ const TradeShowList: React.FC = () => {
                       <td>
                         <span className={statusBadgeClass(show.status)}>{statusLabel(show.status)}</span>
                       </td>
+                      <td>{show.event_type ? (EVENT_TYPE_OPTIONS.find(o => o.value === show.event_type)?.label ?? show.event_type) : '—'}</td>
+                      <td>{show.market ? (MARKETS.find(o => o.value === show.market)?.label ?? show.market) : '—'}</td>
                       <td className="sales-date-cell">{formatDateRange(show.event_start_date, show.event_end_date)}</td>
                       <td>{show.venue || '—'}</td>
                       <td>{[show.city, show.state].filter(Boolean).join(', ') || '—'}</td>

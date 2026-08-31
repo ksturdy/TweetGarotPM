@@ -43,6 +43,18 @@ const TradeShow = {
       idx++;
     }
 
+    if (filters.event_type) {
+      query += ` AND ts.event_type = $${idx}`;
+      params.push(filters.event_type);
+      idx++;
+    }
+
+    if (filters.market) {
+      query += ` AND ts.market = $${idx}`;
+      params.push(filters.market);
+      idx++;
+    }
+
     if (filters.search) {
       query += ` AND (ts.name ILIKE $${idx} OR ts.venue ILIKE $${idx} OR ts.city ILIKE $${idx})`;
       params.push(`%${filters.search}%`);
@@ -90,6 +102,7 @@ const TradeShow = {
         registration_cost, booth_cost, travel_budget, total_budget,
         booth_number, booth_size, website_url, notes,
         sales_lead_id, coordinator_id,
+        event_type, market,
         created_by, updated_by
       ) VALUES (
         $1, $2, $3, $4,
@@ -98,7 +111,8 @@ const TradeShow = {
         $15, $16, $17, $18,
         $19, $20, $21, $22,
         $23, $24,
-        $25, $26
+        $25, $26,
+        $27, $28
       )
       RETURNING *
     `, [
@@ -126,6 +140,8 @@ const TradeShow = {
       data.notes || null,
       data.sales_lead_id || null,
       data.coordinator_id || null,
+      data.event_type || null,
+      data.market || null,
       userId || null,
       userId || null
     ]);
@@ -158,9 +174,11 @@ const TradeShow = {
         notes = $21,
         sales_lead_id = $22,
         coordinator_id = $23,
-        updated_by = $24,
+        event_type = $24,
+        market = $25,
+        updated_by = $26,
         updated_at = NOW()
-      WHERE id = $25 AND tenant_id = $26
+      WHERE id = $27 AND tenant_id = $28
       RETURNING *
     `, [
       data.name,
@@ -186,6 +204,8 @@ const TradeShow = {
       data.notes || null,
       data.sales_lead_id || null,
       data.coordinator_id || null,
+      data.event_type || null,
+      data.market || null,
       userId || null,
       id,
       tenantId

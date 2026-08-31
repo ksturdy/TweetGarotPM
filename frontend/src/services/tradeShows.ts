@@ -2,6 +2,7 @@ import api from './api';
 
 export type TradeShowStatus = 'upcoming' | 'registered' | 'in_progress' | 'completed' | 'cancelled';
 export type AttendeeRegistrationStatus = 'pending' | 'registered' | 'confirmed' | 'cancelled';
+export type TradeShowEventType = 'conference' | 'expo' | 'outing' | 'social_event';
 
 export interface TradeShow {
   id: number;
@@ -31,6 +32,9 @@ export interface TradeShow {
   booth_size?: string | null;
   website_url?: string | null;
   notes?: string | null;
+
+  event_type?: TradeShowEventType | null;
+  market?: string | null;
 
   sales_lead_id?: number | null;
   sales_lead_name?: string | null;
@@ -138,6 +142,8 @@ export interface TradeShowFilters {
   year?: number;
   sales_lead_id?: number;
   coordinator_id?: number;
+  event_type?: string;
+  market?: string;
   search?: string;
 }
 
@@ -200,6 +206,13 @@ export const TRADE_SHOW_STATUS_OPTIONS: { value: TradeShowStatus; label: string;
   { value: 'in_progress', label: 'In Progress', color: '#f59e0b' },
   { value: 'completed', label: 'Completed', color: '#10b981' },
   { value: 'cancelled', label: 'Cancelled', color: '#6b7280' },
+];
+
+export const EVENT_TYPE_OPTIONS: { value: TradeShowEventType; label: string }[] = [
+  { value: 'conference', label: 'Conference' },
+  { value: 'expo', label: 'Expo' },
+  { value: 'outing', label: 'Outing' },
+  { value: 'social_event', label: 'Social Event' },
 ];
 
 export const ATTENDEE_REGISTRATION_STATUS_OPTIONS: { value: AttendeeRegistrationStatus; label: string }[] = [
