@@ -30,7 +30,7 @@ const SEGMENT_COLOR: Record<string, string> = {
 const ROW_H = 28;
 const GROUP_H = 22;
 
-const GANTT_COL_DEFAULTS = { label: 220, estHrs: 62, estCost: 78, start: 90, end: 90, dur: 48, contour: 72 };
+const GANTT_COL_DEFAULTS = { label: 220, estHrs: 62, estCost: 78, start: 90, end: 90, dur: 48, contour: 116 };
 type GanttColKey = keyof typeof GANTT_COL_DEFAULTS;
 const LEFT_PANEL_DEFAULT = Object.values(GANTT_COL_DEFAULTS).reduce((a, b) => a + b, 0);
 
@@ -294,7 +294,7 @@ const CostTypeSchedule: React.FC<Props> = ({
 
   // ── Column widths ─────────────────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<typeof GANTT_COL_DEFAULTS>(() => {
-    try { const s = localStorage.getItem('costTypeSchedule_ganttCols'); return s ? { ...GANTT_COL_DEFAULTS, ...JSON.parse(s) } : GANTT_COL_DEFAULTS; }
+    try { const s = localStorage.getItem('costTypeSchedule_ganttCols'); if (!s) return GANTT_COL_DEFAULTS; const saved = JSON.parse(s); return { ...GANTT_COL_DEFAULTS, ...saved, contour: Math.max(GANTT_COL_DEFAULTS.contour, saved.contour ?? 0) }; }
     catch { return GANTT_COL_DEFAULTS; }
   });
   const colWidthsRef = useRef(colWidths);
@@ -492,7 +492,7 @@ const CostTypeSchedule: React.FC<Props> = ({
               <div style={{ ...hdrCell, width: colWidths.start }}>Start{resizeHandle('start')}</div>
               <div style={{ ...hdrCell, width: colWidths.end }}>End{resizeHandle('end')}</div>
               <div style={{ ...hdrCell, width: colWidths.dur }}>Dur{resizeHandle('dur')}</div>
-              <div style={{ ...hdrCell, width: colWidths.contour, borderRight: 'none' }}>Contour{resizeHandle('contour')}</div>
+              <div style={{ ...hdrCell, width: colWidths.contour, borderRight: 'none' }}>Contour</div>
             </div>
 
             {/* Rows */}
