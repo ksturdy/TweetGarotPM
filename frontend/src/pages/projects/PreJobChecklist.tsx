@@ -16,6 +16,8 @@ import {
   GenericItemRow,
   OtherContact,
 } from '../../services/preJobChecklist';
+import { scheduleSegmentsService } from '../../services/scheduleSegments';
+import { getContourMultipliers, type ContourType } from '../../utils/contours';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import './PreJobChecklist.css';
 
@@ -196,7 +198,16 @@ function tradeHoursFromSummary(labor: PhaseCodeCostSummary['labor'], tradeKey: '
   };
 }
 
+// Primary field segment key per trade (used to look up contour type)
+const TRADE_SEGMENT_KEY: Record<'pf' | 'sm' | 'pl', string> = { pf: '40', sm: '30', pl: '50' };
+
 const LaborForecastSummary: React.FC<LaborForecastProps> = ({ contract, costSummary, startDate, endDate, projectId }) => {
+  const { data: segmentsData } = useQuery({
+    queryKey: ['scheduleSegments', projectId],
+    queryFn: () => scheduleSegmentsService.getSegments(Number(projectId)),
+    enabled: !!projectId,
+  });
+
   const hasDates = !!startDate && !!endDate;
   const totalDurationMonths = hasDates ? monthsBetween(startDate!, endDate!) : null;
   const remMonths = hasDates ? monthsRemaining(endDate!) : null;
@@ -239,7 +250,7 @@ const LaborForecastSummary: React.FC<LaborForecastProps> = ({ contract, costSumm
       cur.setMonth(cur.getMonth() + 1);
     }
 
-    // Spread each trade's remaining hours evenly across all remaining months
+    // Spread each trade's remaining hours across months using the segment's contour type
     if (chartMonths.length > 0) {
       FORECAST_TRADES.forEach(t => {
         let remaining: number;
@@ -252,8 +263,14 @@ const LaborForecastSummary: React.FC<LaborForecastProps> = ({ contract, costSumm
           const jtd  = contract[`${t.key}_hours_jtd`       as keyof VPContract] as number | null;
           remaining = Math.max(0, (proj ?? est ?? 0) - (jtd ?? 0));
         }
-        const hcPerMonth = remaining / chartMonths.length / HPP;
-        chartMonths.forEach(m => { m[t.key] = hcPerMonth; });
+        const segKey = TRADE_SEGMENT_KEY[t.key];
+        const seg = segmentsData?.segments.find(s => s.segment_key === segKey);
+        const contour = (seg?.contour_type ?? 'flat') as ContourType;
+        const multipliers = getContourMultipliers(chartMonths.length, contour);
+        const totalMultiplier = multipliers.reduce((s, v) => s + v, 0) || 1;
+        chartMonths.forEach((m, i) => {
+          m[t.key] = (remaining * (multipliers[i] / totalMultiplier)) / HPP;
+        });
       });
     }
   }
