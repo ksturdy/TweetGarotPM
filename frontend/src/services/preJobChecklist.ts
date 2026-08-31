@@ -33,8 +33,13 @@ export interface ProjectInfoData {
 export interface LaborTradeRow {
   id: string;
   trade: string;
+  segment_key?: string;
+  est_hours?: number;
+  est_rate?: number;
   goal_hours?: number;
+  hours_pct_savings?: number;
   target_rate?: number;
+  rate_pct_below?: number;
   notes?: string;
 }
 
