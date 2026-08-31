@@ -83,7 +83,7 @@ const TitanCard: React.FC<{ question: string; hint?: string }> = ({ question, hi
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 const STEPS = [
-  'Key Dates', 'Office Team', 'Field Team', 'Site Conditions', 'Scope & Bid',
+  'Key Dates', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
   'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
 ];
 
@@ -189,6 +189,21 @@ const PreJobWizard: React.FC = () => {
   const [gcItems, setGcItems] = useState<GenericItemRow[]>([]);
   const [contacts, setContacts] = useState<OtherContact[]>([]);
 
+  // ── Orientation step state ────────────────────────────────────────────────
+  const [badgeRequired, setBadgeRequired] = useState(false);
+  const [orientationRequired, setOrientationRequired] = useState(false);
+  const [safetyTrainingRequired, setSafetyTrainingRequired] = useState(false);
+  const [orientationLink, setOrientationLink] = useState('');
+  const [orientationContactName, setOrientationContactName] = useState('');
+  const [orientationContactPhone, setOrientationContactPhone] = useState('');
+  const [orientationContactEmail, setOrientationContactEmail] = useState('');
+  const [directions, setDirections] = useState('');
+  const [parkingNotes, setParkingNotes] = useState('');
+  const [siteMapUploading, setSiteMapUploading] = useState(false);
+  const [siteMapFilename, setSiteMapFilename] = useState('');
+  const [siteMapAttachmentId, setSiteMapAttachmentId] = useState<number | null>(null);
+  const siteMapInputRef = useRef<HTMLInputElement>(null);
+
   // ── Team step state ───────────────────────────────────────────────────────
   const empSearch = useEmpSearch();
   const [teamRole, setTeamRole] = useState('');
@@ -284,6 +299,18 @@ const PreJobWizard: React.FC = () => {
     const gc = checklist.general_conditions;
     if (gc.approach_notes) setGcApproach(gc.approach_notes);
     if (gc.items?.length) setGcItems(gc.items);
+    const or = checklist.orientation;
+    if (or.badge_required !== undefined) setBadgeRequired(or.badge_required);
+    if (or.orientation_required !== undefined) setOrientationRequired(or.orientation_required);
+    if (or.safety_training_required !== undefined) setSafetyTrainingRequired(or.safety_training_required);
+    if (or.orientation_link) setOrientationLink(or.orientation_link);
+    if (or.contact_name) setOrientationContactName(or.contact_name);
+    if (or.contact_phone) setOrientationContactPhone(or.contact_phone);
+    if (or.contact_email) setOrientationContactEmail(or.contact_email);
+    if (or.directions) setDirections(or.directions);
+    if (or.parking_notes) setParkingNotes(or.parking_notes);
+    if (or.site_map_attachment_id) setSiteMapAttachmentId(or.site_map_attachment_id);
+    if (or.site_map_filename) setSiteMapFilename(or.site_map_filename);
   }, [checklist]);
 
   useEffect(() => {
@@ -358,26 +385,42 @@ const PreJobWizard: React.FC = () => {
       case 2: break; // office team saves live per-add
       case 3: break; // field nominations save live per-submit
       case 4:
-        await preJobChecklistApi.updateSection(pid, 'project_info', { ...existingPi, special_conditions: specialConditions });
+        await preJobChecklistApi.updateSection(pid, 'orientation', {
+          badge_required: badgeRequired,
+          orientation_required: orientationRequired,
+          safety_training_required: safetyTrainingRequired,
+          orientation_link: orientationLink || undefined,
+          contact_name: orientationContactName || undefined,
+          contact_phone: orientationContactPhone || undefined,
+          contact_email: orientationContactEmail || undefined,
+          directions: directions || undefined,
+          parking_notes: parkingNotes || undefined,
+          site_map_attachment_id: siteMapAttachmentId || undefined,
+          site_map_filename: siteMapFilename || undefined,
+        });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 5:
-        await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
+        await preJobChecklistApi.updateSection(pid, 'project_info', { ...existingPi, special_conditions: specialConditions });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 6:
-        await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: laborTrades });
+        await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 7:
-        await preJobChecklistApi.updateSection(pid, 'material', { approach_notes: materialApproach, items: materialItems });
+        await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: laborTrades });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 8:
-        await preJobChecklistApi.updateSection(pid, 'subcontracts', { approach_notes: subApproach, items: subItems });
+        await preJobChecklistApi.updateSection(pid, 'material', { approach_notes: materialApproach, items: materialItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 9:
+        await preJobChecklistApi.updateSection(pid, 'subcontracts', { approach_notes: subApproach, items: subItems });
+        qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
+        break;
+      case 10:
         await Promise.all([
           preJobChecklistApi.updateSection(pid, 'rental', { approach_notes: rentalApproach, items: rentalItems }),
           preJobChecklistApi.updateSection(pid, 'mep_equipment', { approach_notes: mepApproach, items: mepItems }),
@@ -385,7 +428,7 @@ const PreJobWizard: React.FC = () => {
         ]);
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 10:
+      case 11:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), other_contacts: contacts });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
@@ -866,8 +909,120 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 4 — SITE CONDITIONS
-      case 4:
+      // STEP 4 — ORIENTATION
+      case 4: {
+        const toggleStyle = (active: boolean): React.CSSProperties => ({
+          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.5rem 1rem',
+          borderRadius: 8, border: `2px solid ${active ? '#002356' : '#e2e8f0'}`,
+          background: active ? '#eff6ff' : 'white', cursor: 'pointer',
+          fontWeight: 600, fontSize: '0.85rem', color: active ? '#002356' : '#64748b',
+          userSelect: 'none', transition: 'all 0.15s',
+        });
+        return (
+          <div>
+            <TitanCard
+              question="What does your crew need to get on site? Set up site access, orientation, and how to get there."
+              hint="This info goes straight to your field team so they're ready before day one."
+            />
+
+            {/* Site Security */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                Site Security & Access
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <label style={toggleStyle(badgeRequired)} onClick={() => setBadgeRequired(v => !v)}>
+                  <span>{badgeRequired ? '✓' : '○'}</span> Badge Required
+                </label>
+                <label style={toggleStyle(orientationRequired)} onClick={() => setOrientationRequired(v => !v)}>
+                  <span>{orientationRequired ? '✓' : '○'}</span> Site Orientation Required
+                </label>
+                <label style={toggleStyle(safetyTrainingRequired)} onClick={() => setSafetyTrainingRequired(v => !v)}>
+                  <span>{safetyTrainingRequired ? '✓' : '○'}</span> Safety Training Required
+                </label>
+              </div>
+            </div>
+
+            {/* Orientation contact & link */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                Orientation Contact
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <label style={fieldLabel}>Name</label>
+                  <input type="text" style={fieldInput} placeholder="Contact name" value={orientationContactName} onChange={e => setOrientationContactName(e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <label style={fieldLabel}>Phone</label>
+                  <input type="tel" style={fieldInput} placeholder="(xxx) xxx-xxxx" value={orientationContactPhone} onChange={e => setOrientationContactPhone(e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <label style={fieldLabel}>Email</label>
+                  <input type="email" style={fieldInput} placeholder="email@example.com" value={orientationContactEmail} onChange={e => setOrientationContactEmail(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ marginTop: '0.75rem' }}>
+                <label style={fieldLabel}>Orientation Link (ISN, Avetta, online training portal, etc.)</label>
+                <input type="url" style={fieldInput} placeholder="https://…" value={orientationLink} onChange={e => setOrientationLink(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Directions & Parking */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                Getting There
+              </div>
+              <label style={fieldLabel}>Directions to Jobsite</label>
+              <textarea rows={4} style={{ ...fieldInput, resize: 'vertical', marginBottom: '0.75rem' }} placeholder="Gate entrance, turn-by-turn notes, truck route restrictions…" value={directions} onChange={e => setDirections(e.target.value)} />
+              <label style={fieldLabel}>Parking Notes</label>
+              <input type="text" style={fieldInput} placeholder="Crew parking location, permit required, laydown yard…" value={parkingNotes} onChange={e => setParkingNotes(e.target.value)} />
+            </div>
+
+            {/* Site Map Upload */}
+            <div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                Site Map
+              </div>
+              <input ref={siteMapInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={async e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSiteMapUploading(true);
+                try {
+                  const form = new FormData();
+                  form.append('file', file);
+                  const { data } = await api.post(`/attachments/project/${projectId}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+                  setSiteMapAttachmentId(data.id);
+                  setSiteMapFilename(data.original_name ?? file.name);
+                } catch {
+                  toast.error('Failed to upload site map — try again.');
+                } finally {
+                  setSiteMapUploading(false);
+                  if (siteMapInputRef.current) siteMapInputRef.current.value = '';
+                }
+              }} />
+              {siteMapFilename ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.6rem 1rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8 }}>
+                  <span style={{ fontSize: '1.1rem' }}>🗺</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>{siteMapFilename}</span>
+                  <button onClick={() => { setSiteMapAttachmentId(null); setSiteMapFilename(''); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => siteMapInputRef.current?.click()}
+                  disabled={siteMapUploading}
+                  style={{ padding: '0.6rem 1.25rem', background: 'white', border: '2px dashed #cbd5e1', borderRadius: 8, color: '#475569', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {siteMapUploading ? 'Uploading…' : '+ Upload Site Map'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // STEP 5 — SITE CONDITIONS
+      case 5:
         return (
           <div>
             <TitanCard
@@ -884,8 +1039,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 5 — SCOPE & BID NOTES
-      case 5:
+      // STEP 6 — SCOPE & BID NOTES
+      case 6:
         return (
           <div>
             <TitanCard
@@ -902,8 +1057,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 6 — LABOR PLAN
-      case 6: {
+      // STEP 7 — LABOR PLAN
+      case 7: {
         const lt = costSummary?.labor_totals;
         return (
           <div>
@@ -934,8 +1089,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 7 — MATERIAL PLAN
-      case 7: {
+      // STEP 8 — MATERIAL PLAN
+      case 8: {
         const md = costSummary?.costs?.material;
         return (
           <div>
@@ -958,8 +1113,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 8 — SUBCONTRACTS
-      case 8: {
+      // STEP 9 — SUBCONTRACTS
+      case 9: {
         const sd = costSummary?.costs?.subcontracts;
         return (
           <div>
@@ -982,8 +1137,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 9 — OTHER COSTS
-      case 9: {
+      // STEP 10 — OTHER COSTS
+      case 10: {
         const rd = costSummary?.costs?.rentals;
         const mpd = costSummary?.costs?.mep_equipment;
         const gcd = costSummary?.costs?.general_conditions;
@@ -1011,8 +1166,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 10 — OTHER CONTACTS
-      case 10:
+      // STEP 11 — OTHER CONTACTS
+      case 11:
         return (
           <div>
             <TitanCard
@@ -1023,8 +1178,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 11 — SUMMARY
-      case 11:
+      // STEP 12 — SUMMARY
+      case 12:
         return (
           <div>
             <TitanCard
@@ -1034,6 +1189,14 @@ const PreJobWizard: React.FC = () => {
               <SummaryRow label="Dates" value={startDate && endDate ? `${startDate} → ${endDate}` : startDate || endDate || '—'} />
               <SummaryRow label="Office Team" value={officeAssignments.length > 0 ? officeAssignments.map(a => `${[a.first_name, a.last_name].filter(Boolean).join(' ')} (${a.role})`).join(', ') : 'None added'} />
               <SummaryRow label="Field Nominations" value={fieldNominations.length > 0 ? `${fieldNominations.length} nomination${fieldNominations.length !== 1 ? 's' : ''} submitted — pending coordinator approval` : 'None submitted'} />
+              <SummaryRow label="Orientation" value={[
+                badgeRequired ? 'Badge required' : null,
+                orientationRequired ? 'Orientation required' : null,
+                safetyTrainingRequired ? 'Safety training required' : null,
+                orientationContactName ? `Contact: ${orientationContactName}` : null,
+                orientationLink ? 'Link on file' : null,
+                siteMapFilename ? `Site map: ${siteMapFilename}` : null,
+              ].filter(Boolean).join(' · ') || '—'} />
               <SummaryRow label="Site Conditions" value={specialConditions || '—'} multiline />
               <SummaryRow label="Scope & Bid Notes" value={bidScopeNotes || '—'} multiline />
               <SummaryRow label="Labor Strategy" value={laborApproach || '—'} multiline />
@@ -1080,7 +1243,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 12 && <ProgressBar step={step} />}
+      {step > 0 && step < 13 && <ProgressBar step={step} />}
 
       {/* Content */}
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -1088,7 +1251,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Navigation (hide on gate and summary) */}
-      {step > 0 && step < 11 && (
+      {step > 0 && step < 12 && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -1098,7 +1261,7 @@ const PreJobWizard: React.FC = () => {
               </button>
             )}
             <button onClick={handleContinue} disabled={saving} style={navBtn('#002356', 'white')}>
-              {saving ? 'Saving…' : step === 10 ? 'Save & Review →' : 'Save & Continue →'}
+              {saving ? 'Saving…' : step === 11 ? 'Save & Review →' : 'Save & Continue →'}
             </button>
           </div>
         </div>

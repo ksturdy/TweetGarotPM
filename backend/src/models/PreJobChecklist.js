@@ -1,6 +1,6 @@
 const { pool } = require('../config/database');
 
-const SECTIONS = ['project_info', 'labor', 'material', 'subcontracts', 'rental', 'mep_equipment', 'general_conditions'];
+const SECTIONS = ['project_info', 'labor', 'material', 'subcontracts', 'rental', 'mep_equipment', 'general_conditions', 'orientation'];
 
 const PreJobChecklist = {
   async getByProjectId(projectId, tenantId) {

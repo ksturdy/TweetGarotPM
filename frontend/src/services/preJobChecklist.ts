@@ -83,6 +83,20 @@ export interface GenericSectionData {
   items?: GenericItemRow[];
 }
 
+export interface OrientationData {
+  badge_required?: boolean;
+  orientation_required?: boolean;
+  safety_training_required?: boolean;
+  orientation_link?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  directions?: string;
+  parking_notes?: string;
+  site_map_attachment_id?: number;
+  site_map_filename?: string;
+}
+
 export interface PreJobChecklist {
   id?: number;
   project_id?: number;
@@ -93,6 +107,7 @@ export interface PreJobChecklist {
   rental: GenericSectionData;
   mep_equipment: GenericSectionData;
   general_conditions: GenericSectionData;
+  orientation: OrientationData;
 }
 
 export type ChecklistSection = keyof Omit<PreJobChecklist, 'id' | 'project_id'>;
@@ -105,6 +120,7 @@ const EMPTY_CHECKLIST: PreJobChecklist = {
   rental: {},
   mep_equipment: {},
   general_conditions: {},
+  orientation: {},
 };
 
 export interface ReadinessResult {
