@@ -134,7 +134,7 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
     group.modules.some(m => isModuleActive(m.path)),
   [isModuleActive]);
 
-  const isOverviewActive = location.pathname === `/projects/${projectId}`;
+  const isOverviewActive = location.pathname === `/projects/${projectId}/info`;
 
   return (
     <aside className={`project-module-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
@@ -142,7 +142,7 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
       <div className="project-module-sidebar-header">
         {isCollapsed ? (
           <Link
-            to={`/projects/${projectId}`}
+            to={`/projects/${projectId}/info`}
             className={`project-module-overview-icon ${isOverviewActive ? 'active' : ''}`}
             title="Project Overview"
           >
@@ -150,7 +150,7 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
           </Link>
         ) : (
           <Link
-            to={`/projects/${projectId}`}
+            to={`/projects/${projectId}/info`}
             className={`project-module-overview-link ${isOverviewActive ? 'active' : ''}`}
           >
             <span className="project-module-icon"><FolderIcon /></span>

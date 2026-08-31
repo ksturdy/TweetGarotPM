@@ -539,7 +539,8 @@ const App: React.FC = () => {
                 <Route path="/projects/projected-revenue" element={<ProjectedRevenue />} />
                 <Route path="/projects/labor-forecast" element={<LaborForecast />} />
                 <Route path="/projects/new" element={<ProjectForm />} />
-                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/projects/:id" element={<Navigate to="financials" replace />} />
+                <Route path="/projects/:id/info" element={<ProjectDetail />} />
                 <Route path="/projects/:projectId/pre-job-checklist/wizard" element={<PreJobWizard />} />
                 <Route path="/projects/:projectId/pre-job-checklist" element={<PreJobChecklist />} />
                 <Route path="/projects/:projectId/companies" element={<ProjectCompanies />} />
