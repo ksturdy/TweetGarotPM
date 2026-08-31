@@ -150,4 +150,17 @@ export const preJobChecklistApi = {
     const { data } = await api.get(`/pre-job-checklist/project/${projectId}/readiness`);
     return data;
   },
+
+  async downloadPdf(projectId: number, projectName?: string): Promise<void> {
+    const response = await api.get(`/pre-job-checklist/project/${projectId}/pdf-download`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (projectName || 'project').replace(/[^a-z0-9]/gi, '-');
+    a.download = `PreJob-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };

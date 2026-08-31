@@ -2,8 +2,12 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const PreJobChecklist = require('../models/PreJobChecklist');
+const ProjectAssignment = require('../models/ProjectAssignment');
+const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
 const Project = require('../models/Project');
 const db = require('../config/database');
+const { fetchLogoBase64 } = require('../utils/logoFetcher');
+const { generatePreJobChecklistPdfBuffer } = require('../utils/preJobChecklistPdfBuffer');
 
 const router = express.Router();
 
@@ -94,6 +98,53 @@ router.put('/project/:projectId/section/:section', verifyProject, async (req, re
       return res.status(400).json({ error: err.message });
     }
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/pre-job-checklist/project/:projectId/pdf-download
+router.get('/project/:projectId/pdf-download', verifyProject, async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const [checklist, assignments, segments, segCosts, laborResult, logoBase64] = await Promise.all([
+      PreJobChecklist.getByProjectId(projectId, req.tenantId),
+      ProjectAssignment.findByProjectId(projectId, req.tenantId),
+      ProjectScheduleSegment.getByProject(projectId, req.tenantId),
+      ProjectScheduleSegment.getCostsByProject(projectId, req.tenantId),
+      db.query(
+        `SELECT
+           CASE
+             WHEN phase LIKE '30-%' OR phase LIKE '35-%' THEN 'sm'
+             WHEN phase LIKE '40-%' OR phase LIKE '45-%' THEN 'pf'
+             WHEN phase LIKE '50-%' OR phase LIKE '55-%' THEN 'pl'
+             ELSE 'other'
+           END AS trade,
+           COALESCE(SUM(est_hours), 0)  AS est_hours,
+           COALESCE(SUM(jtd_hours), 0)  AS jtd_hours
+         FROM vp_phase_codes
+         WHERE linked_project_id = $1 AND tenant_id = $2 AND cost_type = 1
+         GROUP BY 1`,
+        [projectId, req.tenantId]
+      ),
+      fetchLogoBase64(req.tenantId),
+    ]);
+
+    const laborData = laborResult.rows.map(r => ({
+      trade: r.trade,
+      est_hours: parseFloat(r.est_hours),
+      jtd_hours: parseFloat(r.jtd_hours),
+    }));
+
+    const pdfBuffer = await generatePreJobChecklistPdfBuffer(
+      { project: req.project, checklist, assignments, segments, segCosts, laborData },
+      logoBase64
+    );
+
+    const safeName = (req.project.name || 'project').replace(/[^a-z0-9]/gi, '-');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="PreJob-${safeName}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    next(err);
   }
 });
 

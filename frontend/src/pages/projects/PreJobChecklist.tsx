@@ -767,6 +767,7 @@ const PreJobChecklistPage: React.FC = () => {
   const { toast } = useTitanFeedback();
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ project_info: true });
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   // Date edit state
   const [editingDates, setEditingDates] = useState(false);
@@ -877,8 +878,10 @@ const PreJobChecklistPage: React.FC = () => {
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
   const savedWizardStep = parseInt(localStorage.getItem(wizardKey) ?? '0', 10);
-  const wizardCompleted = savedWizardStep >= WIZARD_STEPS.length;
-  const wizardInProgress = savedWizardStep > 0 && savedWizardStep < WIZARD_STEPS.length;
+  // Treat as completed if localStorage says so OR if the checklist already has content
+  // (covers cases where localStorage was cleared after completing the wizard)
+  const wizardCompleted = savedWizardStep >= WIZARD_STEPS.length || !checklistIsEmpty;
+  const wizardInProgress = savedWizardStep > 0 && savedWizardStep < WIZARD_STEPS.length && checklistIsEmpty;
 
   // ── Date helpers ──
   // Prefer project-level dates; fall back to Vista contract projection overrides
@@ -991,20 +994,47 @@ const PreJobChecklistPage: React.FC = () => {
             </p>
           )}
         </div>
-        <button
-          onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: (checklistIsEmpty || wizardInProgress) ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
-            color: (checklistIsEmpty || wizardInProgress) ? 'white' : '#475569',
-            border: 'none', borderRadius: 8,
-            padding: '0.55rem 1.1rem', fontSize: '0.85rem', fontWeight: 700,
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          <span style={{ fontSize: '1rem' }}>🚀</span>
-          {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : wizardCompleted ? 'Revisit Guided Setup' : 'Re-run Guided Setup'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {!checklistIsEmpty && (
+            <button
+              onClick={async () => {
+                setPdfDownloading(true);
+                try {
+                  await preJobChecklistApi.downloadPdf(Number(projectId), project?.name);
+                } catch {
+                  toast.error('Failed to generate PDF');
+                } finally {
+                  setPdfDownloading(false);
+                }
+              }}
+              disabled={pdfDownloading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: '#f1f5f9', color: '#475569',
+                border: '1px solid #e2e8f0', borderRadius: 8,
+                padding: '0.55rem 1rem', fontSize: '0.85rem', fontWeight: 700,
+                cursor: pdfDownloading ? 'wait' : 'pointer', opacity: pdfDownloading ? 0.7 : 1,
+              }}
+            >
+              <span style={{ fontSize: '0.9rem' }}>⬇</span>
+              {pdfDownloading ? 'Generating…' : 'Download PDF'}
+            </button>
+          )}
+          <button
+            onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: (checklistIsEmpty || wizardInProgress) ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
+              color: (checklistIsEmpty || wizardInProgress) ? 'white' : '#475569',
+              border: 'none', borderRadius: 8,
+              padding: '0.55rem 1.1rem', fontSize: '0.85rem', fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>🚀</span>
+            {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : wizardCompleted ? 'Revisit Guided Setup' : 'Re-run Guided Setup'}
+          </button>
+        </div>
       </div>
 
       {/* Titan wizard banner */}
