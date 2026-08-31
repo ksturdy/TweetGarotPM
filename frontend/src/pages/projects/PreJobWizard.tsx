@@ -287,8 +287,10 @@ const PreJobWizard: React.FC = () => {
 
   useEffect(() => {
     if (project) {
-      if (!startDate && project.start_date) setStartDate(project.start_date.slice(0, 10));
-      if (!endDate && project.end_date) setEndDate(project.end_date.slice(0, 10));
+      const s = project.effective_start_date ?? project.start_date;
+      const e = project.effective_end_date ?? project.end_date;
+      if (!startDate && s) setStartDate(s.slice(0, 10));
+      if (!endDate && e) setEndDate(e.slice(0, 10));
     }
   }, [project]);
 
