@@ -84,7 +84,7 @@ const TitanCard: React.FC<{ question: string; hint?: string }> = ({ question, hi
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 const STEPS = [
-  'Key Dates', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
+  'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
   'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
 ];
 
@@ -191,6 +191,7 @@ const PreJobWizard: React.FC = () => {
   // ── Draft state per section ──────────────────────────────────────────────
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [schedulingMode, setSchedulingMode] = useState<'summary' | 'cost_type' | 'phase'>('cost_type');
   const [specialConditions, setSpecialConditions] = useState('');
   const [bidScopeNotes, setBidScopeNotes] = useState('');
   const [laborApproach, setLaborApproach] = useState('');
@@ -373,6 +374,7 @@ const PreJobWizard: React.FC = () => {
       const e = project.effective_end_date ?? project.end_date;
       if (!startDate && s) setStartDate(s.slice(0, 10));
       if (!endDate && e) setEndDate(e.slice(0, 10));
+      if (project.scheduling_mode) setSchedulingMode(project.scheduling_mode);
     }
   }, [project]);
 
@@ -436,9 +438,13 @@ const PreJobWizard: React.FC = () => {
         }
         qc.invalidateQueries({ queryKey: ['project', projectId] });
         break;
-      case 2: break; // office team saves live per-add
-      case 3: break; // field nominations save live per-submit
-      case 4:
+      case 2:
+        await api.patch(`/projects/${pid}/summary-dates`, { scheduling_mode: schedulingMode });
+        qc.invalidateQueries({ queryKey: ['project', projectId] });
+        break;
+      case 3: break; // office team saves live per-add
+      case 4: break; // field nominations save live per-submit
+      case 5:
         await preJobChecklistApi.updateSection(pid, 'orientation', {
           badge_required: badgeRequired,
           orientation_required: orientationRequired,
@@ -454,15 +460,15 @@ const PreJobWizard: React.FC = () => {
         });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 5:
+      case 6:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...existingPi, special_conditions: specialConditions });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 6:
+      case 7:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 7: {
+      case 8: {
         const tradesToSave = laborTrades.map(row => {
           const goalHrs = (hoursMode === 'pct_savings' && row.est_hours && row.hours_pct_savings != null)
             ? Math.round(row.est_hours * (1 - row.hours_pct_savings / 100))
@@ -476,15 +482,15 @@ const PreJobWizard: React.FC = () => {
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       }
-      case 8:
+      case 9:
         await preJobChecklistApi.updateSection(pid, 'material', { approach_notes: materialApproach, items: materialItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 9:
+      case 10:
         await preJobChecklistApi.updateSection(pid, 'subcontracts', { approach_notes: subApproach, items: subItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 10:
+      case 11:
         await Promise.all([
           preJobChecklistApi.updateSection(pid, 'rental', { approach_notes: rentalApproach, items: rentalItems }),
           preJobChecklistApi.updateSection(pid, 'mep_equipment', { approach_notes: mepApproach, items: mepItems }),
@@ -492,7 +498,7 @@ const PreJobWizard: React.FC = () => {
         ]);
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 11:
+      case 12:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), other_contacts: contacts });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
@@ -865,8 +871,89 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 2 — PROJECT TEAM
-      case 2:
+      // STEP 2 — SCHEDULE MODE
+      case 2: {
+        const modeCard = (
+          mode: 'summary' | 'cost_type' | 'phase',
+          title: string,
+          badge: string | null,
+          badgeColor: string,
+          description: string,
+          details: string[],
+        ) => {
+          const selected = schedulingMode === mode;
+          return (
+            <div
+              onClick={() => setSchedulingMode(mode)}
+              style={{
+                border: `2px solid ${selected ? '#002356' : '#e2e8f0'}`,
+                borderRadius: 10, padding: '1rem 1.25rem', marginBottom: 12,
+                background: selected ? '#eff6ff' : 'white', cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                  border: `2px solid ${selected ? '#002356' : '#cbd5e1'}`,
+                  background: selected ? '#002356' : 'white',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {selected && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white' }} />}
+                </div>
+                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{title}</span>
+                {badge && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: badgeColor === 'green' ? '#dcfce7' : '#fef9c3', color: badgeColor === 'green' ? '#166534' : '#92400e' }}>
+                    {badge}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '0 0 8px 30px', fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{description}</p>
+              <ul style={{ margin: '0 0 0 30px', padding: '0 0 0 16px', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.7 }}>
+                {details.map(d => <li key={d}>{d}</li>)}
+              </ul>
+            </div>
+          );
+        };
+        return (
+          <div>
+            <TitanCard
+              question="How do you want to schedule this project? This choice drives how your revenue and labor forecasts are broken out."
+              hint="You can change this later on the Schedule tab, but picking the right mode now means your pre-job plan will be built correctly from day one."
+            />
+            {modeCard('summary', 'Summary', 'Best for small jobs', 'yellow',
+              'One start + end date covers the entire project. All trades and cost types share the same timeline.',
+              [
+                'Simple to set up — no per-trade dates needed',
+                'Revenue and labor forecasts run off the single project window',
+                'Good fit for single-trade jobs, short durations, or T&M work',
+                'Limited visibility into trade-by-trade timing',
+              ]
+            )}
+            {modeCard('cost_type', 'Cost Type', '⭐ Recommended for most projects', 'green',
+              'Each trade group (Sheet Metal, Pipefitter, Plumbing) and non-labor cost type gets its own start and end date.',
+              [
+                'Revenue forecast is broken out per trade — far more accurate on multi-trade jobs',
+                'Labor forecast reflects when each crew is actually on site',
+                'Dates are set on the Schedule → Cost Type tab after wizard completion',
+                'Ideal for most commercial mechanical projects',
+              ]
+            )}
+            {modeCard('phase', 'Phase', 'Best saved for later', 'yellow',
+              'Every Vista phase code drives its own individual forecast window. Maximum scheduling precision.',
+              [
+                'Requires your phase codes to be fully built out and activated in Vista',
+                'Best used once the project is underway and the phase schedule is established',
+                'Most useful for large, long-duration projects with complex phasing',
+                'You can switch to Phase mode at any time from the Schedule tab',
+              ]
+            )}
+          </div>
+        );
+      }
+
+      // STEP 3 — PROJECT TEAM
+      case 3:
         return (
           <div>
             <TitanCard
@@ -932,8 +1019,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 3 — FIELD TEAM NOMINATIONS
-      case 3: {
+      // STEP 4 — FIELD TEAM NOMINATIONS
+      case 4: {
         const STATUS_LABEL: Record<string, string> = {
           planned: 'Pending Approval',
           active: 'Active',
@@ -1036,8 +1123,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 4 — ORIENTATION
-      case 4: {
+      // STEP 5 — ORIENTATION
+      case 5: {
         const toggleStyle = (active: boolean): React.CSSProperties => ({
           display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.5rem 1rem',
           borderRadius: 8, border: `2px solid ${active ? '#002356' : '#e2e8f0'}`,
@@ -1148,8 +1235,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 5 — SITE CONDITIONS
-      case 5:
+      // STEP 6 — SITE CONDITIONS
+      case 6:
         return (
           <div>
             <TitanCard
@@ -1166,8 +1253,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 6 — SCOPE & BID NOTES
-      case 6:
+      // STEP 7 — SCOPE & BID NOTES
+      case 7:
         return (
           <div>
             <TitanCard
@@ -1184,8 +1271,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 7 — LABOR PLAN
-      case 7: {
+      // STEP 8 — LABOR PLAN
+      case 8: {
         const lt = costSummary?.labor_totals;
         return (
           <div>
@@ -1216,8 +1303,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 8 — MATERIAL PLAN
-      case 8: {
+      // STEP 9 — MATERIAL PLAN
+      case 9: {
         const md = costSummary?.costs?.material;
         return (
           <div>
@@ -1240,8 +1327,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 9 — SUBCONTRACTS
-      case 9: {
+      // STEP 10 — SUBCONTRACTS
+      case 10: {
         const sd = costSummary?.costs?.subcontracts;
         return (
           <div>
@@ -1264,8 +1351,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 10 — OTHER COSTS
-      case 10: {
+      // STEP 11 — OTHER COSTS
+      case 11: {
         const rd = costSummary?.costs?.rentals;
         const mpd = costSummary?.costs?.mep_equipment;
         const gcd = costSummary?.costs?.general_conditions;
@@ -1293,8 +1380,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 11 — OTHER CONTACTS
-      case 11:
+      // STEP 12 — OTHER CONTACTS
+      case 12:
         return (
           <div>
             <TitanCard
@@ -1305,8 +1392,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 12 — SUMMARY
-      case 12:
+      // STEP 13 — SUMMARY
+      case 13:
         return (
           <div>
             <TitanCard
@@ -1314,6 +1401,7 @@ const PreJobWizard: React.FC = () => {
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <SummaryRow label="Dates" value={startDate && endDate ? `${startDate} → ${endDate}` : startDate || endDate || '—'} />
+              <SummaryRow label="Schedule Mode" value={schedulingMode === 'cost_type' ? 'Cost Type' : schedulingMode === 'phase' ? 'Phase' : 'Summary'} />
               <SummaryRow label="Office Team" value={officeAssignments.length > 0 ? officeAssignments.map(a => `${[a.first_name, a.last_name].filter(Boolean).join(' ')} (${a.role})`).join(', ') : 'None added'} />
               <SummaryRow label="Field Nominations" value={fieldNominations.length > 0 ? `${fieldNominations.length} nomination${fieldNominations.length !== 1 ? 's' : ''} submitted — pending coordinator approval` : 'None submitted'} />
               <SummaryRow label="Orientation" value={[
@@ -1370,7 +1458,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 13 && <ProgressBar step={step} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
+      {step > 0 && step < 14 && <ProgressBar step={step} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
 
       {/* Content */}
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -1378,7 +1466,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Navigation (hide on gate and summary) */}
-      {step > 0 && step < 12 && (
+      {step > 0 && step < 13 && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -1388,7 +1476,7 @@ const PreJobWizard: React.FC = () => {
               </button>
             )}
             <button onClick={handleContinue} disabled={saving} style={navBtn('#002356', 'white')}>
-              {saving ? 'Saving…' : step === 11 ? 'Save & Review →' : 'Save & Continue →'}
+              {saving ? 'Saving…' : step === 12 ? 'Save & Review →' : 'Save & Continue →'}
             </button>
           </div>
         </div>

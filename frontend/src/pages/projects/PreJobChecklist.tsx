@@ -849,7 +849,7 @@ const PreJobChecklistPage: React.FC = () => {
     && !checklist?.material?.approach_notes;
 
   const WIZARD_STEPS = [
-    'Key Dates', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
+    'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
     'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
