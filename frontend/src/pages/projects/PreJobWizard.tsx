@@ -88,26 +88,33 @@ const STEPS = [
   'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
 ];
 
-const ProgressBar: React.FC<{ step: number }> = ({ step }) => (
+const ProgressBar: React.FC<{ step: number; onStepClick: (n: number) => void }> = ({ step, onStepClick }) => (
   <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.875rem 2rem' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, maxWidth: 900, margin: '0 auto' }}>
       {STEPS.map((label, i) => {
         const num = i + 1;
         const done = step > num;
         const active = step === num;
+        const clickable = done;
         return (
           <React.Fragment key={label}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, cursor: clickable ? 'pointer' : 'default' }}
+              onClick={() => clickable && onStepClick(num)}
+              title={clickable ? `Go to ${label}` : undefined}
+            >
               <div style={{
                 width: 28, height: 28, borderRadius: '50%',
                 background: done ? '#16a34a' : active ? '#002356' : '#e2e8f0',
                 color: done || active ? 'white' : '#94a3b8',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
+                transition: 'opacity 0.15s',
+                opacity: clickable ? 1 : undefined,
               }}>
                 {done ? '✓' : num}
               </div>
-              <div style={{ fontSize: '0.65rem', color: active ? '#002356' : '#94a3b8', fontWeight: active ? 700 : 400, marginTop: 3, whiteSpace: 'nowrap', maxWidth: 70, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: '0.65rem', color: active ? '#002356' : done ? '#16a34a' : '#94a3b8', fontWeight: active || done ? 700 : 400, marginTop: 3, whiteSpace: 'nowrap', maxWidth: 70, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {label}
               </div>
             </div>
@@ -1363,7 +1370,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 13 && <ProgressBar step={step} />}
+      {step > 0 && step < 13 && <ProgressBar step={step} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
 
       {/* Content */}
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
