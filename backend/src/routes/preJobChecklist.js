@@ -10,7 +10,8 @@ const Project = require('../models/Project');
 const db = require('../config/database');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
 const { generatePreJobChecklistPdfBuffer } = require('../utils/preJobChecklistPdfBuffer');
-const { getFileStream, getFileUrl, isR2Enabled } = require('../utils/fileStorage');
+const { getFileStream, getFileUrl } = require('../utils/fileStorage');
+const { isR2Enabled } = require('../config/r2Client');
 
 const router = express.Router();
 
@@ -159,7 +160,7 @@ router.get('/project/:projectId/pdf-download', verifyProject, async (req, res, n
               }
               imgBuffer = Buffer.concat(chunks);
             } else {
-              // Try local disk first
+              // __dirname = backend/src/routes; ../../ → backend/ where uploads/ lives
               const normalized = att.filename.replace(/\\/g, '/');
               const idx = normalized.indexOf('uploads/');
               const rel = idx !== -1 ? normalized.substring(idx) : att.filename;
@@ -167,7 +168,7 @@ router.get('/project/:projectId/pdf-download', verifyProject, async (req, res, n
               if (fs.existsSync(localPath)) {
                 imgBuffer = fs.readFileSync(localPath);
               } else {
-                // File isn't local (uploaded to R2 in prod) — fetch via public URL
+                // Prod: file may be in R2 — fetch via public URL
                 const fileUrl = await getFileUrl(att.filename);
                 if (fileUrl?.startsWith('https://')) {
                   const resp = await fetch(fileUrl);
