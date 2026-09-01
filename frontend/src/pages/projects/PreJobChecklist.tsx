@@ -768,15 +768,63 @@ const OrientationCard: React.FC<OrientationCardProps> = ({ orientation, projectI
   const [open, setOpen] = useState(true);
   const [siteMapUrl, setSiteMapUrl] = useState<string | null>(null);
   const [siteMapMime, setSiteMapMime] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+  const { toast } = useTitanFeedback();
 
   useEffect(() => {
-    if (!orientation.site_map_attachment_id) return;
+    if (!orientation.site_map_attachment_id) {
+      setSiteMapUrl(null);
+      setSiteMapMime(null);
+      return;
+    }
     api.get<{ url: string; mime_type: string; original_name: string }>(
       `/attachments/id/${orientation.site_map_attachment_id}`
     )
       .then(r => { setSiteMapUrl(r.data.url); setSiteMapMime(r.data.mime_type); })
       .catch(() => {});
   }, [orientation.site_map_attachment_id]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: OrientationData) =>
+      preJobChecklistApi.updateSection(Number(projectId), 'orientation', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] }),
+    onError: () => toast.error('Failed to save orientation changes.'),
+  });
+
+  const handleDelete = () => {
+    const updated: OrientationData = { ...orientation };
+    delete updated.site_map_attachment_id;
+    delete updated.site_map_filename;
+    saveMutation.mutate(updated);
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post<{ id: number; original_name: string }>(
+        `/attachments/project/${projectId}`,
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+      const updated: OrientationData = {
+        ...orientation,
+        site_map_attachment_id: res.data.id,
+        site_map_filename: res.data.original_name,
+      };
+      saveMutation.mutate(updated);
+    } catch {
+      toast.error('Failed to upload site map.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const navigate = useNavigate();
   const checkItem = (label: string, value: boolean | undefined) =>
@@ -861,10 +909,30 @@ const OrientationCard: React.FC<OrientationCardProps> = ({ orientation, projectI
           )}
 
           {/* Site Map */}
-          {orientation.site_map_attachment_id && (
-            <div style={{ marginTop: '0.75rem' }}>
-              <div className="pjc-fact-label" style={{ marginBottom: 6 }}>Site Map</div>
-              {siteMapUrl && siteMapMime?.startsWith('image/') ? (
+          <div style={{ marginTop: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <div className="pjc-fact-label">Site Map</div>
+              {orientation.site_map_attachment_id && (
+                <button
+                  onClick={handleDelete}
+                  disabled={saveMutation.isPending}
+                  title="Remove site map"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#ef4444', fontSize: '0.8rem', lineHeight: 1 }}
+                >
+                  ✕ Remove
+                </button>
+              )}
+              <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={handleUpload} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || saveMutation.isPending}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, lineHeight: 1 }}
+              >
+                {uploading ? 'Uploading…' : orientation.site_map_attachment_id ? 'Replace' : '+ Upload Site Map'}
+              </button>
+            </div>
+            {orientation.site_map_attachment_id && (
+              siteMapUrl && siteMapMime?.startsWith('image/') ? (
                 <a href={siteMapUrl} target="_blank" rel="noopener noreferrer">
                   <img src={siteMapUrl} alt="Site Map"
                     style={{ maxWidth: '100%', maxHeight: 400, border: '1px solid #e5e7eb', borderRadius: 6, display: 'block' }} />
@@ -876,9 +944,9 @@ const OrientationCard: React.FC<OrientationCardProps> = ({ orientation, projectI
                 </a>
               ) : orientation.site_map_filename ? (
                 <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>{orientation.site_map_filename}</div>
-              ) : null}
-            </div>
-          )}
+              ) : null
+            )}
+          </div>
         </div>
       )}
     </div>
