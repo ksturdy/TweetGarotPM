@@ -49,16 +49,22 @@ router.post('/project/:projectId/import', upload.single('file'), async (req, res
       parts,
     });
 
-    // Auto-capture a production snapshot for this upload (fire-and-forget so
-    // a snapshot error never fails the import response).
-    StratusProductionSnapshot.captureSnapshot(projectId, req.tenantId, importRow.id)
-      .then((r) => console.log(`[Stratus] Production snapshot captured: ${r.captured} phases on ${r.snapshot_date}`))
-      .catch((err) => console.error('[Stratus] Production snapshot error:', err));
+    // Capture production snapshot synchronously so the frontend sees it
+    // immediately on the post-upload refetch. Errors are swallowed so a
+    // snapshot failure never fails the import response.
+    let snapshotResult = null;
+    try {
+      snapshotResult = await StratusProductionSnapshot.captureSnapshot(projectId, req.tenantId, importRow.id);
+      console.log(`[Stratus] Production snapshot captured: ${snapshotResult.captured} phases on ${snapshotResult.snapshot_date}`);
+    } catch (err) {
+      console.error('[Stratus] Production snapshot error:', err);
+    }
 
     res.status(201).json({
       import: importRow,
       sourceProjectName,
       rowCount,
+      snapshot: snapshotResult,
     });
   } catch (err) {
     console.error('Stratus import error:', err);

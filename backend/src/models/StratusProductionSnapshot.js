@@ -21,12 +21,14 @@ const StratusProductionSnapshot = {
 
     if (weldResult.rows.length === 0) return { captured: 0 };
 
-    // Pull current JTD labor hours from Vista by phase for this project
+    // Pull current JTD labor hours from Vista by phase for this project.
+    // Vista stores phase codes with a trailing dash (e.g. "45-305-700-");
+    // strip it so they match Stratus phase codes ("45-305-700").
     const hoursResult = await db.query(
-      `SELECT phase, COALESCE(SUM(jtd_hours), 0) AS jtd_hours, COALESCE(SUM(jtd_cost), 0) AS jtd_cost
+      `SELECT RTRIM(phase, '-') AS phase, COALESCE(SUM(jtd_hours), 0) AS jtd_hours, COALESCE(SUM(jtd_cost), 0) AS jtd_cost
        FROM vp_phase_codes
        WHERE linked_project_id = $1 AND tenant_id = $2 AND cost_type = 1
-       GROUP BY phase`,
+       GROUP BY RTRIM(phase, '-')`,
       [projectId, tenantId]
     );
     const hoursMap = {};
@@ -94,10 +96,10 @@ const StratusProductionSnapshot = {
 
   async refreshHoursForProject(projectId, tenantId) {
     const hoursResult = await db.query(
-      `SELECT phase, COALESCE(SUM(jtd_hours), 0) AS jtd_hours, COALESCE(SUM(jtd_cost), 0) AS jtd_cost
+      `SELECT RTRIM(phase, '-') AS phase, COALESCE(SUM(jtd_hours), 0) AS jtd_hours, COALESCE(SUM(jtd_cost), 0) AS jtd_cost
        FROM vp_phase_codes
        WHERE linked_project_id = $1 AND tenant_id = $2 AND cost_type = 1
-       GROUP BY phase`,
+       GROUP BY RTRIM(phase, '-')`,
       [projectId, tenantId]
     );
     if (hoursResult.rows.length === 0) return 0;
