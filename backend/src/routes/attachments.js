@@ -27,6 +27,21 @@ const upload = createUploadMiddleware({
   maxSize: 20 * 1024 * 1024, // 20MB
 });
 
+// Get single attachment by ID with URL — must be before /:entityType/:entityId to avoid shadowing
+router.get('/id/:id', async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+    const attachment = result.rows[0];
+    attachment.url = await getFileUrl(attachment.filename);
+    res.json(attachment);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get attachments for an entity
 router.get('/:entityType/:entityId', async (req, res, next) => {
   try {
@@ -77,21 +92,6 @@ router.post('/:entityType/:entityId', upload.single('file'), async (req, res, ne
       const fileInfo = getFileInfo(req.file);
       await deleteFile(fileInfo.filePath).catch(console.error);
     }
-    next(error);
-  }
-});
-
-// Get single attachment by ID with URL
-router.get('/id/:id', async (req, res, next) => {
-  try {
-    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Attachment not found' });
-    }
-    const attachment = result.rows[0];
-    attachment.url = await getFileUrl(attachment.filename);
-    res.json(attachment);
-  } catch (error) {
     next(error);
   }
 });

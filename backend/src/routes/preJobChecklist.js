@@ -10,7 +10,7 @@ const Project = require('../models/Project');
 const db = require('../config/database');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
 const { generatePreJobChecklistPdfBuffer } = require('../utils/preJobChecklistPdfBuffer');
-const { getFileStream, isR2Enabled } = require('../utils/fileStorage');
+const { getFileStream, getFileUrl, isR2Enabled } = require('../utils/fileStorage');
 
 const router = express.Router();
 
@@ -148,19 +148,38 @@ router.get('/project/:projectId/pdf-download', verifyProject, async (req, res, n
           const att = attResult.rows[0];
           const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
           if (IMAGE_TYPES.includes(att.mime_type)) {
+            let imgBuffer = null;
+
             if (isR2Enabled()) {
+              // Read from R2 stream — chunks may be Uint8Array, coerce to Buffer
               const { stream } = await getFileStream(att.filename);
               const chunks = [];
-              for await (const chunk of stream) chunks.push(chunk);
-              siteMapBase64 = Buffer.concat(chunks).toString('base64');
+              for await (const chunk of stream) {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              }
+              imgBuffer = Buffer.concat(chunks);
             } else {
+              // Try local disk first
               const normalized = att.filename.replace(/\\/g, '/');
               const idx = normalized.indexOf('uploads/');
               const rel = idx !== -1 ? normalized.substring(idx) : att.filename;
               const localPath = path.resolve(__dirname, '../../', rel);
-              siteMapBase64 = fs.readFileSync(localPath).toString('base64');
+              if (fs.existsSync(localPath)) {
+                imgBuffer = fs.readFileSync(localPath);
+              } else {
+                // File isn't local (uploaded to R2 in prod) — fetch via public URL
+                const fileUrl = await getFileUrl(att.filename);
+                if (fileUrl?.startsWith('https://')) {
+                  const resp = await fetch(fileUrl);
+                  if (resp.ok) imgBuffer = Buffer.from(await resp.arrayBuffer());
+                }
+              }
             }
-            siteMapMimeType = att.mime_type;
+
+            if (imgBuffer) {
+              siteMapBase64 = imgBuffer.toString('base64');
+              siteMapMimeType = att.mime_type;
+            }
           }
         }
       } catch (e) {
