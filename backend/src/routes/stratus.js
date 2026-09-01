@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const StratusPart = require('../models/StratusPart');
+const StratusProductionSnapshot = require('../models/StratusProductionSnapshot');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { parseStratusWorkbook } = require('../utils/stratusImporter');
@@ -47,6 +48,12 @@ router.post('/project/:projectId/import', upload.single('file'), async (req, res
       importId: importRow.id,
       parts,
     });
+
+    // Auto-capture a production snapshot for this upload (fire-and-forget so
+    // a snapshot error never fails the import response).
+    StratusProductionSnapshot.captureSnapshot(projectId, req.tenantId, importRow.id)
+      .then((r) => console.log(`[Stratus] Production snapshot captured: ${r.captured} phases on ${r.snapshot_date}`))
+      .catch((err) => console.error('[Stratus] Production snapshot error:', err));
 
     res.status(201).json({
       import: importRow,
@@ -192,6 +199,29 @@ router.delete('/imports/:importId', async (req, res) => {
   } catch (err) {
     console.error('Stratus delete import error:', err);
     res.status(500).json({ message: 'Failed to delete import.' });
+  }
+});
+
+// Production snapshot endpoints
+router.get('/project/:projectId/production/snapshots', async (req, res) => {
+  try {
+    const projectId = parseInt(req.params.projectId, 10);
+    const snapshots = await StratusProductionSnapshot.getAll(projectId, req.tenantId);
+    res.json({ snapshots });
+  } catch (err) {
+    console.error('Stratus production snapshots error:', err);
+    res.status(500).json({ message: 'Failed to load production snapshots.' });
+  }
+});
+
+router.get('/project/:projectId/production/summary', async (req, res) => {
+  try {
+    const projectId = parseInt(req.params.projectId, 10);
+    const summary = await StratusProductionSnapshot.getLatestSummary(projectId, req.tenantId);
+    res.json(summary);
+  } catch (err) {
+    console.error('Stratus production summary error:', err);
+    res.status(500).json({ message: 'Failed to load production summary.' });
   }
 });
 

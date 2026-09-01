@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS, CategoryScale, LinearScale, PointElement,
+  LineElement, Title, Tooltip, Legend, Filler,
+} from 'chart.js';
 import stratusService, {
   MaterialType,
   PipeLengthRow,
@@ -11,8 +16,11 @@ import stratusService, {
   StratusPartFilters,
   StratusSummaryRow,
 } from '../../services/stratus';
+import stratusProductionService, { ProductionSnapshot } from '../../services/stratusProduction';
 import { projectsApi } from '../../services/projects';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 type Metric = 'hours' | 'count' | 'weight' | 'length' | 'cost' | 'welds';
 
@@ -88,6 +96,7 @@ const Stratus: React.FC = () => {
   const { confirm, toast } = useTitanFeedback();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'parts' | 'production'>('parts');
   const [metric, setMetric] = useState<Metric>('hours');
   const [filters, setFilters] = useState<StratusPartFilters>({});
   const [page, setPage] = useState(0);
@@ -141,6 +150,18 @@ const Stratus: React.FC = () => {
     enabled: !!projectId,
   });
 
+  const { data: productionSnapshots } = useQuery({
+    queryKey: ['stratus-production-snapshots', projectId],
+    queryFn: () => stratusProductionService.getSnapshots(projectId).then((r) => r.snapshots),
+    enabled: !!projectId,
+  });
+
+  const { data: productionSummary } = useQuery({
+    queryKey: ['stratus-production-summary', projectId],
+    queryFn: () => stratusProductionService.getSummary(projectId),
+    enabled: !!projectId,
+  });
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) => stratusService.uploadImport(projectId, file),
     onSuccess: () => {
@@ -150,6 +171,8 @@ const Stratus: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['stratus-imports', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-filter-opts', projectId] });
       queryClient.invalidateQueries({ queryKey: ['stratus-pipe-length', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['stratus-production-snapshots', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['stratus-production-summary', projectId] });
     },
   });
 
@@ -251,7 +274,27 @@ const Stratus: React.FC = () => {
         </div>
       </div>
 
-      {loadingLatest ? (
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #e5e7eb', marginBottom: 24 }}>
+        {(['parts', 'production'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              background: 'none', border: 'none', padding: '10px 20px', cursor: 'pointer',
+              fontSize: 14, fontWeight: 600, color: activeTab === tab ? '#3b82f6' : '#6b7280',
+              borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
+              marginBottom: -2,
+            }}
+          >
+            {tab === 'parts' ? 'Parts' : 'Production'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'production' ? (
+        <StratusProduction projectId={projectId} snapshots={productionSnapshots} summary={productionSummary} />
+      ) : loadingLatest ? (
         <div style={cardStyle}>Loading…</div>
       ) : !latest ? (
         <div style={{ ...cardStyle, textAlign: 'center', padding: 40 }}>
@@ -786,5 +829,220 @@ const btnPrimary: React.CSSProperties = { background: '#3b82f6', color: 'white',
 const btnSecondary: React.CSSProperties = { background: 'white', color: '#374151', border: '1px solid #d1d5db', padding: '8px 16px', borderRadius: 4, fontWeight: 500, cursor: 'pointer' };
 const btnToggle: React.CSSProperties = { background: 'white', border: '1px solid #d1d5db', padding: '6px 10px', borderRadius: 4, fontSize: 12, cursor: 'pointer', color: '#374151' };
 const btnToggleActive: React.CSSProperties = { ...btnToggle, background: '#3b82f6', color: 'white', borderColor: '#3b82f6' };
+
+// ─── Production Tab ──────────────────────────────────────────────────────────
+
+const CHART_COLORS = [
+  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+  '#06b6d4','#84cc16','#f97316','#ec4899','#6366f1',
+];
+
+const fmtSnapDate = (d: string) => {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const fmtRate = (r: number | null) =>
+  r == null ? '—' : r.toFixed(2) + ' in/hr';
+
+interface StratusProductionProps {
+  projectId: number;
+  snapshots?: ProductionSnapshot[];
+  summary?: ReturnType<typeof stratusProductionService.getSummary> extends Promise<infer T> ? T : never;
+}
+
+const StratusProduction: React.FC<StratusProductionProps> = ({ snapshots, summary }) => {
+  const [selectedPhases, setSelectedPhases] = useState<Set<string>>(new Set());
+
+  const allPhases = useMemo(() => {
+    const s = new Set<string>();
+    (snapshots || []).forEach((snap) => snap.phases.forEach((p) => s.add(p.phase_code)));
+    return Array.from(s).sort();
+  }, [snapshots]);
+
+  // Default: all phases selected
+  const visiblePhases = selectedPhases.size > 0 ? selectedPhases : new Set(allPhases);
+
+  const togglePhase = (pc: string) => {
+    setSelectedPhases((prev) => {
+      const next = new Set(prev.size === 0 ? allPhases : prev);
+      if (next.has(pc)) { next.delete(pc); } else { next.add(pc); }
+      return next.size === allPhases.length ? new Set() : next;
+    });
+  };
+
+  const snapshotDates = (snapshots || []).map((s) => s.snapshot_date);
+  const labels = snapshotDates.map(fmtSnapDate);
+
+  // Build dataset per phase for production rate chart
+  const rateDatasets = allPhases
+    .filter((pc) => visiblePhases.has(pc))
+    .map((pc, i) => ({
+      label: pc,
+      data: (snapshots || []).map((snap) => {
+        const p = snap.phases.find((x) => x.phase_code === pc);
+        return p?.production_rate ?? null;
+      }),
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '22',
+      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+    }));
+
+  // Weld inches progress chart
+  const weldDatasets = allPhases
+    .filter((pc) => visiblePhases.has(pc))
+    .map((pc, i) => ({
+      label: pc,
+      data: (snapshots || []).map((snap) => {
+        const p = snap.phases.find((x) => x.phase_code === pc);
+        return p?.weld_inches_complete ?? null;
+      }),
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + '22',
+      tension: 0.3,
+      fill: false,
+      spanGaps: true,
+    }));
+
+  const chartOpts = (yLabel: string, yFmt?: (v: number) => string) => ({
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { position: 'top' as const, labels: { font: { size: 11 } } },
+      tooltip: { mode: 'index' as const, intersect: false },
+    },
+    scales: {
+      x: { ticks: { font: { size: 10 } } },
+      y: {
+        ticks: {
+          font: { size: 10 },
+          callback: yFmt ? (v: number | string) => yFmt(Number(v)) : undefined,
+        },
+        title: { display: true, text: yLabel, font: { size: 11 } },
+      },
+    },
+  });
+
+  const latestSnap = snapshots && snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const hoursRefreshed = latestSnap?.hours_refreshed_at;
+
+  const hasData = snapshots && snapshots.length > 0;
+
+  return (
+    <div>
+      {/* Timestamps banner */}
+      {latestSnap && (
+        <div style={{ ...cardStyle, marginBottom: 16, display: 'flex', gap: 32, flexWrap: 'wrap', fontSize: 13 }}>
+          <div>
+            <span style={{ color: '#6b7280', marginRight: 6 }}>Weld data as of</span>
+            <strong>{fmtSnapDate(latestSnap.snapshot_date)}</strong>
+          </div>
+          <div>
+            <span style={{ color: '#6b7280', marginRight: 6 }}>Hours data as of</span>
+            {hoursRefreshed
+              ? <strong>{new Date(hoursRefreshed).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>
+              : <span style={{ color: '#f59e0b', fontWeight: 600 }}>Not yet refreshed — payroll may not be posted</span>}
+          </div>
+          <div style={{ color: '#6b7280', fontSize: 12, alignSelf: 'center' }}>
+            Hours auto-refresh when Vista phase codes are imported
+          </div>
+        </div>
+      )}
+
+      {!hasData ? (
+        <div style={{ ...cardStyle, textAlign: 'center', padding: 40, color: '#6b7280' }}>
+          No production snapshots yet. Upload a Stratus export to create the first snapshot.
+        </div>
+      ) : (
+        <>
+          {/* Phase filter chips */}
+          {allPhases.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              {allPhases.map((pc) => (
+                <button
+                  key={pc}
+                  onClick={() => togglePhase(pc)}
+                  style={{
+                    padding: '3px 10px', borderRadius: 12, fontSize: 12, cursor: 'pointer',
+                    border: '1px solid #d1d5db',
+                    background: visiblePhases.has(pc) ? '#3b82f6' : 'white',
+                    color: visiblePhases.has(pc) ? 'white' : '#374151',
+                  }}
+                >
+                  {pc}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Current rates table */}
+          <div style={{ ...cardStyle, marginBottom: 16 }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 16 }}>Current Production Rates</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    <th style={thStyle}>Phase Code</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Weld In. Complete</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>JTD Hours</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Rate (in/hr)</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Prior Rate</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Δ Rate</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>Weld In. Added</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(summary?.phases || [])
+                    .filter((p) => visiblePhases.has(p.phase_code))
+                    .map((p) => {
+                      const delta = p.rate_delta;
+                      const deltaColor = delta == null ? '#6b7280' : delta > 0 ? '#10b981' : delta < 0 ? '#ef4444' : '#6b7280';
+                      return (
+                        <tr key={p.phase_code}>
+                          <td style={tdStyle}>{p.phase_code}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.weld_inches_complete.toFixed(1)}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.jtd_hours != null ? p.jtd_hours.toFixed(1) : '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{fmtRate(p.production_rate)}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', color: '#6b7280' }}>{fmtRate(p.prior_rate ?? null)}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right', color: deltaColor, fontWeight: 600 }}>
+                            {delta == null ? '—' : (delta > 0 ? '+' : '') + delta.toFixed(2)}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'right', color: '#6b7280' }}>
+                            {p.weld_inches_delta != null ? (p.weld_inches_delta > 0 ? '+' : '') + p.weld_inches_delta.toFixed(1) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Trend charts */}
+          {snapshots && snapshots.length > 1 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 16 }}>
+              <div style={cardStyle}>
+                <h2 style={{ margin: '0 0 12px', fontSize: 16 }}>Production Rate Trend (Weld In. / JTD Hr)</h2>
+                <Line
+                  data={{ labels, datasets: rateDatasets }}
+                  options={chartOpts('Weld Inches / Hour', (v) => v.toFixed(2))}
+                />
+              </div>
+              <div style={cardStyle}>
+                <h2 style={{ margin: '0 0 12px', fontSize: 16 }}>Weld Inches Complete</h2>
+                <Line
+                  data={{ labels, datasets: weldDatasets }}
+                  options={chartOpts('Weld Inches', (v) => v.toFixed(0))}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
 export default Stratus;

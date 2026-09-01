@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 const VistaData = require('../models/VistaData');
 const PhaseSchedule = require('../models/PhaseSchedule');
+const StratusProductionSnapshot = require('../models/StratusProductionSnapshot');
 
 // Helper function to convert Excel serial date to JS Date
 const excelDateToJS = (excelDate) => {
@@ -584,6 +585,13 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
 
         results.phaseCodes = { total: validRows.length, new: newCount, updated: updatedCount, linked: linkedCount, reconciliations_staged: reconciliationCount, batch_id: batch.id };
         results.sheetsProcessed.push(phaseCodesSheetName);
+
+        // Refresh JTD hours in Stratus production snapshots now that payroll
+        // data may have posted. Fire-and-forget so a snapshot error never
+        // fails the Vista import response.
+        StratusProductionSnapshot.refreshHoursForTenant(req.tenantId)
+          .then((n) => { if (n > 0) console.log(`[Vista Auto-Import] Refreshed Stratus production hours: ${n} snapshot rows updated`); })
+          .catch((err) => console.error('[Vista Auto-Import] Stratus production refresh error:', err));
       }
     }
 
