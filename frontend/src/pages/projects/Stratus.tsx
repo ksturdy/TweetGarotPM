@@ -1002,8 +1002,8 @@ const StratusProduction: React.FC<StratusProductionProps> = ({ snapshots, summar
                       return (
                         <tr key={p.phase_code}>
                           <td style={tdStyle}>{p.phase_code}</td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.weld_inches_complete.toFixed(1)}</td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.jtd_hours != null ? p.jtd_hours.toFixed(1) : '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.weld_inches_complete.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>{p.jtd_hours != null ? p.jtd_hours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}</td>
                           <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{fmtRate(p.production_rate)}</td>
                           <td style={{ ...tdStyle, textAlign: 'right', color: '#6b7280' }}>{fmtRate(p.prior_rate ?? null)}</td>
                           <td style={{ ...tdStyle, textAlign: 'right', color: deltaColor, fontWeight: 600 }}>
@@ -1016,6 +1016,38 @@ const StratusProduction: React.FC<StratusProductionProps> = ({ snapshots, summar
                       );
                     })}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const rows = (summary?.phases || []).filter((p) => visiblePhases.has(p.phase_code));
+                    const totalWeld = rows.reduce((s, p) => s + p.weld_inches_complete, 0);
+                    const totalHours = rows.reduce((s, p) => s + (p.jtd_hours ?? 0), 0);
+                    const hasHours = rows.some((p) => p.jtd_hours != null);
+                    const totalRate = hasHours && totalHours > 0 ? totalWeld / totalHours : null;
+                    const priorWeld = rows.reduce((s, p) => s + (p.prior_rate != null && p.jtd_hours != null ? p.prior_rate * p.jtd_hours : 0), 0);
+                    const totalPriorRate = hasHours && totalHours > 0 && priorWeld > 0 ? priorWeld / totalHours : null;
+                    const totalRateDelta = totalRate != null && totalPriorRate != null ? totalRate - totalPriorRate : null;
+                    const totalWeldDelta = rows.every((p) => p.weld_inches_delta != null)
+                      ? rows.reduce((s, p) => s + (p.weld_inches_delta ?? 0), 0)
+                      : null;
+                    const tfTd: React.CSSProperties = { ...tdStyle, fontWeight: 700, borderTop: '2px solid #d1d5db', background: '#f9fafb' };
+                    const deltaColor = totalRateDelta == null ? '#6b7280' : totalRateDelta > 0 ? '#10b981' : totalRateDelta < 0 ? '#ef4444' : '#6b7280';
+                    return (
+                      <tr>
+                        <td style={tfTd}>Total</td>
+                        <td style={{ ...tfTd, textAlign: 'right' }}>{totalWeld.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+                        <td style={{ ...tfTd, textAlign: 'right' }}>{hasHours ? totalHours.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}</td>
+                        <td style={{ ...tfTd, textAlign: 'right' }}>{fmtRate(totalRate)}</td>
+                        <td style={{ ...tfTd, textAlign: 'right', color: '#6b7280' }}>{fmtRate(totalPriorRate)}</td>
+                        <td style={{ ...tfTd, textAlign: 'right', color: deltaColor }}>
+                          {totalRateDelta == null ? '—' : (totalRateDelta > 0 ? '+' : '') + totalRateDelta.toFixed(2)}
+                        </td>
+                        <td style={{ ...tfTd, textAlign: 'right', color: '#6b7280' }}>
+                          {totalWeldDelta != null ? (totalWeldDelta > 0 ? '+' : '') + totalWeldDelta.toFixed(1) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                </tfoot>
               </table>
             </div>
           </div>
