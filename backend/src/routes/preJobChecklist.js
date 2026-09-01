@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const PreJobChecklist = require('../models/PreJobChecklist');
@@ -8,6 +10,7 @@ const Project = require('../models/Project');
 const db = require('../config/database');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
 const { generatePreJobChecklistPdfBuffer } = require('../utils/preJobChecklistPdfBuffer');
+const { getFileStream, isR2Enabled } = require('../utils/fileStorage');
 
 const router = express.Router();
 
@@ -134,8 +137,39 @@ router.get('/project/:projectId/pdf-download', verifyProject, async (req, res, n
       jtd_hours: parseFloat(r.jtd_hours),
     }));
 
+    // Fetch site map attachment as base64 for embedding in PDF (images only)
+    let siteMapBase64 = null;
+    let siteMapMimeType = null;
+    const siteMapId = checklist?.orientation?.site_map_attachment_id;
+    if (siteMapId) {
+      try {
+        const attResult = await db.query('SELECT * FROM attachments WHERE id = $1', [siteMapId]);
+        if (attResult.rows.length > 0) {
+          const att = attResult.rows[0];
+          const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+          if (IMAGE_TYPES.includes(att.mime_type)) {
+            if (isR2Enabled()) {
+              const { stream } = await getFileStream(att.filename);
+              const chunks = [];
+              for await (const chunk of stream) chunks.push(chunk);
+              siteMapBase64 = Buffer.concat(chunks).toString('base64');
+            } else {
+              const normalized = att.filename.replace(/\\/g, '/');
+              const idx = normalized.indexOf('uploads/');
+              const rel = idx !== -1 ? normalized.substring(idx) : att.filename;
+              const localPath = path.resolve(__dirname, '../../', rel);
+              siteMapBase64 = fs.readFileSync(localPath).toString('base64');
+            }
+            siteMapMimeType = att.mime_type;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load site map for PDF:', e.message);
+      }
+    }
+
     const pdfBuffer = await generatePreJobChecklistPdfBuffer(
-      { project: req.project, checklist, assignments, segments, segCosts, laborData },
+      { project: req.project, checklist, assignments, segments, segCosts, laborData, siteMapBase64, siteMapMimeType },
       logoBase64
     );
 

@@ -15,6 +15,7 @@ import {
   SubcontractItemRow,
   GenericItemRow,
   OtherContact,
+  OrientationData,
 } from '../../services/preJobChecklist';
 import { scheduleSegmentsService } from '../../services/scheduleSegments';
 import { getContourMultipliers, type ContourType } from '../../utils/contours';
@@ -758,6 +759,132 @@ const OtherContactsTable: React.FC<OtherContactsTableProps> = ({ contacts, onCha
   );
 };
 
+// ── Orientation Card ───────────────────────────────────────────────────────────
+interface OrientationCardProps {
+  orientation: OrientationData;
+  projectId: string;
+}
+const OrientationCard: React.FC<OrientationCardProps> = ({ orientation, projectId }) => {
+  const [open, setOpen] = useState(true);
+  const [siteMapUrl, setSiteMapUrl] = useState<string | null>(null);
+  const [siteMapMime, setSiteMapMime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orientation.site_map_attachment_id) return;
+    api.get<{ url: string; mime_type: string; original_name: string }>(
+      `/attachments/id/${orientation.site_map_attachment_id}`
+    )
+      .then(r => { setSiteMapUrl(r.data.url); setSiteMapMime(r.data.mime_type); })
+      .catch(() => {});
+  }, [orientation.site_map_attachment_id]);
+
+  const navigate = useNavigate();
+  const checkItem = (label: string, value: boolean | undefined) =>
+    value != null ? (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 16 }}>
+        <span style={{
+          width: 16, height: 16, border: '1.5px solid #9ca3af', borderRadius: 3,
+          background: value ? '#002356' : 'white', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          {value && <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>}
+        </span>
+        <span style={{ fontSize: '0.82rem', color: '#374151' }}>{label}</span>
+      </span>
+    ) : null;
+
+  return (
+    <div className="pjc-info-card" style={{ marginBottom: '1rem' }}>
+      <div className="pjc-info-card-header" onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer' }}>
+        <Chevron open={open} />
+        <h2>Orientation &amp; Site Access</h2>
+        <button
+          onClick={e => { e.stopPropagation(); navigate(`/projects/${projectId}/pre-job-checklist/wizard?step=5`); }}
+          style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 600, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px' }}
+        >
+          Edit in Wizard
+        </button>
+      </div>
+
+      {open && (
+        <div className="pjc-info-body" style={{ padding: '1rem 1.25rem' }}>
+          {/* Requirement toggles */}
+          {(orientation.badge_required != null || orientation.orientation_required != null || orientation.safety_training_required != null) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: '0.75rem' }}>
+              {checkItem('Badge Required', orientation.badge_required)}
+              {checkItem('Orientation Required', orientation.orientation_required)}
+              {checkItem('Safety Training Required', orientation.safety_training_required)}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            {/* Contact */}
+            {(orientation.contact_name || orientation.contact_phone || orientation.contact_email) && (
+              <div>
+                <div className="pjc-fact-label" style={{ marginBottom: 4 }}>Orientation Contact</div>
+                {orientation.contact_name && <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{orientation.contact_name}</div>}
+                {orientation.contact_phone && <div style={{ fontSize: '0.82rem', color: '#374151' }}>{orientation.contact_phone}</div>}
+                {orientation.contact_email && <div style={{ fontSize: '0.82rem', color: '#374151' }}>{orientation.contact_email}</div>}
+              </div>
+            )}
+
+            {/* Orientation link */}
+            {orientation.orientation_link && (
+              <div>
+                <div className="pjc-fact-label" style={{ marginBottom: 4 }}>Orientation Link</div>
+                <a href={orientation.orientation_link} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: '0.82rem', color: '#2563eb', wordBreak: 'break-all' }}>
+                  {orientation.orientation_link}
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Directions */}
+          {orientation.directions && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <div className="pjc-fact-label" style={{ marginBottom: 4 }}>Directions / Site Access</div>
+              <div style={{ fontSize: '0.82rem', color: '#374151', whiteSpace: 'pre-wrap', background: '#f9fafb', borderRadius: 6, padding: '0.5rem 0.75rem' }}>
+                {orientation.directions}
+              </div>
+            </div>
+          )}
+
+          {/* Parking */}
+          {orientation.parking_notes && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <div className="pjc-fact-label" style={{ marginBottom: 4 }}>Parking Notes</div>
+              <div style={{ fontSize: '0.82rem', color: '#374151', whiteSpace: 'pre-wrap', background: '#f9fafb', borderRadius: 6, padding: '0.5rem 0.75rem' }}>
+                {orientation.parking_notes}
+              </div>
+            </div>
+          )}
+
+          {/* Site Map */}
+          {orientation.site_map_attachment_id && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <div className="pjc-fact-label" style={{ marginBottom: 6 }}>Site Map</div>
+              {siteMapUrl && siteMapMime?.startsWith('image/') ? (
+                <a href={siteMapUrl} target="_blank" rel="noopener noreferrer">
+                  <img src={siteMapUrl} alt="Site Map"
+                    style={{ maxWidth: '100%', maxHeight: 400, border: '1px solid #e5e7eb', borderRadius: 6, display: 'block' }} />
+                </a>
+              ) : siteMapUrl ? (
+                <a href={siteMapUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: '0.82rem', color: '#2563eb', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span>⬇</span> {orientation.site_map_filename ?? 'Download Site Map'}
+                </a>
+              ) : orientation.site_map_filename ? (
+                <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>{orientation.site_map_filename}</div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 const PreJobChecklistPage: React.FC = () => {
@@ -1287,6 +1414,20 @@ const PreJobChecklistPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── ORIENTATION & SITE ACCESS ── */}
+      {checklist?.orientation && (
+        checklist.orientation.badge_required != null ||
+        checklist.orientation.orientation_required != null ||
+        checklist.orientation.safety_training_required != null ||
+        checklist.orientation.contact_name ||
+        checklist.orientation.orientation_link ||
+        checklist.orientation.directions ||
+        checklist.orientation.parking_notes ||
+        checklist.orientation.site_map_attachment_id
+      ) && (
+        <OrientationCard orientation={checklist.orientation} projectId={projectId!} />
+      )}
 
       {/* ── COST TYPE SECTIONS ── */}
       <div className="pjc-sections">

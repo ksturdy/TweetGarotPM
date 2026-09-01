@@ -362,7 +362,7 @@ function genericRows(items) {
 }
 
 function generatePreJobChecklistPdfHtml(data, logoBase64 = '') {
-  const { project, checklist, assignments, segments, segCosts, laborData } = data;
+  const { project, checklist, assignments, segments, segCosts, laborData, siteMapBase64, siteMapMimeType } = data;
 
   const mgmtTeam = (assignments || []).filter(a => MGMT_ROLES.includes(a.role));
   const fieldTeam = (assignments || []).filter(a => !MGMT_ROLES.includes(a.role));
@@ -605,6 +605,7 @@ ${(orientation.badge_required != null || orientation.orientation_required != nul
     </div>` : ''}
     ${orientation.directions ? `<div style="margin-top:8px"><div class="field-label">Directions / Site Access</div><div class="notes-text">${esc(orientation.directions)}</div></div>` : ''}
     ${orientation.parking_notes ? `<div style="margin-top:6px"><div class="field-label">Parking Notes</div><div class="notes-text">${esc(orientation.parking_notes)}</div></div>` : ''}
+    ${siteMapBase64 ? `<div style="margin-top:10px"><div class="field-label">Site Map</div><img src="data:${siteMapMimeType};base64,${siteMapBase64}" style="max-width:100%;max-height:480px;border:1px solid #e5e7eb;border-radius:4px;margin-top:4px;display:block" alt="Site Map"/></div>` : (orientation.site_map_filename ? `<div style="margin-top:6px"><div class="field-label">Site Map</div><div class="field-value">${esc(orientation.site_map_filename)}</div></div>` : '')}
   </div>
 </div>` : ''}
 

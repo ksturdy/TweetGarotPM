@@ -81,6 +81,21 @@ router.post('/:entityType/:entityId', upload.single('file'), async (req, res, ne
   }
 });
 
+// Get single attachment by ID with URL
+router.get('/id/:id', async (req, res, next) => {
+  try {
+    const result = await db.query('SELECT * FROM attachments WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+    const attachment = result.rows[0];
+    attachment.url = await getFileUrl(attachment.filename);
+    res.json(attachment);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Delete attachment
 router.delete('/:id', async (req, res, next) => {
   try {
