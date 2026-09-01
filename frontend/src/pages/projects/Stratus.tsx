@@ -22,7 +22,7 @@ const METRIC_LABEL: Record<Metric, string> = {
   weight: 'Weight (lb)',
   length: 'Length (ft)',
   cost: 'Total Cost',
-  welds: 'Weld Count',
+  welds: 'Weld Inches',
 };
 
 const STATUS_ORDER = [
@@ -238,6 +238,13 @@ const Stratus: React.FC = () => {
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
             style={{ display: 'none' }}
           />
+          <a
+            href="/Stratus Tracking Template.xlsx"
+            download="Stratus Tracking Template.xlsx"
+            style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+          >
+            Download Template
+          </a>
           <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={btnPrimary}>
             {uploading ? 'Uploading…' : 'Upload Stratus Export'}
           </button>
@@ -374,12 +381,12 @@ const Stratus: React.FC = () => {
                           const v = pivot.cells[pc]?.[s] || 0;
                           return (
                             <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
-                              {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' || metric === 'welds' ? 0 : 1)}
+                              {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' ? 0 : 1)}
                             </td>
                           );
                         })}
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
-                          {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' || metric === 'welds' ? 0 : 1)}
+                          {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' ? 0 : 1)}
                         </td>
                       </tr>
                     );
@@ -388,11 +395,11 @@ const Stratus: React.FC = () => {
                     <td style={tdStyle}>Total</td>
                     {pivot.statuses.map((s) => (
                       <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
-                        {metric === 'cost' ? fmtMoney(pivot.colTotals[s] || 0) : fmt(pivot.colTotals[s] || 0, metric === 'count' || metric === 'welds' ? 0 : 1)}
+                        {metric === 'cost' ? fmtMoney(pivot.colTotals[s] || 0) : fmt(pivot.colTotals[s] || 0, metric === 'count' ? 0 : 1)}
                       </td>
                     ))}
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      {metric === 'cost' ? fmtMoney(pivot.grandTotal) : fmt(pivot.grandTotal, metric === 'count' || metric === 'welds' ? 0 : 1)}
+                      {metric === 'cost' ? fmtMoney(pivot.grandTotal) : fmt(pivot.grandTotal, metric === 'count' ? 0 : 1)}
                     </td>
                   </tr>
                 </tbody>
@@ -776,6 +783,7 @@ const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collap
 const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #e5e7eb', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '6px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' };
 const btnPrimary: React.CSSProperties = { background: '#3b82f6', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 4, fontWeight: 500, cursor: 'pointer' };
+const btnSecondary: React.CSSProperties = { background: 'white', color: '#374151', border: '1px solid #d1d5db', padding: '8px 16px', borderRadius: 4, fontWeight: 500, cursor: 'pointer' };
 const btnToggle: React.CSSProperties = { background: 'white', border: '1px solid #d1d5db', padding: '6px 10px', borderRadius: 4, fontSize: 12, cursor: 'pointer', color: '#374151' };
 const btnToggleActive: React.CSSProperties = { ...btnToggle, background: '#3b82f6', color: 'white', borderColor: '#3b82f6' };
 

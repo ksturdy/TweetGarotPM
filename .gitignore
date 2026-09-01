@@ -55,6 +55,7 @@ Estimate Templates/
 
 # Allow public assets shipped with the frontend
 !frontend/public/*.pdf
+!frontend/public/*.xlsx
 
 # Temporary files
 *.tmp

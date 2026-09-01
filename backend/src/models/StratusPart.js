@@ -192,7 +192,7 @@ const StratusPart = {
          COALESCE(SUM(item_weight), 0)::numeric AS total_weight,
          COALESCE(SUM(length), 0)::numeric AS total_length,
          COALESCE(SUM(total_cost), 0)::numeric AS total_cost,
-         COALESCE(SUM(total_welds_complete), 0)::numeric AS total_welds
+         COALESCE(SUM(weld_inches_complete), 0)::numeric AS total_welds
        FROM stratus_parts
        WHERE ${where}
        GROUP BY COALESCE(part_field_phase_code, part_shop_phase_code), part_tracking_status
