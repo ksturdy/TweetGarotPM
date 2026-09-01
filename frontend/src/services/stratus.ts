@@ -72,6 +72,7 @@ export interface StratusSummaryRow {
   total_weight: string | number;
   total_length: string | number;
   total_cost: string | number;
+  total_welds: string | number;
 }
 
 export interface StratusFilterOptions {

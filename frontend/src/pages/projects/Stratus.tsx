@@ -14,7 +14,7 @@ import stratusService, {
 import { projectsApi } from '../../services/projects';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 
-type Metric = 'hours' | 'count' | 'weight' | 'length' | 'cost';
+type Metric = 'hours' | 'count' | 'weight' | 'length' | 'cost' | 'welds';
 
 const METRIC_LABEL: Record<Metric, string> = {
   hours: 'Install Hours',
@@ -22,6 +22,7 @@ const METRIC_LABEL: Record<Metric, string> = {
   weight: 'Weight (lb)',
   length: 'Length (ft)',
   cost: 'Total Cost',
+  welds: 'Weld Count',
 };
 
 const STATUS_ORDER = [
@@ -339,7 +340,7 @@ const Stratus: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 18 }}>Status by Phase Code</h2>
               <div style={{ display: 'flex', gap: 4 }}>
-                {(['hours', 'count', 'weight', 'length', 'cost'] as Metric[]).map((m) => (
+                {(['hours', 'count', 'weight', 'length', 'cost', 'welds'] as Metric[]).map((m) => (
                   <button key={m} onClick={() => setMetric(m)} style={metric === m ? btnToggleActive : btnToggle}>
                     {METRIC_LABEL[m]}
                   </button>
@@ -373,12 +374,12 @@ const Stratus: React.FC = () => {
                           const v = pivot.cells[pc]?.[s] || 0;
                           return (
                             <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
-                              {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' ? 0 : 1)}
+                              {metric === 'cost' ? fmtMoney(v) : fmt(v, metric === 'count' || metric === 'welds' ? 0 : 1)}
                             </td>
                           );
                         })}
                         <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>
-                          {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' ? 0 : 1)}
+                          {metric === 'cost' ? fmtMoney(pivot.rowTotals[pc] || 0) : fmt(pivot.rowTotals[pc] || 0, metric === 'count' || metric === 'welds' ? 0 : 1)}
                         </td>
                       </tr>
                     );
@@ -387,11 +388,11 @@ const Stratus: React.FC = () => {
                     <td style={tdStyle}>Total</td>
                     {pivot.statuses.map((s) => (
                       <td key={s} style={{ ...tdStyle, textAlign: 'right' }}>
-                        {metric === 'cost' ? fmtMoney(pivot.colTotals[s] || 0) : fmt(pivot.colTotals[s] || 0, metric === 'count' ? 0 : 1)}
+                        {metric === 'cost' ? fmtMoney(pivot.colTotals[s] || 0) : fmt(pivot.colTotals[s] || 0, metric === 'count' || metric === 'welds' ? 0 : 1)}
                       </td>
                     ))}
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      {metric === 'cost' ? fmtMoney(pivot.grandTotal) : fmt(pivot.grandTotal, metric === 'count' ? 0 : 1)}
+                      {metric === 'cost' ? fmtMoney(pivot.grandTotal) : fmt(pivot.grandTotal, metric === 'count' || metric === 'welds' ? 0 : 1)}
                     </td>
                   </tr>
                 </tbody>
@@ -427,7 +428,7 @@ const Stratus: React.FC = () => {
                 <tbody>
                   {(partsResult?.rows || []).map((p: StratusPart) => (
                     <tr key={p.id}>
-                      <td style={tdStyle}>{p.part_field_phase_code || '-'}</td>
+                      <td style={tdStyle}>{p.part_field_phase_code ?? p.part_shop_phase_code ?? '-'}</td>
                       <td style={tdStyle}>
                         <span style={{
                           background: '#f3f4f6', color: '#374151', padding: '2px 8px',
@@ -730,6 +731,7 @@ function buildPivot(rows: StratusSummaryRow[], metric: Metric) {
       case 'weight': return num(r.total_weight);
       case 'length': return num(r.total_length);
       case 'cost': return num(r.total_cost);
+      case 'welds': return num(r.total_welds);
     }
   };
 

@@ -130,8 +130,19 @@ function parseStratusWorkbook(buffer) {
     part_issue_to_shop_dt: dt(r.PartIssueToShopDT),
     part_shipped_dt: dt(r.PartShippedDT),
     part_field_installed_dt: dt(r.PartFieldInstalledDT),
-    fab_complete_date: dt(r.FabCompleteDate),
+    // Support both old (FabCompleteDate) and new (FabCompleteDT) column names.
+    fab_complete_date: dt(r.FabCompleteDT ?? r.FabCompleteDate),
     qaqc_complete_date: dt(r.QAQCCompleteDate),
+
+    package_name: str(r.PackageName),
+    package_number: str(r.PackageNumber),
+    weld_inches_complete: num(r.WeldInchesComplete),
+    wps: str(r.WPS),
+    total_welds_complete: num(r.Totalweldscomplete),
+    assemblies_count: num(r.assembliescount),
+    product_short_description: str(r.ProductShortDescription),
+    shop_weld_inches: num(r.ShopWeldInches),
+    field_weld_inches: num(r.FieldWeldInches),
 
     raw: r,
     };

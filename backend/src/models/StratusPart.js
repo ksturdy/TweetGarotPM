@@ -11,6 +11,9 @@ const PART_COLUMNS = [
   'weld_id', 'fit_id', 'qc_id',
   'part_issue_to_shop_dt', 'part_shipped_dt', 'part_field_installed_dt',
   'fab_complete_date', 'qaqc_complete_date',
+  'package_name', 'package_number',
+  'weld_inches_complete', 'wps', 'total_welds_complete', 'assemblies_count',
+  'product_short_description', 'shop_weld_inches', 'field_weld_inches',
   'raw',
 ];
 
@@ -41,7 +44,14 @@ function buildFilterClauses(filters = {}, excludeKeys = []) {
     params.push(arr);
   };
   addAny('part_tracking_status', 'status');
-  addAny('part_field_phase_code', 'phase_code');
+  if (!skip.has('phase_code')) {
+    const arr = toArray(filters['phase_code']);
+    if (arr) {
+      conditions.push(`(part_field_phase_code = ANY($${p}::text[]) OR part_shop_phase_code = ANY($${p}::text[]))`);
+      params.push(arr);
+      p++;
+    }
+  }
   addAny('service_name', 'service');
   addAny('area', 'area');
   addAny('size', 'size');
@@ -160,7 +170,7 @@ const StratusPart = {
               fab_complete_date, qaqc_complete_date, assembly_name
        FROM stratus_parts
        WHERE ${where}
-       ORDER BY part_field_phase_code NULLS LAST, service_name, item_description, id
+       ORDER BY COALESCE(part_field_phase_code, part_shop_phase_code) NULLS LAST, service_name, item_description, id
        LIMIT $${p++} OFFSET $${p++}`,
       [...params, limit, offset]
     );
@@ -175,17 +185,18 @@ const StratusPart = {
     const where = [...base, ...shifted].join(' AND ');
     const result = await db.query(
       `SELECT
-         part_field_phase_code,
+         COALESCE(part_field_phase_code, part_shop_phase_code) AS part_field_phase_code,
          part_tracking_status,
          COUNT(*)::int AS part_count,
          COALESCE(SUM(install_hours), 0)::numeric AS total_hours,
          COALESCE(SUM(item_weight), 0)::numeric AS total_weight,
          COALESCE(SUM(length), 0)::numeric AS total_length,
-         COALESCE(SUM(total_cost), 0)::numeric AS total_cost
+         COALESCE(SUM(total_cost), 0)::numeric AS total_cost,
+         COALESCE(SUM(total_welds_complete), 0)::numeric AS total_welds
        FROM stratus_parts
        WHERE ${where}
-       GROUP BY part_field_phase_code, part_tracking_status
-       ORDER BY part_field_phase_code NULLS LAST, part_tracking_status`,
+       GROUP BY COALESCE(part_field_phase_code, part_shop_phase_code), part_tracking_status
+       ORDER BY COALESCE(part_field_phase_code, part_shop_phase_code) NULLS LAST, part_tracking_status`,
       [...baseParams, ...f.params]
     );
     return result.rows;
@@ -197,9 +208,13 @@ const StratusPart = {
          ARRAY(SELECT DISTINCT part_tracking_status FROM stratus_parts
                WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND part_tracking_status IS NOT NULL
                ORDER BY part_tracking_status) AS statuses,
-         ARRAY(SELECT DISTINCT part_field_phase_code FROM stratus_parts
-               WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND part_field_phase_code IS NOT NULL
-               ORDER BY part_field_phase_code) AS phase_codes,
+         ARRAY(SELECT DISTINCT phase_code FROM (
+           SELECT part_field_phase_code AS phase_code FROM stratus_parts
+           WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND part_field_phase_code IS NOT NULL
+           UNION
+           SELECT part_shop_phase_code FROM stratus_parts
+           WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND part_shop_phase_code IS NOT NULL
+         ) _pc ORDER BY phase_code) AS phase_codes,
          ARRAY(SELECT DISTINCT service_name FROM stratus_parts
                WHERE tenant_id = $1 AND project_id = $2 AND import_id = $3 AND service_name IS NOT NULL
                ORDER BY service_name) AS services,
@@ -242,7 +257,7 @@ const StratusPart = {
     const where = [...base, ...shifted].join(' AND ');
     const result = await db.query(
       `SELECT
-         part_field_phase_code,
+         COALESCE(part_field_phase_code, part_shop_phase_code) AS part_field_phase_code,
          COUNT(*)::int AS pipe_count,
          COALESCE(SUM(length), 0)::numeric AS total_length,
          COALESCE(SUM(CASE WHEN part_tracking_status = ANY(${installedParam}::text[]) THEN length ELSE 0 END), 0)::numeric AS installed_length,
@@ -252,8 +267,8 @@ const StratusPart = {
          COALESCE(SUM(CASE WHEN part_tracking_status = ANY(${installedParam}::text[]) THEN total_cost ELSE 0 END), 0)::numeric AS installed_cost
        FROM stratus_parts
        WHERE ${where}
-       GROUP BY part_field_phase_code
-       ORDER BY part_field_phase_code NULLS LAST`,
+       GROUP BY COALESCE(part_field_phase_code, part_shop_phase_code)
+       ORDER BY COALESCE(part_field_phase_code, part_shop_phase_code) NULLS LAST`,
       [...baseParams, ...f.params, installedStatuses]
     );
     return result.rows;
