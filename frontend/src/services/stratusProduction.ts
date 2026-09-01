@@ -1,6 +1,6 @@
-import axios from 'axios';
+import api from './api';
 
-const API = '/api/stratus';
+const API = '/stratus';
 
 export interface ProductionPhaseRow {
   phase_code: string;
@@ -34,12 +34,12 @@ export interface ProductionSummary {
 
 const stratusProductionService = {
   async getSnapshots(projectId: number | string): Promise<{ snapshots: ProductionSnapshot[] }> {
-    const res = await axios.get(`${API}/project/${projectId}/production/snapshots`);
+    const res = await api.get(`${API}/project/${projectId}/production/snapshots`);
     return res.data;
   },
 
   async getSummary(projectId: number | string): Promise<ProductionSummary> {
-    const res = await axios.get(`${API}/project/${projectId}/production/summary`);
+    const res = await api.get(`${API}/project/${projectId}/production/summary`);
     return res.data;
   },
 };
