@@ -54,6 +54,10 @@ const VistaData = {
   // ==================== CONTRACTS ====================
 
   async upsertContract(data, tenantId, batchId = null) {
+    // Normalize raw Vista status codes (e.g. '', '1', 'Active') to canonical values
+    // so forecast pages can reliably filter on 'open'/'soft' string containment.
+    data = { ...data, status: this._mapVistaStatusToProjectStatus(data.status) };
+
     // Check if contract already exists
     const existing = await db.query(
       'SELECT id, link_status, linked_project_id, linked_employee_id, linked_customer_id, linked_department_id FROM vp_contracts WHERE tenant_id = $1 AND contract_number = $2',
@@ -364,6 +368,8 @@ const VistaData = {
   // ==================== WORK ORDERS ====================
 
   async upsertWorkOrder(data, tenantId, batchId = null) {
+    data = { ...data, status: this._mapVistaStatusToProjectStatus(data.status) };
+
     const existing = await db.query(
       'SELECT id, link_status, linked_employee_id, linked_customer_id, linked_department_id FROM vp_work_orders WHERE tenant_id = $1 AND work_order_number = $2',
       [tenantId, data.work_order_number]
