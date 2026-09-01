@@ -227,6 +227,7 @@ const PreJobWizard: React.FC = () => {
   const [siteMapFilename, setSiteMapFilename] = useState('');
   const [siteMapAttachmentId, setSiteMapAttachmentId] = useState<number | null>(null);
   const siteMapInputRef = useRef<HTMLInputElement>(null);
+  const checklistLoaded = useRef(false);
 
   // ── Team step state ───────────────────────────────────────────────────────
   const empSearch = useEmpSearch();
@@ -321,9 +322,12 @@ const PreJobWizard: React.FC = () => {
   const withProjectedCost = phaseCodeDetail.length - noProjectedCost;
   const hasPhaseCodeWarnings = noEstCost > 0 || noProjectedCost > 0;
 
-  // Pre-populate drafts from existing checklist
+  // Pre-populate drafts from existing checklist — runs only once so background
+  // refetches don't overwrite user edits mid-session
   useEffect(() => {
     if (!checklist) return;
+    if (checklistLoaded.current) return;
+    checklistLoaded.current = true;
     const pi = checklist.project_info;
     if (pi.special_conditions) setSpecialConditions(pi.special_conditions);
     if (pi.bid_scope_notes) setBidScopeNotes(pi.bid_scope_notes);
