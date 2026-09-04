@@ -14,7 +14,6 @@ const PART_COLUMNS = [
   'package_name', 'package_number',
   'weld_inches_complete', 'wps', 'total_welds_complete', 'assemblies_count',
   'product_short_description', 'shop_weld_inches', 'field_weld_inches',
-  'raw',
 ];
 
 const toArray = (val) => {
@@ -90,7 +89,7 @@ const StratusPart = {
         const chunk = parts.slice(i, i + chunkSize);
         const values = [];
         const placeholders = chunk.map((p, rowIdx) => {
-          const row = [tenantId, projectId, importId, ...PART_COLUMNS.map((c) => (c === 'raw' ? JSON.stringify(p[c]) : p[c]))];
+          const row = [tenantId, projectId, importId, ...PART_COLUMNS.map((c) => p[c])];
           const start = rowIdx * baseCols.length;
           values.push(...row);
           return '(' + baseCols.map((_, j) => `$${start + j + 1}`).join(',') + ')';
@@ -140,6 +139,15 @@ const StratusPart = {
       [importId, tenantId]
     );
     return result.rowCount > 0;
+  },
+
+  async deleteAllImportsForProject(projectId, tenantId) {
+    // stratus_parts cascade-deletes via FK when the import row is removed
+    const result = await db.query(
+      `DELETE FROM stratus_imports WHERE project_id = $1 AND tenant_id = $2`,
+      [projectId, tenantId]
+    );
+    return result.rowCount;
   },
 
   async listParts({ projectId, tenantId, importId, filters = {}, limit = 100, offset = 0 }) {

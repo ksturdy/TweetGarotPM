@@ -32,6 +32,10 @@ router.post('/project/:projectId/import', upload.single('file'), async (req, res
 
     const { sourceProjectName, rowCount, parts } = parseStratusWorkbook(req.file.buffer);
 
+    // Replace strategy: remove all previous imports for this project before
+    // inserting the new one. stratus_parts cascade-deletes via FK.
+    await StratusPart.deleteAllImportsForProject(projectId, req.tenantId);
+
     const importRow = await StratusPart.createImport({
       tenantId: req.tenantId,
       projectId,
