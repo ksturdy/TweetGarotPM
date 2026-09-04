@@ -1,8 +1,14 @@
 /**
- * One-time cleanup: delete duplicate stratus imports (keep latest per project),
- * null out the raw JSONB column on remaining rows, then vacuum.
+ * Emergency space recovery for a full Render PostgreSQL instance.
  *
- * Run AFTER expanding Render disk storage:
+ * Strategy: TRUNCATE stratus_parts (minimal WAL — no row-by-row logging)
+ * to immediately free ~440 MB, then delete the now-orphan import records.
+ * stratus_production_snapshots is preserved (import_id becomes NULL).
+ *
+ * After running this script, re-upload each project's Stratus file once
+ * through the Stratus module in the UI to restore the parts data.
+ *
+ * Run from the project root:
  *   node backend/scripts/cleanup-stratus-db.js
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
@@ -14,39 +20,53 @@ const pool = new Pool({
 });
 
 async function run() {
-  console.log('Finding latest import per project...');
-  const keepers = await pool.query(`
-    SELECT DISTINCT ON (project_id) id, project_id, filename, row_count, snapshot_at
-    FROM stratus_imports
-    ORDER BY project_id, snapshot_at DESC
+  console.log('Checking current sizes...');
+  const before = await pool.query(`
+    SELECT
+      pg_size_pretty(pg_total_relation_size('stratus_parts'))   AS parts_size,
+      pg_size_pretty(pg_total_relation_size('stratus_imports'))  AS imports_size,
+      (SELECT COUNT(*) FROM stratus_parts)                       AS parts_rows,
+      (SELECT COUNT(*) FROM stratus_imports)                     AS import_count,
+      (SELECT COUNT(*) FROM stratus_production_snapshots)        AS snapshot_count
   `);
-  const keepIds = keepers.rows.map((r) => r.id);
-  console.log('Keeping import IDs:', keepIds);
-  keepers.rows.forEach((r) =>
-    console.log(`  import ${r.id}: project ${r.project_id} — ${r.filename} (${r.row_count} rows, ${r.snapshot_at})`)
-  );
+  console.log('Before:', before.rows[0]);
 
-  console.log('\nDeleting duplicate stratus_imports (parts cascade)...');
-  const del = await pool.query(
-    'DELETE FROM stratus_imports WHERE id != ALL($1)',
-    [keepIds]
-  );
-  console.log(`Deleted ${del.rowCount} import records (and their parts via cascade).`);
+  // TRUNCATE uses a single tiny WAL record regardless of table size.
+  // It also immediately makes space available — no VACUUM needed.
+  // The FK from stratus_production_snapshots uses ON DELETE SET NULL,
+  // but TRUNCATE CASCADE would wipe snapshots, so we truncate only
+  // stratus_parts (no outbound FKs — safe to truncate standalone).
+  console.log('\nTruncating stratus_parts...');
+  await pool.query('TRUNCATE TABLE stratus_parts RESTART IDENTITY');
+  console.log('stratus_parts truncated.');
 
-  console.log('\nNulling raw JSONB column on remaining stratus_parts...');
-  const nulled = await pool.query('UPDATE stratus_parts SET raw = NULL WHERE raw IS NOT NULL');
-  console.log(`Nulled raw on ${nulled.rowCount} rows.`);
+  // With parts gone, deleting import records is now trivially small WAL
+  console.log('Deleting all stratus_import records...');
+  const del = await pool.query('DELETE FROM stratus_imports');
+  console.log(`Deleted ${del.rowCount} import records.`);
+
+  // Null out import_id on production snapshots (they're still valuable —
+  // weld inches and JTD hours are stored directly on each snapshot row)
+  console.log('Nulling import_id on production snapshots...');
+  const snap = await pool.query('UPDATE stratus_production_snapshots SET import_id = NULL WHERE import_id IS NOT NULL');
+  console.log(`Updated ${snap.rowCount} snapshot rows.`);
 
   console.log('\nRunning VACUUM ANALYZE...');
   await pool.query('VACUUM ANALYZE stratus_parts');
   await pool.query('VACUUM ANALYZE stratus_imports');
   console.log('Done.');
 
-  const size = await pool.query(`
-    SELECT pg_size_pretty(pg_total_relation_size('stratus_parts')) AS parts_size,
-           pg_size_pretty(pg_total_relation_size('stratus_imports')) AS imports_size
+  const after = await pool.query(`
+    SELECT
+      pg_size_pretty(pg_total_relation_size('stratus_parts'))   AS parts_size,
+      pg_size_pretty(pg_database_size(current_database()))      AS total_db_size
   `);
-  console.log('\nPost-cleanup sizes:', size.rows[0]);
+  console.log('\nAfter:', after.rows[0]);
+  console.log('\nNext step: re-upload each project\'s Stratus file through the UI.');
 }
 
-run().then(() => pool.end()).catch((e) => { console.error(e.message); pool.end(); process.exit(1); });
+run().then(() => pool.end()).catch((e) => {
+  console.error('FAILED:', e.message);
+  pool.end();
+  process.exit(1);
+});
