@@ -7,9 +7,6 @@ const { getProjectEffectiveDates } = require('../utils/projectDates');
 
 const router = express.Router();
 
-router.use(authenticate);
-router.use(tenantContext);
-
 const verifyProject = async (req, res, next) => {
   try {
     const project = await Project.findByIdAndTenant(req.params.projectId, req.tenantId);
@@ -22,7 +19,7 @@ const verifyProject = async (req, res, next) => {
 };
 
 // GET /projects/:projectId/schedule-segments
-router.get('/projects/:projectId/schedule-segments', verifyProject, async (req, res, next) => {
+router.get('/projects/:projectId/schedule-segments', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
     const segments = await ProjectScheduleSegment.getByProject(req.params.projectId, req.tenantId);
     const activeKeys = await ProjectScheduleSegment.getActiveSegmentKeys(req.params.projectId, req.tenantId);
@@ -33,7 +30,7 @@ router.get('/projects/:projectId/schedule-segments', verifyProject, async (req, 
 });
 
 // GET /projects/:projectId/schedule-segments/costs
-router.get('/projects/:projectId/schedule-segments/costs', verifyProject, async (req, res, next) => {
+router.get('/projects/:projectId/schedule-segments/costs', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
     const costs = await ProjectScheduleSegment.getCostsByProject(req.params.projectId, req.tenantId);
     res.json(costs);
@@ -43,7 +40,7 @@ router.get('/projects/:projectId/schedule-segments/costs', verifyProject, async 
 });
 
 // PUT /projects/:projectId/schedule-segments/:segmentKey
-router.put('/projects/:projectId/schedule-segments/:segmentKey', verifyProject, async (req, res, next) => {
+router.put('/projects/:projectId/schedule-segments/:segmentKey', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
     const { segmentKey } = req.params;
     const { start_date, end_date, contour_type } = req.body;
@@ -69,7 +66,7 @@ router.put('/projects/:projectId/schedule-segments/:segmentKey', verifyProject, 
 // POST /projects/:projectId/schedule-segments/initialize
 // Idempotent — creates all 13 segment rows from current project effective dates.
 // Only fills rows that don't exist yet (ON CONFLICT DO NOTHING in the model).
-router.post('/projects/:projectId/schedule-segments/initialize', verifyProject, async (req, res, next) => {
+router.post('/projects/:projectId/schedule-segments/initialize', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
     const dates = await getProjectEffectiveDates(req.params.projectId, req.tenantId);
     const segments = await ProjectScheduleSegment.initializeSegments(
