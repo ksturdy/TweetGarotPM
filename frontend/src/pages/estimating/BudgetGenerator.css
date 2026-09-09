@@ -674,6 +674,59 @@
   background: #f9fafb;
 }
 
+.item-row-overridden {
+  background: #fffbf0;
+}
+
+.item-editable-cell {
+  cursor: pointer;
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.item-editable-cell:hover {
+  background: #e8f0fe;
+}
+
+.item-editable-cell.item-overridden {
+  color: #e07b00;
+  font-weight: 600;
+}
+
+.item-override-input {
+  width: 90px;
+  padding: 2px 4px;
+  font-size: 0.75rem;
+  border: 1.5px solid #0066cc;
+  border-radius: 3px;
+  text-align: right;
+  outline: none;
+}
+
+.item-reset-cell {
+  width: 1.5rem;
+  padding: 0.25rem !important;
+  text-align: center !important;
+}
+
+.item-override-reset {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.item-override-reset:hover {
+  color: #002356;
+  background: #f3f4f6;
+}
+
 /* Totals Summary */
 .totals-summary {
   margin-top: 1.5rem;

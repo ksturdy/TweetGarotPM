@@ -21,6 +21,12 @@ import '../../styles/SalesPipeline.css';
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
+interface ItemOverride {
+  laborCost?: number;
+  materialCost?: number;
+  totalCost?: number;
+}
+
 interface EditableValues {
   overheadPercent: number;
   profitPercent: number;
@@ -29,6 +35,7 @@ interface EditableValues {
   excludedSections: { [key: string]: boolean }; // sections excluded from budget
   customAssumptions: string[] | null; // null = use generated, array = user override
   customRisks: string[] | null; // null = use generated, array = user override
+  itemOverrides: { [key: string]: ItemOverride }; // key: `${sectionName}::${itemIndex}`
 }
 
 const BudgetGenerator: React.FC = () => {
@@ -78,10 +85,12 @@ const BudgetGenerator: React.FC = () => {
     sectionAdjustments: {},
     excludedSections: {},
     customAssumptions: null,
-    customRisks: null
+    customRisks: null,
+    itemOverrides: {}
   });
   const [adjustedBudget, setAdjustedBudget] = useState<GeneratedBudget | null>(null);
   const [editingAdjustment, setEditingAdjustment] = useState<string | null>(null);
+  const [editingItemCell, setEditingItemCell] = useState<{ sectionName: string; itemIndex: number; field: 'laborCost' | 'materialCost' | 'totalCost' } | null>(null);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -132,7 +141,8 @@ const BudgetGenerator: React.FC = () => {
         sectionAdjustments: {},
         excludedSections: {},
         customAssumptions: null,
-        customRisks: null
+        customRisks: null,
+        itemOverrides: {}
       });
 
       // Reconstruct the budget object for display
@@ -278,17 +288,31 @@ const BudgetGenerator: React.FC = () => {
       const adjustment = editableValues.sectionAdjustments[section.name] || 0;
       const multiplier = isExcluded ? 0 : 1 + (adjustment / 100);
 
-      const adjustedItems = section.items.map(item => ({
-        ...item,
-        laborCost: (item.laborCost || 0) * multiplier,
-        materialCost: (item.materialCost || 0) * multiplier,
-        totalCost: item.totalCost * multiplier
-      }));
+      const adjustedItems = section.items.map((item, itemIndex) => {
+        const overrideKey = `${section.name}::${itemIndex}`;
+        const override = editableValues.itemOverrides[overrideKey];
+        if (override) {
+          return {
+            ...item,
+            laborCost: override.laborCost ?? (item.laborCost || 0) * multiplier,
+            materialCost: override.materialCost ?? (item.materialCost || 0) * multiplier,
+            totalCost: override.totalCost ?? item.totalCost * multiplier,
+          };
+        }
+        return {
+          ...item,
+          laborCost: (item.laborCost || 0) * multiplier,
+          materialCost: (item.materialCost || 0) * multiplier,
+          totalCost: item.totalCost * multiplier
+        };
+      });
+
+      const computedSubtotal = isExcluded ? 0 : adjustedItems.reduce((sum, i) => sum + i.totalCost, 0);
 
       return {
         ...section,
         items: adjustedItems,
-        subtotal: section.subtotal * multiplier
+        subtotal: computedSubtotal
       };
     });
 
@@ -419,7 +443,8 @@ const BudgetGenerator: React.FC = () => {
         sectionAdjustments: {},
         excludedSections: {},
         customAssumptions: null,
-        customRisks: null
+        customRisks: null,
+        itemOverrides: {}
       });
 
       // Auto-expand summary section
@@ -515,7 +540,8 @@ const BudgetGenerator: React.FC = () => {
       sectionAdjustments: {},
       excludedSections: {},
       customAssumptions: null,
-      customRisks: null
+      customRisks: null,
+      itemOverrides: {}
     });
   };
 
@@ -662,6 +688,36 @@ const BudgetGenerator: React.FC = () => {
       handleSectionAdjustment(sectionName, value);
     }
     setEditingAdjustment(null);
+  };
+
+  const handleItemOverride = (sectionName: string, itemIndex: number, field: 'laborCost' | 'materialCost' | 'totalCost', rawValue: string) => {
+    const value = parseFloat(rawValue);
+    if (isNaN(value)) return;
+
+    const key = `${sectionName}::${itemIndex}`;
+    const displayedSection = currentBudget?.sections.find(s => s.name === sectionName);
+    const displayedItem = displayedSection?.items[itemIndex];
+
+    setHasUserEdited(true);
+    setEditableValues(prev => {
+      const existing = prev.itemOverrides[key] || {};
+      const updated: ItemOverride = { ...existing, [field]: value };
+      if (field !== 'totalCost' && displayedItem) {
+        const labor = field === 'laborCost' ? value : (existing.laborCost ?? displayedItem.laborCost ?? 0);
+        const material = field === 'materialCost' ? value : (existing.materialCost ?? displayedItem.materialCost ?? 0);
+        updated.totalCost = labor + material;
+      }
+      return { ...prev, itemOverrides: { ...prev.itemOverrides, [key]: updated } };
+    });
+  };
+
+  const handleClearItemOverride = (sectionName: string, itemIndex: number) => {
+    const key = `${sectionName}::${itemIndex}`;
+    setHasUserEdited(true);
+    setEditableValues(prev => {
+      const { [key]: _removed, ...rest } = prev.itemOverrides;
+      return { ...prev, itemOverrides: rest };
+    });
   };
 
   const handleToggleProjectSelection = (projectId: number) => {
@@ -1437,18 +1493,80 @@ const BudgetGenerator: React.FC = () => {
                               <th>Labor</th>
                               <th>Material</th>
                               <th>Total</th>
+                              {isEditMode && <th></th>}
                             </tr>
                           </thead>
                           <tbody>
-                            {section.items.map((item, itemIndex) => (
-                              <tr key={itemIndex}>
-                                <td>{item.description}</td>
-                                <td>{item.quantity ? `${formatNumber(item.quantity)} ${item.unit || ''}` : '-'}</td>
-                                <td>{formatCurrency(item.laborCost)}</td>
-                                <td>{formatCurrency(item.materialCost)}</td>
-                                <td><strong>{formatCurrency(item.totalCost)}</strong></td>
-                              </tr>
-                            ))}
+                            {section.items.map((item, itemIndex) => {
+                              const overrideKey = `${section.name}::${itemIndex}`;
+                              const override = editableValues.itemOverrides[overrideKey];
+                              const hasOverride = !!override;
+
+                              const renderEditableCell = (field: 'laborCost' | 'materialCost' | 'totalCost', value: number | undefined) => {
+                                if (!isEditMode) return <>{formatCurrency(value)}</>;
+                                const isEditing = editingItemCell?.sectionName === section.name &&
+                                  editingItemCell?.itemIndex === itemIndex &&
+                                  editingItemCell?.field === field;
+                                if (isEditing) {
+                                  return (
+                                    <input
+                                      type="number"
+                                      className="item-override-input"
+                                      defaultValue={value ?? 0}
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === 'Tab') {
+                                          handleItemOverride(section.name, itemIndex, field, (e.target as HTMLInputElement).value);
+                                          setEditingItemCell(null);
+                                          e.preventDefault();
+                                        } else if (e.key === 'Escape') {
+                                          setEditingItemCell(null);
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        handleItemOverride(section.name, itemIndex, field, e.target.value);
+                                        setEditingItemCell(null);
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  );
+                                }
+                                const isFieldOverridden = override?.[field] !== undefined;
+                                return (
+                                  <span
+                                    className={`item-editable-cell${isFieldOverridden ? ' item-overridden' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); setEditingItemCell({ sectionName: section.name, itemIndex, field }); }}
+                                    title="Click to edit"
+                                  >
+                                    {formatCurrency(value)}
+                                  </span>
+                                );
+                              };
+
+                              return (
+                                <tr key={itemIndex} className={hasOverride ? 'item-row-overridden' : ''}>
+                                  <td>{item.description}</td>
+                                  <td>{item.quantity ? `${formatNumber(item.quantity)} ${item.unit || ''}` : '-'}</td>
+                                  <td>{renderEditableCell('laborCost', item.laborCost)}</td>
+                                  <td>{renderEditableCell('materialCost', item.materialCost)}</td>
+                                  <td><strong>{renderEditableCell('totalCost', item.totalCost)}</strong></td>
+                                  {isEditMode && (
+                                    <td className="item-reset-cell">
+                                      {hasOverride && (
+                                        <button
+                                          type="button"
+                                          className="item-override-reset"
+                                          onClick={(e) => { e.stopPropagation(); handleClearItemOverride(section.name, itemIndex); }}
+                                          title="Reset to calculated value"
+                                        >
+                                          ↺
+                                        </button>
+                                      )}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
