@@ -610,7 +610,7 @@ const EstimateDetail: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
-            <Link to="/estimating/estimates" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
+            <Link to="/estimating" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
               &larr; Back to Estimates
             </Link>
             <h1>📋 {estimate.estimate_number} - {estimate.project_name}</h1>
