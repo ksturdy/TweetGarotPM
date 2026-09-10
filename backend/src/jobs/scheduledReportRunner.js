@@ -30,9 +30,9 @@ const REPORT_HANDLERS = {
 
     return {
       pdfBuffer,
-      filename: `Backlog-Fit-Report-${dateStr}.pdf`,
-      subject: `Backlog Fit Analysis Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
-      body: `Please find attached the Backlog Fit Analysis Report.\n\nThis report analyzes capacity gaps across four scenarios (All States 12/18 months, Wisconsin 12/18 months) in both revenue and labor modes, and includes strategic opportunity targeting recommendations.`,
+      filename: `Opportunity-Fit-Report-${dateStr}.pdf`,
+      subject: `Opportunity Fit Analysis Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Opportunity Fit Analysis Report.\n\nThis report analyzes capacity gaps across four scenarios (All States 12/18 months, Wisconsin 12/18 months) in both revenue and labor modes, and includes strategic opportunity targeting recommendations.`,
     };
   },
 

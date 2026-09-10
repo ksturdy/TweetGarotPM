@@ -19,7 +19,7 @@ import '../../styles/SalesPipeline.css';
 
 const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'executive_report', label: 'Executive Report' },
-  { value: 'backlog_fit', label: 'Backlog Fit Analysis' },
+  { value: 'backlog_fit', label: 'Opportunity Fit Analysis' },
   { value: 'cash_flow', label: 'Cash Flow Report' },
   { value: 'buyout_metric', label: 'Buyout Metric Report' },
   { value: 'labor_forecast', label: 'Labor Forecast' },

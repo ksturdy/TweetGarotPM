@@ -1,5 +1,5 @@
 /**
- * Generate HTML for Backlog Fit Analysis PDF Report.
+ * Generate HTML for Opportunity Fit Analysis PDF Report.
  * Landscape Letter, multi-page layout: cover + 4 variants (revenue + labor each) + strategy.
  */
 
@@ -51,7 +51,7 @@ function buildCoverPage(settings, generatedBy, hasRegional) {
         <div style="font-size: 28pt; font-weight: 700; color: #002356; letter-spacing: 0.05em;">TITAN</div>
         <div style="font-size: 10pt; color: #6b7280; margin-top: 4px; letter-spacing: 0.15em; text-transform: uppercase;">Tweet Garot Mechanical</div>
         <div style="width: 80px; height: 3px; background: #F37B03; margin: 20px auto;"></div>
-        <div style="font-size: 18pt; font-weight: 700; color: #1f2937; margin-top: 16px;">Backlog Fit Analysis Report</div>
+        <div style="font-size: 18pt; font-weight: 700; color: #1f2937; margin-top: 16px;">Opportunity Fit Analysis Report</div>
         <div style="font-size: 10pt; color: #6b7280; margin-top: 8px;">${dateLabel}</div>
         ${generatedBy ? `<div style="font-size: 9pt; color: #94a3b8; margin-top: 4px;">Prepared by ${generatedBy}</div>` : ''}
       </div>

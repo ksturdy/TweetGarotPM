@@ -44,7 +44,7 @@ async function buildReportData(tenantId) {
 
 /**
  * GET /api/backlog-report/pdf-download
- * Download the Backlog Fit Analysis Report as a PDF
+ * Download the Opportunity Fit Analysis Report as a PDF
  */
 router.get('/pdf-download', async (req, res) => {
   try {
@@ -54,11 +54,11 @@ router.get('/pdf-download', async (req, res) => {
 
     const dateStr = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Backlog-Fit-Report-${dateStr}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Opportunity-Fit-Report-${dateStr}.pdf"`);
     res.send(pdfBuffer);
   } catch (error) {
-    console.error('Error generating backlog fit report PDF:', error);
-    res.status(500).json({ error: 'Failed to generate backlog fit report PDF' });
+    console.error('Error generating opportunity fit report PDF:', error);
+    res.status(500).json({ error: 'Failed to generate opportunity fit report PDF' });
   }
 });
 
@@ -74,9 +74,9 @@ router.get('/email-draft', async (req, res) => {
 
     const dateStr = new Date().toISOString().split('T')[0];
     const dateLabel = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const pdfFilename = `Backlog-Fit-Report-${dateStr}.pdf`;
+    const pdfFilename = `Opportunity-Fit-Report-${dateStr}.pdf`;
 
-    const emailBody = `Please find attached the Backlog Fit Analysis Report as of ${dateLabel}.
+    const emailBody = `Please find attached the Opportunity Fit Analysis Report as of ${dateLabel}.
 
 This report analyzes capacity gaps across four scenarios (All States 12/18 months, Wisconsin 12/18 months) in both revenue and labor modes, and includes strategic opportunity targeting recommendations.
 
@@ -90,7 +90,7 @@ ${generatedBy}`.trim();
     const emlContent = [
       'MIME-Version: 1.0',
       'To: ',
-      `Subject: Backlog Fit Analysis Report - ${dateLabel}`,
+      `Subject: Opportunity Fit Analysis Report - ${dateLabel}`,
       'X-Unsent: 1',
       `Content-Type: multipart/mixed; boundary="${boundary}"`,
       '',
@@ -112,11 +112,11 @@ ${generatedBy}`.trim();
     ].join('\r\n');
 
     res.setHeader('Content-Type', 'message/rfc822');
-    res.setHeader('Content-Disposition', `attachment; filename="Backlog-Fit-Report-${dateStr}.eml"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Opportunity-Fit-Report-${dateStr}.eml"`);
     res.send(emlContent);
   } catch (error) {
-    console.error('Error generating backlog fit report email:', error);
-    res.status(500).json({ error: 'Failed to generate backlog fit report email draft' });
+    console.error('Error generating opportunity fit report email:', error);
+    res.status(500).json({ error: 'Failed to generate opportunity fit report email draft' });
   }
 });
 

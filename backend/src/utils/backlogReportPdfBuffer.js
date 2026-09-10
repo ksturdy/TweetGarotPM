@@ -2,7 +2,7 @@ const { launchBrowser } = require('./launchBrowser');
 const { generateBacklogReportPdfHtml } = require('./backlogReportPdfGenerator');
 
 /**
- * Generate a PDF buffer for the Backlog Fit Analysis Report (landscape Letter).
+ * Generate a PDF buffer for the Opportunity Fit Analysis Report (landscape Letter).
  * @param {Object} reportData - output of buildBacklogFitReport()
  * @param {Array} recommendations - output of generateStrategyRecommendations()
  * @param {string} generatedBy - user name for cover page

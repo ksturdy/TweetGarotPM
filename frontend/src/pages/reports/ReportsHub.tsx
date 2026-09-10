@@ -43,12 +43,20 @@ const reports = [
     bg: '#eff6ff',
   },
   {
-    name: 'Backlog Fit Analysis',
+    name: 'Opportunity Fit Analysis',
     Icon: ShowChartIcon,
     path: '/reports/backlog-fit',
-    desc: 'Backlog vs. pipeline capacity gap analysis',
+    desc: 'Pipeline capacity gap analysis and opportunity fit scoring',
     color: '#8b5cf6',
     bg: '#f5f3ff',
+  },
+  {
+    name: 'Backlog Analysis',
+    Icon: AccountBalanceIcon,
+    path: '/reports/backlog-analysis',
+    desc: 'FY backlog burn, gross margin coverage, SG&A months covered, and pipeline summary',
+    color: '#1a2b4a',
+    bg: '#f0f4ff',
   },
   {
     name: 'Cash Flow',

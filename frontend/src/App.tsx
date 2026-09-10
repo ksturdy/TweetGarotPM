@@ -141,6 +141,7 @@ import CompanyHealthReport from './pages/reports/CompanyHealthReport';
 import ExecutiveReport from './pages/reports/ExecutiveReport';
 import OpportunityProjectedRevenue from './pages/opportunities/OpportunityProjectedRevenue';
 import BacklogFitAnalysis from './pages/reports/BacklogFitAnalysis';
+import BacklogAnalysis from './pages/reports/BacklogAnalysis';
 import CashFlowReport from './pages/reports/CashFlowReport';
 import ScheduledReports from './pages/reports/ScheduledReports';
 import BuyoutMetricReport from './pages/reports/BuyoutMetricReport';
@@ -522,6 +523,7 @@ const App: React.FC = () => {
                 <Route path="/reports/company-health" element={<CompanyHealthReport />} />
                 <Route path="/reports/executive-report" element={<ExecutiveReport />} />
                 <Route path="/reports/backlog-fit" element={<BacklogFitAnalysis />} />
+                <Route path="/reports/backlog-analysis" element={<BacklogAnalysis />} />
                 <Route path="/reports/cash-flow" element={<CashFlowReport />} />
                 <Route path="/reports/scheduled" element={<ScheduledReports />} />
                 <Route path="/reports/buyout-metric" element={<BuyoutMetricReport />} />

@@ -663,7 +663,7 @@ const BacklogFitAnalysis: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
           <Link to="/sales/projected-revenue" style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>&larr; Opportunity Revenue Forecast</Link>
-          <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Backlog Fit Analysis</h2>
+          <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.25rem' }}>Opportunity Fit Analysis</h2>
           <div style={{ color: '#64748b', fontSize: '0.8rem' }}>
             Comparing project {comparisonMode === 'revenue' ? 'backlog' : 'labor curve'} vs. opportunity pipeline to identify capacity gaps
           </div>

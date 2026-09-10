@@ -283,6 +283,44 @@ router.put('/backlog-fit-settings', async (req, res, next) => {
 });
 
 // =====================================================
+// BACKLOG ANALYSIS SETTINGS (global, any authenticated user)
+// =====================================================
+
+/**
+ * GET /api/tenant/backlog-analysis-settings
+ */
+router.get('/backlog-analysis-settings', async (req, res, next) => {
+  try {
+    const tenant = await Tenant.findById(req.tenantId);
+    res.json(tenant?.settings?.backlogAnalysisSettings || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/tenant/backlog-analysis-settings
+ */
+router.put('/backlog-analysis-settings', async (req, res, next) => {
+  try {
+    const { monthlySgAndA, sgaMode, sgaPct, scenario, conservativePct, aggressivePct } = req.body;
+    const tenant = await Tenant.updateSettings(req.tenantId, {
+      backlogAnalysisSettings: {
+        monthlySgAndA:   monthlySgAndA   != null ? Number(monthlySgAndA)   : null,
+        sgaMode:         sgaMode         || 'dollar',
+        sgaPct:          sgaPct          != null ? Number(sgaPct)          : null,
+        scenario:        scenario        || 'actual',
+        conservativePct: conservativePct != null ? Number(conservativePct) : 10,
+        aggressivePct:   aggressivePct   != null ? Number(aggressivePct)   : 10,
+      },
+    });
+    res.json(tenant.settings.backlogAnalysisSettings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =====================================================
 // PM WORKLOAD REPORT THRESHOLDS (global, any authenticated user)
 // =====================================================
 
