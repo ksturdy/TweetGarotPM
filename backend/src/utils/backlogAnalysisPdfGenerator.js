@@ -94,8 +94,8 @@ function buildContractDetailSection(contractDetails) {
     { label: 'Future Fiscal Year GM',  right: true  },
     { label: 'Total GM',        right: true  },
   ];
-  const thBase = 'padding: 0.35rem 0.4rem; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #ffffff; background: #2d4a7a; white-space: nowrap;';
-  const headerRow = cols.map(c => `<th style="${thBase}${c.right ? ' text-align: right;' : ''}">${c.label}</th>`).join('');
+  const thBase = 'padding: 0.35rem 0.4rem; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #ffffff; background: #2d4a7a; white-space: normal; vertical-align: bottom; line-height: 1.2; text-align: center;';
+  const headerRow = cols.map(c => `<th style="${thBase}">${c.label}</th>`).join('');
 
   const rows = contractDetails.map((c, idx) => {
     const bg  = idx % 2 === 0 ? '#ffffff' : '#f8fafc';

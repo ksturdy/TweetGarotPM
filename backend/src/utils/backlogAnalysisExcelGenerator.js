@@ -188,10 +188,10 @@ async function generateBacklogAnalysisExcel(data) {
     { key: 'pctComplete',      width: 10 },
     { key: 'totalBacklog',     width: 18 },
     { key: 'gmPct',            width: 10 },
-    { key: 'currentFYRevenue', width: 24 },
-    { key: 'currentFYGM',      width: 22 },
-    { key: 'futureFYRevenue',  width: 24 },
-    { key: 'futureFYGM',       width: 22 },
+    { key: 'currentFYRevenue', width: 22 },
+    { key: 'currentFYGM',      width: 20 },
+    { key: 'futureFYRevenue',  width: 22 },
+    { key: 'futureFYGM',       width: 20 },
     { key: 'totalGM',          width: 18 },
   ];
 
@@ -214,7 +214,7 @@ async function generateBacklogAnalysisExcel(data) {
   detailHdr.eachCell(cell => {
     cell.font = { bold: true, size: 9, color: { argb: 'FF' + white } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D4A7A' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.alignment = { vertical: 'bottom', horizontal: 'center', wrapText: true };
     cell.border = { bottom: { style: 'medium', color: { argb: 'FF' + orange } } };
   });
   ws2.getRow(3).height = 22;

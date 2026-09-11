@@ -709,10 +709,10 @@ export default function BacklogAnalysis() {
                     { label: '% Done',          key: 'pctComplete',      right: true  },
                     { label: 'Total Backlog',   key: 'totalBacklog',     right: true  },
                     { label: 'GM %',            key: 'gmPct',            right: true  },
-                    { label: 'Curr Fiscal Year Rev',    key: 'currentFYRevenue', right: true  },
-                    { label: 'Curr Fiscal Year GM',     key: 'currentFYGM',      right: true  },
-                    { label: 'Future Fiscal Year Rev',  key: 'futureFYRevenue',  right: true  },
-                    { label: 'Future Fiscal Year GM',   key: 'futureFYGM',       right: true  },
+                    { label: 'Curr Fiscal Year Rev',   key: 'currentFYRevenue', right: true  },
+                    { label: 'Curr Fiscal Year GM',    key: 'currentFYGM',      right: true  },
+                    { label: 'Future Fiscal Year Rev', key: 'futureFYRevenue',  right: true  },
+                    { label: 'Future Fiscal Year GM',  key: 'futureFYGM',       right: true  },
                     { label: 'Total GM',        key: 'totalGM',          right: true  },
                   ] as { label: string; key: string; right: boolean }[]).map(col => (
                     <th
@@ -722,9 +722,10 @@ export default function BacklogAnalysis() {
                         padding: '0.45rem 0.65rem',
                         fontSize: '0.65rem', fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.05em',
-                        color: '#fff', textAlign: col.right ? 'right' : 'left',
-                        whiteSpace: 'nowrap', cursor: 'pointer',
-                        userSelect: 'none',
+                        color: '#fff', textAlign: col.right ? 'center' : 'left',
+                        whiteSpace: 'normal', cursor: 'pointer',
+                        userSelect: 'none', verticalAlign: 'bottom',
+                        lineHeight: 1.2,
                         background: sortCol === col.key ? '#2d4a7a' : undefined,
                       }}
                     >
