@@ -14,7 +14,8 @@ import { projectsApi } from '../../services/projects';
 import { phaseScheduleApi, PhaseScheduleItem } from '../../services/phaseSchedule';
 import { phaseScheduleLinksApi } from '../../services/phaseScheduleLinks';
 import { useAuth } from '../../context/AuthContext';
-import { exportGcScheduleDiffPdf, loadImageAsDataUrl } from '../../utils/gcScheduleDiffPdf';
+import api from '../../services/api';
+import { exportGcScheduleDiffPdf } from '../../utils/gcScheduleDiffPdf';
 import { exportGcScheduleDiffExcel } from '../../utils/gcScheduleDiffExcel';
 import '../../styles/SalesPipeline.css';
 
@@ -997,13 +998,17 @@ const DiffCard: React.FC<{
       let logoDataUrl: string | undefined;
       if (logoUrl) {
         try {
-          logoDataUrl = await loadImageAsDataUrl(logoUrl);
+          const resp = await api.get(logoUrl, { responseType: 'blob' });
+          logoDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(resp.data as Blob);
+          });
           console.log('[GC Diff PDF] Logo loaded, bytes:', logoDataUrl.length);
         } catch (e) {
           console.warn('[GC Diff PDF] Logo load failed:', e);
         }
-      } else {
-        console.log('[GC Diff PDF] No logoUrl — tenant branding not set');
       }
       const fromV: GCScheduleVersion = data.a;
       const toV: GCScheduleVersion = data.b;

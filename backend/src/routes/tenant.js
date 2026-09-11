@@ -127,8 +127,10 @@ router.patch(
  */
 router.get('/logo', async (req, res, next) => {
   try {
+    console.log('[logo] tenantId:', req.tenantId, 'userId:', req.user?.id);
     const tenant = await Tenant.findById(req.tenantId);
     const logoUrl = tenant?.settings?.branding?.logo_url;
+    console.log('[logo] logoUrl:', logoUrl);
     if (!logoUrl) return res.status(404).send('No logo configured');
 
     if (logoUrl.startsWith('http')) {
