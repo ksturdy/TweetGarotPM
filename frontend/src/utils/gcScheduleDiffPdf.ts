@@ -188,6 +188,21 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
 
   const LOGO_W = 120;
   const LOGO_H = 30;
+  // Placeholder replaced by putTotalPages() after all content is rendered,
+  // so every page footer shows the correct final total.
+  const TOTAL_PH = '{total_pages}';
+
+  // Auto-detect image format from data URL MIME type — avoids silent failure
+  // when the logo is JPEG or WebP but 'PNG' is hardcoded.
+  const getImgFormat = (dataUrl: string): string => {
+    const m = dataUrl.match(/^data:image\/(\w+);/);
+    if (!m) return 'PNG';
+    const t = m[1].toLowerCase();
+    if (t === 'jpeg' || t === 'jpg') return 'JPEG';
+    if (t === 'webp') return 'WEBP';
+    if (t === 'gif') return 'GIF';
+    return 'PNG';
+  };
 
   const drawPageChrome = () => {
     // Accent bar
@@ -196,11 +211,10 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     // Logo top-right on every page
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+        doc.addImage(logoDataUrl, getImgFormat(logoDataUrl), pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H, 'logo');
       } catch { /* skip */ }
     }
     // Footer
-    const pageCount = (doc as any).internal.getNumberOfPages();
     const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
@@ -211,7 +225,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       leftMargin,
       footerY
     );
-    doc.text(`Page ${pageNum} of ${pageCount}`, pageWidth - rightMargin, footerY, { align: 'right' });
+    doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
   };
 
   drawPageChrome();
@@ -466,6 +480,8 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     doc.text('No differences between these versions.', leftMargin, y + 10);
   }
 
+  // Replace placeholder in all footer instances with the true final page count.
+  doc.putTotalPages(TOTAL_PH);
   doc.save(fileName);
 }
 
