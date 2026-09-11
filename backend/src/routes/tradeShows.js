@@ -79,6 +79,25 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/trade-shows/:id/recur - Clone show for next occurrence
+router.post('/:id/recur', async (req, res, next) => {
+  try {
+    const showId = parseInt(req.params.id);
+    const owns = await TradeShow.verifyOwnership(showId, req.tenantId);
+    if (!owns) return res.status(404).json({ error: 'Trade show not found' });
+
+    const newShow = await TradeShow.recur(showId, req.tenantId, req.user.id, {
+      event_start_date: req.body.event_start_date || null,
+      event_end_date: req.body.event_end_date || null,
+      registration_deadline: req.body.registration_deadline || null,
+    });
+
+    res.status(201).json(newShow);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/trade-shows/:id - Delete trade show
 router.delete('/:id', async (req, res, next) => {
   try {

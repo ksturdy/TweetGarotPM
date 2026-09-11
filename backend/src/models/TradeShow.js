@@ -545,6 +545,58 @@ const TradeShow = {
       [todoId]
     );
   },
+
+  // ── Recur: clone a show for the next occurrence ──
+
+  async recur(sourceId, tenantId, userId, overrides = {}) {
+    const source = await this.findByIdAndTenant(sourceId, tenantId);
+    if (!source) return null;
+
+    // Determine status: upcoming if dates provided, date_tbd otherwise
+    const hasDate = !!(overrides.event_start_date || overrides.event_end_date);
+    const newStatus = hasDate ? 'upcoming' : 'date_tbd';
+
+    const newShow = await this.create({
+      name: source.name,
+      description: source.description,
+      status: newStatus,
+      venue: source.venue,
+      city: source.city,
+      state: source.state,
+      country: source.country,
+      address: source.address,
+      event_start_date: overrides.event_start_date || null,
+      event_end_date: overrides.event_end_date || null,
+      registration_deadline: overrides.registration_deadline || null,
+      booth_size: source.booth_size,
+      website_url: source.website_url,
+      notes: source.notes,
+      sales_lead_id: source.sales_lead_id,
+      coordinator_id: source.coordinator_id,
+      event_type: source.event_type,
+      market: source.market,
+      registration_cost: source.registration_cost,
+      booth_cost: source.booth_cost,
+      travel_budget: source.travel_budget,
+    }, tenantId, userId);
+
+    // Copy todos (reset to open, clear dates if no date provided)
+    if (source.todos && source.todos.length > 0) {
+      for (const todo of source.todos) {
+        await this.addTodo(newShow.id, tenantId, {
+          title: todo.title,
+          description: todo.description,
+          status: 'open',
+          priority: todo.priority,
+          due_date: hasDate ? todo.due_date : null,
+          due_time: hasDate ? todo.due_time : null,
+          assigned_to_user_id: todo.assigned_to_user_id,
+        }, userId);
+      }
+    }
+
+    return newShow;
+  },
 };
 
 module.exports = TradeShow;

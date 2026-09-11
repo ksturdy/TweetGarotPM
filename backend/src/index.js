@@ -29,6 +29,7 @@ const { isR2Enabled } = require('./config/r2Client');
 const { captureAllSnapshots } = require('./jobs/weeklySnapshots');
 const { runScheduledReports } = require('./jobs/scheduledReportRunner');
 const { runTradeShowReminders } = require('./jobs/tradeShowReminders');
+const { runTradeShowAutoComplete } = require('./jobs/tradeShowAutoComplete');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -455,6 +456,14 @@ server.listen(config.port, () => {
     });
   });
   console.log(`  ✅ Trade show reminder cron active (every 5 min)`);
+
+  // Auto-complete past trade shows - nightly at 1:00 AM ET
+  cron.schedule('0 1 * * *', () => {
+    runTradeShowAutoComplete().catch(err => {
+      console.error('[Cron] Trade show auto-complete job failed:', err);
+    });
+  }, { timezone: 'America/New_York' });
+  console.log(`  ✅ Trade show auto-complete cron scheduled (nightly 1:00 AM ET)`);
 
   // Stale presence cleanup - every 2 minutes
   const Presence = require('./models/Presence');

@@ -57,6 +57,7 @@ const totalCost = (s: TradeShow) => {
 const statusBadgeClass = (status: string): string => {
   const map: Record<string, string> = {
     upcoming: 'badge badge-info',
+    date_tbd: 'badge badge-purple',
     registered: 'badge badge-info',
     in_progress: 'badge badge-warning',
     completed: 'badge badge-success',
@@ -65,8 +66,10 @@ const statusBadgeClass = (status: string): string => {
   return map[status] || 'badge';
 };
 
-const statusLabel = (status: string) =>
-  status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const statusLabel = (status: string) => {
+  if (status === 'date_tbd') return 'Date TBD';
+  return status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
 
 const TradeShowList: React.FC = () => {
   const navigate = useNavigate();

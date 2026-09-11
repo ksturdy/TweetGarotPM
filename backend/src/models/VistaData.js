@@ -2274,11 +2274,13 @@ const VistaData = {
                 p.client AS titan_client, p.contract_value AS titan_contract_value,
                 p.gross_margin_percent AS titan_margin, p.backlog AS titan_backlog,
                 p.manager_id AS titan_manager_id, p.market AS titan_market,
-                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
+                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id,
+                vd.id AS vista_dept_id
          FROM vp_contracts vc
          JOIN projects p ON p.id = vc.linked_project_id AND p.tenant_id = vc.tenant_id
          LEFT JOIN employees e ON e.employee_number = vc.employee_number::text AND e.tenant_id = vc.tenant_id
          LEFT JOIN vp_employees vpe ON vpe.employee_number = vc.employee_number::int AND vpe.linked_employee_id IS NOT NULL
+         LEFT JOIN departments vd ON vd.tenant_id = vc.tenant_id AND TRIM(vd.department_number) = TRIM(vc.department_code)
          WHERE vc.tenant_id = $1
            AND vc.linked_project_id IS NOT NULL`,
         [tenantId]
@@ -2294,7 +2296,8 @@ const VistaData = {
 
         // Check if ANY field actually changed
         const statusChanged = mappedStatus !== row.titan_status;
-        const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
+        // Resolve department from current department_code (like PM resolution via employee JOIN)
+        const deptChanged = row.vista_dept_id && row.vista_dept_id !== row.titan_dept;
         const startChanged = row.start_month && new Date(row.start_month).toISOString() !== (row.titan_start ? new Date(row.titan_start).toISOString() : null);
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
@@ -2308,6 +2311,7 @@ const VistaData = {
         try {
           // Manager already resolved via JOIN
           const managerId = row.vista_manager_id || null;
+          const deptId = row.vista_dept_id || null;
 
           // Look up customer_id by exact name match
           let customerId = null;
@@ -2347,7 +2351,7 @@ const VistaData = {
               row.gross_profit_percent || null,
               effectiveBacklog,
               managerId,
-              row.linked_department_id || null,
+              deptId,
               row.start_month || null,
               row.primary_market || null,
               row.project_id,
@@ -2355,11 +2359,19 @@ const VistaData = {
             ]
           );
 
+          // Keep linked_department_id on vp_contracts in sync with the resolved department
+          if (deptChanged) {
+            await client.query(
+              `UPDATE vp_contracts SET linked_department_id = $1 WHERE id = $2`,
+              [deptId, row.vp_id]
+            );
+          }
+
           await client.query('RELEASE SAVEPOINT sync_contract_row');
           synced++;
           const changedFields = [];
           if (statusChanged) changedFields.push(`status: ${row.titan_status} → ${mappedStatus}`);
-          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${row.linked_department_id}`);
+          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${deptId}`);
           if (startChanged) changedFields.push(`start_date updated`);
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
@@ -2404,11 +2416,13 @@ const VistaData = {
                 p.id AS project_id, p.status AS titan_status, p.name AS titan_name,
                 p.department_id AS titan_dept, p.client AS titan_client,
                 p.manager_id AS titan_manager_id, p.market AS titan_market,
-                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id
+                COALESCE(e.id, vpe.linked_employee_id) AS vista_manager_id,
+                vd.id AS vista_dept_id
          FROM vp_work_orders vw
          JOIN projects p ON p.number = 'WO-' || vw.work_order_number AND p.tenant_id = vw.tenant_id
          LEFT JOIN employees e ON e.employee_number = vw.employee_number::text AND e.tenant_id = vw.tenant_id
          LEFT JOIN vp_employees vpe ON vpe.employee_number = vw.employee_number::int AND vpe.linked_employee_id IS NOT NULL
+         LEFT JOIN departments vd ON vd.tenant_id = vw.tenant_id AND TRIM(vd.department_number) = TRIM(vw.department_code)
          WHERE vw.tenant_id = $1
            AND vw.link_status IN ('auto_matched', 'manual_matched')`,
         [tenantId]
@@ -2419,7 +2433,8 @@ const VistaData = {
 
         // Check if ANY field actually changed
         const statusChanged = mappedStatus !== row.titan_status;
-        const deptChanged = row.linked_department_id && row.linked_department_id !== row.titan_dept;
+        // Resolve department from current department_code (like PM resolution via employee JOIN)
+        const deptChanged = row.vista_dept_id && row.vista_dept_id !== row.titan_dept;
         const nameChanged = row.description && row.description.substring(0, 255) !== row.titan_name;
         const clientChanged = row.customer_name && row.customer_name.substring(0, 255) !== row.titan_client;
         const managerChanged = row.vista_manager_id && row.vista_manager_id !== row.titan_manager_id;
@@ -2431,6 +2446,7 @@ const VistaData = {
         try {
           // Manager already resolved via JOIN (employees + vp_employees fallback)
           const managerId = row.vista_manager_id || null;
+          const deptId = row.vista_dept_id || null;
 
           await client.query(
             `UPDATE projects SET
@@ -2453,18 +2469,26 @@ const VistaData = {
               row.gross_profit_percent || null,
               row.backlog || null,
               managerId,
-              row.linked_department_id || null,
+              deptId,
               row.primary_market || null,
               row.project_id,
               tenantId
             ]
           );
 
+          // Keep linked_department_id on vp_work_orders in sync with the resolved department
+          if (deptChanged) {
+            await client.query(
+              `UPDATE vp_work_orders SET linked_department_id = $1 WHERE id = $2`,
+              [deptId, row.vp_id]
+            );
+          }
+
           await client.query('RELEASE SAVEPOINT sync_wo_row');
           synced++;
           const changedFields = [];
           if (statusChanged) changedFields.push(`status: ${row.titan_status} → ${mappedStatus}`);
-          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${row.linked_department_id}`);
+          if (deptChanged) changedFields.push(`dept: ${row.titan_dept} → ${deptId}`);
           if (nameChanged) changedFields.push(`name updated`);
           if (clientChanged) changedFields.push(`client updated`);
           if (managerChanged) changedFields.push(`manager: ${row.titan_manager_id} → ${row.vista_manager_id}`);

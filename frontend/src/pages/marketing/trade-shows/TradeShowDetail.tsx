@@ -56,6 +56,7 @@ const fmtTime = (val?: string | null) => {
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
     upcoming: 'badge badge-info',
+    date_tbd: 'badge badge-purple',
     registered: 'badge badge-info',
     in_progress: 'badge badge-warning',
     completed: 'badge badge-success',
@@ -64,8 +65,10 @@ const statusBadge = (status: string) => {
   return map[status] || 'badge';
 };
 
-const statusLabel = (status: string) =>
-  status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const statusLabel = (status: string) => {
+  if (status === 'date_tbd') return 'Date TBD';
+  return status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
 
 const attendeeName = (a: TradeShowAttendee): string => {
   if (a.employee_id && (a.employee_first_name || a.employee_last_name)) {
@@ -137,6 +140,9 @@ const TradeShowDetail: React.FC = () => {
   const [attendeeForm, setAttendeeForm] = useState<AttendeeFormState>(emptyAttendee);
   const [attendeeError, setAttendeeError] = useState<string | null>(null);
 
+  const [showRecurModal, setShowRecurModal] = useState(false);
+  const [recurForm, setRecurForm] = useState({ event_start_date: '', event_end_date: '', registration_deadline: '' });
+
   const showId = id ? parseInt(id) : 0;
 
   const { data: show, isLoading, error } = useQuery({
@@ -167,6 +173,15 @@ const TradeShowDetail: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trade-shows'] });
       navigate('/marketing/trade-shows');
+    },
+  });
+
+  const recurMutation = useMutation({
+    mutationFn: (data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null }) =>
+      tradeShowsApi.recur(showId, data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['trade-shows'] });
+      navigate(`/marketing/trade-shows/${res.data.id}`);
     },
   });
 
@@ -213,6 +228,30 @@ const TradeShowDetail: React.FC = () => {
         notes: attendee.notes ?? null,
         ...patch,
       },
+    });
+  };
+
+  const openRecurModal = () => {
+    const shiftYear = (d?: string | null) => {
+      if (!d) return '';
+      const date = new Date(d.includes('T') ? d : d + 'T00:00:00');
+      if (isNaN(date.getTime())) return '';
+      date.setFullYear(date.getFullYear() + 1);
+      return date.toISOString().slice(0, 10);
+    };
+    setRecurForm({
+      event_start_date: shiftYear(show?.event_start_date),
+      event_end_date: shiftYear(show?.event_end_date),
+      registration_deadline: shiftYear(show?.registration_deadline),
+    });
+    setShowRecurModal(true);
+  };
+
+  const handleRecur = () => {
+    recurMutation.mutate({
+      event_start_date: recurForm.event_start_date || null,
+      event_end_date: recurForm.event_end_date || null,
+      registration_deadline: recurForm.registration_deadline || null,
     });
   };
 
@@ -638,6 +677,9 @@ const TradeShowDetail: React.FC = () => {
           <button className="btn btn-secondary" onClick={exportPdf}>
             📄 Export PDF
           </button>
+          <button className="btn btn-secondary" onClick={openRecurModal}>
+            🔁 Schedule Next Occurrence
+          </button>
           <button className="btn btn-secondary" onClick={() => navigate(`/marketing/trade-shows/${id}/edit`)}>
             ✏️ Edit
           </button>
@@ -875,6 +917,91 @@ const TradeShowDetail: React.FC = () => {
         <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
           <h3 style={sectionTitle}>Notes</h3>
           <div style={{ ...valueStyle, whiteSpace: 'pre-wrap' }}>{show.notes}</div>
+        </div>
+      )}
+
+      {/* Schedule Next Occurrence Modal */}
+      {showRecurModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            padding: '1rem',
+          }}
+          onClick={() => setShowRecurModal(false)}
+        >
+          <div
+            style={{
+              background: 'white', borderRadius: '12px', padding: '1.5rem',
+              width: '100%', maxWidth: '480px',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginTop: 0, marginBottom: '0.5rem' }}>
+              🔁 Schedule Next Occurrence
+            </h2>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+              Creates a copy of <strong>{show.name}</strong> with dates reset for next year.
+              Name, venue, budget, notes, and to-dos will carry over. Attendees and expenses will not.
+              Leave dates blank if the schedule isn't confirmed yet — the status will be set to <strong>Date TBD</strong>.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Event Start Date</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={recurForm.event_start_date}
+                  onChange={(e) => setRecurForm(f => ({ ...f, event_start_date: e.target.value }))}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Event End Date</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={recurForm.event_end_date}
+                  onChange={(e) => setRecurForm(f => ({ ...f, event_end_date: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label">Registration Deadline</label>
+              <input
+                className="form-input"
+                type="date"
+                value={recurForm.registration_deadline}
+                onChange={(e) => setRecurForm(f => ({ ...f, registration_deadline: e.target.value }))}
+              />
+            </div>
+
+            {recurMutation.isError && (
+              <div style={{ padding: '0.5rem 0.75rem', marginBottom: '0.75rem', background: '#fee2e2', borderRadius: '6px', color: '#991b1b', fontSize: '0.85rem' }}>
+                Failed to create next occurrence. Please try again.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowRecurModal(false)}
+                disabled={recurMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleRecur}
+                disabled={recurMutation.isPending}
+              >
+                {recurMutation.isPending ? 'Creating…' : 'Create Next Occurrence'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

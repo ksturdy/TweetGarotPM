@@ -1,6 +1,6 @@
 import api from './api';
 
-export type TradeShowStatus = 'upcoming' | 'registered' | 'in_progress' | 'completed' | 'cancelled';
+export type TradeShowStatus = 'upcoming' | 'registered' | 'in_progress' | 'completed' | 'cancelled' | 'date_tbd';
 export type AttendeeRegistrationStatus = 'pending' | 'registered' | 'confirmed' | 'cancelled';
 export type TradeShowEventType = 'conference' | 'expo' | 'outing' | 'social_event';
 
@@ -160,6 +160,9 @@ export const tradeShowsApi = {
 
   delete: (id: number) => api.delete(`/trade-shows/${id}`),
 
+  recur: (id: number, data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null }) =>
+    api.post<TradeShow>(`/trade-shows/${id}/recur`, data),
+
   // Attendees
   getAttendees: (id: number) =>
     api.get<TradeShowAttendee[]>(`/trade-shows/${id}/attendees`),
@@ -202,6 +205,7 @@ export const tradeShowsApi = {
 
 export const TRADE_SHOW_STATUS_OPTIONS: { value: TradeShowStatus; label: string; color: string }[] = [
   { value: 'upcoming', label: 'Upcoming', color: '#3b82f6' },
+  { value: 'date_tbd', label: 'Date TBD', color: '#a855f7' },
   { value: 'registered', label: 'Registered', color: '#8b5cf6' },
   { value: 'in_progress', label: 'In Progress', color: '#f59e0b' },
   { value: 'completed', label: 'Completed', color: '#10b981' },

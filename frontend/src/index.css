@@ -201,6 +201,11 @@ button {
   color: #991b1b;
 }
 
+.badge-purple {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
 .badge-info {
   background-color: #dbeafe;
   color: #1e40af;
