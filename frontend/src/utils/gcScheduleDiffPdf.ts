@@ -188,32 +188,13 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
 
   const LOGO_W = 120;
   const LOGO_H = 30;
-  // Placeholder replaced by putTotalPages() after all content is rendered,
-  // so every page footer shows the correct final total.
+  // Placeholder replaced by putTotalPages() after all content is rendered.
   const TOTAL_PH = '{total_pages}';
-
-  // Auto-detect image format from data URL MIME type — avoids silent failure
-  // when the logo is JPEG or WebP but 'PNG' is hardcoded.
-  const getImgFormat = (dataUrl: string): string => {
-    const m = dataUrl.match(/^data:image\/(\w+);/);
-    if (!m) return 'PNG';
-    const t = m[1].toLowerCase();
-    if (t === 'jpeg' || t === 'jpg') return 'JPEG';
-    if (t === 'webp') return 'WEBP';
-    if (t === 'gif') return 'GIF';
-    return 'PNG';
-  };
 
   const drawPageChrome = () => {
     // Accent bar
     doc.setFillColor(ACCENT[0], ACCENT[1], ACCENT[2]);
     doc.rect(0, 0, pageWidth, 4, 'F');
-    // Logo top-right on every page
-    if (logoDataUrl) {
-      try {
-        doc.addImage(logoDataUrl, getImgFormat(logoDataUrl), pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H, 'logo');
-      } catch { /* skip */ }
-    }
     // Footer
     const pageNum = (doc as any).internal.getCurrentPageInfo().pageNumber;
     doc.setFontSize(7);
@@ -227,6 +208,16 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     );
     doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
   };
+
+  // Logo top-right on page 1 — drawn once before any tables, same pattern as
+  // costControlPdf.ts which is confirmed working.
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+    } catch (e) {
+      console.warn('[GC Schedule PDF] Logo failed to render:', e);
+    }
+  }
 
   drawPageChrome();
 
