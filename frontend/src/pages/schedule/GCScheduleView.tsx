@@ -1,5 +1,5 @@
 // @refresh reset
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,8 @@ import {
   gcSchedulesApi,
   GCScheduleVersion,
   GCScheduleActivity,
+  GCScheduleTag,
+  GCScheduleTagGroup,
   ActivityFilters,
 } from '../../services/gcSchedules';
 import { projectsApi } from '../../services/projects';
@@ -21,9 +23,6 @@ import '../../styles/SalesPipeline.css';
 
 const fmtDate = (s: string | null): string => {
   if (!s) return '-';
-  // API returns dates either as bare YYYY-MM-DD or as full ISO timestamps
-  // (Postgres DATE columns serialize as ISO via JSON). Normalize to a local
-  // calendar date so a 2026-03-11 row doesn't drift to 2026-03-10 in CT.
   const isoDate = s.length >= 10 ? s.slice(0, 10) : s;
   const d = new Date(isoDate + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return s;
@@ -38,11 +37,6 @@ const daysBetween = (a: string | null, b: string | null): number | null => {
   return Math.round((db - da) / 86400000);
 };
 
-// Renders the "What changed" cell as a verdict-first list:
-//   "Finish Date  Delayed by 7 days     (Mar 26, 2026 → Apr 2, 2026)"
-// The verdict is bold and colored; the values are muted context. Reads the
-// delta metadata the backend attaches to each diff so we don't have to
-// re-compute days/points on the client.
 const renderChangeLines = (diffs: Record<string, any>): React.ReactNode => {
   const order = ['start', 'finish', 'duration', 'percent', 'name'];
   const keys = Object.keys(diffs).sort((a, b) => {
@@ -123,10 +117,841 @@ const formatLabel: Record<string, string> = {
   mspxml: 'MS Project XML',
 };
 
-// Match the Titan/Stratus table density: 13px font, 6px/10px cell padding.
 const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 };
 const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #e5e7eb', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: 'white' };
 const tdStyle: React.CSSProperties = { padding: '6px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' };
+
+// Colored pill for a single tag
+const TagChip: React.FC<{ tag: { id: number; name: string; color: string } }> = ({ tag }) => (
+  <span style={{
+    background: tag.color + '22',
+    color: tag.color,
+    border: `1px solid ${tag.color}55`,
+    borderRadius: 3,
+    padding: '1px 6px',
+    fontSize: 11,
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+  }}>
+    {tag.name}
+  </span>
+);
+
+const TagChips: React.FC<{ tags: Array<{ id: number; name: string; color: string }> | undefined }> = ({ tags }) => {
+  if (!tags || tags.length === 0) return <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+      {tags.map((t) => <TagChip key={t.id} tag={t} />)}
+    </div>
+  );
+};
+
+const TAG_COLORS = [
+  '#1e40af', '#0d9488', '#16a34a', '#7c3aed',
+  '#db2777', '#ea580c', '#dc2626', '#d97706',
+  '#0891b2', '#6b7280',
+];
+
+const MAX_TAG_GROUPS = 3;
+
+// Shared style for the filter pill buttons (trades + tags)
+const filterBtnStyle = (active: boolean): React.CSSProperties => ({
+  padding: '4px 8px', fontSize: 13,
+  border: '1px solid #d1d5db', borderRadius: 4,
+  background: active ? '#eff6ff' : 'white',
+  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+  whiteSpace: 'nowrap',
+});
+
+// Shared dropdown panel style
+const filterDropdownStyle: React.CSSProperties = {
+  position: 'fixed', zIndex: 9999,
+  background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '6px 0',
+  minWidth: 180,
+};
+
+const TRADE_OPTIONS = [
+  { value: '', label: 'All trades' },
+  { value: 'mechanical', label: 'Mechanical' },
+  { value: 'electrical', label: 'Electrical' },
+  { value: 'plumbing', label: 'Plumbing' },
+  { value: 'sprinkler', label: 'Sprinkler' },
+  { value: 'controls', label: 'Controls' },
+];
+
+// Single-select trade filter styled to match TagMultiFilter
+const TradeSelect: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const label = TRADE_OPTIONS.find((o) => o.value === value)?.label || 'All trades';
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        style={filterBtnStyle(!!value)}
+        onClick={() => {
+          setRect(btnRef.current!.getBoundingClientRect());
+          setOpen((v) => !v);
+        }}
+      >
+        {value && <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#2563eb' }} />}
+        {label} ▾
+      </button>
+      {open && rect && createPortal(
+        <div ref={dropRef} style={{ ...filterDropdownStyle, top: rect.bottom + 2, left: rect.left }}>
+          {TRADE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: 13,
+                background: value === opt.value ? '#eff6ff' : 'transparent',
+                color: '#111827',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
+
+const TagMultiFilter: React.FC<{
+  tags: GCScheduleTag[];
+  tagGroups: GCScheduleTagGroup[];
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+}> = ({ tags, tagGroups, selectedIds, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || dropRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const label = selectedIds.length === 0
+    ? 'All tags'
+    : selectedIds.length === 1
+      ? tags.find((t) => t.id === selectedIds[0])?.name || '1 tag'
+      : `${selectedIds.length} tags`;
+
+  const tagRow = (tag: GCScheduleTag) => (
+    <label key={tag.id} style={{
+      display: 'flex', alignItems: 'center', gap: 7, padding: '5px 12px',
+      cursor: 'pointer', fontSize: 13,
+      background: selectedIds.includes(tag.id) ? '#eff6ff' : 'transparent',
+    }}>
+      <input
+        type="checkbox"
+        checked={selectedIds.includes(tag.id)}
+        onChange={(e) => {
+          if (e.target.checked) onChange([...selectedIds, tag.id]);
+          else onChange(selectedIds.filter((id) => id !== tag.id));
+        }}
+      />
+      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
+      {tag.name}
+    </label>
+  );
+
+  const ungrouped = tags.filter((t) => !t.group_id);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        style={filterBtnStyle(selectedIds.length > 0)}
+        onClick={() => {
+          setRect(btnRef.current!.getBoundingClientRect());
+          setOpen((v) => !v);
+        }}
+      >
+        {selectedIds.length > 0 && (
+          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#2563eb' }} />
+        )}
+        {label} ▾
+      </button>
+      {open && rect && createPortal(
+        <div ref={dropRef} style={{ ...filterDropdownStyle, top: rect.bottom + 2, left: rect.left, maxHeight: 320, overflowY: 'auto' }}>
+          {tags.length === 0 && (
+            <div style={{ fontSize: 12, color: '#6b7280', padding: '4px 12px' }}>No tags created yet</div>
+          )}
+          {tagGroups.map((g) => {
+            const groupTags = tags.filter((t) => t.group_id === g.id);
+            if (groupTags.length === 0) return null;
+            return (
+              <div key={g.id}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', padding: '6px 12px 2px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {g.name}
+                </div>
+                {groupTags.map(tagRow)}
+              </div>
+            );
+          })}
+          {ungrouped.length > 0 && (
+            <div>
+              {tagGroups.length > 0 && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', padding: '6px 12px 2px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Other
+                </div>
+              )}
+              {ungrouped.map(tagRow)}
+            </div>
+          )}
+          {selectedIds.length > 0 && (
+            <>
+              <div style={{ margin: '4px 0', borderTop: '1px solid #f3f4f6' }} />
+              <button
+                type="button"
+                onClick={() => { onChange([]); setOpen(false); }}
+                style={{ fontSize: 11, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 12px' }}
+              >
+                Clear filter
+              </button>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
+
+// Inline-edit form for a single tag (used inside both group sections and ungrouped)
+const TagEditForm: React.FC<{
+  tag: GCScheduleTag;
+  groups: GCScheduleTagGroup[];
+  onSave: (name: string, color: string, groupId: number | null) => void;
+  onDelete: () => void;
+  onCancel: () => void;
+  saving: boolean;
+}> = ({ tag, groups, onSave, onDelete, onCancel, saving }) => {
+  const [editName, setEditName] = useState(tag.name);
+  const [editColor, setEditColor] = useState(tag.color);
+  const [editGroupId, setEditGroupId] = useState<number | null>(tag.group_id ?? null);
+  return (
+    <div style={{ padding: '8px 8px 6px', background: '#f0fdf4', borderRadius: 6, border: '1px solid #bbf7d0', marginBottom: 4 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+        <input
+          type="text"
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && editName.trim()) onSave(editName.trim(), editColor, editGroupId); if (e.key === 'Escape') onCancel(); }}
+          maxLength={100}
+          autoFocus
+          style={{ flex: 1, padding: '4px 7px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13 }}
+        />
+        <button type="button" disabled={!editName.trim() || saving} onClick={() => onSave(editName.trim(), editColor, editGroupId)} className="btn btn-sm btn-primary">
+          {saving ? '...' : 'Save'}
+        </button>
+        <button type="button" onClick={onCancel} className="btn btn-sm">Cancel</button>
+        <button type="button" onClick={onDelete} title="Delete tag"
+          style={{ background: 'none', border: '1px solid #fca5a5', borderRadius: 4, cursor: 'pointer', color: '#dc2626', fontSize: 12, padding: '3px 7px' }}>
+          Delete
+        </button>
+      </div>
+      {groups.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 2 }}>Group</label>
+          <select
+            value={editGroupId ?? ''}
+            onChange={(e) => setEditGroupId(e.target.value === '' ? null : Number(e.target.value))}
+            style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 5, width: '100%' }}
+          >
+            <option value="">No group (Ungrouped)</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {TAG_COLORS.map((c) => (
+          <button key={c} type="button" onClick={() => setEditColor(c)} style={{
+            width: 18, height: 18, borderRadius: 3, background: c, padding: 0,
+            border: editColor === c ? '3px solid #111827' : '2px solid transparent', cursor: 'pointer',
+          }} />
+        ))}
+        <span style={{ fontSize: 11, color: '#6b7280', alignSelf: 'center', marginLeft: 2 }}>
+          <TagChip tag={{ id: 0, name: editName || tag.name, color: editColor }} />
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// Add-tag mini-form inside a group (or ungrouped section)
+const AddTagForm: React.FC<{
+  onAdd: (name: string, color: string) => void;
+  adding: boolean;
+}> = ({ onAdd, adding }) => {
+  const [name, setName] = useState('');
+  const [color, setColor] = useState(TAG_COLORS[0]);
+  return (
+    <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed #e5e7eb' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input
+          type="text"
+          placeholder="Tag name..."
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { onAdd(name.trim(), color); setName(''); } }}
+          maxLength={100}
+          style={{ flex: 1, padding: '4px 7px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 12 }}
+        />
+        <button type="button" disabled={!name.trim() || adding} onClick={() => { onAdd(name.trim(), color); setName(''); }} className="btn btn-sm btn-primary" style={{ fontSize: 12 }}>
+          Add
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
+        {TAG_COLORS.map((c) => (
+          <button key={c} type="button" onClick={() => setColor(c)} style={{
+            width: 16, height: 16, borderRadius: 3, background: c, padding: 0,
+            border: color === c ? '3px solid #111827' : '2px solid transparent', cursor: 'pointer',
+          }} />
+        ))}
+        {name.trim() && <span style={{ marginLeft: 2, alignSelf: 'center' }}><TagChip tag={{ id: 0, name: name.trim(), color }} /></span>}
+      </div>
+    </div>
+  );
+};
+
+// Tag manager modal
+const TagManagerModal: React.FC<{
+  projectId: number;
+  onClose: () => void;
+}> = ({ projectId, onClose }) => {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [editingTagId, setEditingTagId] = useState<number | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+
+  const tagsQuery = useQuery({
+    queryKey: ['gc-schedule-tags', projectId],
+    queryFn: () => gcSchedulesApi.listTags(projectId).then((r) => r.data),
+  });
+  const groupsQuery = useQuery({
+    queryKey: ['gc-schedule-tag-groups', projectId],
+    queryFn: () => gcSchedulesApi.listTagGroups(projectId).then((r) => r.data),
+  });
+  const tags = tagsQuery.data || [];
+  const groups = groupsQuery.data || [];
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['gc-schedule-tags', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['gc-schedule-tag-groups', projectId] });
+    queryClient.invalidateQueries({ queryKey: ['gc-schedule-activities'] });
+  };
+
+  const createTagMut = useMutation({
+    mutationFn: (d: { name: string; color: string; groupId?: number | null }) =>
+      gcSchedulesApi.createTag(projectId, d),
+    onSuccess: () => { setError(null); invalidate(); },
+    onError: (e: any) => setError(e?.response?.data?.message || e?.message || 'Failed to create tag'),
+  });
+
+  const updateTagMut = useMutation({
+    mutationFn: ({ tagId, name, color, groupId }: { tagId: number; name: string; color: string; groupId?: number | null }) =>
+      gcSchedulesApi.updateTag(tagId, { name, color, groupId }),
+    onSuccess: () => { setEditingTagId(null); setError(null); invalidate(); },
+    onError: (e: any) => setError(e?.response?.data?.message || e?.message || 'Failed to update tag'),
+  });
+
+  const deleteTagMut = useMutation({
+    mutationFn: (tagId: number) => gcSchedulesApi.deleteTag(tagId),
+    onSuccess: () => invalidate(),
+  });
+
+  const createGroupMut = useMutation({
+    mutationFn: (name: string) => gcSchedulesApi.createTagGroup(projectId, { name }),
+    onSuccess: () => { setError(null); invalidate(); },
+    onError: (e: any) => setError(e?.response?.data?.message || e?.message || 'Failed to create group'),
+  });
+
+  const updateGroupMut = useMutation({
+    mutationFn: ({ groupId, name }: { groupId: number; name: string }) =>
+      gcSchedulesApi.updateTagGroup(groupId, { name }),
+    onSuccess: () => { setEditingGroupId(null); setError(null); invalidate(); },
+    onError: (e: any) => setError(e?.response?.data?.message || e?.message || 'Failed to update group'),
+  });
+
+  const deleteGroupMut = useMutation({
+    mutationFn: (groupId: number) => gcSchedulesApi.deleteTagGroup(groupId),
+    onSuccess: () => invalidate(),
+  });
+
+  const renderTag = (tag: GCScheduleTag) => {
+    if (editingTagId === tag.id) {
+      return (
+        <TagEditForm
+          key={tag.id}
+          tag={tag}
+          groups={groups}
+          onSave={(name, color, groupId) => updateTagMut.mutate({ tagId: tag.id, name, color, groupId })}
+          onDelete={() => { if (window.confirm(`Delete tag "${tag.name}"?`)) { deleteTagMut.mutate(tag.id); setEditingTagId(null); } }}
+          onCancel={() => setEditingTagId(null)}
+          saving={updateTagMut.isPending}
+        />
+      );
+    }
+    return (
+      <div key={tag.id} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 8px', marginBottom: 3,
+        background: '#f9fafb', borderRadius: 5, border: '1px solid #e5e7eb',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: tag.color, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 500 }}>{tag.name}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button type="button" onClick={() => { setEditingTagId(tag.id); setError(null); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 13, padding: '0 5px' }} title="Edit">&#9998;</button>
+          <button type="button" onClick={() => { if (window.confirm(`Delete tag "${tag.name}"?`)) deleteTagMut.mutate(tag.id); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: '0 3px' }} title="Delete">&times;</button>
+        </div>
+      </div>
+    );
+  };
+
+  const ungroupedTags = tags.filter((t) => !t.group_id);
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#fff', borderRadius: 12, width: 460, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Manage Tags</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+            Organize tags into groups (up to {MAX_TAG_GROUPS}). Tags survive schedule re-uploads.
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {(tagsQuery.isLoading || groupsQuery.isLoading) && <div style={{ color: '#6b7280', fontSize: 13 }}>Loading...</div>}
+          {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8, background: '#fef2f2', padding: '4px 8px', borderRadius: 4 }}>{error}</div>}
+
+          {/* Existing groups */}
+          {groups.map((group) => {
+            const groupTags = tags.filter((t) => t.group_id === group.id);
+            return (
+              <div key={group.id} style={{ marginBottom: 14, border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
+                  {editingGroupId === group.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editGroupName}
+                        onChange={(e) => setEditGroupName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && editGroupName.trim()) updateGroupMut.mutate({ groupId: group.id, name: editGroupName.trim() }); if (e.key === 'Escape') setEditingGroupId(null); }}
+                        autoFocus
+                        maxLength={100}
+                        style={{ flex: 1, padding: '3px 7px', border: '1px solid #d1d5db', borderRadius: 5, fontSize: 13, fontWeight: 600 }}
+                      />
+                      <button type="button" disabled={!editGroupName.trim() || updateGroupMut.isPending} onClick={() => updateGroupMut.mutate({ groupId: group.id, name: editGroupName.trim() })} className="btn btn-sm btn-primary" style={{ fontSize: 12 }}>Save</button>
+                      <button type="button" onClick={() => setEditingGroupId(null)} className="btn btn-sm" style={{ fontSize: 12 }}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#374151', flex: 1 }}>{group.name}</span>
+                      <span style={{ fontSize: 11, color: '#9ca3af', marginRight: 4 }}>{groupTags.length} tag{groupTags.length !== 1 ? 's' : ''}</span>
+                      <button type="button" onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 13, padding: '0 4px' }} title="Rename group">&#9998;</button>
+                      <button type="button" onClick={() => {
+                        const msg = groupTags.length > 0
+                          ? `Delete group "${group.name}"? Its ${groupTags.length} tag(s) will become ungrouped.`
+                          : `Delete group "${group.name}"?`;
+                        if (window.confirm(msg)) deleteGroupMut.mutate(group.id);
+                      }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: '0 2px' }} title="Delete group">&times;</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ padding: '8px 10px' }}>
+                  {groupTags.length === 0 && !tagsQuery.isLoading && (
+                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>No tags yet.</div>
+                  )}
+                  {groupTags.map(renderTag)}
+                  <AddTagForm onAdd={(name, color) => createTagMut.mutate({ name, color, groupId: group.id })} adding={createTagMut.isPending} />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Ungrouped tags */}
+          <div style={{ marginBottom: 14, border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ padding: '8px 12px', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Ungrouped</span>
+              <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{ungroupedTags.length} tag{ungroupedTags.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div style={{ padding: '8px 10px' }}>
+              {ungroupedTags.length === 0 && !tagsQuery.isLoading && (
+                <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>No ungrouped tags.</div>
+              )}
+              {ungroupedTags.map(renderTag)}
+              <AddTagForm onAdd={(name, color) => createTagMut.mutate({ name, color, groupId: null })} adding={createTagMut.isPending} />
+            </div>
+          </div>
+
+          {/* Add new group */}
+          {groups.length < MAX_TAG_GROUPS ? (
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: '#374151', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Add Tag Group ({groups.length}/{MAX_TAG_GROUPS})
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="text"
+                  placeholder="Group name (e.g. Area, Floor)"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && newGroupName.trim()) { createGroupMut.mutate(newGroupName.trim()); setNewGroupName(''); } }}
+                  maxLength={100}
+                  style={{ flex: 1, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}
+                />
+                <button
+                  type="button"
+                  disabled={!newGroupName.trim() || createGroupMut.isPending}
+                  onClick={() => { createGroupMut.mutate(newGroupName.trim()); setNewGroupName(''); }}
+                  className="btn btn-sm btn-primary"
+                >
+                  Create Group
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', paddingTop: 8 }}>
+              Maximum {MAX_TAG_GROUPS} groups reached.
+            </div>
+          )}
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', background: '#f9fafb' }}>
+          <button className="btn btn-sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// Tag assign modal — shown when activities are selected and user clicks "Tag…"
+const TagAssignModal: React.FC<{
+  projectId: number;
+  selectedActivities: GCScheduleActivity[];
+  onClose: () => void;
+  onDone: () => void;
+}> = ({ projectId, selectedActivities, onClose, onDone }) => {
+  const queryClient = useQueryClient();
+  const tagsQuery = useQuery({
+    queryKey: ['gc-schedule-tags', projectId],
+    queryFn: () => gcSchedulesApi.listTags(projectId).then((r) => r.data),
+  });
+  const groupsQuery = useQuery({
+    queryKey: ['gc-schedule-tag-groups', projectId],
+    queryFn: () => gcSchedulesApi.listTagGroups(projectId).then((r) => r.data),
+  });
+  const tags = tagsQuery.data || [];
+  const tagGroups = groupsQuery.data || [];
+
+  // Compute initial state: for each tag, are all / some / none of the selected activities tagged?
+  const tagState = useMemo<Map<number, 'all' | 'some' | 'none'>>(() => {
+    const m = new Map<number, 'all' | 'some' | 'none'>();
+    for (const tag of tags) {
+      const count = selectedActivities.filter((a) =>
+        a.activity_id && a.tags?.some((t) => t.id === tag.id)
+      ).length;
+      const eligible = selectedActivities.filter((a) => !!a.activity_id).length;
+      m.set(tag.id, count === 0 ? 'none' : count === eligible ? 'all' : 'some');
+    }
+    return m;
+  }, [tags, selectedActivities]);
+
+  // Local checked state: starts from tagState
+  const [checked, setChecked] = useState<Map<number, boolean>>(() => {
+    const m = new Map<number, boolean>();
+    for (const tag of tags) {
+      m.set(tag.id, tagState.get(tag.id) !== 'none');
+    }
+    return m;
+  });
+
+  // Sync checked state when tagState changes (tags loaded async)
+  useEffect(() => {
+    setChecked((prev) => {
+      const m = new Map(prev);
+      for (const tag of tags) {
+        if (!m.has(tag.id)) m.set(tag.id, tagState.get(tag.id) !== 'none');
+      }
+      return m;
+    });
+  }, [tags, tagState]);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const eligibleActivityIds = selectedActivities.map((a) => a.activity_id).filter(Boolean) as string[];
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      const toAssign = tags.filter((t) => checked.get(t.id)).map((t) => t.id);
+      const toUnassign = tags.filter((t) => !checked.get(t.id)).map((t) => t.id);
+
+      const ops: Promise<any>[] = [];
+      if (toAssign.length) {
+        ops.push(gcSchedulesApi.assignTags({ tagIds: toAssign, activityIds: eligibleActivityIds, projectId }));
+      }
+      if (toUnassign.length) {
+        ops.push(gcSchedulesApi.unassignTags({ tagIds: toUnassign, activityIds: eligibleActivityIds }));
+      }
+      await Promise.all(ops);
+      queryClient.invalidateQueries({ queryKey: ['gc-schedule-activities'] });
+      queryClient.invalidateQueries({ queryKey: ['gc-schedule-diff'] });
+      onDone();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || 'Failed to save tags');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: '#fff', borderRadius: 12, width: 360, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Assign Tags</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+            {eligibleActivityIds.length} activit{eligibleActivityIds.length === 1 ? 'y' : 'ies'} selected
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
+          {(tagsQuery.isLoading || groupsQuery.isLoading) && <div style={{ color: '#6b7280', fontSize: 13, padding: '8px 20px' }}>Loading...</div>}
+          {!tagsQuery.isLoading && tags.length === 0 && (
+            <div style={{ color: '#9ca3af', fontSize: 13, padding: '8px 20px' }}>
+              No tags yet. Use "Manage Tags" to create some first.
+            </div>
+          )}
+          {(() => {
+            const tagRow = (tag: GCScheduleTag) => {
+              const state = tagState.get(tag.id) || 'none';
+              const isChecked = !!checked.get(tag.id);
+              return (
+                <label key={tag.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '7px 20px',
+                  cursor: 'pointer', background: isChecked ? '#f0fdf4' : 'transparent',
+                }}>
+                  <input type="checkbox" checked={isChecked} onChange={(e) => setChecked((prev) => new Map(prev).set(tag.id, e.target.checked))} />
+                  <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 3, background: tag.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{tag.name}</span>
+                  {state === 'some' && <span style={{ fontSize: 11, color: '#6b7280', fontStyle: 'italic' }}>partial</span>}
+                </label>
+              );
+            };
+            const ungrouped = tags.filter((t) => !t.group_id);
+            return (
+              <>
+                {tagGroups.map((g) => {
+                  const groupTags = tags.filter((t) => t.group_id === g.id);
+                  if (groupTags.length === 0) return null;
+                  return (
+                    <div key={g.id}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', padding: '6px 20px 2px', textTransform: 'uppercase', letterSpacing: 0.5 }}>{g.name}</div>
+                      {groupTags.map(tagRow)}
+                    </div>
+                  );
+                })}
+                {ungrouped.length > 0 && (
+                  <div>
+                    {tagGroups.length > 0 && (
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', padding: '6px 20px 2px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Other</div>
+                    )}
+                    {ungrouped.map(tagRow)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+
+        {error && <div style={{ padding: '6px 20px', color: '#b91c1c', fontSize: 12, background: '#fef2f2' }}>{error}</div>}
+
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: 8, background: '#f9fafb' }}>
+          <button className="btn btn-sm" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={busy || eligibleActivityIds.length === 0 || tags.length === 0}
+            onClick={submit}
+          >
+            {busy ? 'Saving…' : 'Apply'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+interface ColDef {
+  key: string;
+  label: string;
+  sortable: boolean;
+  groupId?: number;
+  isTag?: boolean;
+}
+
+const STANDARD_COL_DEFS: ColDef[] = [
+  { key: 'activity_id', label: 'Activity ID', sortable: true },
+  { key: 'activity_name', label: 'Activity Name', sortable: true },
+  { key: 'start_date', label: 'Start', sortable: true },
+  { key: 'finish_date', label: 'Finish', sortable: true },
+  { key: 'duration_days', label: 'Dur', sortable: true },
+  { key: 'percent_complete', label: '% Comp', sortable: true },
+  { key: 'responsible', label: 'Responsible', sortable: true },
+  { key: 'tags_ungrouped', label: 'Tags', sortable: false, isTag: true },
+];
+
+const COL_WIDTHS_KEY = 'gc-schedule-col-widths-v2';
+const VISIBLE_COLS_KEY = 'gc-schedule-visible-cols-v1';
+const DEFAULT_COL_WIDTHS: Record<string, number> = {
+  activity_id: 100,
+  activity_name: 300,
+  start_date: 110,
+  finish_date: 110,
+  duration_days: 60,
+  percent_complete: 70,
+  responsible: 130,
+  tags_ungrouped: 180,
+};
+const DEFAULT_TAG_COL_WIDTH = 150;
+
+const SortIcon: React.FC<{ col: string; sortKey: string | null; sortDir: 'asc' | 'desc' }> = ({ col, sortKey, sortDir }) => (
+  <span style={{ marginLeft: 4, fontSize: 10, color: sortKey === col ? '#2563eb' : '#d1d5db' }}>
+    {sortKey === col ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+  </span>
+);
+
+const ResizeHandle: React.FC<{ onMouseDown: (e: React.MouseEvent) => void }> = ({ onMouseDown }) => (
+  <div
+    onMouseDown={onMouseDown}
+    style={{
+      position: 'absolute', right: 0, top: 0, bottom: 0, width: 5,
+      cursor: 'col-resize', userSelect: 'none', zIndex: 1,
+    }}
+  />
+);
+
+// Right-click column chooser panel
+const ColumnChooser: React.FC<{
+  pos: { x: number; y: number };
+  allCols: ColDef[];
+  visibleCols: Set<string>;
+  onToggle: (key: string) => void;
+  onClose: () => void;
+}> = ({ pos, allCols, visibleCols, onToggle, onClose }) => {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const standardCols = allCols.filter((c) => !c.groupId && !c.isTag);
+  const tagGroupCols = allCols.filter((c) => !!c.groupId);
+  const unGroupedCol = allCols.find((c) => c.isTag && !c.groupId);
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      style={{
+        position: 'fixed', zIndex: 9999,
+        top: pos.y, left: pos.x,
+        background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)', padding: '10px 0', minWidth: 200,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', padding: '2px 14px 6px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        Columns
+      </div>
+      {standardCols.map((col) => (
+        <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', cursor: 'pointer', fontSize: 13 }}>
+          <input type="checkbox" checked={visibleCols.has(col.key)} onChange={() => onToggle(col.key)} />
+          {col.label}
+        </label>
+      ))}
+      {(tagGroupCols.length > 0 || unGroupedCol) && (
+        <>
+          <div style={{ margin: '6px 0', borderTop: '1px solid #f3f4f6' }} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', padding: '2px 14px 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Tag Columns
+          </div>
+          {tagGroupCols.map((col) => (
+            <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={visibleCols.has(col.key)} onChange={() => onToggle(col.key)} />
+              {col.label}
+            </label>
+          ))}
+          {unGroupedCol && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={visibleCols.has(unGroupedCol.key)} onChange={() => onToggle(unGroupedCol.key)} />
+              {unGroupedCol.label} (ungrouped)
+            </label>
+          )}
+        </>
+      )}
+    </div>,
+    document.body
+  );
+};
 
 const GCScheduleView: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -155,13 +980,65 @@ const GCScheduleView: React.FC = () => {
     });
   };
   const [filters, setFilters] = useState<ActivityFilters>({ mechanicalOnly: false, hideSummary: false });
+  const [tagFilterIds, setTagFilterIds] = useState<number[]>([]);
   const [searchInput, setSearchInput] = useState('');
+
+  // Column widths — persisted to localStorage
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem(COL_WIDTHS_KEY);
+      return saved ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(saved) } : { ...DEFAULT_COL_WIDTHS };
+    } catch { return { ...DEFAULT_COL_WIDTHS }; }
+  });
+  useEffect(() => {
+    localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths));
+  }, [colWidths]);
+
+  // Column resize drag
+  const [resizing, setResizing] = useState<{ key: string; startX: number; startWidth: number } | null>(null);
+  const startResize = (e: React.MouseEvent, key: string) => {
+    e.preventDefault(); e.stopPropagation();
+    setResizing({ key, startX: e.clientX, startWidth: colWidths[key] ?? DEFAULT_COL_WIDTHS[key] ?? DEFAULT_TAG_COL_WIDTH });
+  };
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const newWidth = Math.max(40, resizing.startWidth + e.clientX - resizing.startX);
+      setColWidths((prev) => ({ ...prev, [resizing.key]: newWidth }));
+    };
+    const onUp = () => setResizing(null);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  }, [resizing]);
+
+  // Column sort — active sort switches to flat (no-tree) view
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else { setSortKey(null); }
+    } else {
+      setSortKey(key); setSortDir('asc');
+    }
+  };
+
+  // Debounce search input → filters.search so the table updates as you type
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFilters((f) => ({ ...f, search: searchInput || undefined }));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffA, setDiffA] = useState<number | null>(null);
   const [diffB, setDiffB] = useState<number | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [linkPhaseOpen, setLinkPhaseOpen] = useState(false);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [tagAssignOpen, setTagAssignOpen] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', pid],
@@ -173,19 +1050,82 @@ const GCScheduleView: React.FC = () => {
     queryFn: () => gcSchedulesApi.listVersions(pid).then((r) => r.data),
   });
 
+  const tagsQuery = useQuery({
+    queryKey: ['gc-schedule-tags', pid],
+    queryFn: () => gcSchedulesApi.listTags(pid).then((r) => r.data),
+  });
+  const tagGroupsQuery = useQuery({
+    queryKey: ['gc-schedule-tag-groups', pid],
+    queryFn: () => gcSchedulesApi.listTagGroups(pid).then((r) => r.data),
+  });
+  const projectTags = tagsQuery.data || [];
+  const projectTagGroups = tagGroupsQuery.data || [];
+
+  // Build all available column defs (standard + one per tag group)
+  const allColDefs = useMemo<ColDef[]>(() => [
+    ...STANDARD_COL_DEFS,
+    ...projectTagGroups.map((g) => ({
+      key: `group_${g.id}`,
+      label: g.name,
+      sortable: false,
+      groupId: g.id,
+    })),
+  ], [projectTagGroups]);
+
+  // Visible columns — persisted to localStorage; new tag-group cols default to visible
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(VISIBLE_COLS_KEY);
+      if (saved) return new Set(JSON.parse(saved));
+    } catch { /* ignore */ }
+    return new Set(STANDARD_COL_DEFS.map((c) => c.key));
+  });
+
+  useEffect(() => {
+    setVisibleCols((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const g of projectTagGroups) {
+        const k = `group_${g.id}`;
+        if (!next.has(k)) { next.add(k); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [projectTagGroups]);
+
+  useEffect(() => {
+    localStorage.setItem(VISIBLE_COLS_KEY, JSON.stringify([...visibleCols]));
+  }, [visibleCols]);
+
+  const visibleColDefs = useMemo(() => allColDefs.filter((c) => visibleCols.has(c.key)), [allColDefs, visibleCols]);
+
+  const toggleCol = (key: string) => setVisibleCols((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+
+  const [colChooserPos, setColChooserPos] = useState<{ x: number; y: number } | null>(null);
+
   const versions = versionsQuery.data || [];
 
-  // Auto-select latest version
   const effectiveVersionId = useMemo(() => {
     if (selectedVersionId) return selectedVersionId;
     if (versions.length) return versions[0].id;
     return null;
   }, [selectedVersionId, versions]);
 
+  // Combine tag filter IDs into the filters object sent to the query
+  const effectiveFilters = useMemo<ActivityFilters>(
+    () => ({ ...filters, tagIds: tagFilterIds.length ? tagFilterIds : undefined }),
+    [filters, tagFilterIds]
+  );
+
   const activitiesQuery = useQuery({
-    queryKey: ['gc-schedule-activities', effectiveVersionId, filters],
+    queryKey: ['gc-schedule-activities', effectiveVersionId, effectiveFilters],
     queryFn: () =>
-      gcSchedulesApi.getActivities(effectiveVersionId!, filters).then((r) => r.data),
+      gcSchedulesApi.getActivities(effectiveVersionId!, effectiveFilters).then((r) => r.data),
     enabled: !!effectiveVersionId,
   });
 
@@ -259,6 +1199,13 @@ const GCScheduleView: React.FC = () => {
           <Link to={`/projects/${pid}/schedule`} className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
             Internal Schedule
           </Link>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setTagManagerOpen(true)}
+            title="Create and manage custom tags for this project's schedule activities"
+          >
+            Manage Tags
+          </button>
           <button
             className={diffOpen ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
             disabled={versions.length < 2}
@@ -369,6 +1316,8 @@ const GCScheduleView: React.FC = () => {
           projectNumber={project?.number}
           generatedBy={user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : null}
           logoUrl={logoUrl}
+          projectTags={projectTags}
+          projectTagGroups={projectTagGroups}
         />
       )}
 
@@ -376,22 +1325,33 @@ const GCScheduleView: React.FC = () => {
         <>
           <div className="card" style={{ marginBottom: '0.75rem', padding: 10 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
-              <input
-                type="text"
-                placeholder="Search activities, IDs, WBS, responsible..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') setFilters((f) => ({ ...f, search: searchInput }));
-                }}
-                style={{ flex: 1, minWidth: 220, padding: '4px 8px', fontSize: 13 }}
-              />
-              <button
-                className="btn btn-sm"
-                onClick={() => setFilters((f) => ({ ...f, search: searchInput }))}
-              >
-                Search
-              </button>
+              <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Search activities, IDs, WBS, responsible..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setSearchInput(''); setFilters((f) => ({ ...f, search: undefined })); }
+                  }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: searchInput ? '4px 26px 4px 8px' : '4px 8px', fontSize: 13 }}
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchInput(''); setFilters((f) => ({ ...f, search: undefined })); }}
+                    title="Clear search"
+                    style={{
+                      position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#9ca3af', fontSize: 15, lineHeight: 1, padding: 0,
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
                   type="checkbox"
@@ -408,18 +1368,16 @@ const GCScheduleView: React.FC = () => {
                 />
                 Hide summary rows
               </label>
-              <select
+              <TradeSelect
                 value={filters.trade || ''}
-                onChange={(e) => setFilters((f) => ({ ...f, trade: e.target.value || undefined }))}
-                style={{ padding: '4px 6px', fontSize: 13 }}
-              >
-                <option value="">All trades</option>
-                <option value="mechanical">Mechanical</option>
-                <option value="electrical">Electrical</option>
-                <option value="plumbing">Plumbing</option>
-                <option value="sprinkler">Sprinkler</option>
-                <option value="controls">Controls</option>
-              </select>
+                onChange={(v) => setFilters((f) => ({ ...f, trade: v || undefined }))}
+              />
+              <TagMultiFilter
+                tags={projectTags}
+                tagGroups={projectTagGroups}
+                selectedIds={tagFilterIds}
+                onChange={setTagFilterIds}
+              />
             </div>
           </div>
 
@@ -447,6 +1405,13 @@ const GCScheduleView: React.FC = () => {
                 </button>
                 <button
                   className="btn btn-sm"
+                  onClick={() => setTagAssignOpen(true)}
+                  title="Assign or remove tags on the selected activities"
+                >
+                  Tag…
+                </button>
+                <button
+                  className="btn btn-sm"
                   onClick={() => setLinkPhaseOpen(true)}
                   title="Link the selected activities to a Phase Schedule item"
                 >
@@ -457,81 +1422,91 @@ const GCScheduleView: React.FC = () => {
                 </button>
               </div>
             )}
-            <table style={tableStyle}>
-              <thead>
+            <table style={{ ...tableStyle, tableLayout: 'fixed', width: 'max-content', minWidth: '100%', cursor: resizing ? 'col-resize' : undefined }}>
+              <thead onContextMenu={(e) => { e.preventDefault(); setColChooserPos({ x: e.clientX, y: e.clientY }); }}>
                 <tr>
-                  <th style={{ ...thStyle, width: 32, textAlign: 'center', padding: '4px 6px' }} title="Expand / collapse all">
-                    <button
-                      onClick={() => {
-                        const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
-                        const anyExpanded = allSummaries.some((d) => !collapsed.has(d));
-                        setCollapsed(anyExpanded ? new Set(allSummaries) : new Set());
-                      }}
-                      style={{
-                        background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 3,
-                        padding: '0 6px', height: 18, cursor: 'pointer', fontSize: 11, color: '#475569',
-                      }}
-                      title="Toggle expand / collapse all sections"
-                    >
-                      {(() => {
-                        const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
-                        const anyExpanded = allSummaries.some((d) => !collapsed.has(d));
-                        return anyExpanded ? '−' : '+';
-                      })()}
-                    </button>
+                  {/* expand/collapse — fixed width, no sort/resize */}
+                  <th style={{ ...thStyle, width: 32, textAlign: 'center', padding: '4px 6px' }}>
+                    {!sortKey && (
+                      <button
+                        onClick={() => {
+                          const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
+                          const anyExpanded = allSummaries.some((d) => !collapsed.has(d));
+                          setCollapsed(anyExpanded ? new Set(allSummaries) : new Set());
+                        }}
+                        style={{ background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 3, padding: '0 6px', height: 18, cursor: 'pointer', fontSize: 11, color: '#475569' }}
+                        title="Toggle expand / collapse all"
+                      >
+                        {(() => {
+                          const allSummaries = activities.filter((a) => a.is_summary).map((a) => a.display_order);
+                          return allSummaries.some((d) => !collapsed.has(d)) ? '−' : '+';
+                        })()}
+                      </button>
+                    )}
                   </th>
+                  {/* checkbox — fixed width */}
                   <th style={{ ...thStyle, width: 28, textAlign: 'center', padding: '4px 6px' }}>
                     <input
                       type="checkbox"
-                      checked={
-                        activities.filter((a) => !a.is_summary).length > 0 &&
-                        activities.filter((a) => !a.is_summary).every((a) => selectedIds.has(a.id))
-                      }
+                      checked={activities.filter((a) => !a.is_summary).length > 0 && activities.filter((a) => !a.is_summary).every((a) => selectedIds.has(a.id))}
                       onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedIds(new Set(activities.filter((a) => !a.is_summary).map((a) => a.id)));
-                        } else {
-                          setSelectedIds(new Set());
-                        }
+                        if (e.target.checked) setSelectedIds(new Set(activities.filter((a) => !a.is_summary).map((a) => a.id)));
+                        else setSelectedIds(new Set());
                       }}
                       title="Select all visible tasks"
                     />
                   </th>
-                  <th style={thStyle}>Activity ID</th>
-                  <th style={thStyle}>Activity Name</th>
-                  <th style={thStyle}>Start</th>
-                  <th style={thStyle}>Finish</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Dur</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>% Comp</th>
-                  <th style={thStyle}>Responsible</th>
+                  {visibleColDefs.map(({ key, label, sortable }) => (
+                    <th
+                      key={key}
+                      style={{ ...thStyle, width: colWidths[key] ?? DEFAULT_TAG_COL_WIDTH, position: 'relative', userSelect: 'none', cursor: sortable ? 'pointer' : 'default' }}
+                      onClick={() => sortable && handleSort(key)}
+                    >
+                      {label}
+                      {sortable && <SortIcon col={key} sortKey={sortKey} sortDir={sortDir} />}
+                      <ResizeHandle onMouseDown={(e) => startResize(e, key)} />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {activitiesQuery.isLoading && (
-                  <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', padding: '1.5rem' }}>Loading…</td></tr>
+                  <tr><td colSpan={visibleColDefs.length + 2} style={{ ...tdStyle, textAlign: 'center', padding: '1.5rem' }}>Loading...</td></tr>
                 )}
                 {!activitiesQuery.isLoading && activities.length === 0 && (
-                  <tr><td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>No activities match the filters.</td></tr>
+                  <tr><td colSpan={visibleColDefs.length + 2} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>No activities match the filters.</td></tr>
                 )}
-                {renderTreeRows({
-                  activities,
-                  collapsed,
-                  selectedIds,
-                  onToggleCollapsed: toggleCollapsed,
-                  onToggleSelected: toggleSelected,
-                  onToggleMech: (id, on) => toggleMech.mutate({ id, on }),
-                  onSelectChildren: (parentOrder, on) => {
-                    const childIds = activities
-                      .filter((a) => !a.is_summary && a.parent_summary_order === parentOrder)
-                      .map((a) => a.id);
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      if (on) childIds.forEach((id) => next.add(id));
-                      else childIds.forEach((id) => next.delete(id));
-                      return next;
-                    });
-                  },
-                })}
+                {sortKey
+                  ? renderFlatRows({
+                      activities,
+                      sortKey,
+                      sortDir,
+                      selectedIds,
+                      onToggleSelected: toggleSelected,
+                      onToggleMech: (id, on) => toggleMech.mutate({ id, on }),
+                      colDefs: visibleColDefs,
+                    })
+                  : renderTreeRows({
+                      activities,
+                      collapsed,
+                      selectedIds,
+                      onToggleCollapsed: toggleCollapsed,
+                      onToggleSelected: toggleSelected,
+                      onToggleMech: (id, on) => toggleMech.mutate({ id, on }),
+                      colDefs: visibleColDefs,
+                      onSelectChildren: (parentOrder, on) => {
+                        const childIds = activities
+                          .filter((a) => !a.is_summary && a.parent_summary_order === parentOrder)
+                          .map((a) => a.id);
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (on) childIds.forEach((id) => next.add(id));
+                          else childIds.forEach((id) => next.delete(id));
+                          return next;
+                        });
+                      },
+                    })
+                }
               </tbody>
             </table>
           </div>
@@ -543,6 +1518,29 @@ const GCScheduleView: React.FC = () => {
           selectedActivities={activities.filter((a) => selectedIds.has(a.id) && !!a.activity_id)}
           onClose={() => setLinkPhaseOpen(false)}
           onLinked={() => { setLinkPhaseOpen(false); setSelectedIds(new Set()); }}
+        />
+      )}
+      {colChooserPos && (
+        <ColumnChooser
+          pos={colChooserPos}
+          allCols={allColDefs}
+          visibleCols={visibleCols}
+          onToggle={toggleCol}
+          onClose={() => setColChooserPos(null)}
+        />
+      )}
+      {tagManagerOpen && (
+        <TagManagerModal
+          projectId={pid}
+          onClose={() => setTagManagerOpen(false)}
+        />
+      )}
+      {tagAssignOpen && (
+        <TagAssignModal
+          projectId={pid}
+          selectedActivities={activities.filter((a) => selectedIds.has(a.id))}
+          onClose={() => setTagAssignOpen(false)}
+          onDone={() => { setTagAssignOpen(false); }}
         />
       )}
     </div>
@@ -699,10 +1697,46 @@ const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   </div>
 );
 
-// Render the activity list as a 2-level tree. Summary rows are clickable
-// chevron headers; tasks under a collapsed header are skipped. Empty
-// summaries (no children visible after filter) are also skipped so the
-// table doesn't have orphaned headers.
+const renderFlatRows = ({
+  activities,
+  sortKey,
+  sortDir,
+  selectedIds,
+  onToggleSelected,
+  onToggleMech,
+  colDefs,
+}: {
+  activities: GCScheduleActivity[];
+  sortKey: string;
+  sortDir: 'asc' | 'desc';
+  selectedIds: Set<number>;
+  onToggleSelected: (id: number) => void;
+  onToggleMech: (id: number, on: boolean) => void;
+  colDefs: ColDef[];
+}): React.ReactNode => {
+  const tasks = activities.filter((a) => !a.is_summary);
+  const mul = sortDir === 'asc' ? 1 : -1;
+  const sorted = [...tasks].sort((a, b) => {
+    const av = (a as any)[sortKey];
+    const bv = (b as any)[sortKey];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1 * mul;
+    if (bv == null) return -1 * mul;
+    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * mul;
+    return (Number(av) - Number(bv)) * mul;
+  });
+  return sorted.map((a) => (
+    <TaskRow
+      key={a.id}
+      a={a}
+      isSelected={selectedIds.has(a.id)}
+      onToggleSelected={() => onToggleSelected(a.id)}
+      onToggleMech={(on) => onToggleMech(a.id, on)}
+      colDefs={colDefs}
+    />
+  ));
+};
+
 const renderTreeRows = ({
   activities,
   collapsed,
@@ -711,6 +1745,7 @@ const renderTreeRows = ({
   onToggleSelected,
   onToggleMech,
   onSelectChildren,
+  colDefs,
 }: {
   activities: GCScheduleActivity[];
   collapsed: Set<number>;
@@ -719,9 +1754,8 @@ const renderTreeRows = ({
   onToggleSelected: (id: number) => void;
   onToggleMech: (activityId: number, on: boolean) => void;
   onSelectChildren: (parentOrder: number, on: boolean) => void;
+  colDefs: ColDef[];
 }): React.ReactNode => {
-  // Pre-count visible children per summary so we can hide empty headers
-  // and tell whether the section's children are all/some/none selected.
   const childrenBySummary = new Map<number, GCScheduleActivity[]>();
   for (const a of activities) {
     if (a.is_summary) continue;
@@ -750,6 +1784,7 @@ const renderTreeRows = ({
           someChildrenSelected={someChildrenSelected}
           onClick={() => onToggleCollapsed(a.display_order)}
           onSelectChildren={(on) => onSelectChildren(a.display_order, on)}
+          colDefs={colDefs}
         />
       );
     } else {
@@ -762,6 +1797,7 @@ const renderTreeRows = ({
           isSelected={selectedIds.has(a.id)}
           onToggleSelected={() => onToggleSelected(a.id)}
           onToggleMech={(on) => onToggleMech(a.id, on)}
+          colDefs={colDefs}
         />
       );
     }
@@ -777,19 +1813,28 @@ const SummaryRow: React.FC<{
   someChildrenSelected: boolean;
   onClick: () => void;
   onSelectChildren: (on: boolean) => void;
-}> = ({ a, childCount, isCollapsed, allChildrenSelected, someChildrenSelected, onClick, onSelectChildren }) => {
+  colDefs: ColDef[];
+}> = ({ a, childCount, isCollapsed, allChildrenSelected, someChildrenSelected, onClick, onSelectChildren, colDefs }) => {
   const checkboxRef = React.useRef<HTMLInputElement>(null);
   React.useEffect(() => {
     if (checkboxRef.current) checkboxRef.current.indeterminate = someChildrenSelected;
   }, [someChildrenSelected]);
+
+  const cellContent = (key: string): React.ReactNode => {
+    switch (key) {
+      case 'activity_name': return (
+        <>{a.activity_name}<span style={{ marginLeft: 8, color: '#64748b', fontWeight: 400, fontSize: 11 }}>({childCount} task{childCount === 1 ? '' : 's'})</span></>
+      );
+      case 'start_date': return fmtDate(a.start_date);
+      case 'finish_date': return fmtDate(a.finish_date);
+      case 'duration_days': return a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-';
+      case 'percent_complete': return a.percent_complete != null ? `${a.percent_complete}%` : '-';
+      default: return null;
+    }
+  };
+
   return (
-    <tr
-      style={{
-        background: '#f1f5f9',
-        borderTop: '1px solid #e2e8f0',
-        fontWeight: 600,
-      }}
-    >
+    <tr style={{ background: '#f1f5f9', borderTop: '1px solid #e2e8f0', fontWeight: 600 }}>
       <td
         onClick={onClick}
         style={{ ...tdStyle, textAlign: 'center', color: '#475569', userSelect: 'none', padding: '6px 4px', cursor: 'pointer' }}
@@ -805,22 +1850,14 @@ const SummaryRow: React.FC<{
           title={`Select all ${childCount} task${childCount === 1 ? '' : 's'} in this section`}
         />
       </td>
-      <td style={tdStyle} onClick={onClick}></td>
-      <td style={{ ...tdStyle, color: '#0f172a', cursor: 'pointer' }} onClick={onClick}>
-        {a.activity_name}
-        <span style={{ marginLeft: 8, color: '#64748b', fontWeight: 400, fontSize: 11 }}>
-          ({childCount} task{childCount === 1 ? '' : 's'})
-        </span>
-      </td>
-      <td style={{ ...tdStyle, color: '#475569', cursor: 'pointer' }} onClick={onClick}>{fmtDate(a.start_date)}</td>
-      <td style={{ ...tdStyle, color: '#475569', cursor: 'pointer' }} onClick={onClick}>{fmtDate(a.finish_date)}</td>
-      <td style={{ ...tdStyle, textAlign: 'right', color: '#475569', cursor: 'pointer' }} onClick={onClick}>
-        {a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-'}
-      </td>
-      <td style={{ ...tdStyle, textAlign: 'right', color: '#475569', cursor: 'pointer' }} onClick={onClick}>
-        {a.percent_complete != null ? `${a.percent_complete}%` : '-'}
-      </td>
-      <td style={tdStyle} onClick={onClick}></td>
+      {colDefs.map((col) => {
+        const isName = col.key === 'activity_name';
+        return (
+          <td key={col.key} style={{ ...tdStyle, color: '#475569', cursor: 'pointer', ...(isName ? { color: '#0f172a' } : {}) }} onClick={onClick}>
+            {cellContent(col.key)}
+          </td>
+        );
+      })}
     </tr>
   );
 };
@@ -830,41 +1867,59 @@ const TaskRow: React.FC<{
   isSelected: boolean;
   onToggleSelected: () => void;
   onToggleMech: (on: boolean) => void;
-}> = ({ a, isSelected, onToggleSelected, onToggleMech }) => {
+  colDefs: ColDef[];
+}> = ({ a, isSelected, onToggleSelected, onToggleMech, colDefs }) => {
   const rowBg = isSelected ? '#dbeafe' : a.is_mechanical ? '#ecfdf5' : undefined;
+
+  const cellContent = (col: ColDef): React.ReactNode => {
+    switch (col.key) {
+      case 'activity_id': return <span style={{ fontSize: 12, color: '#475569' }}>{a.activity_id || '-'}</span>;
+      case 'activity_name': return (
+        <>
+          {a.is_mechanical && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onToggleMech(false); }}
+              title={a.mechanical_override ? 'Manually set — click to unmark' : 'Auto-detected — click to unmark'}
+              style={{ display: 'inline-block', background: '#10b981', color: 'white', borderRadius: 3, padding: '0 5px', fontSize: 10, marginRight: 6, cursor: 'pointer', border: a.mechanical_override ? '1px solid #b45309' : 'none' }}
+            >MECH</span>
+          )}
+          {a.is_milestone ? '🏁 ' : ''}{a.activity_name}
+        </>
+      );
+      case 'start_date': return fmtDate(a.start_date);
+      case 'finish_date': return fmtDate(a.finish_date);
+      case 'duration_days': return a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-';
+      case 'percent_complete': return a.percent_complete != null ? `${a.percent_complete}%` : '-';
+      case 'responsible': return a.responsible || '-';
+      case 'tags_ungrouped': return <TagChips tags={(a.tags || []).filter((t) => !t.group_id)} />;
+      default:
+        if (col.groupId != null) return <TagChips tags={(a.tags || []).filter((t) => t.group_id === col.groupId)} />;
+        return null;
+    }
+  };
+
+  const isNumeric = (key: string) => key === 'duration_days' || key === 'percent_complete';
+  const isNameCol = (key: string) => key === 'activity_name';
+
   return (
     <tr style={{ background: rowBg }}>
       <td style={{ ...tdStyle, padding: '4px 6px' }}></td>
       <td style={{ ...tdStyle, textAlign: 'center', padding: '4px 6px' }}>
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={onToggleSelected}
-        />
+        <input type="checkbox" checked={isSelected} onChange={onToggleSelected} />
       </td>
-      <td style={{ ...tdStyle, fontSize: 12, color: '#475569' }}>{a.activity_id || '-'}</td>
-      <td style={{ ...tdStyle, paddingLeft: 24 }}>
-        {a.is_mechanical && (
-          <span
-            onClick={() => onToggleMech(false)}
-            title={a.mechanical_override ? 'Manually set mechanical — click to unmark' : 'Auto-detected mechanical — click to unmark'}
-            style={{
-              display: 'inline-block', background: '#10b981', color: 'white',
-              borderRadius: 3, padding: '0 5px', fontSize: 10, marginRight: 6, cursor: 'pointer',
-              border: a.mechanical_override ? '1px solid #b45309' : 'none',
-            }}
-          >
-            MECH
-          </span>
-        )}
-        {a.is_milestone ? '🏁 ' : ''}
-        {a.activity_name}
-      </td>
-      <td style={tdStyle}>{fmtDate(a.start_date)}</td>
-      <td style={tdStyle}>{fmtDate(a.finish_date)}</td>
-      <td style={{ ...tdStyle, textAlign: 'right' }}>{a.duration_days ?? daysBetween(a.start_date, a.finish_date) ?? '-'}</td>
-      <td style={{ ...tdStyle, textAlign: 'right' }}>{a.percent_complete != null ? `${a.percent_complete}%` : '-'}</td>
-      <td style={tdStyle}>{a.responsible || '-'}</td>
+      {colDefs.map((col) => (
+        <td
+          key={col.key}
+          style={{
+            ...tdStyle,
+            ...(isNameCol(col.key) ? { paddingLeft: 24 } : {}),
+            ...(isNumeric(col.key) ? { textAlign: 'right' } : {}),
+            ...((col.isTag || col.groupId != null) ? { whiteSpace: 'normal' } : {}),
+          }}
+        >
+          {cellContent(col)}
+        </td>
+      ))}
     </tr>
   );
 };
@@ -964,16 +2019,23 @@ const DiffCard: React.FC<{
   projectNumber?: string | null;
   generatedBy?: string | null;
   logoUrl?: string;
-}> = ({ versions, a, b, onChangeA, onChangeB, data, loading, projectName, projectNumber, generatedBy, logoUrl }) => {
+  projectTags: GCScheduleTag[];
+  projectTagGroups: GCScheduleTagGroup[];
+}> = ({ versions, a, b, onChangeA, onChangeB, data, loading, projectName, projectNumber, generatedBy, logoUrl, projectTags, projectTagGroups }) => {
   const [mechanicalOnly, setMechanicalOnly] = useState(false);
   const [trade, setTrade] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [tagFilterIds, setTagFilterIds] = useState<number[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
 
   const matchesFilter = (row: any): boolean => {
     if (mechanicalOnly && !row.is_mechanical) return false;
     if (trade && row.trade !== trade) return false;
+    if (tagFilterIds.length > 0) {
+      const rowTagIds = (row.tags || []).map((t: any) => t.id);
+      if (!tagFilterIds.some((id) => rowTagIds.includes(id))) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       const hay = [
@@ -1133,16 +2195,15 @@ const DiffCard: React.FC<{
             <input type="checkbox" checked={mechanicalOnly} onChange={(e) => setMechanicalOnly(e.target.checked)} />
             Mechanical only
           </label>
-          <select value={trade} onChange={(e) => setTrade(e.target.value)} style={{ padding: '4px 6px', fontSize: 13 }}>
-            <option value="">All trades</option>
-            <option value="mechanical">Mechanical</option>
-            <option value="electrical">Electrical</option>
-            <option value="plumbing">Plumbing</option>
-            <option value="sprinkler">Sprinkler</option>
-            <option value="controls">Controls</option>
-          </select>
-          {(mechanicalOnly || trade || search) && (
-            <button className="btn btn-sm" onClick={() => { setMechanicalOnly(false); setTrade(''); setSearch(''); }}>
+          <TradeSelect value={trade} onChange={setTrade} />
+          <TagMultiFilter
+            tags={projectTags}
+            tagGroups={projectTagGroups}
+            selectedIds={tagFilterIds}
+            onChange={setTagFilterIds}
+          />
+          {(mechanicalOnly || trade || search || tagFilterIds.length > 0) && (
+            <button className="btn btn-sm" onClick={() => { setMechanicalOnly(false); setTrade(''); setSearch(''); setTagFilterIds([]); }}>
               Clear filters
             </button>
           )}
@@ -1173,6 +2234,7 @@ const DiffCard: React.FC<{
 
 const DiffSection: React.FC<{ title: string; rows: any[]; kind: 'added' | 'removed' | 'changed' }> = ({ title, rows, kind }) => {
   if (!rows.length) return null;
+  const colCount = kind === 'changed' ? 4 : 5;
   return (
     <div style={{ marginBottom: '1rem' }}>
       <h4 style={{ marginBottom: '0.4rem', fontSize: 13 }}>{title} ({rows.length})</h4>
@@ -1181,7 +2243,11 @@ const DiffSection: React.FC<{ title: string; rows: any[]; kind: 'added' | 'remov
           <tr>
             <th style={thStyle}>Activity ID</th>
             <th style={thStyle}>Name</th>
-            {kind === 'changed' ? <th style={thStyle}>What changed</th> : <><th style={thStyle}>Start</th><th style={thStyle}>Finish</th></>}
+            {kind === 'changed'
+              ? <th style={thStyle}>What changed</th>
+              : <><th style={thStyle}>Start</th><th style={thStyle}>Finish</th></>
+            }
+            <th style={thStyle}>Tags</th>
           </tr>
         </thead>
         <tbody>
@@ -1199,10 +2265,13 @@ const DiffSection: React.FC<{ title: string; rows: any[]; kind: 'added' | 'remov
                   <td style={tdStyle}>{fmtDate(r.finish_date)}</td>
                 </>
               )}
+              <td style={{ ...tdStyle, whiteSpace: 'normal' }}>
+                <TagChips tags={r.tags} />
+              </td>
             </tr>
           ))}
           {rows.length > 200 && (
-            <tr><td colSpan={3} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>Showing first 200 of {rows.length}.</td></tr>
+            <tr><td colSpan={colCount} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>Showing first 200 of {rows.length}.</td></tr>
           )}
         </tbody>
       </table>

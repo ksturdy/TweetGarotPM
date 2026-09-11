@@ -17,6 +17,26 @@ export interface GCScheduleVersion {
   uploaded_at: string;
 }
 
+export interface GCScheduleTagGroup {
+  id: number;
+  project_id: number;
+  tenant_id: number;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface GCScheduleTag {
+  id: number;
+  project_id: number;
+  tenant_id: number;
+  name: string;
+  color: string;
+  group_id: number | null;
+  group_name: string | null;
+  created_at: string;
+}
+
 export interface GCScheduleActivity {
   id: number;
   version_id: number;
@@ -42,6 +62,7 @@ export interface GCScheduleActivity {
   outline_level: number;
   parent_summary_order: number | null;
   display_order: number;
+  tags: Array<{ id: number; name: string; color: string; group_id?: number | null; group_name?: string | null }>;
 }
 
 export interface ActivityFilters {
@@ -51,6 +72,7 @@ export interface ActivityFilters {
   startAfter?: string;
   endBefore?: string;
   hideSummary?: boolean;
+  tagIds?: number[];
 }
 
 export interface DiffResult {
@@ -90,6 +112,7 @@ export const gcSchedulesApi = {
     if (filters.startAfter) params.start_after = filters.startAfter;
     if (filters.endBefore) params.end_before = filters.endBefore;
     if (filters.hideSummary) params.hide_summary = 'true';
+    if (filters.tagIds?.length) params.tag_ids = filters.tagIds.join(',');
     return api.get<{ version: GCScheduleVersion; activities: GCScheduleActivity[] }>(
       `/gc-schedules/versions/${versionId}/activities`,
       { params }
@@ -110,4 +133,34 @@ export const gcSchedulesApi = {
 
   deleteVersion: (versionId: number) =>
     api.delete(`/gc-schedules/versions/${versionId}`),
+
+  listTags: (projectId: number) =>
+    api.get<GCScheduleTag[]>(`/gc-schedules/project/${projectId}/tags`),
+
+  createTag: (projectId: number, data: { name: string; color: string; groupId?: number | null }) =>
+    api.post<GCScheduleTag>(`/gc-schedules/project/${projectId}/tags`, data),
+
+  updateTag: (tagId: number, data: { name?: string; color?: string; groupId?: number | null }) =>
+    api.patch<GCScheduleTag>(`/gc-schedules/tags/${tagId}`, data),
+
+  deleteTag: (tagId: number) =>
+    api.delete(`/gc-schedules/tags/${tagId}`),
+
+  listTagGroups: (projectId: number) =>
+    api.get<GCScheduleTagGroup[]>(`/gc-schedules/project/${projectId}/tag-groups`),
+
+  createTagGroup: (projectId: number, data: { name: string }) =>
+    api.post<GCScheduleTagGroup>(`/gc-schedules/project/${projectId}/tag-groups`, data),
+
+  updateTagGroup: (groupId: number, data: { name: string }) =>
+    api.patch<GCScheduleTagGroup>(`/gc-schedules/tag-groups/${groupId}`, data),
+
+  deleteTagGroup: (groupId: number) =>
+    api.delete(`/gc-schedules/tag-groups/${groupId}`),
+
+  assignTags: (data: { tagIds: number[]; activityIds: string[]; projectId: number }) =>
+    api.post<{ assigned: number }>(`/gc-schedules/activities/assign-tags`, data),
+
+  unassignTags: (data: { tagIds: number[]; activityIds: string[] }) =>
+    api.post<{ unassigned: number }>(`/gc-schedules/activities/unassign-tags`, data),
 };

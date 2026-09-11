@@ -99,8 +99,8 @@ const GCSchedule = {
     }
   },
 
-  async listActivities({ versionId, filters = {} }) {
-    const conditions = ['version_id = $1'];
+  async listActivities({ versionId, projectId = null, filters = {} }) {
+    const conditions = ['a.version_id = $1'];
     const params = [versionId];
     let p = 2;
 
@@ -108,37 +108,71 @@ const GCSchedule = {
     // tree view loses its grouping. The frontend can hide empty headers
     // client-side after filtering.
     if (filters.mechanicalOnly === true || filters.mechanicalOnly === 'true') {
-      conditions.push('(is_summary = TRUE OR is_mechanical = TRUE)');
+      conditions.push('(a.is_summary = TRUE OR a.is_mechanical = TRUE)');
     }
     if (filters.trade) {
-      conditions.push(`(is_summary = TRUE OR trade = $${p++})`);
+      conditions.push(`(a.is_summary = TRUE OR a.trade = $${p++})`);
       params.push(filters.trade);
     }
     if (filters.search) {
-      conditions.push(`(is_summary = TRUE OR activity_name ILIKE $${p} OR activity_id ILIKE $${p} OR wbs_code ILIKE $${p} OR responsible ILIKE $${p})`);
+      conditions.push(`(a.is_summary = TRUE OR a.activity_name ILIKE $${p} OR a.activity_id ILIKE $${p} OR a.wbs_code ILIKE $${p} OR a.responsible ILIKE $${p})`);
       params.push(`%${filters.search}%`);
       p++;
     }
     if (filters.startAfter) {
-      conditions.push(`(is_summary = TRUE OR finish_date >= $${p++})`);
+      conditions.push(`(a.is_summary = TRUE OR a.finish_date >= $${p++})`);
       params.push(filters.startAfter);
     }
     if (filters.endBefore) {
-      conditions.push(`(is_summary = TRUE OR start_date <= $${p++})`);
+      conditions.push(`(a.is_summary = TRUE OR a.start_date <= $${p++})`);
       params.push(filters.endBefore);
     }
     if (filters.hideSummary) {
-      conditions.push('is_summary = FALSE');
+      conditions.push('a.is_summary = FALSE');
+    }
+    if (filters.tagIds && filters.tagIds.length > 0) {
+      conditions.push(`(a.is_summary = TRUE OR EXISTS (
+        SELECT 1 FROM gc_activity_tag_assignments ata_f
+        WHERE ata_f.activity_id = a.activity_id
+          AND ata_f.tag_id = ANY($${p++}::int[])
+      ))`);
+      params.push(filters.tagIds);
     }
 
     const where = conditions.join(' AND ');
+
+    if (projectId) {
+      params.push(projectId);
+      const pidParam = p;
+      const result = await db.query(
+        `SELECT a.*,
+          COALESCE(
+            json_agg(
+              json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color,
+                                'group_id', tg.group_id, 'group_name', grp.name)
+              ORDER BY grp.sort_order NULLS LAST, tg.name
+            ) FILTER (WHERE tg.id IS NOT NULL),
+            '[]'::json
+          ) AS tags
+         FROM gc_schedule_activities a
+         LEFT JOIN gc_activity_tag_assignments ata ON ata.activity_id = a.activity_id AND ata.project_id = $${pidParam}
+         LEFT JOIN gc_schedule_tags tg ON tg.id = ata.tag_id
+         LEFT JOIN gc_schedule_tag_groups grp ON grp.id = tg.group_id
+         WHERE ${where}
+         GROUP BY a.id
+         ORDER BY a.display_order, a.id`,
+        params
+      );
+      return result.rows;
+    }
+
     const result = await db.query(
-      `SELECT * FROM gc_schedule_activities
+      `SELECT a.* FROM gc_schedule_activities a
        WHERE ${where}
-       ORDER BY display_order, id`,
+       ORDER BY a.display_order, a.id`,
       params
     );
-    return result.rows;
+    return result.rows.map((r) => ({ ...r, tags: [] }));
   },
 
   async setMechanicalOverride({ activityId, isMechanical }) {
@@ -201,7 +235,7 @@ const GCSchedule = {
   //   • duration diffs that are pure backfills — one side was null while the
   //     start/finish on both sides match (the duration was just computed
   //     after-the-fact and isn't a real schedule change)
-  async diffVersions({ versionAId, versionBId }) {
+  async diffVersions({ versionAId, versionBId, projectId = null }) {
     const aRows = await db.query(
       `SELECT activity_id, activity_name, start_date, finish_date,
               duration_days, percent_complete, is_mechanical, trade, wbs_code, responsible
@@ -312,7 +346,169 @@ const GCSchedule = {
       if (!bMap.has(aid)) removed.push(a);
     }
 
+    // Annotate each diff row with the project's tags for that activity_id.
+    if (projectId) {
+      const allIds = [
+        ...added.map((a) => a.activity_id),
+        ...removed.map((a) => a.activity_id),
+        ...changed.map((a) => a.activity_id),
+      ].filter(Boolean);
+      if (allIds.length) {
+        const tagResult = await db.query(
+          `SELECT ata.activity_id,
+            json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color,
+                                       'group_id', t.group_id, 'group_name', g.name)
+                     ORDER BY g.sort_order NULLS LAST, t.name) AS tags
+           FROM gc_activity_tag_assignments ata
+           JOIN gc_schedule_tags t ON t.id = ata.tag_id
+           LEFT JOIN gc_schedule_tag_groups g ON g.id = t.group_id
+           WHERE ata.activity_id = ANY($1::text[]) AND ata.project_id = $2
+           GROUP BY ata.activity_id`,
+          [allIds, projectId]
+        );
+        const tagMap = new Map(tagResult.rows.map((r) => [r.activity_id, r.tags]));
+        added.forEach((a) => { a.tags = tagMap.get(a.activity_id) || []; });
+        removed.forEach((a) => { a.tags = tagMap.get(a.activity_id) || []; });
+        changed.forEach((a) => { a.tags = tagMap.get(a.activity_id) || []; });
+      }
+    }
+
     return { added, removed, changed };
+  },
+
+  async listTagGroups({ projectId, tenantId }) {
+    const result = await db.query(
+      `SELECT * FROM gc_schedule_tag_groups
+       WHERE tenant_id = $1 AND project_id = $2
+       ORDER BY sort_order, id`,
+      [tenantId, projectId]
+    );
+    return result.rows;
+  },
+
+  async createTagGroup({ tenantId, projectId, name }) {
+    // Enforce 3-group limit per project
+    const count = await db.query(
+      `SELECT COUNT(*)::int AS n FROM gc_schedule_tag_groups WHERE tenant_id = $1 AND project_id = $2`,
+      [tenantId, projectId]
+    );
+    if (count.rows[0].n >= 3) {
+      throw new Error('Maximum of 3 tag groups per project.');
+    }
+    const result = await db.query(
+      `INSERT INTO gc_schedule_tag_groups (tenant_id, project_id, name, sort_order)
+       VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort_order),0)+1 FROM gc_schedule_tag_groups WHERE tenant_id=$1 AND project_id=$2))
+       ON CONFLICT (tenant_id, project_id, name) DO NOTHING
+       RETURNING *`,
+      [tenantId, projectId, name.trim()]
+    );
+    return result.rows[0] || null;
+  },
+
+  async updateTagGroup({ groupId, tenantId, name }) {
+    const result = await db.query(
+      `UPDATE gc_schedule_tag_groups
+         SET name = $1
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING *`,
+      [name.trim(), groupId, tenantId]
+    );
+    return result.rows[0] || null;
+  },
+
+  async deleteTagGroup({ groupId, tenantId }) {
+    // Tags in this group have group_id set to NULL by FK ON DELETE SET NULL
+    const result = await db.query(
+      `DELETE FROM gc_schedule_tag_groups WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [groupId, tenantId]
+    );
+    return result.rowCount > 0;
+  },
+
+  async listTags({ projectId, tenantId }) {
+    const result = await db.query(
+      `SELECT t.*, g.name AS group_name
+       FROM gc_schedule_tags t
+       LEFT JOIN gc_schedule_tag_groups g ON g.id = t.group_id
+       WHERE t.tenant_id = $1 AND t.project_id = $2
+       ORDER BY g.sort_order NULLS LAST, g.name NULLS LAST, t.name`,
+      [tenantId, projectId]
+    );
+    return result.rows;
+  },
+
+  async updateTag({ tagId, tenantId, name, color, groupId }) {
+    // groupId: undefined = don't touch, null = remove from group, number = set group
+    const fields = [];
+    const vals = [];
+    let p = 1;
+    if (name !== undefined) { fields.push(`name = $${p++}`); vals.push(name.trim()); }
+    if (color !== undefined && color !== null) { fields.push(`color = $${p++}`); vals.push(color); }
+    if (groupId !== undefined) { fields.push(`group_id = $${p++}`); vals.push(groupId ?? null); }
+    if (!fields.length) return null;
+    vals.push(tagId, tenantId);
+    const result = await db.query(
+      `UPDATE gc_schedule_tags SET ${fields.join(', ')} WHERE id = $${p++} AND tenant_id = $${p++} RETURNING *, (SELECT name FROM gc_schedule_tag_groups WHERE id = group_id) AS group_name`,
+      vals
+    );
+    return result.rows[0] || null;
+  },
+
+  async createTag({ tenantId, projectId, name, color, groupId, createdBy }) {
+    const result = await db.query(
+      `INSERT INTO gc_schedule_tags (tenant_id, project_id, name, color, group_id, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (tenant_id, project_id, name) DO NOTHING
+       RETURNING *, (SELECT name FROM gc_schedule_tag_groups WHERE id = group_id) AS group_name`,
+      [tenantId, projectId, name.trim(), color || '#6366f1', groupId || null, createdBy || null]
+    );
+    return result.rows[0] || null;
+  },
+
+  async deleteTag({ tagId, tenantId }) {
+    const result = await db.query(
+      `DELETE FROM gc_schedule_tags WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [tagId, tenantId]
+    );
+    return result.rowCount > 0;
+  },
+
+  async assignTags({ tagIds, activityIds, tenantId, projectId }) {
+    if (!tagIds.length || !activityIds.length) return 0;
+    const tagCheck = await db.query(
+      `SELECT COUNT(*)::int AS n FROM gc_schedule_tags
+       WHERE id = ANY($1::int[]) AND tenant_id = $2 AND project_id = $3`,
+      [tagIds, tenantId, projectId]
+    );
+    if (tagCheck.rows[0].n !== tagIds.length) {
+      throw new Error('One or more tags are outside the requested project.');
+    }
+    const values = [];
+    const placeholders = [];
+    let i = 1;
+    for (const tagId of tagIds) {
+      for (const activityId of activityIds) {
+        placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++})`);
+        values.push(tagId, activityId, projectId, tenantId);
+      }
+    }
+    const result = await db.query(
+      `INSERT INTO gc_activity_tag_assignments (tag_id, activity_id, project_id, tenant_id)
+       VALUES ${placeholders.join(',')}
+       ON CONFLICT (tag_id, activity_id) DO NOTHING`,
+      values
+    );
+    return result.rowCount;
+  },
+
+  async unassignTags({ tagIds, activityIds }) {
+    if (!tagIds.length || !activityIds.length) return 0;
+    const result = await db.query(
+      `DELETE FROM gc_activity_tag_assignments
+       WHERE tag_id = ANY($1::int[]) AND activity_id = ANY($2::text[])`,
+      [tagIds, activityIds]
+    );
+    return result.rowCount;
   },
 };
 
