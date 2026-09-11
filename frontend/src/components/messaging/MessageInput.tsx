@@ -64,7 +64,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ conversationId, disabled })
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         placeholder="Type a message..."
-        rows={1}
+        rows={4}
         disabled={disabled || sending}
       />
       <button
