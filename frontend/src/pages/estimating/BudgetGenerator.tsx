@@ -1,3 +1,4 @@
+// @refresh reset
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Doughnut, Bar } from 'react-chartjs-2';

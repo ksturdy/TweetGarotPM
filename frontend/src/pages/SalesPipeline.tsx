@@ -1,3 +1,4 @@
+// @refresh reset
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
