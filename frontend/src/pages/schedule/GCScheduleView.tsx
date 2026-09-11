@@ -14,6 +14,7 @@ import { phaseScheduleApi, PhaseScheduleItem } from '../../services/phaseSchedul
 import { phaseScheduleLinksApi } from '../../services/phaseScheduleLinks';
 import { useAuth } from '../../context/AuthContext';
 import { exportGcScheduleDiffPdf, loadImageAsDataUrl } from '../../utils/gcScheduleDiffPdf';
+import { exportGcScheduleDiffExcel } from '../../utils/gcScheduleDiffExcel';
 import '../../styles/SalesPipeline.css';
 
 const fmtDate = (s: string | null): string => {
@@ -257,7 +258,7 @@ const GCScheduleView: React.FC = () => {
             Internal Schedule
           </Link>
           <button
-            className="btn btn-secondary"
+            className={diffOpen ? 'btn btn-primary' : 'btn btn-secondary'}
             disabled={versions.length < 2}
             onClick={() => {
               setDiffOpen((v) => !v);
@@ -267,7 +268,7 @@ const GCScheduleView: React.FC = () => {
               }
             }}
           >
-            Compare Versions
+            {diffOpen ? 'Exit Comparison' : 'Compare Versions'}
           </button>
           <button className="btn btn-primary" onClick={() => setUploadOpen((v) => !v)}>
             {uploadOpen ? 'Cancel Upload' : 'Upload Schedule'}
@@ -839,7 +840,7 @@ const TaskRow: React.FC<{
           onChange={onToggleSelected}
         />
       </td>
-      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{a.activity_id || '-'}</td>
+      <td style={{ ...tdStyle, fontSize: 12, color: '#475569' }}>{a.activity_id || '-'}</td>
       <td style={{ ...tdStyle, paddingLeft: 24 }}>
         {a.is_mechanical && (
           <span
@@ -966,6 +967,7 @@ const DiffCard: React.FC<{
   const [trade, setTrade] = useState<string>('');
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const matchesFilter = (row: any): boolean => {
     if (mechanicalOnly && !row.is_mechanical) return false;
@@ -1024,18 +1026,61 @@ const DiffCard: React.FC<{
     }
   };
 
+  const exportExcel = () => {
+    if (!data || !filtered) return;
+    setExportingExcel(true);
+    try {
+      const fromV: GCScheduleVersion = data.a;
+      const toV: GCScheduleVersion = data.b;
+      const fileName = `GC_Schedule_Diff_${(projectNumber || 'Project').replace(/[^\w-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      exportGcScheduleDiffExcel({
+        meta: {
+          projectName,
+          projectNumber,
+          fromVersionLabel: versionDisplay(fromV),
+          toVersionLabel: versionDisplay(toV),
+          fromUploadedAt: fromV.uploaded_at,
+          toUploadedAt: toV.uploaded_at,
+          generatedBy,
+        },
+        counts: {
+          changed: filtered.changed.length,
+          added: filtered.added.length,
+          removed: filtered.removed.length,
+        },
+        changed: filtered.changed,
+        added: filtered.added,
+        removed: filtered.removed,
+        fileName,
+      });
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   return (
     <div className="card" style={{ marginBottom: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h3 style={{ margin: 0 }}>Compare Versions</h3>
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={!filtered || loading || exporting}
-          onClick={exportPdf}
-          title="Download a PDF report of the differences between these two versions"
-        >
-          {exporting ? 'Exporting…' : 'Export PDF'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className="btn btn-sm"
+            style={{ background: '#217346', color: '#fff', border: 'none' }}
+            disabled={!filtered || loading || exportingExcel}
+            onClick={exportExcel}
+            title="Download an Excel workbook with all differences (Changed, Added, Removed sheets)"
+          >
+            {exportingExcel ? 'Exporting…' : 'Export Excel'}
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!filtered || loading || exporting}
+            onClick={exportPdf}
+            title="Download a PDF report of the differences between these two versions"
+          >
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
+        </div>
       </div>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <div>
@@ -1119,7 +1164,7 @@ const DiffSection: React.FC<{ title: string; rows: any[]; kind: 'added' | 'remov
         <tbody>
           {rows.slice(0, 200).map((r, i) => (
             <tr key={i} style={{ background: kind === 'added' ? '#ecfdf5' : kind === 'removed' ? '#fef2f2' : '#fffbeb' }}>
-              <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{r.activity_id || '-'}</td>
+              <td style={{ ...tdStyle, fontSize: 12, color: '#475569' }}>{r.activity_id || '-'}</td>
               <td style={tdStyle}>{r.name || r.activity_name}{r.is_mechanical ? ' ⚙' : ''}</td>
               {kind === 'changed' ? (
                 <td style={{ ...tdStyle, fontSize: 12, whiteSpace: 'normal' }}>
