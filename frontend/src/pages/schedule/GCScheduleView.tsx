@@ -996,7 +996,14 @@ const DiffCard: React.FC<{
     try {
       let logoDataUrl: string | undefined;
       if (logoUrl) {
-        try { logoDataUrl = await loadImageAsDataUrl(logoUrl); } catch { /* skip logo */ }
+        try {
+          logoDataUrl = await loadImageAsDataUrl(logoUrl);
+          console.log('[GC Diff PDF] Logo loaded, bytes:', logoDataUrl.length);
+        } catch (e) {
+          console.warn('[GC Diff PDF] Logo load failed:', e);
+        }
+      } else {
+        console.log('[GC Diff PDF] No logoUrl — tenant branding not set');
       }
       const fromV: GCScheduleVersion = data.a;
       const toV: GCScheduleVersion = data.b;

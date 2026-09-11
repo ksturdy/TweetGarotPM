@@ -209,16 +209,6 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
   };
 
-  // Logo top-right on page 1. Auto-detect format from data URL so PNG/JPEG/WebP all work.
-  if (logoDataUrl) {
-    try {
-      const imgFmt = (logoDataUrl.match(/^data:image\/(\w+);/) || [])[1]?.toUpperCase() || 'PNG';
-      doc.addImage(logoDataUrl, imgFmt, pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
-    } catch (e) {
-      console.warn('[GC Schedule PDF] Logo failed to render:', e);
-    }
-  }
-
   drawPageChrome();
 
   // Title block — compact
@@ -309,7 +299,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
         doc.setFont('helvetica', 'bold');
         const verdictW = doc.getTextWidth(sanitizedVerdict);
         // Context starts after: left-pad + label column + verdict + gap
-        const contextStartX = CELL_PAD + LABEL_W + verdictW + 6;
+        const contextStartX = CELL_PAD + LABEL_W + verdictW + 8;
         const contextAvailW = col2Width - contextStartX - CELL_PAD;
 
         let contextLines: string[];
@@ -396,7 +386,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
           const verdictW = doc.getTextWidth(line.verdict);
           for (let ci = 0; ci < line.contextLines.length; ci++) {
             if (ci === 0) {
-              doc.text(line.contextLines[0], x + LABEL_W + verdictW + 4, ly);
+              doc.text(line.contextLines[0], x + LABEL_W + verdictW + 8, ly);
             } else {
               ly += 9;
               doc.text(line.contextLines[ci], x + LABEL_W + 4, ly);
@@ -475,26 +465,48 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
 
   // Replace placeholder in all footer instances with the true final page count.
   doc.putTotalPages(TOTAL_PH);
+
+  // Draw logo on page 1 as the very last step so nothing can overwrite it.
+  // loadImageAsDataUrl always returns a PNG data URL via canvas.
+  if (logoDataUrl) {
+    try {
+      (doc as any).setPage(1);
+      doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+    } catch (e) {
+      console.warn('[GC Schedule PDF] Logo failed to render:', e);
+    }
+  }
+
   doc.save(fileName);
 }
 
-// Load an authenticated image URL into a base64 data URL so it can be
-// embedded in the PDF.
-export function loadImageAsDataUrl(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'blob';
-    const token = localStorage.getItem('token');
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    xhr.onload = () => {
-      if (xhr.status !== 200) { reject(new Error(`Failed: ${xhr.status}`)); return; }
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(xhr.response);
+// Load an authenticated image URL into a PNG data URL via canvas so jsPDF
+// always gets a clean, format-agnostic PNG regardless of source type.
+export async function loadImageAsDataUrl(url: string): Promise<string> {
+  const token = localStorage.getItem('token');
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  return new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No 2d context');
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(blobUrl);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        URL.revokeObjectURL(blobUrl);
+        reject(err);
+      }
     };
-    xhr.onerror = () => reject(new Error('Failed to load image'));
-    xhr.send();
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Image failed to load')); };
+    img.src = blobUrl;
   });
 }
