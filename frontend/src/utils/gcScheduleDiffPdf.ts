@@ -186,8 +186,8 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   const leftMargin = 40;
   const rightMargin = 40;
 
-  const LOGO_W = 120;
-  const LOGO_H = 30;
+  const LOGO_W = 84;
+  const LOGO_H = 21;
   // Placeholder replaced by putTotalPages() after all content is rendered.
   const TOTAL_PH = '{total_pages}';
 
@@ -211,7 +211,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     if (pageNum === 1 && logoDataUrl) {
       console.log('[GC Schedule PDF] Drawing logo on page 1');
       try {
-        doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+        doc.addImage(logoDataUrl, 'PNG', pageWidth - 10 - LOGO_W, 5, LOGO_W, LOGO_H);
       } catch (e) {
         console.warn('[GC Schedule PDF] addImage failed:', e);
       }
@@ -221,7 +221,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   drawPageChrome();
 
   // Title block — compact
-  const textMaxX = pageWidth - rightMargin - LOGO_W - 12; // don't overlap logo
+  const textMaxX = pageWidth - 10 - LOGO_W - 8; // don't overlap logo
   let y = 22;
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
