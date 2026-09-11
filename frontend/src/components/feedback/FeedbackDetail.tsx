@@ -48,6 +48,7 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
       case 'read': return '#17a2b8';
       case 'under_review': return '#ffc107';
       case 'in_progress': return '#007bff';
+      case 'in_testing': return '#8b5cf6';
       case 'completed': return '#28a745';
       case 'on_hold': return '#fd7e14';
       case 'rejected': return '#dc3545';
@@ -212,6 +213,7 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
               <option value="read">Read</option>
               <option value="under_review">Under Review</option>
               <option value="in_progress">In Progress</option>
+              <option value="in_testing">In Testing</option>
               <option value="completed">Completed</option>
               <option value="on_hold">On Hold</option>
               <option value="rejected">Rejected</option>

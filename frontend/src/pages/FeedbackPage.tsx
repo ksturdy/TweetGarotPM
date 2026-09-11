@@ -14,7 +14,7 @@ import FeedbackForm from '../components/feedback/FeedbackForm';
 import FeedbackDetail from '../components/feedback/FeedbackDetail';
 import './FeedbackPage.css';
 
-const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'completed', 'on_hold', 'rejected'];
+const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'in_testing', 'completed', 'on_hold', 'rejected'];
 const DEFAULT_STATUSES = ALL_STATUSES.filter(s => s !== 'completed');
 
 const STATUS_LABELS: Record<string, string> = {
@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   read: 'Read',
   under_review: 'Under Review',
   in_progress: 'In Progress',
+  in_testing: 'In Testing',
   completed: 'Completed',
   on_hold: 'On Hold',
   rejected: 'Rejected',

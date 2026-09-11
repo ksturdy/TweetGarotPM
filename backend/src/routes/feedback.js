@@ -12,6 +12,7 @@ const STATUS_LABELS = {
   read: 'Read',
   under_review: 'Under Review',
   in_progress: 'In Progress',
+  in_testing: 'In Testing',
   completed: 'Completed',
   on_hold: 'On Hold',
   rejected: 'Rejected',
