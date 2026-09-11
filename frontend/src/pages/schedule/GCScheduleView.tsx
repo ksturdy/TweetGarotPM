@@ -333,7 +333,7 @@ const GCScheduleView: React.FC = () => {
             {currentVersion && (
               <button
                 className="btn btn-danger btn-sm"
-                style={{ marginLeft: 'auto' }}
+                style={{ marginLeft: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                 onClick={() => {
                   if (window.confirm(`Delete this version (${currentVersion.activity_count} activities)?`)) {
                     deleteVersion.mutate(currentVersion.id);
@@ -388,6 +388,7 @@ const GCScheduleView: React.FC = () => {
               />
               <button
                 className="btn btn-sm"
+                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                 onClick={() => setFilters((f) => ({ ...f, search: searchInput }))}
               >
                 Search
