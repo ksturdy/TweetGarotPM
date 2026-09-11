@@ -207,6 +207,15 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       footerY
     );
     doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
+    // Logo — drawn on every page 1 invocation (initial + autoTable didDrawPage)
+    if (pageNum === 1 && logoDataUrl) {
+      try {
+        const fmt = (logoDataUrl.match(/^data:image\/(\w+);/) || [])[1]?.toUpperCase() || 'PNG';
+        doc.addImage(logoDataUrl, fmt, pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+      } catch (e) {
+        console.warn('[GC Schedule PDF] Logo draw failed:', e);
+      }
+    }
   };
 
   drawPageChrome();
@@ -465,48 +474,26 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
 
   // Replace placeholder in all footer instances with the true final page count.
   doc.putTotalPages(TOTAL_PH);
-
-  // Draw logo on page 1 as the very last step so nothing can overwrite it.
-  // loadImageAsDataUrl always returns a PNG data URL via canvas.
-  if (logoDataUrl) {
-    try {
-      (doc as any).setPage(1);
-      doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
-    } catch (e) {
-      console.warn('[GC Schedule PDF] Logo failed to render:', e);
-    }
-  }
-
   doc.save(fileName);
 }
 
-// Load an authenticated image URL into a PNG data URL via canvas so jsPDF
-// always gets a clean, format-agnostic PNG regardless of source type.
+// Load an authenticated image URL into a base64 data URL for PDF embedding.
 export async function loadImageAsDataUrl(url: string): Promise<string> {
   const token = localStorage.getItem('token');
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
   const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
   const blob = await response.blob();
-  const blobUrl = URL.createObjectURL(blob);
   return new Promise<string>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('No 2d context');
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(blobUrl);
-        resolve(canvas.toDataURL('image/png'));
-      } catch (err) {
-        URL.revokeObjectURL(blobUrl);
-        reject(err);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string' && reader.result.length > 100) {
+        resolve(reader.result);
+      } else {
+        reject(new Error('FileReader returned empty or invalid data'));
       }
     };
-    img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Image failed to load')); };
-    img.src = blobUrl;
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader error'));
+    reader.readAsDataURL(blob);
   });
 }
