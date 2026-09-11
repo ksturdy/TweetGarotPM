@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   tradeShowsApi,
@@ -88,11 +88,18 @@ const sectionTitle: React.CSSProperties = {
 
 const TradeShowForm: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
 
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(() => {
+    if (!id) {
+      const prefill = (location.state as any)?.prefill;
+      if (prefill && typeof prefill === 'object') return { ...emptyForm, ...prefill };
+    }
+    return emptyForm;
+  });
   const [error, setError] = useState<string | null>(null);
 
   const { data: existing, isLoading: loadingExisting } = useQuery({

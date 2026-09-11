@@ -42,6 +42,139 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// POST /api/trade-shows/extract-url - Extract trade show info from a URL using Schema.org / OpenGraph
+router.post('/extract-url', async (req, res, next) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL' });
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ error: 'Only http/https URLs are supported' });
+    }
+
+    const axios = require('axios');
+    const cheerio = require('cheerio');
+
+    let html;
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; TitanPM/1.0)',
+          'Accept': 'text/html,application/xhtml+xml',
+        },
+        timeout: 10000,
+        maxRedirects: 5,
+        maxContentLength: 2 * 1024 * 1024,
+      });
+      html = response.data;
+    } catch {
+      return res.status(422).json({ error: 'Could not fetch that URL. The site may be blocking automated requests.' });
+    }
+
+    const $ = cheerio.load(html);
+    const result = {};
+
+    const extractDate = (val) => {
+      if (!val) return null;
+      return String(val).split('T')[0];
+    };
+    const extractTime = (val) => {
+      if (!val || !String(val).includes('T')) return null;
+      return String(val).split('T')[1].substring(0, 5);
+    };
+
+    // Try Schema.org JSON-LD
+    $('script[type="application/ld+json"]').each((_, el) => {
+      if (result.name) return;
+      try {
+        const raw = $(el).html();
+        if (!raw) return;
+        const json = JSON.parse(raw);
+        const items = Array.isArray(json) ? json : (json['@graph'] ? json['@graph'] : [json]);
+        for (const item of items) {
+          const type = item['@type'];
+          const isEvent = type === 'Event' || (Array.isArray(type) && type.includes('Event'));
+          if (!isEvent) continue;
+
+          if (item.name) result.name = String(item.name).trim();
+          if (item.description) result.description = String(item.description).trim();
+          result.website_url = item.url || url;
+
+          if (item.startDate) {
+            result.event_start_date = extractDate(item.startDate);
+            const t = extractTime(item.startDate);
+            if (t) result.event_start_time = t;
+          }
+          if (item.endDate) {
+            result.event_end_date = extractDate(item.endDate);
+            const t = extractTime(item.endDate);
+            if (t) result.event_end_time = t;
+          }
+
+          const loc = item.location;
+          if (loc && typeof loc === 'object') {
+            if (loc.name) result.venue = String(loc.name).trim();
+            const addr = loc.address;
+            if (addr) {
+              if (typeof addr === 'string') {
+                result.address = addr;
+              } else {
+                if (addr.streetAddress) result.address = String(addr.streetAddress).trim();
+                if (addr.addressLocality) result.city = String(addr.addressLocality).trim();
+                if (addr.addressRegion) result.state = String(addr.addressRegion).trim();
+                if (addr.addressCountry) result.country = String(addr.addressCountry).trim();
+              }
+            }
+          } else if (loc && typeof loc === 'string') {
+            result.venue = loc;
+          }
+
+          const offers = item.offers ? (Array.isArray(item.offers) ? item.offers : [item.offers]) : [];
+          for (const offer of offers) {
+            const price = parseFloat(offer.price);
+            if (!isNaN(price)) { result.registration_cost = price; break; }
+            if (offer.validThrough) result.registration_deadline = extractDate(offer.validThrough);
+          }
+
+          break;
+        }
+      } catch {
+        // Malformed JSON-LD — skip
+      }
+    });
+
+    // OpenGraph fallbacks
+    if (!result.name) {
+      result.name =
+        $('meta[property="og:title"]').attr('content') ||
+        $('meta[name="twitter:title"]').attr('content') ||
+        $('title').text().trim() ||
+        null;
+    }
+    if (!result.description) {
+      result.description =
+        $('meta[property="og:description"]').attr('content') ||
+        $('meta[name="description"]').attr('content') ||
+        null;
+    }
+    if (!result.website_url) {
+      result.website_url = $('meta[property="og:url"]').attr('content') || url;
+    }
+
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/trade-shows/:id - Get trade show with attendees
 router.get('/:id', async (req, res, next) => {
   try {

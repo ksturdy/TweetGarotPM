@@ -163,6 +163,9 @@ export const tradeShowsApi = {
   recur: (id: number, data: { event_start_date?: string | null; event_end_date?: string | null; registration_deadline?: string | null }) =>
     api.post<TradeShow>(`/trade-shows/${id}/recur`, data),
 
+  extractFromUrl: (url: string) =>
+    api.post<Record<string, string | number | null>>('/trade-shows/extract-url', { url }),
+
   // Attendees
   getAttendees: (id: number) =>
     api.get<TradeShowAttendee[]>(`/trade-shows/${id}/attendees`),

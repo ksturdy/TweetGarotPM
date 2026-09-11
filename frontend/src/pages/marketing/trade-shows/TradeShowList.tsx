@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import TradeShowURLImportDialog from './TradeShowURLImportDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -85,6 +86,7 @@ const TradeShowList: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortKey, setSortKey] = useState<string>('event_start_date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const { data: tradeShows, isLoading, error } = useQuery({
     queryKey: ['trade-shows'],
@@ -264,6 +266,7 @@ const TradeShowList: React.FC = () => {
   if (error) return <div className="error-message">Error loading trade shows</div>;
 
   return (
+    <>
     <div className="container" style={{ maxWidth: 'min(100%, 1800px)', padding: '0 1.5rem' }}>
       <div className="sales-page-header">
         <div className="sales-page-title">
@@ -278,6 +281,9 @@ const TradeShowList: React.FC = () => {
         <div className="sales-header-actions">
           <button className="btn btn-secondary" onClick={exportPdf} disabled={filtered.length === 0}>
             📄 Export PDF
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowImportDialog(true)}>
+            🔗 Import from URL
           </button>
           <button className="btn btn-primary" onClick={() => navigate('/marketing/trade-shows/create')}>
             + New Event
@@ -466,6 +472,9 @@ const TradeShowList: React.FC = () => {
         </div>
       )}
     </div>
+
+    {showImportDialog && <TradeShowURLImportDialog onClose={() => setShowImportDialog(false)} />}
+    </>
   );
 };
 
