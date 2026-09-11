@@ -88,10 +88,10 @@ function buildContractDetailSection(contractDetails) {
     { label: '% Comp',          right: true  },
     { label: 'Total Backlog',   right: true  },
     { label: 'GM %',            right: true  },
-    { label: 'Curr FY Rev',     right: true  },
-    { label: 'Curr FY GM',      right: true  },
-    { label: 'Future FY Rev',   right: true  },
-    { label: 'Future FY GM',    right: true  },
+    { label: 'Curr Fiscal Year Rev',   right: true  },
+    { label: 'Curr Fiscal Year GM',    right: true  },
+    { label: 'Future Fiscal Year Rev', right: true  },
+    { label: 'Future Fiscal Year GM',  right: true  },
     { label: 'Total GM',        right: true  },
   ];
   const thBase = 'padding: 0.35rem 0.4rem; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #ffffff; background: #2d4a7a; white-space: nowrap;';
@@ -208,8 +208,8 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const divLabel  = data.filters?.divisionFilter && data.filters.divisionFilter !== 'all'
-    ? `Division: ${data.filters.divisionFilter}`
-    : 'All Divisions';
+    ? `Department: ${data.filters.divisionFilter}`
+    : 'All Departments';
   const teamLabel = data.teamName
     ? `Team: ${data.teamName}`
     : (data.teamFilter && data.teamFilter !== 'all' ? `Team: ${data.teamFilter}` : 'All Teams');
@@ -221,12 +221,12 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
 
   const rows = [
     buildSectionHeader('Backlog Burn by Fiscal Year'),
-    buildMetricRow('Remaining Backlog to Burn in the Current FY ($)', fmtDollars(data.currentFYRevenue),    'Backlog',    false, `Remaining backlog that will burn in ${data.currentFY}.`),
-    buildMetricRow('Backlog to Burn in Future Fiscal Years ($)',       fmtDollars(data.futureFYRevenue),    'Backlog',    false, `Backlog that will burn after Dec 31, ${data.currentFY}.`),
-    buildMetricRow('Total Booked Backlog Revenue ($)',                 fmtDollars(data.totalBacklogRevenue),'Calculated', true,  'Sum of current FY + future FY backlog.'),
+    buildMetricRow('Remaining Backlog to Burn in the Current Fiscal Year ($)', fmtDollars(data.currentFYRevenue),    'Backlog',    false, `Remaining backlog that will burn in ${data.currentFY}.`),
+    buildMetricRow('Backlog to Burn in Future Fiscal Years ($)',               fmtDollars(data.futureFYRevenue),    'Backlog',    false, `Backlog that will burn after Dec 31, ${data.currentFY}.`),
+    buildMetricRow('Total Booked Backlog Revenue ($)',                         fmtDollars(data.totalBacklogRevenue),'Calculated', true,  'Sum of current fiscal year + future fiscal year backlog.'),
 
     buildSectionHeader('Gross Margin on Backlog'),
-    buildMetricRow(`Gross Margin on Backlog that will Burn in the Current FY ($)`,        fmtDollars(data.currentFYGM),  'Backlog',    false, `Gross margin on backlog burning in ${data.currentFY}.`),
+    buildMetricRow(`Gross Margin on Backlog that will Burn in the Current Fiscal Year ($)`, fmtDollars(data.currentFYGM),  'Backlog',    false, `Gross margin on backlog burning in ${data.currentFY}.`),
     buildMetricRow('Gross Margin on Backlog that will Burn in Future Fiscal Years ($)',   fmtDollars(data.futureFYGM),   'Backlog',    false, 'Gross margin expected on backlog burning in future years.'),
     buildMetricRow('Total Booked Backlog Gross Margin ($)',                               fmtDollars(data.totalBacklogGM),'Calculated', true,  'Total GM across all booked backlog.'),
     buildMetricRow('Number of Months SG&A Covered by Gross Margin on Backlog',           sgaDisplay,                    'Calculated', true,
@@ -313,7 +313,7 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
   <div class="report-header">
     <div class="report-title">
       <h1>Backlog Analysis</h1>
-      <div class="subtitle">FY Burn, Gross Margin Coverage &amp; Pipeline Summary · ${filterLabel}</div>
+      <div class="subtitle">Fiscal Year Burn, Gross Margin Coverage &amp; Pipeline Summary · ${filterLabel}</div>
     </div>
     <div class="report-meta">
       <div class="date">${dateStr}</div>
@@ -326,7 +326,7 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
     <div class="summary-card highlight">
       <div class="card-label">Total Booked Backlog</div>
       <div class="card-value">${fmtCurrency(data.totalBacklogRevenue)}</div>
-      <div class="card-sub">Current FY + Future FY</div>
+      <div class="card-sub">Current Fiscal Year + Future Fiscal Years</div>
     </div>
     <div class="summary-card highlight">
       <div class="card-label">Total Backlog GM</div>
@@ -369,7 +369,7 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
 
   <div class="footer">
     <span>Titan PM · Backlog Analysis Report · ${dateStr}</span>
-    <span>Data source: Vista ERP + Titan PM pipeline · FY ${data.currentFY} (Jan 1 – Dec 31)</span>
+    <span>Data source: Vista ERP + Titan PM pipeline · Fiscal Year ${data.currentFY} (Jan 1 – Dec 31)</span>
   </div>
 
 </div>

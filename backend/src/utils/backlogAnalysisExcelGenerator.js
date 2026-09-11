@@ -31,7 +31,7 @@ async function generateBacklogAnalysisExcel(data) {
 
   const divLabel  = data.filters?.divisionFilter && data.filters.divisionFilter !== 'all'
     ? `Division: ${data.filters.divisionFilter}`
-    : 'All Divisions';
+    : 'All Departments';
   const teamLabel = data.teamName
     ? `Team: ${data.teamName}`
     : (data.teamFilter && data.teamFilter !== 'all' ? `Team: ${data.teamFilter}` : 'All Teams');
@@ -48,7 +48,7 @@ async function generateBacklogAnalysisExcel(data) {
 
   ws.mergeCells('A2:E2');
   const subCell = ws.getCell('A2');
-  subCell.value = `FY ${data.currentFY} (Jan 1 – Dec 31)  ·  ${filterLabel}  ·  Generated: ${new Date().toLocaleDateString()}`;
+  subCell.value = `Fiscal Year ${data.currentFY} (Jan 1 – Dec 31)  ·  ${filterLabel}  ·  Generated: ${new Date().toLocaleDateString()}`;
   subCell.font = { size: 10, color: { argb: 'FF94A3B8' } };
   subCell.fill = headerFill;
   subCell.alignment = { horizontal: 'left' };
@@ -72,15 +72,15 @@ async function generateBacklogAnalysisExcel(data) {
     {
       title: 'BACKLOG BURN BY FISCAL YEAR',
       rows: [
-        { num: 31, cat: 'Backlog',    label: `Remaining Backlog to Burn in the Current FY ($)`,     value: fmt(data.currentFYRevenue),    desc: `Remaining backlog that will burn in ${data.currentFY}.` },
-        { num: 32, cat: 'Backlog',    label: 'Backlog to Burn in Future Fiscal Years ($)',           value: fmt(data.futureFYRevenue),     desc: `Backlog that will burn after Dec 31, ${data.currentFY}.` },
-        { num: '',  cat: 'Calculated', label: 'Total Booked Backlog Revenue ($)',                    value: fmt(data.totalBacklogRevenue), desc: 'Sum of current FY + future FY backlog.' },
+        { num: 31, cat: 'Backlog',    label: `Remaining Backlog to Burn in the Current Fiscal Year ($)`, value: fmt(data.currentFYRevenue),    desc: `Remaining backlog that will burn in ${data.currentFY}.` },
+        { num: 32, cat: 'Backlog',    label: 'Backlog to Burn in Future Fiscal Years ($)',               value: fmt(data.futureFYRevenue),     desc: `Backlog that will burn after Dec 31, ${data.currentFY}.` },
+        { num: '',  cat: 'Calculated', label: 'Total Booked Backlog Revenue ($)',                        value: fmt(data.totalBacklogRevenue), desc: 'Sum of current fiscal year + future fiscal year backlog.' },
       ],
     },
     {
       title: 'GROSS MARGIN ON BACKLOG',
       rows: [
-        { num: 33, cat: 'Backlog',    label: `Gross Margin on Backlog that will Burn in the Current FY ($)`,      value: fmt(data.currentFYGM),  desc: `Gross margin on backlog burning in ${data.currentFY}.` },
+        { num: 33, cat: 'Backlog',    label: `Gross Margin on Backlog that will Burn in the Current Fiscal Year ($)`, value: fmt(data.currentFYGM),  desc: `Gross margin on backlog burning in ${data.currentFY}.` },
         { num: 34, cat: 'Backlog',    label: 'Gross Margin on Backlog that will Burn in Future Fiscal Years ($)', value: fmt(data.futureFYGM),   desc: 'Gross margin expected on backlog burning in future years.' },
         { num: '',  cat: 'Calculated', label: 'Total Booked Backlog Gross Margin ($)',                            value: fmt(data.totalBacklogGM), desc: 'Total GM across all booked backlog.' },
         { num: '',  cat: 'Calculated', label: 'Number of Months SG&A Covered by Gross Margin on Backlog',
@@ -188,17 +188,17 @@ async function generateBacklogAnalysisExcel(data) {
     { key: 'pctComplete',      width: 10 },
     { key: 'totalBacklog',     width: 18 },
     { key: 'gmPct',            width: 10 },
-    { key: 'currentFYRevenue', width: 18 },
-    { key: 'currentFYGM',      width: 18 },
-    { key: 'futureFYRevenue',  width: 18 },
-    { key: 'futureFYGM',       width: 18 },
+    { key: 'currentFYRevenue', width: 24 },
+    { key: 'currentFYGM',      width: 22 },
+    { key: 'futureFYRevenue',  width: 24 },
+    { key: 'futureFYGM',       width: 22 },
     { key: 'totalGM',          width: 18 },
   ];
 
   // Sheet 2 title
   ws2.mergeCells('A1:M1');
   const t2 = ws2.getCell('A1');
-  t2.value = `Backlog Analysis – Contract Detail  ·  FY ${data.currentFY}  ·  ${filterLabel}`;
+  t2.value = `Backlog Analysis – Contract Detail  ·  Fiscal Year ${data.currentFY}  ·  ${filterLabel}`;
   t2.font  = { bold: true, size: 13, color: { argb: 'FF' + white } };
   t2.fill  = headerFill;
   t2.alignment = { vertical: 'middle', horizontal: 'left' };
@@ -209,7 +209,7 @@ async function generateBacklogAnalysisExcel(data) {
   const detailHdr = ws2.addRow([
     'Contract #', 'Description', 'Customer', 'PM',
     '% Complete', 'Total Backlog', 'GM %',
-    'Curr FY Revenue', 'Curr FY GM', 'Future FY Revenue', 'Future FY GM', 'Total GM',
+    'Curr Fiscal Year Revenue', 'Curr Fiscal Year GM', 'Future Fiscal Year Revenue', 'Future Fiscal Year GM', 'Total GM',
   ]);
   detailHdr.eachCell(cell => {
     cell.font = { bold: true, size: 9, color: { argb: 'FF' + white } };
@@ -303,7 +303,7 @@ async function generateBacklogAnalysisExcel(data) {
 
   ws3.mergeCells('A1:F1');
   const t3 = ws3.getCell('A1');
-  t3.value = `Backlog Analysis – Pipeline Detail  ·  FY ${data.currentFY}  ·  ${filterLabel}`;
+  t3.value = `Backlog Analysis – Pipeline Detail  ·  Fiscal Year ${data.currentFY}  ·  ${filterLabel}`;
   t3.font  = { bold: true, size: 13, color: { argb: 'FF' + white } };
   t3.fill  = headerFill;
   t3.alignment = { vertical: 'middle', horizontal: 'left' };

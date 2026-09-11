@@ -110,13 +110,6 @@ function SectionHeader({ title }: { title: string }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-const DIVISION_OPTIONS = [
-  { value: 'all', label: 'All Divisions' },
-  { value: 'NEW', label: 'NEW · De Pere, WI' },
-  { value: 'CW',  label: 'CW · Wisconsin Rapids, WI' },
-  { value: 'WW',  label: 'WW · Altoona, WI' },
-  { value: 'AZ',  label: 'AZ · Tempe, AZ' },
-];
 
 export default function BacklogAnalysis() {
   const queryClient = useQueryClient();
@@ -260,7 +253,7 @@ export default function BacklogAnalysis() {
   });
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1rem' }}>
+    <div style={{ maxWidth: 1440, margin: '0 auto', padding: '1rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
         <div>
@@ -271,7 +264,7 @@ export default function BacklogAnalysis() {
             Backlog Analysis
           </h2>
           <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            FY burn, gross margin coverage &amp; pipeline summary · FY {d?.currentFY ?? new Date().getFullYear()} (Jan 1 – Dec 31)
+            Fiscal Year burn, gross margin coverage &amp; pipeline summary · Fiscal Year {d?.currentFY ?? new Date().getFullYear()} (Jan 1 – Dec 31)
             {d?.scenario && d.scenario !== 'actual' && (
               <span style={{
                 padding: '0.1rem 0.5rem',
@@ -493,15 +486,16 @@ export default function BacklogAnalysis() {
       }}>
         <div>
           <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.25rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Division
+            Department
           </label>
           <select
             value={divisionFilter}
             onChange={e => setDivisionFilter(e.target.value)}
             style={{ padding: '0.35rem 0.6rem', fontSize: '0.82rem', border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff' }}
           >
-            {DIVISION_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+            <option value="all">All Departments</option>
+            {(d?.availableDivisions || []).map(dept => (
+              <option key={dept} value={dept}>{dept}</option>
             ))}
           </select>
         </div>
@@ -541,7 +535,7 @@ export default function BacklogAnalysis() {
               {fmtCompact(d.totalBacklogRevenue)}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '0.15rem' }}>
-              Current FY: {fmtCompact(d.currentFYRevenue)}
+              Current Fiscal Year: {fmtCompact(d.currentFYRevenue)}
             </div>
           </div>
           <div className="card" style={{ padding: '0.85rem', borderLeft: '3px solid #16a34a' }}>
@@ -621,7 +615,7 @@ export default function BacklogAnalysis() {
               <MetricRow
                 rowNum={31}
                 category="Backlog"
-                label={`Remaining Backlog to Burn in the Current FY ($)`}
+                label={`Remaining Backlog to Burn in the Current Fiscal Year ($)`}
                 value={fmtDollars(d.currentFYRevenue)}
                 description={`Remaining backlog that will burn in ${d.currentFY}.`}
               />
@@ -636,7 +630,7 @@ export default function BacklogAnalysis() {
                 category="Calculated"
                 label="Total Booked Backlog Revenue ($)"
                 value={fmtDollars(d.totalBacklogRevenue)}
-                description="Sum of current FY + future FY backlog."
+                description="Sum of current fiscal year + future fiscal year backlog."
                 isCalculated
               />
 
@@ -644,7 +638,7 @@ export default function BacklogAnalysis() {
               <MetricRow
                 rowNum={33}
                 category="Backlog"
-                label={`Gross Margin on Backlog that will Burn in the Current FY ($)`}
+                label={`Gross Margin on Backlog that will Burn in the Current Fiscal Year ($)`}
                 value={fmtDollars(d.currentFYGM)}
                 description={`Gross margin on backlog burning in ${d.currentFY}.`}
               />
@@ -715,10 +709,10 @@ export default function BacklogAnalysis() {
                     { label: '% Done',          key: 'pctComplete',      right: true  },
                     { label: 'Total Backlog',   key: 'totalBacklog',     right: true  },
                     { label: 'GM %',            key: 'gmPct',            right: true  },
-                    { label: 'Curr FY Rev',     key: 'currentFYRevenue', right: true  },
-                    { label: 'Curr FY GM',      key: 'currentFYGM',      right: true  },
-                    { label: 'Future FY Rev',   key: 'futureFYRevenue',  right: true  },
-                    { label: 'Future FY GM',    key: 'futureFYGM',       right: true  },
+                    { label: 'Curr Fiscal Year Rev',    key: 'currentFYRevenue', right: true  },
+                    { label: 'Curr Fiscal Year GM',     key: 'currentFYGM',      right: true  },
+                    { label: 'Future Fiscal Year Rev',  key: 'futureFYRevenue',  right: true  },
+                    { label: 'Future Fiscal Year GM',   key: 'futureFYGM',       right: true  },
                     { label: 'Total GM',        key: 'totalGM',          right: true  },
                   ] as { label: string; key: string; right: boolean }[]).map(col => (
                     <th
@@ -874,7 +868,7 @@ export default function BacklogAnalysis() {
       {/* FY note */}
       <div style={{ marginTop: '0.75rem', fontSize: '0.68rem', color: '#9ca3af' }}>
         Burn timing derived from Vista contract backlog distributed via project revenue schedule contours.
-        Fiscal year: Jan 1 – Dec 31. GM from Vista <code>gross_profit_percent</code> applied proportionally to each FY bucket.
+        Fiscal Year: Jan 1 – Dec 31. GM from Vista <code>gross_profit_percent</code> applied proportionally to each fiscal year bucket.
       </div>
     </div>
   );

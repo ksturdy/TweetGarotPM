@@ -4,8 +4,6 @@
  * and pipeline totals (Awarded Not in Vista, High Probability).
  */
 
-const { LOCATION_GROUPS } = require('../constants/locationGroups');
-
 // ─── Date helpers ───────────────────────────────────────────────
 
 function startOfMonth(d) {
@@ -95,10 +93,7 @@ function getDuration(value) {
 // ─── Location group helper ──────────────────────────────────────
 
 function getDivisionForContract(c) {
-  const deptCode = c.department_code || c.linked_department_number || '';
-  const prefix = deptCode.substring(0, 2);
-  const grp = LOCATION_GROUPS.find(g => g.prefix === prefix);
-  return grp ? grp.value : null;
+  return (c.department_code || c.linked_department_number || '').trim() || null;
 }
 
 // ─── Main calculation ───────────────────────────────────────────
@@ -328,7 +323,7 @@ function buildBacklogAnalysis(contracts, opportunities, settings = {}) {
     filters: {
       divisionFilter: divisionFilter || 'all',
     },
-    availableDivisions: LOCATION_GROUPS.map(g => g.value).filter(v => divNames.has(v)),
+    availableDivisions: [...divNames].sort(),
 
     // Backlog burn by FY
     currentFYRevenue,
@@ -363,4 +358,4 @@ function buildBacklogAnalysis(contracts, opportunities, settings = {}) {
   };
 }
 
-module.exports = { buildBacklogAnalysis, LOCATION_GROUPS };
+module.exports = { buildBacklogAnalysis };
