@@ -85,7 +85,9 @@ async function generateBacklogAnalysisExcel(data) {
         { num: '',  cat: 'Calculated', label: 'Total Booked Backlog Gross Margin ($)',                            value: fmt(data.totalBacklogGM), desc: 'Total GM across all booked backlog.' },
         { num: '',  cat: 'Calculated', label: 'Number of Months SG&A Covered by Gross Margin on Backlog',
           value: data.sgaMonthsCovered !== null ? parseFloat(data.sgaMonthsCovered.toFixed(1)) : null,
-          desc: data.monthlySgAndA ? `Based on monthly SG&A of $${Math.round(data.monthlySgAndA).toLocaleString()}.` : 'Configure monthly SG&A in report settings.',
+          desc: data.monthlySgAndA
+            ? `Based on monthly SG&A of $${Math.round(data.monthlySgAndA).toLocaleString()}${data.totalBacklogRevenue > 0 ? ' (' + ((data.monthlySgAndA * 12) / data.totalBacklogRevenue * 100).toFixed(1) + '% of rev)' : ''}.`
+            : 'Configure monthly SG&A in report settings.',
           isMonths: true,
         },
       ],

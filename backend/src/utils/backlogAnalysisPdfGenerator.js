@@ -230,7 +230,9 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
     buildMetricRow('Gross Margin on Backlog that will Burn in Future Fiscal Years ($)',   fmtDollars(data.futureFYGM),   'Backlog',    false, 'Gross margin expected on backlog burning in future years.'),
     buildMetricRow('Total Booked Backlog Gross Margin ($)',                               fmtDollars(data.totalBacklogGM),'Calculated', true,  'Total GM across all booked backlog.'),
     buildMetricRow('Number of Months SG&A Covered by Gross Margin on Backlog',           sgaDisplay,                    'Calculated', true,
-      data.monthlySgAndA ? `Based on monthly SG&A of ${fmtDollars(data.monthlySgAndA)}.` : 'Configure monthly SG&A in report settings.'),
+      data.monthlySgAndA
+        ? `Based on monthly SG&A of ${fmtDollars(data.monthlySgAndA)}${data.totalBacklogRevenue > 0 ? ' (' + ((data.monthlySgAndA * 12) / data.totalBacklogRevenue * 100).toFixed(1) + '% of rev)' : ''}.`
+        : 'Configure monthly SG&A in report settings.'),
 
     buildSectionHeader('Pipeline Backlog'),
     buildMetricRow('Backlog Sold (Not Yet Contracted) ($)', fmtDollars(data.backlogSoldNotContracted), 'Pipeline', false, 'Awarded opportunities not yet entered in Vista.'),
@@ -334,7 +336,12 @@ function generateBacklogAnalysisPdfHtml(data, generatedBy) {
     <div class="summary-card">
       <div class="card-label">SG&amp;A Months Covered</div>
       <div class="card-value">${data.sgaMonthsCovered !== null ? fmtFixed(data.sgaMonthsCovered, 1) : '—'}</div>
-      <div class="card-sub">${data.monthlySgAndA ? 'Monthly SG&A: ' + fmtCurrency(data.monthlySgAndA) : 'SG&A not configured'}</div>
+      <div class="card-sub">${data.monthlySgAndA
+        ? 'Monthly SG&A: ' + fmtCurrency(data.monthlySgAndA) +
+          (data.totalBacklogRevenue > 0
+            ? ' (' + ((data.monthlySgAndA * 12) / data.totalBacklogRevenue * 100).toFixed(1) + '% of rev)'
+            : '')
+        : 'SG&A not configured'}</div>
     </div>
     <div class="summary-card orange">
       <div class="card-label">Pipeline (Awarded + High Potential)</div>

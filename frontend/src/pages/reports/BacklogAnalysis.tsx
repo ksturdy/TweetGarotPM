@@ -565,7 +565,16 @@ export default function BacklogAnalysis() {
               {d.sgaMonthsCovered != null ? d.sgaMonthsCovered.toFixed(1) : '—'}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: '0.15rem' }}>
-              {d.monthlySgAndA ? `Monthly SG&A: ${fmtCompact(d.monthlySgAndA)}` : 'Configure in Settings'}
+              {d.monthlySgAndA ? (
+                <>
+                  {`Monthly SG&A: ${fmtCompact(d.monthlySgAndA)}`}
+                  {d.totalBacklogRevenue > 0 && (
+                    <span style={{ marginLeft: '0.3rem', color: '#a78bfa' }}>
+                      ({((d.monthlySgAndA * 12) / d.totalBacklogRevenue * 100).toFixed(1)}% of rev)
+                    </span>
+                  )}
+                </>
+              ) : 'Configure in Settings'}
             </div>
           </div>
           <div className="card" style={{ padding: '0.85rem', borderLeft: '3px solid #f97316' }}>

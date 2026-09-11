@@ -152,7 +152,7 @@ function buildBacklogAnalysis(contracts, opportunities, settings = {}) {
     const status = (c.status || '').toLowerCase();
     if (!status.includes('open') && !status.includes('soft')) continue;
 
-    const backlog = parseNum(c.backlog);
+    const backlog = parseNum(c.backlog) + parseNum(c.ipd_amount);
     if (backlog <= 0) continue;
 
     const division = getDivisionForContract(c);
