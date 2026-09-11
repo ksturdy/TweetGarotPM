@@ -44,6 +44,7 @@ interface ExportOptions {
   removed: DiffRowSimple[];
   fileName: string;
   logoDataUrl?: string;
+  logoAspect?: number;
 }
 
 const ACCENT: RGB = [37, 99, 235];
@@ -178,7 +179,7 @@ function buildChangeLines(diffs: Record<string, any>): ChangeLine[] {
 }
 
 export function exportGcScheduleDiffPdf(options: ExportOptions): void {
-  const { meta, counts, changed, added, removed, fileName, logoDataUrl } = options;
+  const { meta, counts, changed, added, removed, fileName, logoDataUrl, logoAspect } = options;
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -187,7 +188,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   const rightMargin = 40;
 
   const LOGO_W = 84;
-  const LOGO_H = 21;
+  const LOGO_H = logoAspect ? Math.round(LOGO_W / logoAspect) : 21;
   // Placeholder replaced by putTotalPages() after all content is rendered.
   const TOTAL_PH = '{total_pages}';
 

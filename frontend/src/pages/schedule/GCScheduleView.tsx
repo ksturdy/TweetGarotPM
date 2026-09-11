@@ -996,12 +996,13 @@ const DiffCard: React.FC<{
     setExporting(true);
     try {
       let logoDataUrl: string | undefined;
+      let logoAspect: number | undefined;
       if (logoUrl) {
         try {
           const resp = await api.get('/tenant/logo', { responseType: 'blob' });
           const blob = resp.data as Blob;
           const objectUrl = URL.createObjectURL(blob);
-          logoDataUrl = await new Promise<string>((resolve, reject) => {
+          ({ dataUrl: logoDataUrl, aspect: logoAspect } = await new Promise<{ dataUrl: string; aspect: number }>((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
               const canvas = document.createElement('canvas');
@@ -1009,12 +1010,11 @@ const DiffCard: React.FC<{
               canvas.height = img.naturalHeight || 1;
               canvas.getContext('2d')!.drawImage(img, 0, 0);
               URL.revokeObjectURL(objectUrl);
-              resolve(canvas.toDataURL('image/png'));
+              resolve({ dataUrl: canvas.toDataURL('image/png'), aspect: img.naturalWidth / img.naturalHeight });
             };
             img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('img load failed')); };
             img.src = objectUrl;
-          });
-          console.log('[GC Diff PDF] Logo ready, dataLen:', logoDataUrl.length);
+          }));
         } catch (e) {
           console.warn('[GC Diff PDF] Logo load failed:', e);
         }
@@ -1042,6 +1042,7 @@ const DiffCard: React.FC<{
         removed: filtered.removed,
         fileName,
         logoDataUrl,
+        logoAspect,
       });
     } finally {
       setExporting(false);
