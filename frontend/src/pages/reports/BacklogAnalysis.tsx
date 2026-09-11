@@ -722,7 +722,7 @@ export default function BacklogAnalysis() {
                         padding: '0.45rem 0.65rem',
                         fontSize: '0.65rem', fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.05em',
-                        color: '#fff', textAlign: col.right ? 'center' : 'left',
+                        color: '#fff', textAlign: 'center',
                         whiteSpace: 'normal', cursor: 'pointer',
                         userSelect: 'none', verticalAlign: 'bottom',
                         lineHeight: 1.2,
