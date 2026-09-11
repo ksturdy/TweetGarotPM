@@ -255,12 +255,11 @@ const GCScheduleView: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <Link to={`/projects/${pid}/schedule`} className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}>
+          <Link to={`/projects/${pid}/schedule`} className="btn btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
             Internal Schedule
           </Link>
           <button
-            className={diffOpen ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+            className={diffOpen ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
             disabled={versions.length < 2}
             onClick={() => {
               setDiffOpen((v) => !v);
@@ -272,7 +271,7 @@ const GCScheduleView: React.FC = () => {
           >
             {diffOpen ? 'Exit Comparison' : 'Compare Versions'}
           </button>
-          <button className="btn btn-primary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => setUploadOpen((v) => !v)}>
+          <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen((v) => !v)}>
             {uploadOpen ? 'Cancel Upload' : 'Upload Schedule'}
           </button>
         </div>
@@ -333,7 +332,7 @@ const GCScheduleView: React.FC = () => {
             {currentVersion && (
               <button
                 className="btn btn-danger btn-sm"
-                style={{ marginLeft: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                style={{ marginLeft: 'auto' }}
                 onClick={() => {
                   if (window.confirm(`Delete this version (${currentVersion.activity_count} activities)?`)) {
                     deleteVersion.mutate(currentVersion.id);
@@ -388,7 +387,6 @@ const GCScheduleView: React.FC = () => {
               />
               <button
                 className="btn btn-sm"
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                 onClick={() => setFilters((f) => ({ ...f, search: searchInput }))}
               >
                 Search

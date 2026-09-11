@@ -586,16 +586,15 @@ const ProjectFinancials: React.FC = () => {
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 onClick={handleEmailPM}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                className="btn btn-secondary btn-sm"
                 title={c.linked_employee_email ? `Email ${c.project_manager_name} (${c.linked_employee_email})` : `Email ${c.project_manager_name || 'PM'}`}
               >
                 ✉ Email PM
               </button>
               <button
                 onClick={() => setNotesDrawerOpen(true)}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', position: 'relative' }}
+                className="btn btn-secondary btn-sm"
+                style={{ position: 'relative' }}
               >
                 Notes
                 {totalNoteCount > 0 && (
@@ -607,16 +606,15 @@ const ProjectFinancials: React.FC = () => {
               </button>
               <button
                 onClick={() => captureSnapshotMutation.mutate()}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                className="btn btn-secondary btn-sm"
                 disabled={captureSnapshotMutation.isPending}
               >
                 {captureSnapshotMutation.isPending ? 'Capturing...' : 'Capture Snapshot'}
               </button>
               <Link
                 to={`/projects/${projectId}/performance`}
-                className="btn btn-primary"
-                style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}
+                className="btn btn-primary btn-sm"
+                style={{ textDecoration: 'none' }}
               >
                 Performance Trends
               </Link>

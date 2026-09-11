@@ -79,6 +79,11 @@ button {
   color: var(--white);
 }
 
+.btn-sm {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.6rem;
+}
+
 .card {
   background-color: var(--white);
   border-radius: 0.5rem;
