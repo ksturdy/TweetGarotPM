@@ -998,7 +998,7 @@ const DiffCard: React.FC<{
       let logoDataUrl: string | undefined;
       if (logoUrl) {
         try {
-          const resp = await api.get(logoUrl, { responseType: 'blob' });
+          const resp = await api.get('/tenant/logo', { responseType: 'blob' });
           const blob = resp.data as Blob;
           const objectUrl = URL.createObjectURL(blob);
           logoDataUrl = await new Promise<string>((resolve, reject) => {
