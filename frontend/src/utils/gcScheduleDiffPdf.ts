@@ -209,11 +209,11 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
     doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
   };
 
-  // Logo top-right on page 1 — drawn once before any tables, same pattern as
-  // costControlPdf.ts which is confirmed working.
+  // Logo top-right on page 1. Auto-detect format from data URL so PNG/JPEG/WebP all work.
   if (logoDataUrl) {
     try {
-      doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+      const imgFmt = (logoDataUrl.match(/^data:image\/(\w+);/) || [])[1]?.toUpperCase() || 'PNG';
+      doc.addImage(logoDataUrl, imgFmt, pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
     } catch (e) {
       console.warn('[GC Schedule PDF] Logo failed to render:', e);
     }
@@ -223,23 +223,23 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
 
   // Title block — compact
   const textMaxX = pageWidth - rightMargin - LOGO_W - 12; // don't overlap logo
-  let y = 30;
-  doc.setFontSize(13);
+  let y = 22;
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(SLATE_900[0], SLATE_900[1], SLATE_900[2]);
   doc.text('GC Schedule - Version Comparison', leftMargin, y);
 
-  y += 11;
-  doc.setFontSize(8.5);
+  y += 9;
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(SLATE_500[0], SLATE_500[1], SLATE_500[2]);
   const projLine = sanitize(meta.projectNumber ? `${meta.projectNumber} - ${meta.projectName}` : meta.projectName);
   doc.text(projLine, leftMargin, y);
 
   // Version rows — label bold, value normal, truncated to stay left of logo
-  const VER_LABEL_W = 62;
-  doc.setFontSize(7.5);
-  y += 10;
+  const VER_LABEL_W = 58;
+  doc.setFontSize(7);
+  y += 9;
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(SLATE_700[0], SLATE_700[1], SLATE_700[2]);
   doc.text('From (older):', leftMargin, y);
@@ -248,7 +248,7 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   const fromLines = doc.splitTextToSize(fromText, textMaxX - leftMargin - VER_LABEL_W) as string[];
   doc.text(fromLines[0], leftMargin + VER_LABEL_W, y);
 
-  y += 10;
+  y += 8;
   doc.setFont('helvetica', 'bold');
   doc.text('To (newer):', leftMargin, y);
   doc.setFont('helvetica', 'normal');
@@ -257,9 +257,9 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   doc.text(toLines[0], leftMargin + VER_LABEL_W, y);
 
   // Counts strip — compact
-  y += 10;
+  y += 7;
   const stripWidth = pageWidth - leftMargin - rightMargin;
-  const stripHeight = 24;
+  const stripHeight = 20;
   doc.setFillColor(SLATE_50[0], SLATE_50[1], SLATE_50[2]);
   doc.roundedRect(leftMargin, y, stripWidth, stripHeight, 3, 3, 'F');
   const cells: Array<{ label: string; value: string; color: RGB }> = [
@@ -270,33 +270,35 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
   const cellW = stripWidth / cells.length;
   cells.forEach((c, i) => {
     const cx = leftMargin + cellW * i + cellW / 2;
-    doc.setFontSize(6.5);
+    doc.setFontSize(6);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(SLATE_500[0], SLATE_500[1], SLATE_500[2]);
-    doc.text(c.label.toUpperCase(), cx, y + 8, { align: 'center' });
-    doc.setFontSize(11);
+    doc.text(c.label.toUpperCase(), cx, y + 6, { align: 'center' });
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(c.color[0], c.color[1], c.color[2]);
-    doc.text(c.value, cx, y + 19, { align: 'center' });
+    doc.text(c.value, cx, y + 16, { align: 'center' });
   });
-  y += stripHeight + 8;
+  y += stripHeight + 6;
 
   // CHANGED section
   if (changed.length > 0) {
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(SLATE_900[0], SLATE_900[1], SLATE_900[2]);
     doc.text(`Changed (${changed.length})`, leftMargin, y);
-    y += 6;
+    y += 5;
 
     // Column geometry (must match columnStyles below)
     const LABEL_W = 78;
-    const CELL_PAD = 4;
-    const col2Width = pageWidth - leftMargin - rightMargin - 300;
+    const CELL_PAD = 3;
+    const COL0_W = 110;
+    const COL1_W = 250;
+    const col2Width = pageWidth - leftMargin - rightMargin - COL0_W - COL1_W;
 
     // Pre-compute wrapped context lines so we can size rows correctly and
     // avoid text running off the right edge of the "What changed" cell.
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     const rows: RenderedRow[] = changed.map((r) => {
       const changeLines = buildChangeLines(r.diffs);
       const renderedLines: RenderedChangeLine[] = changeLines.map((l) => {
@@ -344,8 +346,8 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       body: rows.map((r) => [r.activityId, r.name, '']),
       margin: { left: leftMargin, right: rightMargin },
       styles: {
-        fontSize: 7.5,
-        cellPadding: { top: 4, right: 5, bottom: 4, left: 5 },
+        fontSize: 7,
+        cellPadding: { top: 2.5, right: 4, bottom: 2.5, left: 4 },
         textColor: SLATE_900,
         lineColor: SLATE_200,
         lineWidth: 0.5,
@@ -355,19 +357,19 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
         fillColor: [241, 245, 249],
         textColor: [71, 85, 105],
         fontStyle: 'bold',
-        fontSize: 7.5,
+        fontSize: 7,
       },
       alternateRowStyles: { fillColor: [255, 251, 235] }, // soft amber for changed
       columnStyles: {
-        0: { cellWidth: 80, fontSize: 7.5 },
-        1: { cellWidth: 210 },
+        0: { cellWidth: COL0_W, fontSize: 7 },
+        1: { cellWidth: COL1_W },
         2: { cellWidth: col2Width },
       },
       didParseCell: (data: any) => {
         if (data.section === 'body' && data.column.index === 2) {
           const row = rows[data.row.index];
           if (row) {
-            data.cell.styles.minCellHeight = 8 + row.totalVisualLines * 10;
+            data.cell.styles.minCellHeight = 7 + row.totalVisualLines * 9;
             data.cell.text = ['']; // drawn manually in didDrawCell
           }
         }
@@ -377,8 +379,8 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
         const row = rows[data.row.index];
         if (!row) return;
         const x = data.cell.x + CELL_PAD;
-        let ly = data.cell.y + 10;
-        doc.setFontSize(7.5);
+        let ly = data.cell.y + 8;
+        doc.setFontSize(7);
         for (const line of row.lines) {
           // Label (bold, slate)
           doc.setFont('helvetica', 'bold');
@@ -394,13 +396,13 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
           const verdictW = doc.getTextWidth(line.verdict);
           for (let ci = 0; ci < line.contextLines.length; ci++) {
             if (ci === 0) {
-              doc.text(line.contextLines[0], x + LABEL_W + verdictW + 5, ly);
+              doc.text(line.contextLines[0], x + LABEL_W + verdictW + 4, ly);
             } else {
-              ly += 10;
-              doc.text(line.contextLines[ci], x + LABEL_W + 5, ly);
+              ly += 9;
+              doc.text(line.contextLines[ci], x + LABEL_W + 4, ly);
             }
           }
-          ly += 10;
+          ly += 9;
         }
       },
       didDrawPage: drawPageChrome,
@@ -421,11 +423,11 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       drawPageChrome();
       y = 26;
     }
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(SLATE_900[0], SLATE_900[1], SLATE_900[2]);
     doc.text(`${title} (${rows.length})`, leftMargin, y);
-    y += 6;
+    y += 5;
 
     autoTable(doc, {
       startY: y,
@@ -438,8 +440,8 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       ]),
       margin: { left: leftMargin, right: rightMargin },
       styles: {
-        fontSize: 7.5,
-        cellPadding: 4,
+        fontSize: 7,
+        cellPadding: { top: 2.5, right: 4, bottom: 2.5, left: 4 },
         textColor: SLATE_900,
         lineColor: SLATE_200,
         lineWidth: 0.5,
@@ -448,13 +450,13 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
         fillColor: [241, 245, 249],
         textColor: [71, 85, 105],
         fontStyle: 'bold',
-        fontSize: 7.5,
+        fontSize: 7,
       },
       alternateRowStyles: { fillColor: rowFill },
       columnStyles: {
-        0: { cellWidth: 80, fontSize: 7.5 },
-        2: { cellWidth: 90 },
-        3: { cellWidth: 90 },
+        0: { cellWidth: 110, fontSize: 7 },
+        2: { cellWidth: 85 },
+        3: { cellWidth: 85 },
       },
       didDrawPage: drawPageChrome,
     });
