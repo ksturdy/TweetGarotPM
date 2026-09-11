@@ -207,13 +207,13 @@ export function exportGcScheduleDiffPdf(options: ExportOptions): void {
       footerY
     );
     doc.text(`Page ${pageNum} of ${TOTAL_PH}`, pageWidth - rightMargin, footerY, { align: 'right' });
-    // Logo — drawn on every page 1 invocation (initial + autoTable didDrawPage)
+    // Logo — drawn on page 1 each time drawPageChrome is invoked (startup + didDrawPage)
     if (pageNum === 1 && logoDataUrl) {
+      console.log('[GC Schedule PDF] Drawing logo on page 1');
       try {
-        const fmt = (logoDataUrl.match(/^data:image\/(\w+);/) || [])[1]?.toUpperCase() || 'PNG';
-        doc.addImage(logoDataUrl, fmt, pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
+        doc.addImage(logoDataUrl, 'PNG', pageWidth - rightMargin - LOGO_W, 7, LOGO_W, LOGO_H);
       } catch (e) {
-        console.warn('[GC Schedule PDF] Logo draw failed:', e);
+        console.warn('[GC Schedule PDF] addImage failed:', e);
       }
     }
   };

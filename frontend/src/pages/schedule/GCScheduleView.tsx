@@ -999,13 +999,22 @@ const DiffCard: React.FC<{
       if (logoUrl) {
         try {
           const resp = await api.get(logoUrl, { responseType: 'blob' });
+          const blob = resp.data as Blob;
+          const objectUrl = URL.createObjectURL(blob);
           logoDataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(resp.data as Blob);
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || 1;
+              canvas.height = img.naturalHeight || 1;
+              canvas.getContext('2d')!.drawImage(img, 0, 0);
+              URL.revokeObjectURL(objectUrl);
+              resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('img load failed')); };
+            img.src = objectUrl;
           });
-          console.log('[GC Diff PDF] Logo loaded, bytes:', logoDataUrl.length);
+          console.log('[GC Diff PDF] Logo ready, dataLen:', logoDataUrl.length);
         } catch (e) {
           console.warn('[GC Diff PDF] Logo load failed:', e);
         }
