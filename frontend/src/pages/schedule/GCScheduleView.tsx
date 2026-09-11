@@ -254,11 +254,12 @@ const GCScheduleView: React.FC = () => {
           </div>
         </div>
         <div className="sales-header-actions">
-          <Link to={`/projects/${pid}/schedule`} className="btn btn-secondary">
+          <Link to={`/projects/${pid}/schedule`} className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', textDecoration: 'none' }}>
             Internal Schedule
           </Link>
           <button
             className={diffOpen ? 'btn btn-primary' : 'btn btn-secondary'}
+            style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
             disabled={versions.length < 2}
             onClick={() => {
               setDiffOpen((v) => !v);
@@ -270,7 +271,7 @@ const GCScheduleView: React.FC = () => {
           >
             {diffOpen ? 'Exit Comparison' : 'Compare Versions'}
           </button>
-          <button className="btn btn-primary" onClick={() => setUploadOpen((v) => !v)}>
+          <button className="btn btn-primary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={() => setUploadOpen((v) => !v)}>
             {uploadOpen ? 'Cancel Upload' : 'Upload Schedule'}
           </button>
         </div>
