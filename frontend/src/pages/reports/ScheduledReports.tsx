@@ -1261,6 +1261,42 @@ const ScheduledReports: React.FC = () => {
                 <label style={labelStyle}>
                   Recipients ({form.recipient_user_ids.length} selected)
                 </label>
+
+                {/* Selected chips */}
+                {form.recipient_user_ids.length > 0 && (
+                  <div style={{
+                    display: 'flex', flexWrap: 'wrap', gap: '0.375rem',
+                    marginBottom: '0.5rem',
+                  }}>
+                    {(allUsers as User[])
+                      .filter(u => form.recipient_user_ids.includes(u.id))
+                      .map(u => (
+                        <div key={u.id} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+                          padding: '3px 8px 3px 10px',
+                          background: u.is_active ? '#eff6ff' : '#fff7ed',
+                          border: `1px solid ${u.is_active ? '#bfdbfe' : '#fed7aa'}`,
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem', fontWeight: 500,
+                          color: u.is_active ? '#1d4ed8' : '#9a3412',
+                        }}>
+                          {u.first_name} {u.last_name}
+                          <button
+                            onClick={() => toggleRecipient(u.id)}
+                            style={{
+                              border: 'none', background: 'none', cursor: 'pointer',
+                              padding: '0 2px', lineHeight: 1, fontSize: '0.875rem',
+                              color: u.is_active ? '#93c5fd' : '#fdba74',
+                              display: 'flex', alignItems: 'center',
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
                 <div style={{
                   border: '1px solid #d1d5db', borderRadius: '6px',
                   overflow: 'hidden',
