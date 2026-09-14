@@ -14,13 +14,13 @@ async function generatePhaseReportExcel(rows, filters = {}) {
 
   ws.columns = [
     { key: 'job_number',      header: 'Job #',        width: 16 },
+    { key: 'job_name',        header: 'Job Name',     width: 36 },
+    { key: 'manager_name',    header: 'PM',           width: 18 },
     { key: 'phase_code',      header: 'Phase Code',   width: 14 },
     { key: 'phase_name',      header: 'Phase Name',   width: 30 },
-    { key: 'job_name',        header: 'Job Name',     width: 36 },
     { key: 'department_code', header: 'Department',   width: 13 },
     { key: 'status',          header: 'Status',       width: 12 },
     { key: 'bill_method',     header: 'Bill Method',  width: 14 },
-    { key: 'manager_name',    header: 'PM',           width: 18 },
     { key: 'est_hours',       header: 'Est Hours',    width: 13 },
     { key: 'jtd_hours',       header: 'JTD Hours',    width: 13 },
     { key: 'burn_pct',        header: 'Burn %',       width: 11 },
@@ -55,7 +55,7 @@ async function generatePhaseReportExcel(rows, filters = {}) {
   ws.addRow([]);
 
   // Header row
-  const hdrRow = ws.addRow(['Job #', 'Phase Code', 'Phase Name', 'Job Name', 'Department', 'Status', 'Bill Method', 'PM', 'Est Hours', 'JTD Hours', 'Burn %']);
+  const hdrRow = ws.addRow(['Job #', 'Job Name', 'PM', 'Phase Code', 'Phase Name', 'Department', 'Status', 'Bill Method', 'Est Hours', 'JTD Hours', 'Burn %']);
   hdrRow.eachCell((cell, colNum) => {
     cell.font = { bold: true, size: 10, color: { argb: 'FF' + white } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + orange } };
@@ -76,13 +76,13 @@ async function generatePhaseReportExcel(rows, filters = {}) {
 
     const dataRow = ws.addRow([
       r.job_number || '',
+      r.job_name || '',
+      r.manager_name || '',
       r.phase_code || '',
       r.phase_name || '',
-      r.job_name || '',
       r.department_code || '',
       r.status || '',
       r.bill_method || '',
-      r.manager_name || '',
       est || null,
       jtd || null,
       burnPct,

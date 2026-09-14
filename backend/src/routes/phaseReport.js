@@ -32,19 +32,24 @@ async function buildPhaseReportData(tenantId, filters = {}) {
     params.push(...filters.phases);
   }
 
-  // Team filter: restrict to jobs whose linked project has a manager on the team
+  // Team filter: match vc.employee_number against employees on the team
   if (filters.team) {
     const Team = require('../models/Team');
     const members = await Team.getMembers(Number(filters.team), tenantId);
-    if (members.length > 0) {
-      const empIds = members.map(m => m.employee_id);
-      const placeholders = empIds.map(() => `$${paramIdx++}`).join(', ');
-      whereClauses.push(`vc.linked_employee_id IN (${placeholders})`);
-      params.push(...empIds);
-    } else {
-      // Team exists but has no members — return nothing
-      return [];
-    }
+    if (members.length === 0) return [];
+
+    const empIds = members.map(m => m.employee_id);
+    const empNumResult = await db.query(
+      `SELECT employee_number FROM employees
+       WHERE id = ANY($1::int[]) AND employee_number IS NOT NULL AND employee_number <> ''`,
+      [empIds]
+    );
+    const empNumbers = empNumResult.rows.map(r => String(r.employee_number));
+    if (empNumbers.length === 0) return [];
+
+    const placeholders = empNumbers.map(() => `$${paramIdx++}`).join(', ');
+    whereClauses.push(`vc.employee_number IN (${placeholders})`);
+    params.push(...empNumbers);
   }
 
   // cost_type = 1 (labor) so est_hours/jtd_hours are meaningful
@@ -54,18 +59,17 @@ async function buildPhaseReportData(tenantId, filters = {}) {
     `SELECT
        vpc.job                                          AS job_number,
        vpc.job_description                              AS job_name,
+       vc.project_manager_name                          AS manager_name,
        vpc.phase                                        AS phase_code,
        vpc.phase_description                            AS phase_name,
        vc.department_code,
        vc.status,
        vc.bill_method,
-       e.first_name || ' ' || e.last_name              AS manager_name,
        COALESCE(vpc.est_hours, 0)                       AS est_hours,
        COALESCE(vpc.jtd_hours, 0)                       AS jtd_hours
      FROM vp_phase_codes vpc
      LEFT JOIN vp_contracts vc
        ON vpc.contract = vc.contract_number AND vc.tenant_id = vpc.tenant_id
-     LEFT JOIN employees e ON vc.linked_employee_id = e.id
      WHERE ${whereClauses.join(' AND ')}
      ORDER BY vpc.job ASC, vpc.phase ASC`,
     params

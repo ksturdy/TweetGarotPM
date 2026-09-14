@@ -357,14 +357,17 @@ const PhaseReport: React.FC = () => {
                 <th style={{ ...thStyle('job_number'), textAlign: 'left' }} onClick={() => handleSort('job_number')}>
                   Job # <SortIcon col="job_number" sortCol={sortCol} sortDir={sortDir} />
                 </th>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
+                  Job Name
+                </th>
+                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
+                  PM
+                </th>
                 <th style={{ ...thStyle('phase_code'), textAlign: 'left' }} onClick={() => handleSort('phase_code')}>
                   Phase Code <SortIcon col="phase_code" sortCol={sortCol} sortDir={sortDir} />
                 </th>
                 <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
                   Phase Name
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Job Name
                 </th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
                   Dept
@@ -374,9 +377,6 @@ const PhaseReport: React.FC = () => {
                 </th>
                 <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
                   Bill Method
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Manager
                 </th>
                 <th style={{ ...thStyle('est_hours'), textAlign: 'right' }} onClick={() => handleSort('est_hours')}>
                   Est Hours <SortIcon col="est_hours" sortCol={sortCol} sortDir={sortDir} />
@@ -402,9 +402,10 @@ const PhaseReport: React.FC = () => {
                     onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#f8fafc')}
                   >
                     <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1e3a5f', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{row.job_number}</td>
+                    <td style={{ padding: '7px 10px', color: '#334155', fontSize: '0.8rem', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.job_name || '-'}</td>
+                    <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{row.manager_name || '-'}</td>
                     <td style={{ padding: '7px 10px', fontWeight: 500, color: '#1e3a5f', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{row.phase_code || '-'}</td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_name || '-'}</td>
-                    <td style={{ padding: '7px 10px', color: '#334155', fontSize: '0.8rem', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.job_name || '-'}</td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', textAlign: 'center' }}>{row.department_code || '-'}</td>
                     <td style={{ padding: '7px 10px', fontSize: '0.78rem', textAlign: 'center' }}>
                       {row.status ? (
@@ -416,7 +417,6 @@ const PhaseReport: React.FC = () => {
                       ) : '-'}
                     </td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', textAlign: 'center' }}>{row.bill_method || '-'}</td>
-                    <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', textAlign: 'center' }}>{row.manager_name || '-'}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{fmtHours(row.est_hours)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{fmtHours(row.jtd_hours)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.8rem', color: burn !== null ? burnColor(est, jtd) : '#94a3b8' }}>

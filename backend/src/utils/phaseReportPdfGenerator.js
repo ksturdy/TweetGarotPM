@@ -33,13 +33,13 @@ function generatePhaseReportPdfHtml(rows, filters = {}) {
     return `
       <tr style="background:${bg};">
         <td style="padding:5px 6px; font-weight:600; color:#1e3a5f; white-space:nowrap;">${r.job_number || '-'}</td>
+        <td style="padding:5px 6px; color:#334155;">${r.job_name || '-'}</td>
+        <td style="padding:5px 6px; color:#475569; white-space:nowrap;">${r.manager_name || '-'}</td>
         <td style="padding:5px 6px; font-weight:500; color:#1e3a5f; white-space:nowrap;">${r.phase_code || '-'}</td>
         <td style="padding:5px 6px; color:#475569;">${r.phase_name || '-'}</td>
-        <td style="padding:5px 6px; color:#334155;">${r.job_name || '-'}</td>
         <td style="padding:5px 6px; color:#475569; text-align:center;">${r.department_code || '-'}</td>
         <td style="padding:5px 6px; color:#475569; text-align:center;">${r.status || '-'}</td>
         <td style="padding:5px 6px; color:#475569; text-align:center;">${r.bill_method || '-'}</td>
-        <td style="padding:5px 6px; color:#475569; text-align:center;">${r.manager_name || '-'}</td>
         <td style="padding:5px 6px; text-align:right; font-weight:600;">${fmtHours(r.est_hours)}</td>
         <td style="padding:5px 6px; text-align:right; font-weight:600;">${fmtHours(r.jtd_hours)}</td>
         <td style="padding:5px 6px; text-align:right; font-weight:600; color:${varColor};">${variance !== null ? variance.toFixed(1) + '%' : '-'}</td>
@@ -106,13 +106,13 @@ function generatePhaseReportPdfHtml(rows, filters = {}) {
     <thead>
       <tr>
         <th>Job #</th>
+        <th>Job Name</th>
+        <th>PM</th>
         <th>Phase Code</th>
         <th>Phase Name</th>
-        <th>Job Name</th>
         <th class="center">Dept</th>
         <th class="center">Status</th>
         <th class="center">Bill Method</th>
-        <th class="center">PM</th>
         <th class="right">Est Hours</th>
         <th class="right">JTD Hours</th>
         <th class="right">Burn %</th>
