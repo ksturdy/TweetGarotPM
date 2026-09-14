@@ -120,7 +120,7 @@ const MultiSelectDropdown: React.FC<{
 
 const PhaseReport: React.FC = () => {
   const [departments, setDepartments] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>(['Open', 'Soft Closed']);
+  const [statuses, setStatuses] = useState<string[]>(['Open', 'Soft-Closed']);
   const [billMethods, setBillMethods] = useState<string[]>([]);
   const [teams, setTeams] = useState<string[]>([]);
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
