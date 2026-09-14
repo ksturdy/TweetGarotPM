@@ -84,7 +84,70 @@ async function buildPhaseReportData(tenantId, filters = {}) {
   return result.rows;
 }
 
-async function buildFilterOptions(tenantId) {
+async function buildFilterOptions(tenantId, filters = {}) {
+  // Resolve team employee numbers up-front so we can use them in the phase sub-query
+  let teamEmpNumbers = [];
+  if (filters.teams && filters.teams.length > 0) {
+    const Team = require('../models/Team');
+    const allEmpIds = new Set();
+    for (const teamId of filters.teams) {
+      const members = await Team.getMembers(Number(teamId), tenantId);
+      members.forEach(m => allEmpIds.add(m.employee_id));
+    }
+    if (allEmpIds.size > 0) {
+      const empNumResult = await db.query(
+        `SELECT employee_number FROM employees
+         WHERE id = ANY($1::int[]) AND employee_number IS NOT NULL AND employee_number <> ''`,
+        [[...allEmpIds]]
+      );
+      teamEmpNumbers = empNumResult.rows.map(r => String(r.employee_number));
+    }
+  }
+
+  // Build a phase query that respects the active dept/status/bill_method/team filters
+  const hasCtx = filters.departments?.length > 0 || filters.statuses?.length > 0 ||
+                 filters.bill_methods?.length > 0 || teamEmpNumbers.length > 0;
+
+  let phaseQueryPromise;
+  if (hasCtx) {
+    const phaseParams = [tenantId];
+    let pi = 2;
+    const phaseWhere = ['vpc.tenant_id = $1', 'vpc.cost_type = 1'];
+
+    if (filters.departments?.length > 0) {
+      phaseWhere.push(`vc.department_code IN (${filters.departments.map(() => `$${pi++}`).join(', ')})`);
+      phaseParams.push(...filters.departments);
+    }
+    if (filters.statuses?.length > 0) {
+      phaseWhere.push(`vc.status IN (${filters.statuses.map(() => `$${pi++}`).join(', ')})`);
+      phaseParams.push(...filters.statuses);
+    }
+    if (filters.bill_methods?.length > 0) {
+      phaseWhere.push(`vc.bill_method IN (${filters.bill_methods.map(() => `$${pi++}`).join(', ')})`);
+      phaseParams.push(...filters.bill_methods);
+    }
+    if (teamEmpNumbers.length > 0) {
+      phaseWhere.push(`vc.employee_number IN (${teamEmpNumbers.map(() => `$${pi++}`).join(', ')})`);
+      phaseParams.push(...teamEmpNumbers);
+    }
+
+    phaseQueryPromise = db.query(
+      `SELECT DISTINCT vpc.phase
+       FROM vp_phase_codes vpc
+       LEFT JOIN vp_contracts vc ON vpc.contract = vc.contract_number AND vc.tenant_id = vpc.tenant_id
+       WHERE ${phaseWhere.join(' AND ')} AND vpc.phase IS NOT NULL AND vpc.phase <> ''
+       ORDER BY vpc.phase`,
+      phaseParams
+    );
+  } else {
+    phaseQueryPromise = db.query(
+      `SELECT DISTINCT phase FROM vp_phase_codes
+       WHERE tenant_id = $1 AND cost_type = 1 AND phase IS NOT NULL AND phase <> ''
+       ORDER BY phase`,
+      [tenantId]
+    );
+  }
+
   const [depts, statuses, billMethods, phases] = await Promise.all([
     db.query(
       `SELECT DISTINCT department_code FROM vp_contracts
@@ -104,12 +167,7 @@ async function buildFilterOptions(tenantId) {
        ORDER BY bill_method`,
       [tenantId]
     ),
-    db.query(
-      `SELECT DISTINCT phase FROM vp_phase_codes
-       WHERE tenant_id = $1 AND phase IS NOT NULL AND phase <> ''
-       ORDER BY phase`,
-      [tenantId]
-    ),
+    phaseQueryPromise,
   ]);
 
   return {
@@ -144,7 +202,7 @@ router.get('/', async (req, res) => {
 
 router.get('/filters', async (req, res) => {
   try {
-    const options = await buildFilterOptions(req.tenantId);
+    const options = await buildFilterOptions(req.tenantId, parseFilters(req.query));
     res.json(options);
   } catch (err) {
     console.error('Phase report filter options error:', err);

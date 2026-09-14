@@ -44,8 +44,8 @@ export const phaseReportApi = {
   getData: (params: PhaseReportParams = {}) =>
     api.get<PhaseReportRow[]>('/reports/phase-report', { params: buildParams(params) }).then(r => r.data),
 
-  getFilters: () =>
-    api.get<PhaseReportFilters>('/reports/phase-report/filters').then(r => r.data),
+  getFilters: (params: PhaseReportParams = {}) =>
+    api.get<PhaseReportFilters>('/reports/phase-report/filters', { params: buildParams(params) }).then(r => r.data),
 
   downloadPdf: async (params: PhaseReportParams = {}) => {
     const res = await api.get('/reports/phase-report/pdf-download', {

@@ -143,10 +143,18 @@ const PhaseReport: React.FC = () => {
     staleTime: 2 * 60 * 1000,
   });
 
+  // Context params (without phases) — used to scope the phase dropdown options
+  const contextParams: PhaseReportParams = {
+    departments: departments.length > 0 ? departments : undefined,
+    statuses: statuses.length > 0 ? statuses : undefined,
+    bill_methods: billMethods.length > 0 ? billMethods : undefined,
+    teams: teams.length > 0 ? teams : undefined,
+  };
+
   const { data: filterOptions } = useQuery({
-    queryKey: ['phase-report-filters'],
-    queryFn: () => phaseReportApi.getFilters(),
-    staleTime: 5 * 60 * 1000,
+    queryKey: ['phase-report-filters', contextParams],
+    queryFn: () => phaseReportApi.getFilters(contextParams),
+    staleTime: 2 * 60 * 1000,
   });
 
   const { data: teamsData } = useQuery({
