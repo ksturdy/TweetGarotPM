@@ -979,6 +979,24 @@ const ScheduledReports: React.FC = () => {
                         {teams.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
                       </select>
                     </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Phase Code Starts With</label>
+                      <input
+                        style={inputStyle}
+                        value={(form.filters.phase_prefix as string) || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, phase_prefix: e.target.value || undefined } }))}
+                        placeholder="e.g. 70-106-"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Phase Codes (exact)</label>
+                      <SearchableMultiSelect
+                        options={(phaseReportFilters?.phases || []).map(p => ({ value: p, label: p }))}
+                        values={(form.filters.phases as string[]) || []}
+                        onChange={vals => setForm(f => ({ ...f, filters: { ...f.filters, phases: vals.length ? vals : undefined } }))}
+                        placeholder="All phases — type to filter..."
+                      />
+                    </div>
                   </div>
                 </div>
               )}

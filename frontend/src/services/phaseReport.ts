@@ -27,6 +27,7 @@ export interface PhaseReportParams {
   teams?: string[];
   teamNames?: string[];
   phases?: string[];
+  phase_prefix?: string;
 }
 
 function buildParams(p: PhaseReportParams): URLSearchParams {
@@ -37,6 +38,7 @@ function buildParams(p: PhaseReportParams): URLSearchParams {
   if (p.teams && p.teams.length > 0) params.set('teams', p.teams.join(','));
   if (p.teamNames && p.teamNames.length > 0) params.set('teamNames', p.teamNames.join(','));
   if (p.phases && p.phases.length > 0) params.set('phases', p.phases.join(','));
+  if (p.phase_prefix) params.set('phase_prefix', p.phase_prefix);
   return params;
 }
 

@@ -34,6 +34,10 @@ async function buildPhaseReportData(tenantId, filters = {}) {
     whereClauses.push(`vpc.phase IN (${placeholders})`);
     params.push(...filters.phases);
   }
+  if (filters.phase_prefix) {
+    whereClauses.push(`vpc.phase LIKE $${paramIdx++}`);
+    params.push(`${filters.phase_prefix}%`);
+  }
 
   // Team filter: match vc.employee_number against employees on the selected teams
   if (filters.teams && filters.teams.length > 0) {
@@ -187,6 +191,7 @@ function parseFilters(query) {
     teams: csv(query.teams),
     teamNames: csv(query.teamNames),
     phases: csv(query.phases),
+    phase_prefix: query.phase_prefix ? String(query.phase_prefix).trim() : null,
   };
 }
 

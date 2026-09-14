@@ -447,11 +447,12 @@ const REPORT_HANDLERS = {
     const f = report.filters || {};
     // Normalize filters — stored as arrays in JSONB
     const filters = {
-      departments: f.departments || [],
-      statuses:    f.statuses    || [],
+      departments:  f.departments  || [],
+      statuses:     f.statuses     || [],
       bill_methods: f.bill_methods || [],
-      teams:       f.teams       || [],
-      phases:      f.phases      || [],
+      teams:        f.teams        || [],
+      phases:       f.phases       || [],
+      phase_prefix: f.phase_prefix || null,
     };
 
     // Resolve team names for the PDF filter label
@@ -465,8 +466,11 @@ const REPORT_HANDLERS = {
       filters.teamNames = names;
     }
 
+    console.log(`[Phase Report] filters:`, JSON.stringify(filters));
     const rows = await buildPhaseReportData(report.tenant_id, filters);
+    console.log(`[Phase Report] query returned ${rows.length} rows`);
     const pdfBuffer = await generatePhaseReportPdfBuffer(rows, filters);
+    console.log(`[Phase Report] PDF generated (${pdfBuffer.length} bytes)`);
     const dateStr = new Date().toISOString().split('T')[0];
     const distinctJobs = new Set(rows.map(r => r.job_number)).size;
 
@@ -520,9 +524,10 @@ async function executeScheduledReport(report) {
   }
 
   // Send a single email to all recipients
+  console.log(`[Scheduled Reports] Sending "${report.name}" to: ${toAddresses.join(', ')}`);
   const result = await sendEmail({
     to: toAddresses.join(', '),
-    subject: `${subject}${report.name ? ` (${report.name})` : ''}`,
+    subject: report.name || subject,
     text: `${body}\n\nThis is an automated report from TITAN Project Management.\nSchedule: "${report.name}"`,
     html: generateEmailHtml(body, report.name),
     attachments: [
@@ -534,6 +539,11 @@ async function executeScheduledReport(report) {
     ],
   });
 
+  if (!result.success) {
+    throw new Error(result.message || result.error || 'sendEmail returned failure');
+  }
+
+  console.log(`[Scheduled Reports] Email sent successfully: ${result.messageId}`);
   return {
     reportId: report.id,
     reportName: report.name,
