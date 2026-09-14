@@ -407,18 +407,18 @@ const ScheduledReports: React.FC = () => {
     zIndex: 1000,
   };
   const dialogStyle: React.CSSProperties = {
-    background: 'white', borderRadius: '12px', width: '640px', maxHeight: '90vh',
+    background: 'white', borderRadius: '12px', width: '900px', maxWidth: '96vw', maxHeight: '94vh',
     overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
   };
   const sectionStyle: React.CSSProperties = {
-    marginBottom: '1.25rem',
+    marginBottom: '1rem',
   };
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b',
-    marginBottom: '0.375rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
+    display: 'block', fontSize: '0.6875rem', fontWeight: 600, color: '#64748b',
+    marginBottom: '0.3rem', textTransform: 'uppercase' as const, letterSpacing: '0.05em',
   };
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.875rem',
+    width: '100%', padding: '0.4rem 0.625rem', fontSize: '0.8125rem',
     border: '1px solid #d1d5db', borderRadius: '6px', outline: 'none',
     boxSizing: 'border-box',
   };
@@ -1194,238 +1194,166 @@ const ScheduledReports: React.FC = () => {
                 </div>
               )}
 
-              {/* Teams */}
-              {teams.length > 0 && (
-                <div style={sectionStyle}>
-                  <label style={labelStyle}>
-                    Send to Teams ({form.recipient_team_ids.length} selected)
-                  </label>
-                  <div style={{
-                    border: '1px solid #d1d5db', borderRadius: '6px',
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{ maxHeight: '140px', overflow: 'auto' }}>
-                      {teams.map(team => {
-                        const isSelected = form.recipient_team_ids.includes(team.id);
-                        return (
-                          <div
-                            key={team.id}
-                            onClick={() => toggleTeamRecipient(team.id)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: '0.75rem',
-                              padding: '0.5rem 0.75rem', cursor: 'pointer',
-                              background: isSelected ? '#eff6ff' : 'transparent',
-                              borderBottom: '1px solid #f1f5f9',
-                            }}
-                          >
-                            <div style={{
-                              width: '18px', height: '18px', borderRadius: '4px',
-                              border: isSelected ? '2px solid #2563eb' : '2px solid #d1d5db',
-                              background: isSelected ? '#2563eb' : 'transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              flexShrink: 0,
-                            }}>
-                              {isSelected && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </div>
-                            <div style={{
-                              width: '10px', height: '10px', borderRadius: '50%',
-                              background: team.color || '#3b82f6', flexShrink: 0,
-                            }} />
-                            <div style={{ flex: 1 }}>
-                              <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#1e293b' }}>
-                                {team.name}
-                              </span>
-                              <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '0.5rem' }}>
-                                {team.member_count} member{team.member_count !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {form.recipient_team_ids.length > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.375rem' }}>
-                      All team members will receive the report. Duplicates with individual recipients are removed automatically.
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Teams + Recipients — side by side */}
+              <div style={{ display: 'grid', gridTemplateColumns: teams.length > 0 ? '1fr 2fr' : '1fr', gap: '1rem', marginBottom: '1rem' }}>
 
-              {/* Recipients */}
-              <div style={sectionStyle}>
-                <label style={labelStyle}>
-                  Recipients ({form.recipient_user_ids.length} selected)
-                </label>
-
-                {/* Selected chips */}
-                {form.recipient_user_ids.length > 0 && (
-                  <div style={{
-                    display: 'flex', flexWrap: 'wrap', gap: '0.375rem',
-                    marginBottom: '0.5rem',
-                  }}>
-                    {(allUsers as User[])
-                      .filter(u => form.recipient_user_ids.includes(u.id))
-                      .map(u => (
-                        <div key={u.id} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
-                          padding: '3px 8px 3px 10px',
-                          background: u.is_active ? '#eff6ff' : '#fff7ed',
-                          border: `1px solid ${u.is_active ? '#bfdbfe' : '#fed7aa'}`,
-                          borderRadius: '9999px',
-                          fontSize: '0.75rem', fontWeight: 500,
-                          color: u.is_active ? '#1d4ed8' : '#9a3412',
-                        }}>
-                          {u.first_name} {u.last_name}
-                          <button
-                            onClick={() => toggleRecipient(u.id)}
-                            style={{
-                              border: 'none', background: 'none', cursor: 'pointer',
-                              padding: '0 2px', lineHeight: 1, fontSize: '0.875rem',
-                              color: u.is_active ? '#93c5fd' : '#fdba74',
-                              display: 'flex', alignItems: 'center',
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                {/* Teams column */}
+                {teams.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>
+                      Send to Teams ({form.recipient_team_ids.length} selected)
+                    </label>
+                    <div style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden' }}>
+                      <div style={{ maxHeight: '220px', overflow: 'auto' }}>
+                        {teams.map(team => {
+                          const isSelected = form.recipient_team_ids.includes(team.id);
+                          return (
+                            <div
+                              key={team.id}
+                              onClick={() => toggleTeamRecipient(team.id)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.625rem',
+                                padding: '0.4rem 0.625rem', cursor: 'pointer',
+                                background: isSelected ? '#eff6ff' : 'transparent',
+                                borderBottom: '1px solid #f1f5f9',
+                              }}
+                            >
+                              <div style={{
+                                width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+                                border: isSelected ? '2px solid #2563eb' : '2px solid #d1d5db',
+                                background: isSelected ? '#2563eb' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {isSelected && (
+                                  <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
+                                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: team.color || '#3b82f6', flexShrink: 0 }} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {team.name}
+                                </div>
+                                <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
+                                  {team.member_count} member{team.member_count !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {form.recipient_team_ids.length > 0 && (
+                      <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.3rem' }}>
+                        Duplicates with individual recipients are removed automatically.
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <div style={{
-                  border: '1px solid #d1d5db', borderRadius: '6px',
-                  overflow: 'hidden',
-                }}>
-                  {/* Search input */}
-                  <div style={{
-                    padding: '0.5rem 0.75rem',
-                    borderBottom: '1px solid #e5e7eb',
-                    background: '#f9fafb',
-                    display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ flexShrink: 0 }}>
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Search users by name or email..."
-                      value={recipientSearch}
-                      onChange={e => setRecipientSearch(e.target.value)}
-                      style={{
-                        border: 'none', outline: 'none', background: 'transparent',
-                        fontSize: '0.8125rem', width: '100%', color: '#1e293b',
-                      }}
-                    />
-                    {recipientSearch && (
-                      <button
-                        onClick={() => setRecipientSearch('')}
-                        style={{
-                          border: 'none', background: 'none', cursor: 'pointer',
-                          color: '#94a3b8', fontSize: '1rem', padding: 0, lineHeight: 1,
-                        }}
-                      >
-                        x
-                      </button>
-                    )}
-                  </div>
-                  {/* User list */}
-                  <div style={{ maxHeight: '200px', overflow: 'auto' }}>
-                    {/* Inactive recipients pinned at top so they can be removed */}
-                    {inactiveSelectedUsers.map(user => (
-                      <div
-                        key={`inactive-${user.id}`}
-                        onClick={() => toggleRecipient(user.id)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '0.75rem',
-                          padding: '0.5rem 0.75rem', cursor: 'pointer',
-                          background: '#fff7ed',
-                          borderBottom: '1px solid #fed7aa',
-                        }}
-                      >
-                        <div style={{
-                          width: '18px', height: '18px', borderRadius: '4px',
-                          border: '2px solid #f97316',
-                          background: '#f97316',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          flexShrink: 0,
-                        }}>
-                          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#9a3412' }}>
-                            {user.first_name} {user.last_name}
+                {/* Recipients column */}
+                <div>
+                  <label style={labelStyle}>
+                    Recipients ({form.recipient_user_ids.length} selected)
+                  </label>
+
+                  {/* Selected chips */}
+                  {form.recipient_user_ids.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                      {(allUsers as User[])
+                        .filter(u => form.recipient_user_ids.includes(u.id))
+                        .map(u => (
+                          <div key={u.id} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '2px 6px 2px 8px',
+                            background: u.is_active ? '#eff6ff' : '#fff7ed',
+                            border: `1px solid ${u.is_active ? '#bfdbfe' : '#fed7aa'}`,
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem', fontWeight: 500,
+                            color: u.is_active ? '#1d4ed8' : '#9a3412',
+                          }}>
+                            {u.first_name} {u.last_name}
+                            <button
+                              onClick={() => toggleRecipient(u.id)}
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer',
+                                padding: '0 1px', lineHeight: 1, fontSize: '0.875rem',
+                                color: u.is_active ? '#93c5fd' : '#fdba74',
+                                display: 'flex', alignItems: 'center',
+                              }}
+                            >×</button>
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: '#c2410c' }}>{user.email}</div>
+                        ))}
+                    </div>
+                  )}
+
+                  <div style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden' }}>
+                    {/* Search */}
+                    <div style={{
+                      padding: '0.4rem 0.625rem', borderBottom: '1px solid #e5e7eb',
+                      background: '#f9fafb', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ flexShrink: 0 }}>
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search users by name or email..."
+                        value={recipientSearch}
+                        onChange={e => setRecipientSearch(e.target.value)}
+                        style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '0.8125rem', width: '100%', color: '#1e293b' }}
+                      />
+                      {recipientSearch && (
+                        <button onClick={() => setRecipientSearch('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: 0, lineHeight: 1 }}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    {/* User list */}
+                    <div style={{ maxHeight: '220px', overflow: 'auto' }}>
+                      {inactiveSelectedUsers.map(user => (
+                        <div
+                          key={`inactive-${user.id}`}
+                          onClick={() => toggleRecipient(user.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.375rem 0.625rem', cursor: 'pointer', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}
+                        >
+                          <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '2px solid #f97316', background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#9a3412' }}>{user.first_name} {user.last_name}</div>
+                            <div style={{ fontSize: '0.6875rem', color: '#c2410c' }}>{user.email}</div>
+                          </div>
+                          <span style={{ fontSize: '0.625rem', fontWeight: 600, padding: '2px 5px', borderRadius: '4px', background: '#fed7aa', color: '#9a3412', textTransform: 'uppercase', flexShrink: 0 }}>Inactive</span>
                         </div>
-                        <span style={{
-                          fontSize: '0.625rem', fontWeight: 600, padding: '2px 6px',
-                          borderRadius: '4px', background: '#fed7aa', color: '#9a3412',
-                          textTransform: 'uppercase',
-                        }}>
-                          Inactive
-                        </span>
-                      </div>
-                    ))}
-                    {users.length === 0 ? (
-                      <div style={{ padding: '1rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.875rem' }}>
-                        No active users found
-                      </div>
-                    ) : filteredUsers.length === 0 ? (
-                      <div style={{ padding: '1rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.875rem' }}>
-                        No users match "{recipientSearch}"
-                      </div>
-                    ) : (
-                      filteredUsers.map(user => {
-                        const isSelected = form.recipient_user_ids.includes(user.id);
-                        return (
-                          <div
-                            key={user.id}
-                            onClick={() => toggleRecipient(user.id)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: '0.75rem',
-                              padding: '0.5rem 0.75rem', cursor: 'pointer',
-                              background: isSelected ? '#f0f9ff' : 'transparent',
-                              borderBottom: '1px solid #f1f5f9',
-                            }}
-                          >
-                            <div style={{
-                              width: '18px', height: '18px', borderRadius: '4px',
-                              border: isSelected ? '2px solid #002356' : '2px solid #d1d5db',
-                              background: isSelected ? '#002356' : 'transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              flexShrink: 0,
-                            }}>
-                              {isSelected && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#1e293b' }}>
-                                {user.first_name} {user.last_name}
+                      ))}
+                      {users.length === 0 ? (
+                        <div style={{ padding: '1rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.8125rem' }}>No active users found</div>
+                      ) : filteredUsers.length === 0 ? (
+                        <div style={{ padding: '1rem', color: '#94a3b8', textAlign: 'center', fontSize: '0.8125rem' }}>No users match "{recipientSearch}"</div>
+                      ) : (
+                        filteredUsers.map(user => {
+                          const isSelected = form.recipient_user_ids.includes(user.id);
+                          return (
+                            <div
+                              key={user.id}
+                              onClick={() => toggleRecipient(user.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.375rem 0.625rem', cursor: 'pointer', background: isSelected ? '#f0f9ff' : 'transparent', borderBottom: '1px solid #f1f5f9' }}
+                            >
+                              <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: isSelected ? '2px solid #002356' : '2px solid #d1d5db', background: isSelected ? '#002356' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                {isSelected && <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                               </div>
-                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user.email}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#1e293b' }}>{user.first_name} {user.last_name}</div>
+                                <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{user.email}</div>
+                              </div>
+                              <span style={{ fontSize: '0.625rem', fontWeight: 600, padding: '2px 5px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', textTransform: 'uppercase', flexShrink: 0 }}>{user.role}</span>
                             </div>
-                            <span style={{
-                              fontSize: '0.625rem', fontWeight: 600, padding: '2px 6px',
-                              borderRadius: '4px', background: '#f1f5f9', color: '#64748b',
-                              textTransform: 'uppercase',
-                            }}>
-                              {user.role}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1448,7 +1376,7 @@ const ScheduledReports: React.FC = () => {
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                   }} />
                 </button>
-                <span style={{ fontSize: '0.875rem', color: '#475569' }}>
+                <span style={{ fontSize: '0.8125rem', color: '#475569' }}>
                   {form.is_enabled ? 'Enabled — reports will be sent on schedule' : 'Disabled — reports will not be sent'}
                 </span>
               </div>
