@@ -408,7 +408,8 @@ const ScheduledReports: React.FC = () => {
   };
   const dialogStyle: React.CSSProperties = {
     background: 'white', borderRadius: '12px', width: '900px', maxWidth: '96vw', maxHeight: '94vh',
-    overflow: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
   };
   const sectionStyle: React.CSSProperties = {
     marginBottom: '1rem',
@@ -677,7 +678,7 @@ const ScheduledReports: React.FC = () => {
             </div>
 
             {/* Dialog Body */}
-            <div style={{ padding: '1.5rem' }}>
+            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
               {/* Name */}
               <div style={sectionStyle}>
                 <label style={labelStyle}>Schedule Name</label>
