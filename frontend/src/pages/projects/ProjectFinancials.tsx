@@ -650,6 +650,7 @@ const ProjectFinancials: React.FC = () => {
                 {c.project_manager_name && <span><strong>PM:</strong> {c.project_manager_name}</span>}
                 {c.department_code && <span><strong>Dept:</strong> {c.department_code}</span>}
                 {c.status && <span><strong>Status:</strong> {c.status}</span>}
+                {c.bill_method && <span><strong>Bill Method:</strong> {c.bill_method}</span>}
                 {c.start_month && <span><strong>Start:</strong> {format(new Date(c.start_month), 'MM/yy')}</span>}
               </div>
             </div>

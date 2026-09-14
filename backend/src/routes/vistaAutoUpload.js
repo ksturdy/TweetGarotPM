@@ -138,6 +138,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
         if (data[0]) {
           const columns = Object.keys(data[0]);
           console.log(`[Vista Auto-Import] ${contractSheetName} columns: ${columns.join(', ')}`);
+
         }
 
         const batch = await VistaData.createImportBatch({
@@ -231,6 +232,7 @@ router.post('/upload', apiKeyAuth, upload.single('file'), async (req, res, next)
             negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
             delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
             ipd_amount: parseNumber(row['IPD Amount'] ?? row[' IPD Amount '] ?? (ipdColByPosition ? row[ipdColByPosition] : undefined)),
+            bill_method: row['BillMethod'] ?? row['Bill Method'] ?? row[' Bill Method '] ?? '',
             raw_data: null
           };
 

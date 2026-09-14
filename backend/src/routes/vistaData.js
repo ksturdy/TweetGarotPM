@@ -299,6 +299,7 @@ router.post('/import/upload', requireAdmin, handleUpload, async (req, res, next)
             negotiated_work: row['Negotiated Work'] ?? row[' Negotiated Work '] ?? '',
             delivery_method: row['Delivery Method'] ?? row[' Delivery Method '] ?? '',
             ipd_amount: parseNumber(pickColumn(row, 'IPD Amount', ' IPD Amount ', 'IPD Amt', ' IPD Amt ', ipdColByPosition)),
+            bill_method: row['BillMethod'] ?? row['Bill Method'] ?? row[' Bill Method '] ?? '',
             raw_data: null  // Don't store raw data to save memory
           };
 

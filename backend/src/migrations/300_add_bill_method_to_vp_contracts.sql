@@ -1,0 +1,1 @@
+ALTER TABLE vp_contracts ADD COLUMN IF NOT EXISTS bill_method VARCHAR(50);
