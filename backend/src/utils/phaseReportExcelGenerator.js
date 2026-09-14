@@ -37,10 +37,10 @@ async function generatePhaseReportExcel(rows, filters = {}) {
 
   // Filter / date row
   const filterParts = [];
-  if (filters.department) filterParts.push(`Dept: ${filters.department}`);
-  if (filters.status) filterParts.push(`Status: ${filters.status}`);
-  if (filters.bill_method) filterParts.push(`Bill Method: ${filters.bill_method}`);
-  if (filters.teamName) filterParts.push(`Team: ${filters.teamName}`);
+  if (filters.departments && filters.departments.length > 0) filterParts.push(`Dept: ${filters.departments.join(', ')}`);
+  if (filters.statuses && filters.statuses.length > 0) filterParts.push(`Status: ${filters.statuses.join(', ')}`);
+  if (filters.bill_methods && filters.bill_methods.length > 0) filterParts.push(`Bill Method: ${filters.bill_methods.join(', ')}`);
+  if (filters.teamNames && filters.teamNames.length > 0) filterParts.push(`Team: ${filters.teamNames.join(', ')}`);
   if (filters.phases && filters.phases.length > 0) filterParts.push(`Phase: ${filters.phases.join(', ')}`);
   const filterLabel = filterParts.length > 0 ? filterParts.join('  ·  ') : 'All Jobs';
 

@@ -7,10 +7,10 @@ const fmtHours = (v) => {
 
 function buildFilterLabel(filters) {
   const parts = [];
-  if (filters.department) parts.push(`Dept: ${filters.department}`);
-  if (filters.status) parts.push(`Status: ${filters.status}`);
-  if (filters.bill_method) parts.push(`Bill Method: ${filters.bill_method}`);
-  if (filters.teamName) parts.push(`Team: ${filters.teamName}`);
+  if (filters.departments && filters.departments.length > 0) parts.push(`Dept: ${filters.departments.join(', ')}`);
+  if (filters.statuses && filters.statuses.length > 0) parts.push(`Status: ${filters.statuses.join(', ')}`);
+  if (filters.bill_methods && filters.bill_methods.length > 0) parts.push(`Bill Method: ${filters.bill_methods.join(', ')}`);
+  if (filters.teamNames && filters.teamNames.length > 0) parts.push(`Team: ${filters.teamNames.join(', ')}`);
   if (filters.phases && filters.phases.length > 0) parts.push(`Phase: ${filters.phases.join(', ')}`);
   return parts.length > 0 ? parts.join('  ·  ') : 'All Jobs';
 }

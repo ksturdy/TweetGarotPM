@@ -21,21 +21,21 @@ export interface PhaseReportFilters {
 }
 
 export interface PhaseReportParams {
-  department?: string;
-  status?: string;
-  bill_method?: string;
-  team?: string;
-  teamName?: string;
+  departments?: string[];
+  statuses?: string[];
+  bill_methods?: string[];
+  teams?: string[];
+  teamNames?: string[];
   phases?: string[];
 }
 
 function buildParams(p: PhaseReportParams): URLSearchParams {
   const params = new URLSearchParams();
-  if (p.department) params.set('department', p.department);
-  if (p.status) params.set('status', p.status);
-  if (p.bill_method) params.set('bill_method', p.bill_method);
-  if (p.team) params.set('team', p.team);
-  if (p.teamName) params.set('teamName', p.teamName);
+  if (p.departments && p.departments.length > 0) params.set('departments', p.departments.join(','));
+  if (p.statuses && p.statuses.length > 0) params.set('statuses', p.statuses.join(','));
+  if (p.bill_methods && p.bill_methods.length > 0) params.set('bill_methods', p.bill_methods.join(','));
+  if (p.teams && p.teams.length > 0) params.set('teams', p.teams.join(','));
+  if (p.teamNames && p.teamNames.length > 0) params.set('teamNames', p.teamNames.join(','));
   if (p.phases && p.phases.length > 0) params.set('phases', p.phases.join(','));
   return params;
 }

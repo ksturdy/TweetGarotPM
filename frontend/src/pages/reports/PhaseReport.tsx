@@ -23,13 +23,106 @@ const SortIcon: React.FC<{ col: string; sortCol: string; sortDir: string }> = ({
   </span>
 );
 
+interface MsOption { value: string; label: string; }
+
+const MultiSelectDropdown: React.FC<{
+  label: string;
+  options: MsOption[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+  minWidth?: number;
+  showSelectAll?: boolean;
+}> = ({ label, options, selected, onChange, placeholder = 'All', minWidth = 130, showSelectAll = false }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filtered = options.filter(o => !search || o.label.toLowerCase().includes(search.toLowerCase()));
+
+  const toggle = (value: string) =>
+    onChange(selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>
+        {label}{selected.length > 0 && <span style={{ color: '#F37B03' }}> ({selected.length})</span>}
+      </label>
+      <div style={{ position: 'relative' }}>
+        <input
+          type="text"
+          placeholder={selected.length > 0 ? `${selected.length} selected` : placeholder}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', width: minWidth }}
+        />
+        {open && filtered.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff',
+            border: '1px solid #e2e8f0', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            maxHeight: 220, overflowY: 'auto', minWidth, marginTop: 2,
+          }}>
+            {showSelectAll && search && (
+              <div
+                onClick={() => onChange([...new Set([...selected, ...filtered.map(o => o.value)])])}
+                style={{
+                  padding: '5px 10px', fontSize: '0.75rem', fontWeight: 600,
+                  color: '#1e40af', background: '#dbeafe', cursor: 'pointer',
+                  borderBottom: '1px solid #bfdbfe', userSelect: 'none',
+                }}
+              >
+                ✓ Select all {filtered.length} matching &ldquo;{search}&rdquo;
+              </div>
+            )}
+            {filtered.slice(0, 100).map(o => (
+              <label key={o.value} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+                cursor: 'pointer', fontSize: '0.78rem', color: '#334155',
+                background: selected.includes(o.value) ? '#eff6ff' : undefined,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(o.value)}
+                  onChange={() => toggle(o.value)}
+                  style={{ accentColor: '#1a2b4a' }}
+                />
+                {o.label}
+              </label>
+            ))}
+            {filtered.length > 100 && (
+              <div style={{ padding: '4px 10px', fontSize: '0.72rem', color: '#94a3b8' }}>
+                {filtered.length - 100} more — refine your search
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+          {selected.map(v => {
+            const displayLabel = options.find(o => o.value === v)?.label ?? v;
+            return (
+              <span key={v} style={{
+                fontSize: '0.7rem', padding: '1px 6px', borderRadius: 8,
+                background: '#dbeafe', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 3,
+              }}>
+                {displayLabel}
+                <button onClick={() => toggle(v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '0.75rem', lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PhaseReport: React.FC = () => {
-  const [department, setDepartment] = useState('');
-  const [status, setStatus] = useState('');
-  const [billMethod, setBillMethod] = useState('');
-  const [team, setTeam] = useState('');
-  const [phaseSearch, setPhaseSearch] = useState('');
-  const [phaseFocused, setPhaseFocused] = useState(false);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>(['Open', 'Soft Closed']);
+  const [billMethods, setBillMethods] = useState<string[]>([]);
+  const [teams, setTeams] = useState<string[]>([]);
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
@@ -37,10 +130,10 @@ const PhaseReport: React.FC = () => {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const activeParams: PhaseReportParams = {
-    department: department || undefined,
-    status: status || undefined,
-    bill_method: billMethod || undefined,
-    team: team || undefined,
+    departments: departments.length > 0 ? departments : undefined,
+    statuses: statuses.length > 0 ? statuses : undefined,
+    bill_methods: billMethods.length > 0 ? billMethods : undefined,
+    teams: teams.length > 0 ? teams : undefined,
     phases: selectedPhases.length > 0 ? selectedPhases : undefined,
   };
 
@@ -62,11 +155,26 @@ const PhaseReport: React.FC = () => {
     staleTime: 10 * 60 * 1000,
   });
 
-  const filteredPhaseOptions = useMemo(() => {
-    if (!filterOptions?.phases) return [];
-    const term = phaseSearch.toLowerCase();
-    return filterOptions.phases.filter(p => p.toLowerCase().includes(term));
-  }, [filterOptions?.phases, phaseSearch]);
+  const deptOptions: MsOption[] = useMemo(
+    () => (filterOptions?.departments ?? []).map(d => ({ value: d, label: d })),
+    [filterOptions?.departments]
+  );
+  const statusOptions: MsOption[] = useMemo(
+    () => (filterOptions?.statuses ?? []).map(s => ({ value: s, label: s })),
+    [filterOptions?.statuses]
+  );
+  const billMethodOptions: MsOption[] = useMemo(
+    () => (filterOptions?.billMethods ?? []).map(b => ({ value: b, label: b })),
+    [filterOptions?.billMethods]
+  );
+  const teamOptions: MsOption[] = useMemo(
+    () => (teamsData ?? []).map((t: Team) => ({ value: String(t.id), label: t.name })),
+    [teamsData]
+  );
+  const phaseOptions: MsOption[] = useMemo(
+    () => (filterOptions?.phases ?? []).map(p => ({ value: p, label: p })),
+    [filterOptions?.phases]
+  );
 
   const sorted = useMemo(() => {
     const arr = [...rows];
@@ -99,26 +207,23 @@ const PhaseReport: React.FC = () => {
     else { setSortCol(col); setSortDir('asc'); }
   };
 
-  const togglePhase = (phase: string) => {
-    setSelectedPhases(prev =>
-      prev.includes(phase) ? prev.filter(p => p !== phase) : [...prev, phase]
-    );
-  };
-
   const clearFilters = () => {
-    setDepartment('');
-    setStatus('');
-    setBillMethod('');
-    setTeam('');
+    setDepartments([]);
+    setStatuses([]);
+    setBillMethods([]);
+    setTeams([]);
     setSelectedPhases([]);
-    setPhaseSearch('');
   };
 
-  const anyFilter = department || status || billMethod || team || selectedPhases.length > 0;
+  const anyFilter = departments.length > 0 || statuses.length > 0 || billMethods.length > 0 || teams.length > 0 || selectedPhases.length > 0;
+
+  const selectedTeamNames = (teamsData ?? [])
+    .filter((t: Team) => teams.includes(String(t.id)))
+    .map((t: Team) => t.name);
 
   const activeParamsForExport: PhaseReportParams = {
     ...activeParams,
-    teamName: team ? teamsData?.find((t: Team) => String(t.id) === team)?.name : undefined,
+    teamNames: selectedTeamNames.length > 0 ? selectedTeamNames : undefined,
   };
 
   const handlePdf = async () => {
@@ -146,6 +251,16 @@ const PhaseReport: React.FC = () => {
     color: '#fff',
     background: '#1a2b4a',
   });
+
+  const thBase: React.CSSProperties = {
+    padding: '8px 10px',
+    fontSize: '0.7rem',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: '#fff',
+    background: '#1a2b4a',
+  };
 
   const burnColor = (est: number, jtd: number): string => {
     if (!est) return '#475569';
@@ -192,141 +307,57 @@ const PhaseReport: React.FC = () => {
 
       {/* Filters */}
       <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '0.75rem', position: 'relative', zIndex: 20, overflow: 'visible' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          {/* Department */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Department</label>
-            <select
-              value={department}
-              onChange={e => setDepartment(e.target.value)}
-              style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', minWidth: 130 }}
-            >
-              <option value="">All Departments</option>
-              {filterOptions?.departments.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-
-          {/* Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Status</label>
-            <select
-              value={status}
-              onChange={e => setStatus(e.target.value)}
-              style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', minWidth: 120 }}
-            >
-              <option value="">All Statuses</option>
-              {filterOptions?.statuses.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          {/* Bill Method */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Bill Method</label>
-            <select
-              value={billMethod}
-              onChange={e => setBillMethod(e.target.value)}
-              style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', minWidth: 130 }}
-            >
-              <option value="">All Bill Methods</option>
-              {filterOptions?.billMethods.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </div>
-
-          {/* Team */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>Team</label>
-            <select
-              value={team}
-              onChange={e => setTeam(e.target.value)}
-              style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', minWidth: 120 }}
-            >
-              <option value="">All Teams</option>
-              {(teamsData || []).map((t: Team) => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
-            </select>
-          </div>
-
-          {/* Phase multiselect */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>
-              Phase {selectedPhases.length > 0 && <span style={{ color: '#F37B03' }}>({selectedPhases.length} selected)</span>}
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                placeholder="Search phases…"
-                value={phaseSearch}
-                onChange={e => setPhaseSearch(e.target.value)}
-                onFocus={() => setPhaseFocused(true)}
-                onBlur={() => setTimeout(() => setPhaseFocused(false), 150)}
-                style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', width: 150 }}
-              />
-              {phaseFocused && filteredPhaseOptions.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, zIndex: 200, background: '#fff',
-                  border: '1px solid #e2e8f0', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  maxHeight: 220, overflowY: 'auto', minWidth: 200, marginTop: 2,
-                }}>
-                  {phaseSearch && filteredPhaseOptions.length > 0 && (
-                    <div
-                      onClick={() => setSelectedPhases(prev => [...new Set([...prev, ...filteredPhaseOptions])])}
-                      style={{
-                        padding: '5px 10px', fontSize: '0.75rem', fontWeight: 600,
-                        color: '#1e40af', background: '#dbeafe', cursor: 'pointer',
-                        borderBottom: '1px solid #bfdbfe', userSelect: 'none',
-                      }}
-                    >
-                      ✓ Select all {filteredPhaseOptions.length} matching "{phaseSearch}"
-                    </div>
-                  )}
-                  {filteredPhaseOptions.slice(0, 100).map(p => (
-                    <label key={p} style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px',
-                      cursor: 'pointer', fontSize: '0.78rem', color: '#334155',
-                      background: selectedPhases.includes(p) ? '#eff6ff' : undefined,
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedPhases.includes(p)}
-                        onChange={() => togglePhase(p)}
-                        style={{ accentColor: '#1a2b4a' }}
-                      />
-                      {p}
-                    </label>
-                  ))}
-                  {filteredPhaseOptions.length > 100 && (
-                    <div style={{ padding: '4px 10px', fontSize: '0.72rem', color: '#94a3b8' }}>
-                      {filteredPhaseOptions.length - 100} more — refine your search
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <MultiSelectDropdown
+            label="Department"
+            options={deptOptions}
+            selected={departments}
+            onChange={setDepartments}
+            placeholder="All Departments"
+            minWidth={140}
+          />
+          <MultiSelectDropdown
+            label="Status"
+            options={statusOptions}
+            selected={statuses}
+            onChange={setStatuses}
+            placeholder="All Statuses"
+            minWidth={130}
+          />
+          <MultiSelectDropdown
+            label="Bill Method"
+            options={billMethodOptions}
+            selected={billMethods}
+            onChange={setBillMethods}
+            placeholder="All Bill Methods"
+            minWidth={140}
+          />
+          <MultiSelectDropdown
+            label="Team"
+            options={teamOptions}
+            selected={teams}
+            onChange={setTeams}
+            placeholder="All Teams"
+            minWidth={130}
+          />
+          <MultiSelectDropdown
+            label="Phase"
+            options={phaseOptions}
+            selected={selectedPhases}
+            onChange={setSelectedPhases}
+            placeholder="Search phases…"
+            minWidth={150}
+            showSelectAll
+          />
           {anyFilter && (
             <button
               onClick={clearFilters}
-              style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 2, alignSelf: 'flex-end' }}
+              style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-end', marginBottom: 4 }}
             >
               Clear all
             </button>
           )}
         </div>
-
-        {/* Selected phase chips */}
-        {selectedPhases.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: '0.5rem' }}>
-            {selectedPhases.map(p => (
-              <span key={p} style={{
-                fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10,
-                background: '#dbeafe', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                {p}
-                <button onClick={() => togglePhase(p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: '0.8rem', lineHeight: 1, padding: 0 }}>×</button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Summary KPIs */}
@@ -357,27 +388,15 @@ const PhaseReport: React.FC = () => {
                 <th style={{ ...thStyle('job_number'), textAlign: 'left' }} onClick={() => handleSort('job_number')}>
                   Job # <SortIcon col="job_number" sortCol={sortCol} sortDir={sortDir} />
                 </th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Job Name
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  PM
-                </th>
+                <th style={{ ...thBase, textAlign: 'left' }}>Job Name</th>
+                <th style={{ ...thBase, textAlign: 'left' }}>PM</th>
                 <th style={{ ...thStyle('phase_code'), textAlign: 'left' }} onClick={() => handleSort('phase_code')}>
                   Phase Code <SortIcon col="phase_code" sortCol={sortCol} sortDir={sortDir} />
                 </th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Phase Name
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Dept
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Status
-                </th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#fff', background: '#1a2b4a' }}>
-                  Bill Method
-                </th>
+                <th style={{ ...thBase, textAlign: 'left' }}>Phase Name</th>
+                <th style={{ ...thBase, textAlign: 'center' }}>Dept</th>
+                <th style={{ ...thBase, textAlign: 'center' }}>Status</th>
+                <th style={{ ...thBase, textAlign: 'center' }}>Bill Method</th>
                 <th style={{ ...thStyle('est_hours'), textAlign: 'right' }} onClick={() => handleSort('est_hours')}>
                   Est Hours <SortIcon col="est_hours" sortCol={sortCol} sortDir={sortDir} />
                 </th>

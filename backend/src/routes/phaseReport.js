@@ -14,17 +14,20 @@ async function buildPhaseReportData(tenantId, filters = {}) {
   let paramIdx = 2;
   const whereClauses = ['vpc.tenant_id = $1'];
 
-  if (filters.department) {
-    whereClauses.push(`vc.department_code = $${paramIdx++}`);
-    params.push(filters.department);
+  if (filters.departments && filters.departments.length > 0) {
+    const placeholders = filters.departments.map(() => `$${paramIdx++}`).join(', ');
+    whereClauses.push(`vc.department_code IN (${placeholders})`);
+    params.push(...filters.departments);
   }
-  if (filters.status) {
-    whereClauses.push(`vc.status = $${paramIdx++}`);
-    params.push(filters.status);
+  if (filters.statuses && filters.statuses.length > 0) {
+    const placeholders = filters.statuses.map(() => `$${paramIdx++}`).join(', ');
+    whereClauses.push(`vc.status IN (${placeholders})`);
+    params.push(...filters.statuses);
   }
-  if (filters.bill_method) {
-    whereClauses.push(`vc.bill_method = $${paramIdx++}`);
-    params.push(filters.bill_method);
+  if (filters.bill_methods && filters.bill_methods.length > 0) {
+    const placeholders = filters.bill_methods.map(() => `$${paramIdx++}`).join(', ');
+    whereClauses.push(`vc.bill_method IN (${placeholders})`);
+    params.push(...filters.bill_methods);
   }
   if (filters.phases && filters.phases.length > 0) {
     const placeholders = filters.phases.map(() => `$${paramIdx++}`).join(', ');
@@ -32,17 +35,20 @@ async function buildPhaseReportData(tenantId, filters = {}) {
     params.push(...filters.phases);
   }
 
-  // Team filter: match vc.employee_number against employees on the team
-  if (filters.team) {
+  // Team filter: match vc.employee_number against employees on the selected teams
+  if (filters.teams && filters.teams.length > 0) {
     const Team = require('../models/Team');
-    const members = await Team.getMembers(Number(filters.team), tenantId);
-    if (members.length === 0) return [];
+    const allEmpIds = new Set();
+    for (const teamId of filters.teams) {
+      const members = await Team.getMembers(Number(teamId), tenantId);
+      members.forEach(m => allEmpIds.add(m.employee_id));
+    }
+    if (allEmpIds.size === 0) return [];
 
-    const empIds = members.map(m => m.employee_id);
     const empNumResult = await db.query(
       `SELECT employee_number FROM employees
        WHERE id = ANY($1::int[]) AND employee_number IS NOT NULL AND employee_number <> ''`,
-      [empIds]
+      [[...allEmpIds]]
     );
     const empNumbers = empNumResult.rows.map(r => String(r.employee_number));
     if (empNumbers.length === 0) return [];
@@ -115,13 +121,14 @@ async function buildFilterOptions(tenantId) {
 }
 
 function parseFilters(query) {
+  const csv = (v) => v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : [];
   return {
-    department: query.department || null,
-    status: query.status || null,
-    bill_method: query.bill_method || null,
-    team: query.team ? Number(query.team) : null,
-    teamName: query.teamName || null,
-    phases: query.phases ? String(query.phases).split(',').map(p => p.trim()).filter(Boolean) : [],
+    departments: csv(query.departments),
+    statuses: csv(query.statuses),
+    bill_methods: csv(query.bill_methods),
+    teams: csv(query.teams),
+    teamNames: csv(query.teamNames),
+    phases: csv(query.phases),
   };
 }
 
