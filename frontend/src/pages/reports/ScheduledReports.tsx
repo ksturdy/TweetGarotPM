@@ -15,6 +15,7 @@ import { teamsApi, Team } from '../../services/teams';
 import { getCampaigns, Campaign } from '../../services/campaigns';
 import recurringSearchesService, { RecurringSearch } from '../../services/recurringSearches';
 import { pmReportApi } from '../../services/pmReport';
+import { phaseReportApi } from '../../services/phaseReport';
 import SearchableMultiSelect from '../../components/SearchableMultiSelect';
 import '../../styles/SalesPipeline.css';
 
@@ -29,6 +30,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: 'opportunity_search', label: 'Opportunity Search' },
   { value: 'weekly_sales', label: 'Weekly Sales Report' },
   { value: 'pm_report', label: 'Project Manager Report' },
+  { value: 'phase_report', label: 'Phase Report' },
 ];
 
 const LOCATION_GROUP_OPTIONS = [
@@ -244,6 +246,14 @@ const ScheduledReports: React.FC = () => {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([name, n]) => ({ value: name, label: name, subtitle: `${n} PM${n === 1 ? '' : 's'}` }));
   }, [pmReportResponse]);
+  // Fetch Phase Report filter options for the scheduled report dialog
+  const { data: phaseReportFilters } = useQuery({
+    queryKey: ['phaseReportFiltersForScheduling'],
+    queryFn: () => phaseReportApi.getFilters(),
+    enabled: dialogOpen && form.report_type === 'phase_report',
+    staleTime: 5 * 60 * 1000,
+  });
+
   const availableSnapshotDates: string[] = useMemo(() => {
     const data = (execReportResponse as any)?.data || execReportResponse || {};
     return data.availableDates || [];
@@ -915,6 +925,60 @@ const ScheduledReports: React.FC = () => {
                       <option value="yellow">Watch Only</option>
                       <option value="green">Healthy Only</option>
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters (for Phase Report) */}
+              {form.report_type === 'phase_report' && (
+                <div style={sectionStyle}>
+                  <label style={labelStyle}>Filters (Optional)</label>
+                  <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>
+                    Leave empty to include all jobs. Selections narrow the report.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Department</label>
+                      <select
+                        style={selectStyle}
+                        value={((form.filters.departments as string[]) || [])[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, departments: e.target.value ? [e.target.value] : undefined } }))}
+                      >
+                        <option value="">All Departments</option>
+                        {(phaseReportFilters?.departments || []).map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Status</label>
+                      <SearchableMultiSelect
+                        options={(phaseReportFilters?.statuses || []).map(s => ({ value: s, label: s }))}
+                        values={(form.filters.statuses as string[]) || []}
+                        onChange={vals => setForm(f => ({ ...f, filters: { ...f.filters, statuses: vals.length ? vals : undefined } }))}
+                        placeholder="All statuses — type to filter..."
+                      />
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Bill Method</label>
+                      <select
+                        style={selectStyle}
+                        value={((form.filters.bill_methods as string[]) || [])[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, bill_methods: e.target.value ? [e.target.value] : undefined } }))}
+                      >
+                        <option value="">All Bill Methods</option>
+                        {(phaseReportFilters?.billMethods || []).map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...labelStyle, fontSize: '0.6875rem', marginBottom: '0.25rem' }}>Team</label>
+                      <select
+                        style={selectStyle}
+                        value={((form.filters.teams as string[]) || [])[0] || ''}
+                        onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, teams: e.target.value ? [e.target.value] : undefined } }))}
+                      >
+                        <option value="">All Teams</option>
+                        {teams.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}

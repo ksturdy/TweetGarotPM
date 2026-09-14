@@ -440,6 +440,43 @@ const REPORT_HANDLERS = {
       body: `Please find attached the Opportunity Search Report for "${recurringSearch.name}".\n\nThis search found ${leadCount} project${leadCount !== 1 ? 's' : ''} with a total estimated value of ${fmtValue}.\n\nClick the link in the PDF to view full details and convert opportunities in Titan.`,
     };
   },
+  async phase_report(report) {
+    const { buildPhaseReportData } = require('../routes/phaseReport');
+    const { generatePhaseReportPdfBuffer } = require('../utils/phaseReportPdfBuffer');
+
+    const f = report.filters || {};
+    // Normalize filters — stored as arrays in JSONB
+    const filters = {
+      departments: f.departments || [],
+      statuses:    f.statuses    || [],
+      bill_methods: f.bill_methods || [],
+      teams:       f.teams       || [],
+      phases:      f.phases      || [],
+    };
+
+    // Resolve team names for the PDF filter label
+    if (filters.teams.length > 0) {
+      const Team = require('../models/Team');
+      const names = [];
+      for (const teamId of filters.teams) {
+        const team = await Team.getByIdAndTenant(Number(teamId), report.tenant_id);
+        if (team) names.push(team.name);
+      }
+      filters.teamNames = names;
+    }
+
+    const rows = await buildPhaseReportData(report.tenant_id, filters);
+    const pdfBuffer = await generatePhaseReportPdfBuffer(rows, filters);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const distinctJobs = new Set(rows.map(r => r.job_number)).size;
+
+    return {
+      pdfBuffer,
+      filename: `Phase-Report-${dateStr}.pdf`,
+      subject: `Phase Report - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+      body: `Please find attached the Phase Report.\n\nThis report covers ${distinctJobs} job${distinctJobs !== 1 ? 's' : ''} across ${rows.length} phase${rows.length !== 1 ? 's' : ''} with Vista JTD labor hours vs. estimates.`,
+    };
+  },
 };
 
 /**
