@@ -131,6 +131,14 @@ const reports = [
     bg: '#f0fdfa',
   },
   {
+    name: 'Phase Report',
+    Icon: EngineeringIcon,
+    path: '/reports/phase-report',
+    desc: 'Vista job hours by phase — est vs JTD, filtered by department, status, bill method, and team',
+    color: '#0f766e',
+    bg: '#f0fdfa',
+  },
+  {
     name: 'Scheduled Reports',
     Icon: ScheduleIcon,
     path: '/reports/scheduled',
