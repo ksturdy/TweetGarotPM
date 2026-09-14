@@ -12,6 +12,7 @@ function buildFilterLabel(filters) {
   if (filters.bill_methods && filters.bill_methods.length > 0) parts.push(`Bill Method: ${filters.bill_methods.join(', ')}`);
   if (filters.teamNames && filters.teamNames.length > 0) parts.push(`Team: ${filters.teamNames.join(', ')}`);
   if (filters.phases && filters.phases.length > 0) parts.push(`Phase: ${filters.phases.join(', ')}`);
+  if (filters.phase_prefix) parts.push(`Phase Starts With: ${filters.phase_prefix}`);
   return parts.length > 0 ? parts.join('  ·  ') : 'All Jobs';
 }
 

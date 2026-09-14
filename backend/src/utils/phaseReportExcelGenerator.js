@@ -42,6 +42,7 @@ async function generatePhaseReportExcel(rows, filters = {}) {
   if (filters.bill_methods && filters.bill_methods.length > 0) filterParts.push(`Bill Method: ${filters.bill_methods.join(', ')}`);
   if (filters.teamNames && filters.teamNames.length > 0) filterParts.push(`Team: ${filters.teamNames.join(', ')}`);
   if (filters.phases && filters.phases.length > 0) filterParts.push(`Phase: ${filters.phases.join(', ')}`);
+  if (filters.phase_prefix) filterParts.push(`Phase Starts With: ${filters.phase_prefix}`);
   const filterLabel = filterParts.length > 0 ? filterParts.join('  ·  ') : 'All Jobs';
 
   const distinctJobs = new Set(rows.map(r => r.job_number)).size;
