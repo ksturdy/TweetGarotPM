@@ -285,7 +285,12 @@ const ProjectFinancials: React.FC = () => {
 
   const calcProjectedHours = (summary: { jtd_cost: number; jtd_hours: number; est_cost: number; est_hours: number; projected_cost: number }) => {
     if (!summary.projected_cost) return 0;
-    const rate = summary.jtd_hours > 0
+    // Rate reliability threshold: don't trust JTD rate until at least 5% of estimated hours
+    // are burned. Early in a job the sample is too small — mobilization and supervision hours
+    // skew the $/hr low, which inflates projected hours by 2-3x. Fall back to estimate rate
+    // until the JTD pool is large enough to be statistically meaningful.
+    const jtdRateReliable = summary.jtd_hours >= summary.est_hours * 0.05;
+    const rate = jtdRateReliable
       ? summary.jtd_cost / summary.jtd_hours
       : summary.est_hours > 0
         ? summary.est_cost / summary.est_hours
@@ -303,7 +308,11 @@ const ProjectFinancials: React.FC = () => {
       const estC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.est_cost, 0);
       const jtdC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.jtd_cost, 0);
       const projC = rows.reduce((s: number, r: LaborTradeSummary) => s + r.projected_cost, 0);
-      const rate = jtdH > 0 ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
+      // Rate reliability threshold: same rule as calcProjectedHours — don't switch to JTD
+      // rate until ≥5% of estimated hours are burned. Before that the early-job sample
+      // (mobilization, supervision) skews $/hr low and balloons the remaining-hours forecast.
+      const jtdRateReliable = jtdH >= estH * 0.05;
+      const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
       return { key, remaining: Math.max(0, projH - jtdH), rate };
     });
