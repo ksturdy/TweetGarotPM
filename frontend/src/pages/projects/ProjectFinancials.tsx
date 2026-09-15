@@ -321,7 +321,14 @@ const ProjectFinancials: React.FC = () => {
       const jtdRateReliable = jtdH >= estH * 0.05;
       const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
-      return { key, remaining: Math.max(0, projH - jtdH), rate };
+      const remaining = Math.max(0, projH - jtdH);
+      // Split remaining hours between field and shop proportionally by estimated hours.
+      // Field and shop share the same $/hr rate; only their schedule windows differ.
+      const estHField = rows.filter((r: LaborTradeSummary) => r.location === 'field').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
+      const estHShop  = rows.filter((r: LaborTradeSummary) => r.location === 'shop').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
+      const fieldFrac = estH > 0 ? estHField / estH : 1;
+      const shopFrac  = estH > 0 ? estHShop  / estH : 0;
+      return { key, remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac, rate };
     });
     const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
     if (totalRem <= 0) return null;
@@ -340,17 +347,17 @@ const ProjectFinancials: React.FC = () => {
         : projectStartOff + 3;
     const projectContour: ContourType = (c.user_selected_contour as ContourType) || laborAutoContour(pctComplete);
 
-    // In cost_type mode each trade has its own segment with independent start/end/contour.
-    // Segment keys: PF=40 (Pipefitter Field), SM=30 (Sheet Metal Field), PL=50 (Plumbing Field).
-    // If a segment has no dates configured it falls back to the project-level window so the
-    // forecast still renders rather than going silent.
+    // In cost_type mode each trade has separate field and shop segments with independent
+    // start/end/contour. Field: PF=40, SM=30, PL=50. Shop: PF=45, SM=35, PL=55.
+    // If a segment has no dates configured it falls back to the project-level window.
     const schedulingMode = project?.scheduling_mode ?? 'summary';
     const segments = segmentsData?.segments ?? [];
-    const TRADE_SEGMENT_KEYS: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
+    const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
+    const TRADE_SHOP_SEG:  Record<string, string> = { pf: '45', sm: '35', pl: '55' };
 
-    const resolveTradeWindow = (tradeKey: string): { startOff: number; endOff: number; contour: ContourType } => {
+    const resolveSegmentWindow = (segKey: string): { startOff: number; endOff: number; contour: ContourType } => {
       if (schedulingMode === 'cost_type') {
-        const seg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SEGMENT_KEYS[tradeKey]);
+        const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
         if (seg?.start_date) {
           const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
           const eUserOff = dateToMonthOff(seg.end_date);
@@ -363,31 +370,38 @@ const ProjectFinancials: React.FC = () => {
       return { startOff: projectStartOff, endOff: projectEndOff, contour: projectContour };
     };
 
-    const now = new Date();
-    const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
-    const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
-
-    // Distribute each trade's hours within its own date window, then merge into shared maps
-    TRADE_META.forEach(({ key }, idx) => {
-      const t = tradeHours[idx];
-      if (t.remaining <= 0) return;
-      const { startOff, endOff, contour } = resolveTradeWindow(key);
+    const distributeHours = (tradeKey: string, hours: number, rate: number, segKey: string,
+      monthlyHours: Map<string, { pf: number; sm: number; pl: number; total: number }>,
+      monthlyCosts: Map<string, { pf: number; sm: number; pl: number; total: number }>,
+      now: Date) => {
+      if (hours <= 0) return;
+      const { startOff, endOff, contour } = resolveSegmentWindow(segKey);
       const remMonths = endOff - startOff;
       if (remMonths <= 0) return;
       const mults = laborContourMultipliers(remMonths, contour);
       for (let i = 0; i < remMonths; i++) {
         const mk = format(addMonths(now, startOff + i), 'yyyy-MM');
-        const h = (t.remaining / remMonths) * mults[i];
-        const existing = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
-        const existingC = monthlyCosts.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
-        existing[key as 'pf' | 'sm' | 'pl'] += h;
+        const h = (hours / remMonths) * mults[i];
+        const existing  = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+        const existingC = monthlyCosts.get(mk)  ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+        existing[tradeKey as 'pf' | 'sm' | 'pl'] += h;
         existing.total += h;
-        const cost = h * t.rate;
-        existingC[key as 'pf' | 'sm' | 'pl'] += cost;
-        existingC.total += cost;
+        existingC[tradeKey as 'pf' | 'sm' | 'pl'] += h * rate;
+        existingC.total += h * rate;
         monthlyHours.set(mk, existing);
         monthlyCosts.set(mk, existingC);
       }
+    };
+
+    const now = new Date();
+    const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+    const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+
+    // Distribute field and shop hours for each trade into their respective segment windows
+    TRADE_META.forEach(({ key }, idx) => {
+      const t = tradeHours[idx];
+      distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], monthlyHours, monthlyCosts, now);
+      distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  monthlyHours, monthlyCosts, now);
     });
 
     const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
