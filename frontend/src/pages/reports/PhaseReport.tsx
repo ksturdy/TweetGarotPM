@@ -124,6 +124,8 @@ const PhaseReport: React.FC = () => {
   const [billMethods, setBillMethods] = useState<string[]>([]);
   const [teams, setTeams] = useState<string[]>([]);
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
+  const [phasePrefix, setPhasePrefix] = useState('');
+  const [includeMissing, setIncludeMissing] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'job_number' | 'phase_code' | 'est_hours' | 'jtd_hours' | 'burn'>('job_number');
@@ -135,6 +137,8 @@ const PhaseReport: React.FC = () => {
     bill_methods: billMethods.length > 0 ? billMethods : undefined,
     teams: teams.length > 0 ? teams : undefined,
     phases: selectedPhases.length > 0 ? selectedPhases : undefined,
+    phase_prefix: phasePrefix.trim() || undefined,
+    include_missing: phasePrefix.trim() && includeMissing ? true : undefined,
   };
 
   const { data: rows = [], isLoading } = useQuery<PhaseReportRow[]>({
@@ -204,6 +208,8 @@ const PhaseReport: React.FC = () => {
     return arr;
   }, [rows, sortCol, sortDir]);
 
+  const phaseCount = useMemo(() => rows.filter(r => !r.is_missing).length, [rows]);
+
   const totals = useMemo(() => ({
     est: rows.reduce((s, r) => s + parseNum(r.est_hours), 0),
     jtd: rows.reduce((s, r) => s + parseNum(r.jtd_hours), 0),
@@ -221,9 +227,11 @@ const PhaseReport: React.FC = () => {
     setBillMethods([]);
     setTeams([]);
     setSelectedPhases([]);
+    setPhasePrefix('');
+    setIncludeMissing(false);
   };
 
-  const anyFilter = departments.length > 0 || statuses.length > 0 || billMethods.length > 0 || teams.length > 0 || selectedPhases.length > 0;
+  const anyFilter = departments.length > 0 || statuses.length > 0 || billMethods.length > 0 || teams.length > 0 || selectedPhases.length > 0 || !!phasePrefix.trim();
 
   const selectedTeamNames = (teamsData ?? [])
     .filter((t: Team) => teams.includes(String(t.id)))
@@ -289,7 +297,7 @@ const PhaseReport: React.FC = () => {
           <div>
             <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: '#1a2b4a' }}>Phase Report</h1>
             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>
-              Vista job hours by phase &mdash; {isLoading ? '…' : `${totals.distinctJobs} job${totals.distinctJobs !== 1 ? 's' : ''}, ${rows.length} phase${rows.length !== 1 ? 's' : ''}`}
+              Vista job hours by phase &mdash; {isLoading ? '…' : `${totals.distinctJobs} job${totals.distinctJobs !== 1 ? 's' : ''}, ${phaseCount} phase${phaseCount !== 1 ? 's' : ''}`}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -357,6 +365,31 @@ const PhaseReport: React.FC = () => {
             minWidth={150}
             showSelectAll
           />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#475569', textTransform: 'uppercase' }}>
+              Phase Starts With
+            </label>
+            <input
+              type="text"
+              value={phasePrefix}
+              onChange={e => setPhasePrefix(e.target.value)}
+              placeholder="e.g. 70-106-"
+              style={{ fontSize: '0.8rem', padding: '0.3rem 0.5rem', borderRadius: 5, border: '1px solid #cbd5e1', width: 130 }}
+            />
+          </div>
+          {phasePrefix.trim() && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignSelf: 'flex-end', marginBottom: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '0.78rem', color: '#475569', whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={includeMissing}
+                  onChange={e => setIncludeMissing(e.target.checked)}
+                  style={{ accentColor: '#1a2b4a' }}
+                />
+                Include jobs missing this phase
+              </label>
+            </div>
+          )}
           {anyFilter && (
             <button
               onClick={clearFilters}
@@ -423,16 +456,16 @@ const PhaseReport: React.FC = () => {
                 const burn = est > 0 ? (jtd / est) * 100 : null;
                 return (
                   <tr
-                    key={`${row.job_number}-${row.phase_code || ''}`}
-                    style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}
+                    key={`${row.job_number}-${row.phase_code || 'missing'}-${i}`}
+                    style={{ background: row.is_missing ? '#fff7ed' : (i % 2 === 0 ? '#fff' : '#f8fafc') }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#eff6ff')}
-                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#f8fafc')}
+                    onMouseLeave={e => (e.currentTarget.style.background = row.is_missing ? '#fff7ed' : (i % 2 === 0 ? '#fff' : '#f8fafc'))}
                   >
-                    <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1e3a5f', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{row.job_number}</td>
-                    <td style={{ padding: '7px 10px', color: '#334155', fontSize: '0.8rem', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.job_name || '-'}</td>
+                    <td style={{ padding: '7px 10px', fontWeight: 600, color: row.is_missing ? '#92400e' : '#1e3a5f', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{row.job_number}</td>
+                    <td style={{ padding: '7px 10px', color: row.is_missing ? '#92400e' : '#334155', fontSize: '0.8rem', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.job_name || '-'}</td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{row.manager_name || '-'}</td>
                     <td style={{ padding: '7px 10px', fontWeight: 500, color: '#1e3a5f', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{row.phase_code || '-'}</td>
-                    <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_name || '-'}</td>
+                    <td style={{ padding: '7px 10px', color: row.is_missing ? '#b45309' : '#475569', fontStyle: row.is_missing ? 'italic' : 'normal', fontSize: '0.78rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_name || '-'}</td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', textAlign: 'center' }}>{row.department_code || '-'}</td>
                     <td style={{ padding: '7px 10px', fontSize: '0.78rem', textAlign: 'center' }}>
                       {row.status ? (
@@ -444,10 +477,10 @@ const PhaseReport: React.FC = () => {
                       ) : '-'}
                     </td>
                     <td style={{ padding: '7px 10px', color: '#475569', fontSize: '0.78rem', textAlign: 'center' }}>{row.bill_method || '-'}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{fmtHours(row.est_hours)}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{fmtHours(row.jtd_hours)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{row.is_missing ? '-' : fmtHours(row.est_hours)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem', color: '#1a2b4a' }}>{row.is_missing ? '-' : fmtHours(row.jtd_hours)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.8rem', color: burn !== null ? burnColor(est, jtd) : '#94a3b8' }}>
-                      {burn !== null ? `${burn.toFixed(1)}%` : '-'}
+                      {row.is_missing ? '-' : (burn !== null ? `${burn.toFixed(1)}%` : '-')}
                     </td>
                   </tr>
                 );
@@ -455,7 +488,7 @@ const PhaseReport: React.FC = () => {
             </tbody>
             <tfoot>
               <tr style={{ background: '#1a2b4a', color: '#fff' }}>
-                <td colSpan={8} style={{ padding: '7px 10px', fontWeight: 700, fontSize: '0.8rem' }}>TOTAL ({totals.distinctJobs} jobs · {rows.length} phases)</td>
+                <td colSpan={8} style={{ padding: '7px 10px', fontWeight: 700, fontSize: '0.8rem' }}>TOTAL ({totals.distinctJobs} jobs · {phaseCount} phases)</td>
                 <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.8rem' }}>{fmtHours(totals.est)}</td>
                 <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.8rem' }}>{fmtHours(totals.jtd)}</td>
                 <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.8rem' }}>

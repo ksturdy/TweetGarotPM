@@ -11,6 +11,7 @@ export interface PhaseReportRow {
   manager_name: string | null;
   est_hours: number | null;
   jtd_hours: number | null;
+  is_missing?: boolean;
 }
 
 export interface PhaseReportFilters {
@@ -28,6 +29,7 @@ export interface PhaseReportParams {
   teamNames?: string[];
   phases?: string[];
   phase_prefix?: string;
+  include_missing?: boolean;
 }
 
 function buildParams(p: PhaseReportParams): URLSearchParams {
@@ -39,6 +41,7 @@ function buildParams(p: PhaseReportParams): URLSearchParams {
   if (p.teamNames && p.teamNames.length > 0) params.set('teamNames', p.teamNames.join(','));
   if (p.phases && p.phases.length > 0) params.set('phases', p.phases.join(','));
   if (p.phase_prefix) params.set('phase_prefix', p.phase_prefix);
+  if (p.include_missing) params.set('include_missing', 'true');
   return params;
 }
 

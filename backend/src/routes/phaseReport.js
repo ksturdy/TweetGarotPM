@@ -9,37 +9,81 @@ const { generatePhaseReportExcel } = require('../utils/phaseReportExcelGenerator
 router.use(authenticate);
 router.use(tenantContext);
 
-async function buildPhaseReportData(tenantId, filters = {}) {
-  const params = [tenantId];
-  let paramIdx = 2;
-  const whereClauses = ['vpc.tenant_id = $1'];
+// Build WHERE clauses for dept/status/bill_method/team (shared by main + missing queries)
+function buildContextClauses(filters, empNumbers, startIdx) {
+  const clauses = [];
+  const values = [];
+  let idx = startIdx;
 
   if (filters.departments && filters.departments.length > 0) {
-    const placeholders = filters.departments.map(() => `$${paramIdx++}`).join(', ');
-    whereClauses.push(`vc.department_code IN (${placeholders})`);
-    params.push(...filters.departments);
+    clauses.push(`vc.department_code IN (${filters.departments.map(() => `$${idx++}`).join(', ')})`);
+    values.push(...filters.departments);
   }
   if (filters.statuses && filters.statuses.length > 0) {
-    const placeholders = filters.statuses.map(() => `$${paramIdx++}`).join(', ');
-    whereClauses.push(`vc.status IN (${placeholders})`);
-    params.push(...filters.statuses);
+    clauses.push(`vc.status IN (${filters.statuses.map(() => `$${idx++}`).join(', ')})`);
+    values.push(...filters.statuses);
   }
   if (filters.bill_methods && filters.bill_methods.length > 0) {
-    const placeholders = filters.bill_methods.map(() => `$${paramIdx++}`).join(', ');
-    whereClauses.push(`vc.bill_method IN (${placeholders})`);
-    params.push(...filters.bill_methods);
+    clauses.push(`vc.bill_method IN (${filters.bill_methods.map(() => `$${idx++}`).join(', ')})`);
+    values.push(...filters.bill_methods);
   }
-  if (filters.phases && filters.phases.length > 0) {
-    const placeholders = filters.phases.map(() => `$${paramIdx++}`).join(', ');
-    whereClauses.push(`vpc.phase IN (${placeholders})`);
-    params.push(...filters.phases);
-  }
-  if (filters.phase_prefix) {
-    whereClauses.push(`vpc.phase LIKE $${paramIdx++}`);
-    params.push(`${filters.phase_prefix}%`);
+  if (empNumbers && empNumbers.length > 0) {
+    clauses.push(`vc.employee_number IN (${empNumbers.map(() => `$${idx++}`).join(', ')})`);
+    values.push(...empNumbers);
   }
 
-  // Team filter: match vc.employee_number against employees on the selected teams
+  return { clauses, values, nextIdx: idx };
+}
+
+// Find jobs that match context filters but have ZERO phases matching phase_prefix
+async function buildMissingRows(tenantId, filters, empNumbers) {
+  const prefix = filters.phase_prefix;
+  const params = [tenantId];
+  let paramIdx = 2;
+  const whereClauses = ['vpc.tenant_id = $1', 'vpc.cost_type = 1'];
+
+  const { clauses, values, nextIdx } = buildContextClauses(filters, empNumbers, paramIdx);
+  whereClauses.push(...clauses);
+  params.push(...values);
+  paramIdx = nextIdx;
+
+  // Exclude jobs that already have at least one phase matching the prefix
+  whereClauses.push(`NOT EXISTS (
+    SELECT 1 FROM vp_phase_codes vpc2
+    WHERE vpc2.job = vpc.job AND vpc2.tenant_id = vpc.tenant_id
+      AND vpc2.cost_type = 1 AND vpc2.phase LIKE $${paramIdx++}
+  )`);
+  params.push(`${prefix}%`);
+
+  const phaseNameIdx = paramIdx++;
+  params.push(`— No ${prefix} phases —`);
+
+  const result = await db.query(
+    `SELECT DISTINCT ON (vpc.job)
+       vpc.job                      AS job_number,
+       vpc.job_description          AS job_name,
+       vc.project_manager_name      AS manager_name,
+       NULL                         AS phase_code,
+       $${phaseNameIdx}             AS phase_name,
+       vc.department_code,
+       vc.status,
+       vc.bill_method,
+       NULL                         AS est_hours,
+       NULL                         AS jtd_hours
+     FROM vp_phase_codes vpc
+     LEFT JOIN vp_contracts vc
+       ON vpc.contract = vc.contract_number AND vc.tenant_id = vpc.tenant_id
+     WHERE ${whereClauses.join(' AND ')}
+     ORDER BY vpc.job`,
+    params
+  );
+
+  return result.rows.map(r => ({ ...r, is_missing: true }));
+}
+
+async function buildPhaseReportData(tenantId, filters = {}) {
+  // Resolve team employee numbers up-front (reused by missing-row query)
+  let empNumbers = null;
   if (filters.teams && filters.teams.length > 0) {
     const Team = require('../models/Team');
     const allEmpIds = new Set();
@@ -54,12 +98,27 @@ async function buildPhaseReportData(tenantId, filters = {}) {
        WHERE id = ANY($1::int[]) AND employee_number IS NOT NULL AND employee_number <> ''`,
       [[...allEmpIds]]
     );
-    const empNumbers = empNumResult.rows.map(r => String(r.employee_number));
+    empNumbers = empNumResult.rows.map(r => String(r.employee_number));
     if (empNumbers.length === 0) return [];
+  }
 
-    const placeholders = empNumbers.map(() => `$${paramIdx++}`).join(', ');
-    whereClauses.push(`vc.employee_number IN (${placeholders})`);
-    params.push(...empNumbers);
+  const params = [tenantId];
+  let paramIdx = 2;
+  const whereClauses = ['vpc.tenant_id = $1'];
+
+  const { clauses, values, nextIdx } = buildContextClauses(filters, empNumbers, paramIdx);
+  whereClauses.push(...clauses);
+  params.push(...values);
+  paramIdx = nextIdx;
+
+  if (filters.phases && filters.phases.length > 0) {
+    const placeholders = filters.phases.map(() => `$${paramIdx++}`).join(', ');
+    whereClauses.push(`vpc.phase IN (${placeholders})`);
+    params.push(...filters.phases);
+  }
+  if (filters.phase_prefix) {
+    whereClauses.push(`vpc.phase LIKE $${paramIdx++}`);
+    params.push(`${filters.phase_prefix}%`);
   }
 
   // cost_type = 1 (labor) so est_hours/jtd_hours are meaningful
@@ -84,6 +143,11 @@ async function buildPhaseReportData(tenantId, filters = {}) {
      ORDER BY vpc.job ASC, vpc.phase ASC`,
     params
   );
+
+  if (filters.include_missing && filters.phase_prefix) {
+    const missingRows = await buildMissingRows(tenantId, filters, empNumbers || []);
+    return [...result.rows, ...missingRows];
+  }
 
   return result.rows;
 }
@@ -192,6 +256,7 @@ function parseFilters(query) {
     teamNames: csv(query.teamNames),
     phases: csv(query.phases),
     phase_prefix: query.phase_prefix ? String(query.phase_prefix).trim() : null,
+    include_missing: query.include_missing === 'true',
   };
 }
 

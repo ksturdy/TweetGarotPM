@@ -999,6 +999,19 @@ const ScheduledReports: React.FC = () => {
                       />
                     </div>
                   </div>
+                  {form.filters.phase_prefix && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8125rem', color: '#475569' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!(form.filters.include_missing)}
+                          onChange={e => setForm(f => ({ ...f, filters: { ...f.filters, include_missing: e.target.checked || undefined } }))}
+                          style={{ accentColor: '#1a2b4a' }}
+                        />
+                        Include jobs with no matching phases (shown as amber rows)
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
 

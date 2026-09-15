@@ -46,9 +46,10 @@ async function generatePhaseReportExcel(rows, filters = {}) {
   const filterLabel = filterParts.length > 0 ? filterParts.join('  ·  ') : 'All Jobs';
 
   const distinctJobs = new Set(rows.map(r => r.job_number)).size;
+  const phaseRowCount = rows.filter(r => !r.is_missing).length;
   ws.mergeCells('A2:K2');
   const subCell = ws.getCell('A2');
-  subCell.value = `${filterLabel}  ·  Generated: ${new Date().toLocaleDateString()}  ·  ${distinctJobs} job(s) · ${rows.length} phase(s)`;
+  subCell.value = `${filterLabel}  ·  Generated: ${new Date().toLocaleDateString()}  ·  ${distinctJobs} job(s) · ${phaseRowCount} phase(s)`;
   subCell.font = { size: 9, color: { argb: 'FF94A3B8' } };
   subCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + navy } };
   ws.getRow(2).height = 16;
@@ -67,6 +68,7 @@ async function generatePhaseReportExcel(rows, filters = {}) {
 
   let totalEst = 0;
   let totalJtd = 0;
+  const amber = 'FFFFF7ED';
 
   rows.forEach((r, i) => {
     const est = Number(r.est_hours) || 0;
@@ -84,25 +86,31 @@ async function generatePhaseReportExcel(rows, filters = {}) {
       r.department_code || '',
       r.status || '',
       r.bill_method || '',
-      est || null,
-      jtd || null,
-      burnPct,
+      r.is_missing ? null : (est || null),
+      r.is_missing ? null : (jtd || null),
+      r.is_missing ? null : burnPct,
     ]);
 
-    const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FF' + altBg;
+    const bg = r.is_missing ? amber : (i % 2 === 0 ? 'FFFFFFFF' : 'FF' + altBg);
     dataRow.eachCell((cell, colNum) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      cell.font = { size: 10 };
-      if (colNum >= 9) {
-        cell.alignment = { horizontal: 'right' };
-        if (colNum === 9 || colNum === 10) {
-          cell.numFmt = '#,##0.0';
-        }
-        if (colNum === 11 && burnPct !== null) {
-          cell.numFmt = '0.0%';
-          if (burnPct > 1.1) cell.font = { size: 10, color: { argb: 'FFDC2626' } };
-          else if (burnPct > 0.9) cell.font = { size: 10, color: { argb: 'FFD97706' } };
-          else cell.font = { size: 10, color: { argb: 'FF16A34A' } };
+      if (r.is_missing) {
+        cell.font = colNum === 5
+          ? { size: 10, italic: true, color: { argb: 'FFB45309' } }
+          : { size: 10, color: { argb: 'FFB45309' } };
+      } else {
+        cell.font = { size: 10 };
+        if (colNum >= 9) {
+          cell.alignment = { horizontal: 'right' };
+          if (colNum === 9 || colNum === 10) {
+            cell.numFmt = '#,##0.0';
+          }
+          if (colNum === 11 && burnPct !== null) {
+            cell.numFmt = '0.0%';
+            if (burnPct > 1.1) cell.font = { size: 10, color: { argb: 'FFDC2626' } };
+            else if (burnPct > 0.9) cell.font = { size: 10, color: { argb: 'FFD97706' } };
+            else cell.font = { size: 10, color: { argb: 'FF16A34A' } };
+          }
         }
       }
     });

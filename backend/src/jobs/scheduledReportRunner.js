@@ -451,8 +451,9 @@ const REPORT_HANDLERS = {
       statuses:     f.statuses     || [],
       bill_methods: f.bill_methods || [],
       teams:        f.teams        || [],
-      phases:       f.phases       || [],
-      phase_prefix: f.phase_prefix || null,
+      phases:         f.phases         || [],
+      phase_prefix:   f.phase_prefix   || null,
+      include_missing: f.include_missing || false,
     };
 
     // Resolve team names for the PDF filter label
