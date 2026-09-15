@@ -37,6 +37,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
       { path: 'issues', label: 'Field Issues' },
       { path: 'photos', label: 'Photos' },
       { path: 'weekly-goals', label: 'Weekly Goal Plans' },
+      { path: 'safety', label: 'Safety' },
     ],
   },
   {

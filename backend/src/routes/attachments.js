@@ -76,11 +76,12 @@ router.post('/:entityType/:entityId', upload.single('file'), async (req, res, ne
 
     const fileInfo = getFileInfo(req.file);
 
+    const sectionArea = req.body?.section_area || null;
     const result = await db.query(
-      `INSERT INTO attachments (entity_type, entity_id, filename, original_name, mime_type, size, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO attachments (entity_type, entity_id, filename, original_name, mime_type, size, uploaded_by, section_area)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [entityType, entityId, fileInfo.filePath, fileInfo.fileName, fileInfo.fileType, fileInfo.fileSize, req.user.id]
+      [entityType, entityId, fileInfo.filePath, fileInfo.fileName, fileInfo.fileType, fileInfo.fileSize, req.user.id, sectionArea]
     );
 
     const attachment = result.rows[0];

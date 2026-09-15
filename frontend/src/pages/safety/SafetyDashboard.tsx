@@ -1,9 +1,23 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { safetyObservationsApi } from '../../services/safetyObservations';
 import '../../styles/SalesPipeline.css';
 import './SafetyDashboard.css';
 
 const SafetyDashboard: React.FC = () => {
+  const navigate = useNavigate();
+
+  const { data: stats } = useQuery({
+    queryKey: ['safety-obs-stats'],
+    queryFn: () => safetyObservationsApi.getStats().then(r => r.data),
+  });
+
+  const { data: recentObs = [] } = useQuery({
+    queryKey: ['safety-obs-recent'],
+    queryFn: () => safetyObservationsApi.getAll({ status: undefined }).then(r => r.data.slice(0, 5)),
+  });
+
   const handleOpenSharePoint = () => {
     window.open('https://tweetgarot.sharepoint.com/sites/safety', '_blank');
   };
@@ -22,8 +36,12 @@ const SafetyDashboard: React.FC = () => {
   const safetyStats = [
     { label: 'Days Without Incident', value: '127', icon: '✅', color: '#10B981' },
     { label: 'Safety Training Completed', value: '98%', icon: '📚', color: '#3B82F6' },
-    { label: 'Open Safety Reports', value: '3', icon: '📝', color: '#F59E0B' },
-    { label: 'Inspections This Month', value: '12', icon: '🔍', color: '#8B5CF6' },
+    { label: 'Open Safety Reports', value: String(stats?.open ?? '—'), icon: '📝', color: '#F59E0B' },
+    { label: 'Inspections This Month', value: String(recentObs.filter(o => {
+      const d = new Date(o.date_of_observation + 'T00:00:00');
+      const now = new Date();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length), icon: '🔍', color: '#8B5CF6' },
   ];
 
   return (
@@ -105,7 +123,7 @@ const SafetyDashboard: React.FC = () => {
               <span className="action-icon">⚠️</span>
               Report Near-Miss
             </button>
-            <button className="action-btn action-btn-primary" onClick={handleOpenSharePoint}>
+            <button className="action-btn action-btn-primary" onClick={() => navigate('/field')}>
               <span className="action-icon">📝</span>
               Submit Safety Observation
             </button>

@@ -1,0 +1,1 @@
+ALTER TABLE attachments ADD COLUMN IF NOT EXISTS section_area VARCHAR(50);

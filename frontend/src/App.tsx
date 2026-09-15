@@ -181,11 +181,15 @@ import FieldSheetMetalFittingOrderDetail from './pages/field/fittingOrders/Field
 import FieldJSAList from './pages/field/safetyJsa/FieldJSAList';
 import FieldJSAForm from './pages/field/safetyJsa/FieldJSAForm';
 import FieldJSADetail from './pages/field/safetyJsa/FieldJSADetail';
+import FieldSafetyObservationList from './pages/field/safetyObservations/FieldSafetyObservationList';
+import FieldSafetyObservationWizard from './pages/field/safetyObservations/FieldSafetyObservationWizard';
+import FieldSafetyObservationDetail from './pages/field/safetyObservations/FieldSafetyObservationDetail';
 import FieldNearMissList from './pages/field/nearMiss/FieldNearMissList';
 import FieldNearMissForm from './pages/field/nearMiss/FieldNearMissForm';
 import FieldNearMissDetail from './pages/field/nearMiss/FieldNearMissDetail';
 import ProjectIssueList from './pages/issues/ProjectIssueList';
 import ProjectIssueDetail from './pages/issues/ProjectIssueDetail';
+import ProjectSafety from './pages/projects/ProjectSafety';
 import FieldIssueList from './pages/field/issues/FieldIssueList';
 import FieldIssueForm from './pages/field/issues/FieldIssueForm';
 import FieldIssueDetail from './pages/field/issues/FieldIssueDetail';
@@ -374,6 +378,9 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/safety-jsa/new" element={<FieldJSAForm />} />
           <Route path="projects/:projectId/safety-jsa/:id" element={<FieldJSADetail />} />
           <Route path="projects/:projectId/safety-jsa/:id/edit" element={<FieldJSAForm />} />
+          <Route path="projects/:projectId/safety-observations" element={<FieldSafetyObservationList />} />
+          <Route path="projects/:projectId/safety-observations/new" element={<FieldSafetyObservationWizard />} />
+          <Route path="projects/:projectId/safety-observations/:id" element={<FieldSafetyObservationDetail />} />
           <Route path="projects/:projectId/safety-near-miss" element={<FieldNearMissList />} />
           <Route path="projects/:projectId/safety-near-miss/new" element={<FieldNearMissForm />} />
           <Route path="projects/:projectId/safety-near-miss/:id" element={<FieldNearMissDetail />} />
@@ -563,6 +570,7 @@ const App: React.FC = () => {
                 <Route path="/projects/:projectId/daily-reports/:id" element={<DailyReportDetail />} />
                 <Route path="/projects/:projectId/issues" element={<ProjectIssueList />} />
                 <Route path="/projects/:projectId/issues/:id" element={<ProjectIssueDetail />} />
+                <Route path="/projects/:projectId/safety" element={<ProjectSafety />} />
                 <Route path="/projects/:projectId/schedule" element={<ScheduleHub />} />
                 <Route path="/projects/:projectId/gc-schedule" element={<GCScheduleView />} />
                 <Route path="/projects/:projectId/phase-schedule" element={<Navigate to="../schedule?tab=phase" replace relative="path" />} />

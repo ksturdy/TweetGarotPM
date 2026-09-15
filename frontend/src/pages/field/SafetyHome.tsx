@@ -9,7 +9,7 @@ const SafetyHome: React.FC = () => {
   const navigate = useNavigate();
 
   const modules = [
-    { label: 'Safety Observation', icon: <VisibilityIcon />, path: 'safety-observation', color: 'green', external: 'https://forms.office.com/pages/responsepage.aspx?id=_HPklJrWd0Wg5UW3JIVFlO71YL64s9RGmedH7RU9UnhURVk3NkdLUjVYR05NWjBETkFIUUo2U01XMSQlQCN0PWcu&route=shorturl' },
+    { label: 'Safety Observation', icon: <VisibilityIcon />, path: 'safety-observations', color: 'green' },
     { label: 'JSA (Job Safety Analysis)', icon: <AssignmentIcon />, path: 'safety-jsa', color: 'red' },
     { label: 'Near Miss', icon: <ReportProblemIcon />, path: 'safety-near-miss', color: 'orange' },
   ];
@@ -24,7 +24,7 @@ const SafetyHome: React.FC = () => {
           <div
             key={mod.path}
             className="field-tile"
-            onClick={() => mod.external ? window.open(mod.external, '_blank') : navigate(`/field/projects/${projectId}/${mod.path}`)}
+            onClick={() => navigate(`/field/projects/${projectId}/${mod.path}`)}
           >
             <div className={`field-tile-icon ${mod.color}`}>
               {mod.icon}
