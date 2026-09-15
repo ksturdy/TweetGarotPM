@@ -146,7 +146,9 @@ async function buildPhaseReportData(tenantId, filters = {}) {
 
   if (filters.include_missing && filters.phase_prefix) {
     const missingRows = await buildMissingRows(tenantId, filters, empNumbers || []);
-    return [...result.rows, ...missingRows];
+    const combined = [...result.rows, ...missingRows];
+    combined.sort((a, b) => String(a.job_number || '').localeCompare(String(b.job_number || '')));
+    return combined;
   }
 
   return result.rows;
