@@ -1,11 +1,11 @@
 const db = require('../config/database');
 
 const SafetyObservation = {
-  async create({ projectId, tenantId, number, observerId, dateOfObservation, stretchAndFlex, feedbackNotes, sections, status, createdBy }) {
+  async create({ projectId, tenantId, number, observerId, dateOfObservation, weather, temperature, stretchAndFlex, feedbackNotes, sections, status, createdBy }) {
     const result = await db.query(
       `INSERT INTO safety_observations
-         (project_id, tenant_id, number, observer_id, date_of_observation, stretch_and_flex, feedback_notes, sections, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (project_id, tenant_id, number, observer_id, date_of_observation, weather, temperature, stretch_and_flex, feedback_notes, sections, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         projectId,
@@ -13,6 +13,8 @@ const SafetyObservation = {
         number,
         observerId,
         dateOfObservation,
+        weather || null,
+        temperature !== undefined ? temperature : null,
         stretchAndFlex !== undefined ? stretchAndFlex : null,
         feedbackNotes || null,
         JSON.stringify(sections || []),
@@ -89,12 +91,14 @@ const SafetyObservation = {
     return result.rows;
   },
 
-  async update(id, { dateOfObservation, stretchAndFlex, feedbackNotes, sections, status }) {
+  async update(id, { dateOfObservation, weather, temperature, stretchAndFlex, feedbackNotes, sections, status }) {
     const fields = [];
     const values = [];
     let p = 1;
 
     if (dateOfObservation !== undefined) { fields.push(`date_of_observation = $${p++}`); values.push(dateOfObservation); }
+    if (weather !== undefined)           { fields.push(`weather = $${p++}`);             values.push(weather); }
+    if (temperature !== undefined)       { fields.push(`temperature = $${p++}`);         values.push(temperature); }
     if (stretchAndFlex !== undefined)    { fields.push(`stretch_and_flex = $${p++}`);    values.push(stretchAndFlex); }
     if (feedbackNotes !== undefined)     { fields.push(`feedback_notes = $${p++}`);      values.push(feedbackNotes); }
     if (sections !== undefined)          { fields.push(`sections = $${p++}`);            values.push(JSON.stringify(sections)); }

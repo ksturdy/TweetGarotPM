@@ -22,6 +22,8 @@ export interface SafetyObservation {
   observer_id: number;
   observer_name: string;
   date_of_observation: string;
+  weather: string | null;
+  temperature: number | null;
   stretch_and_flex: boolean | null;
   feedback_notes: string | null;
   sections: ObservationSection[];
@@ -52,6 +54,8 @@ export const safetyObservationsApi = {
   create: (data: {
     project_id: number;
     date_of_observation: string;
+    weather?: string | null;
+    temperature?: number | null;
     sections: ObservationSection[];
     stretch_and_flex: boolean | null;
     feedback_notes: string;
@@ -60,6 +64,8 @@ export const safetyObservationsApi = {
 
   update: (id: number, data: Partial<{
     date_of_observation: string;
+    weather: string | null;
+    temperature: number | null;
     sections: ObservationSection[];
     stretch_and_flex: boolean | null;
     feedback_notes: string;

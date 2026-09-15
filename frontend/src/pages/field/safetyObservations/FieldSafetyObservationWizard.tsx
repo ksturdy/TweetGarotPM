@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -10,6 +10,20 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import WbSunnyIcon from '@mui/icons-material/WbSunny';
+
+const WEATHER_OPTIONS = ['Sunny', 'Partly Cloudy', 'Cloudy', 'Rainy', 'Windy', 'Snowy', 'Stormy', 'Foggy', 'Other'];
+
+const wmoToWeather = (code: number): string => {
+  if (code <= 1) return 'Sunny';
+  if (code === 2) return 'Partly Cloudy';
+  if (code === 3) return 'Cloudy';
+  if (code === 45 || code === 48) return 'Foggy';
+  if (code >= 51 && code <= 67) return 'Rainy';
+  if (code >= 71 && code <= 86) return 'Snowy';
+  if (code >= 95) return 'Stormy';
+  return 'Cloudy';
+};
 import { useAuth } from '../../../context/AuthContext';
 import {
   safetyObservationsApi,
@@ -34,6 +48,9 @@ const FieldSafetyObservationWizard: React.FC = () => {
 
   // Step 0 state
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [weather, setWeather] = useState('Sunny');
+  const [temperature, setTemperature] = useState<number | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
 
   // Section answers: keyed by area key
@@ -50,6 +67,31 @@ const FieldSafetyObservationWizard: React.FC = () => {
   const [step, setStep] = useState(0); // 0 = area select, 1..N = audit sections, last = final
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Auto-fetch weather on mount via geolocation + Open-Meteo
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    setWeatherLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`;
+          const res = await fetch(url);
+          const data = await res.json();
+          const code = data.current.weather_code as number;
+          const temp = Math.round(data.current.temperature_2m as number);
+          setWeather(wmoToWeather(code));
+          setTemperature(temp);
+        } catch {
+          // leave defaults
+        } finally {
+          setWeatherLoading(false);
+        }
+      },
+      () => setWeatherLoading(false),
+      { timeout: 8000 }
+    );
+  }, []);
 
   // Derived step list: ['select', ...selectedAreas, 'final']
   const stepList = ['select', ...selectedAreas, 'final'];
@@ -121,6 +163,8 @@ const FieldSafetyObservationWizard: React.FC = () => {
       const { data: obs } = await safetyObservationsApi.create({
         project_id: Number(projectId),
         date_of_observation: date,
+        weather: weather || null,
+        temperature: temperature,
         sections: selectedAreas.map(k => sections[k]),
         stretch_and_flex: stretchAndFlex,
         feedback_notes: feedbackNotes,
@@ -171,6 +215,8 @@ const FieldSafetyObservationWizard: React.FC = () => {
               setSections({});
               setSectionPhotos({});
               setDate(new Date().toISOString().split('T')[0]);
+              setWeather('Sunny');
+              setTemperature(null);
               setStretchAndFlex(null);
               setFeedbackNotes('');
             }}
@@ -253,6 +299,33 @@ const FieldSafetyObservationWizard: React.FC = () => {
                 value={date}
                 onChange={e => setDate(e.target.value)}
               />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="field-form-group" style={{ marginBottom: 0 }}>
+                <label className="field-form-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <WbSunnyIcon style={{ fontSize: 13, color: '#f59e0b' }} />
+                  Weather
+                  {weatherLoading && <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}> · fetching…</span>}
+                </label>
+                <select
+                  className="field-form-input"
+                  value={weather}
+                  onChange={e => setWeather(e.target.value)}
+                >
+                  {WEATHER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="field-form-group" style={{ marginBottom: 0 }}>
+                <label className="field-form-label">Temp (°F)</label>
+                <input
+                  type="number"
+                  className="field-form-input"
+                  value={temperature ?? ''}
+                  onChange={e => setTemperature(e.target.value !== '' ? Number(e.target.value) : null)}
+                  placeholder="—"
+                />
+              </div>
             </div>
           </div>
 

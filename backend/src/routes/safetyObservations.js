@@ -144,6 +144,8 @@ router.post(
         number,
         observerId: req.user.id,
         dateOfObservation: req.body.date_of_observation,
+        weather: req.body.weather,
+        temperature: req.body.temperature !== undefined ? req.body.temperature : undefined,
         stretchAndFlex: req.body.stretch_and_flex,
         feedbackNotes: req.body.feedback_notes,
         sections: req.body.sections,
@@ -167,6 +169,8 @@ router.put('/:id', async (req, res, next) => {
 
     const obs = await SafetyObservation.update(req.params.id, {
       dateOfObservation: req.body.date_of_observation,
+      weather: req.body.weather,
+      temperature: req.body.temperature,
       stretchAndFlex: req.body.stretch_and_flex,
       feedbackNotes: req.body.feedback_notes,
       sections: req.body.sections,

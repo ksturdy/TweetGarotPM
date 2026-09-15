@@ -110,6 +110,9 @@ function generateObservationPdfHtml(obs, logoBase64 = '', sectionPhotos = {}) {
   .page-header-sub { font-size: 12px; opacity: 0.8; }
   .page-header-meta { margin-top: 10px; display: flex; gap: 16px; align-items: center; font-size: 11px; opacity: 0.85; }
   .page-header-status { padding: 2px 10px; border-radius: 10px; background: rgba(255,255,255,0.15); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .page-header-sf { padding: 2px 10px; border-radius: 10px; font-weight: 700; letter-spacing: 0.3px; }
+  .sf-yes { background: rgba(16,185,129,0.25); color: #6ee7b7; }
+  .sf-no  { background: rgba(239,68,68,0.25);  color: #fca5a5; }
 
   .meta-bar {
     display: flex; gap: 0; border-bottom: 1px solid #e5e7eb;
@@ -121,6 +124,7 @@ function generateObservationPdfHtml(obs, logoBase64 = '', sectionPhotos = {}) {
   .meta-cell:last-child { border-right: none; }
   .meta-label { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
   .meta-value { font-size: 12px; font-weight: 600; color: #111827; }
+  .meta-temp  { font-size: 11px; color: #6b7280; font-weight: 500; }
 
   .score-bar {
     display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; background: white;
@@ -197,6 +201,9 @@ function generateObservationPdfHtml(obs, logoBase64 = '', sectionPhotos = {}) {
     <span>${formatDate(obs.date_of_observation)}</span>
     <span>&bull;</span>
     <span class="page-header-status">${escapeHtml(obs.status || 'submitted')}</span>
+    ${obs.stretch_and_flex !== null && obs.stretch_and_flex !== undefined
+      ? `<span>&bull;</span><span class="page-header-sf ${obs.stretch_and_flex ? 'sf-yes' : 'sf-no'}">S&amp;F: ${obs.stretch_and_flex ? '&#10003; Yes' : '&#10007; No'}</span>`
+      : ''}
   </div>
 </div>
 
@@ -211,9 +218,9 @@ function generateObservationPdfHtml(obs, logoBase64 = '', sectionPhotos = {}) {
     <div class="meta-value">${formatDate(obs.date_of_observation)}</div>
   </div>
   <div class="meta-cell">
-    <div class="meta-label">Stretch &amp; Flex</div>
-    <div class="meta-value" style="color:${obs.stretch_and_flex === true ? '#065f46' : obs.stretch_and_flex === false ? '#991b1b' : '#9ca3af'}">
-      ${obs.stretch_and_flex === true ? 'Yes' : obs.stretch_and_flex === false ? 'No' : '—'}
+    <div class="meta-label">Weather</div>
+    <div class="meta-value">
+      ${obs.weather ? escapeHtml(obs.weather) : '—'}${obs.temperature !== null && obs.temperature !== undefined ? `<span class="meta-temp"> &nbsp;${obs.temperature}°F</span>` : ''}
     </div>
   </div>
   <div class="meta-cell">
