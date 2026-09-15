@@ -999,7 +999,7 @@ const ScheduledReports: React.FC = () => {
                       />
                     </div>
                   </div>
-                  {form.filters.phase_prefix && (
+                  {!!(form.filters.phase_prefix as string) && (
                     <div style={{ marginTop: '0.5rem' }}>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8125rem', color: '#475569' }}>
                         <input
