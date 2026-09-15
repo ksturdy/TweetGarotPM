@@ -1,8 +1,8 @@
 const { launchBrowser } = require('./launchBrowser');
 const { generateObservationPdfHtml } = require('./safetyObservationPdfGenerator');
 
-async function generateObservationPdfBuffer(obs, logoBase64 = '') {
-  const html = generateObservationPdfHtml(obs, logoBase64);
+async function generateObservationPdfBuffer(obs, logoBase64 = '', sectionPhotos = {}) {
+  const html = generateObservationPdfHtml(obs, logoBase64, sectionPhotos);
   let browser = null;
 
   try {

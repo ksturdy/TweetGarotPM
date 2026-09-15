@@ -167,7 +167,8 @@ html {
   padding: 12px;
   padding-left: calc(12px + env(safe-area-inset-left));
   padding-right: calc(12px + env(safe-area-inset-right));
-  padding-bottom: calc(var(--field-bottom-nav-height) + 12px + env(safe-area-inset-bottom));
+  /* Extra 64px clears a fixed .field-actions-bar on pages that have one */
+  padding-bottom: calc(var(--field-bottom-nav-height) + 76px + env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   /* Prevent horizontal overflow from wide tables */
@@ -773,13 +774,12 @@ html {
   padding-left: calc(12px + env(safe-area-inset-left));
   padding-right: calc(12px + env(safe-area-inset-right));
   background: white;
-  position: sticky;
-  bottom: calc(var(--field-bottom-nav-height) + env(safe-area-inset-bottom));
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--field-bottom-nav-height);
   border-top: 1px solid var(--field-border);
   z-index: 50;
-  margin: 0 -12px;
-  margin-left: calc(-12px - env(safe-area-inset-left));
-  margin-right: calc(-12px - env(safe-area-inset-right));
 }
 
 /* Page Title */
@@ -1076,9 +1076,15 @@ html {
     right: 24px;
   }
 
-  /* Actions bar repositioned */
+  /* Actions bar: switch back to sticky inside the scrollable content pane */
   .field-actions-bar {
+    position: sticky;
+    left: auto;
+    right: auto;
     bottom: 0;
+    margin: 0 -24px;
+    padding-left: 24px;
+    padding-right: 24px;
   }
 
   /* Table scroll: adjust margins for tablet padding */
@@ -1260,10 +1266,14 @@ html {
 
   /* Actions bar */
   .field-actions-bar {
+    position: sticky;
+    left: auto;
+    right: auto;
     bottom: 0;
-    max-width: 1400px;
-    margin-left: auto;
-    margin-right: auto;
+    max-width: none;
+    margin: 0 -32px;
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   /* Header: allow longer project names */

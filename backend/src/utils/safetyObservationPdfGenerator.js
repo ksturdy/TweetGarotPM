@@ -31,7 +31,7 @@ function answerBadge(answer) {
   return '<span class="badge badge-blank">—</span>';
 }
 
-function generateObservationPdfHtml(obs, logoBase64 = '') {
+function generateObservationPdfHtml(obs, logoBase64 = '', sectionPhotos = {}) {
   const sections = obs.sections || [];
 
   const totalYes = sections.reduce((a, s) => a + (s.items || []).filter(i => i.answer === 'yes').length, 0);
@@ -42,6 +42,7 @@ function generateObservationPdfHtml(obs, logoBase64 = '') {
   const sectionHtml = sections.map(section => {
     const areaLabel = AUDIT_AREAS[section.area] || section.area;
     const noCount = (section.items || []).filter(i => i.answer === 'no').length;
+    const photos = sectionPhotos[section.area] || [];
 
     const itemRows = (section.items || []).map((item, idx) => `
       <tr class="${item.answer === 'no' ? 'row-no' : ''}">
@@ -49,6 +50,14 @@ function generateObservationPdfHtml(obs, logoBase64 = '') {
         <td class="item-label">${escapeHtml(item.label)}</td>
         <td class="item-answer">${answerBadge(item.answer)}</td>
       </tr>`).join('');
+
+    const photosHtml = photos.length > 0 ? `
+      <div class="section-photos">
+        <div class="section-photos-label">Photos (${photos.length})</div>
+        <div class="section-photos-grid">
+          ${photos.map(b64 => `<img src="${b64}" class="section-photo" alt="Section photo" />`).join('')}
+        </div>
+      </div>` : '';
 
     return `
       <div class="section">
@@ -67,6 +76,7 @@ function generateObservationPdfHtml(obs, logoBase64 = '') {
           <tbody>${itemRows}</tbody>
         </table>
         ${section.comments ? `<div class="section-comments"><strong>Comments:</strong> ${escapeHtml(section.comments)}</div>` : ''}
+        ${photosHtml}
       </div>`;
   }).join('');
 
@@ -155,6 +165,11 @@ function generateObservationPdfHtml(obs, logoBase64 = '') {
   .badge-blank { background: #fef9c3; color: #854d0e; }
 
   .section-comments { padding: 7px 12px; background: #f9fafb; font-size: 11px; color: #374151; border-top: 1px solid #e5e7eb; line-height: 1.4; }
+
+  .section-photos { padding: 8px 12px; border-top: 1px solid #e5e7eb; background: white; }
+  .section-photos-label { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+  .section-photos-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .section-photo { width: 110px; height: 110px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
 
   .global-section { margin-bottom: 16px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
   .global-section-title { padding: 8px 12px; background: #374151; color: white; font-size: 11px; font-weight: 700; }

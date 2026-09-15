@@ -2,9 +2,11 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const SafetyObservation = require('../models/SafetyObservation');
 const Project = require('../models/Project');
+const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const { fetchLogoBase64 } = require('../utils/logoFetcher');
+const { fetchImageBase64 } = require('../utils/fetchImageBase64');
 const { generateObservationPdfBuffer } = require('../utils/safetyObservationPdfBuffer');
 
 const router = express.Router();
@@ -75,7 +77,30 @@ router.get('/:id/pdf', async (req, res, next) => {
     if (!project) return res.status(404).json({ error: 'Observation not found' });
 
     const logoBase64 = await fetchLogoBase64(req.tenantId);
-    const pdfBuffer = await generateObservationPdfBuffer(obs, logoBase64);
+
+    // Fetch section photos as base64 for embedding in the PDF
+    const photoRows = await db.query(
+      `SELECT filename, mime_type, section_area FROM attachments
+       WHERE entity_type = 'safety_observation' AND entity_id = $1
+         AND section_area IS NOT NULL AND mime_type LIKE 'image/%'
+       ORDER BY created_at ASC`,
+      [obs.id]
+    );
+    const photoEntries = await Promise.all(
+      photoRows.rows.map(async row => ({
+        section_area: row.section_area,
+        b64: await fetchImageBase64(row.filename),
+      }))
+    );
+    const sectionPhotos = {};
+    for (const { section_area, b64 } of photoEntries) {
+      if (b64) {
+        if (!sectionPhotos[section_area]) sectionPhotos[section_area] = [];
+        sectionPhotos[section_area].push(b64);
+      }
+    }
+
+    const pdfBuffer = await generateObservationPdfBuffer(obs, logoBase64, sectionPhotos);
     const filename = `Safety-Observation-${obs.number}-${project.number || project.name || ''}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
