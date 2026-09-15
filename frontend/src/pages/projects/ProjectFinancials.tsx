@@ -6,6 +6,7 @@ import { vistaDataService, VPContract, PhaseCodeCostSummary, LaborTradeSummary }
 import { projectsApi } from '../../services/projects';
 import { projectSnapshotsApi } from '../../services/projectSnapshots';
 import { projectionNotesApi } from '../../services/projectionNotes';
+import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
 import { format, addMonths, differenceInMonths, parseISO, startOfMonth } from 'date-fns';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ProjectionNotesDrawer from '../../components/projects/ProjectionNotesDrawer';
@@ -268,6 +269,12 @@ const ProjectFinancials: React.FC = () => {
     enabled: !!c,
   });
 
+  const { data: segmentsData } = useQuery({
+    queryKey: ['scheduleSegments', projectId],
+    queryFn: () => scheduleSegmentsService.getSegments(Number(projectId)),
+    enabled: !!projectId,
+  });
+
   const getTradeSummary = (trade: string) => {
     if (!costSummary?.labor) return { est_hours: 0, jtd_hours: 0, est_cost: 0, jtd_cost: 0, committed_cost: 0, projected_cost: 0, prior_week_cost: 0, change_from_last_projection: 0 };
     const rows = costSummary.labor.filter((l: LaborTradeSummary) => l.trade === trade);
@@ -319,40 +326,70 @@ const ProjectFinancials: React.FC = () => {
     const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
     if (totalRem <= 0) return null;
 
-    const startOff = Math.max(0, dateToMonthOff(c.user_adjusted_start_date) ?? 0);
     const earned = pn(c.earned_revenue); const proj = pn(c.projected_revenue);
     const backlog = pn(c.backlog); const contractVal = pn(c.contract_amount) || proj;
-    const userEndOff = dateToMonthOff(c.user_adjusted_end_date);
-    let endOff: number;
-    if (userEndOff != null) {
-      endOff = Math.max(startOff + 1, Math.min(37, userEndOff + 1));
-    } else if (backlog > 0) {
-      const pct = proj > 0 ? earned / proj : 0;
-      endOff = startOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - pct))));
-    } else {
-      endOff = startOff + 3;
-    }
-    const remMonths = endOff - startOff;
     const pctComplete = proj > 0 ? (earned / proj) * 100 : 0;
-    const contour: ContourType = (c.user_selected_contour as ContourType) || laborAutoContour(pctComplete);
+
+    // Fallback (summary mode): single window from project-level dates
+    const projectStartOff = Math.max(0, dateToMonthOff(c.user_adjusted_start_date) ?? 0);
+    const projectUserEndOff = dateToMonthOff(c.user_adjusted_end_date);
+    const projectEndOff = projectUserEndOff != null
+      ? Math.max(projectStartOff + 1, Math.min(37, projectUserEndOff + 1))
+      : backlog > 0
+        ? projectStartOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - (proj > 0 ? earned / proj : 0)))))
+        : projectStartOff + 3;
+    const projectContour: ContourType = (c.user_selected_contour as ContourType) || laborAutoContour(pctComplete);
+
+    // In cost_type mode each trade has its own segment with independent start/end/contour.
+    // Segment keys: PF=40 (Pipefitter Field), SM=30 (Sheet Metal Field), PL=50 (Plumbing Field).
+    // If a segment has no dates configured it falls back to the project-level window so the
+    // forecast still renders rather than going silent.
+    const schedulingMode = project?.scheduling_mode ?? 'summary';
+    const segments = segmentsData?.segments ?? [];
+    const TRADE_SEGMENT_KEYS: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
+
+    const resolveTradeWindow = (tradeKey: string): { startOff: number; endOff: number; contour: ContourType } => {
+      if (schedulingMode === 'cost_type') {
+        const seg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SEGMENT_KEYS[tradeKey]);
+        if (seg?.start_date) {
+          const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
+          const eUserOff = dateToMonthOff(seg.end_date);
+          const eOff = eUserOff != null
+            ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
+            : sOff + Math.max(1, Math.min(36, Math.ceil(laborDuration(contractVal) * (1 - (proj > 0 ? earned / proj : 0)))));
+          return { startOff: sOff, endOff: eOff, contour: (seg.contour_type as ContourType) || laborAutoContour(pctComplete) };
+        }
+      }
+      return { startOff: projectStartOff, endOff: projectEndOff, contour: projectContour };
+    };
 
     const now = new Date();
     const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
     const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
-    if (remMonths > 0) {
+
+    // Distribute each trade's hours within its own date window, then merge into shared maps
+    TRADE_META.forEach(({ key }, idx) => {
+      const t = tradeHours[idx];
+      if (t.remaining <= 0) return;
+      const { startOff, endOff, contour } = resolveTradeWindow(key);
+      const remMonths = endOff - startOff;
+      if (remMonths <= 0) return;
       const mults = laborContourMultipliers(remMonths, contour);
       for (let i = 0; i < remMonths; i++) {
-        const key = format(addMonths(now, startOff + i), 'yyyy-MM');
-        const pfH = (tradeHours[0].remaining / remMonths) * mults[i];
-        const smH = (tradeHours[1].remaining / remMonths) * mults[i];
-        const plH = (tradeHours[2].remaining / remMonths) * mults[i];
-        monthlyHours.set(key, { pf: pfH, sm: smH, pl: plH, total: pfH + smH + plH });
-        const pfC = pfH * tradeHours[0].rate;
-        const smC = smH * tradeHours[1].rate;
-        const plC = plH * tradeHours[2].rate;
-        monthlyCosts.set(key, { pf: pfC, sm: smC, pl: plC, total: pfC + smC + plC });
+        const mk = format(addMonths(now, startOff + i), 'yyyy-MM');
+        const h = (t.remaining / remMonths) * mults[i];
+        const existing = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+        const existingC = monthlyCosts.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+        existing[key as 'pf' | 'sm' | 'pl'] += h;
+        existing.total += h;
+        const cost = h * t.rate;
+        existingC[key as 'pf' | 'sm' | 'pl'] += cost;
+        existingC.total += cost;
+        monthlyHours.set(mk, existing);
+        monthlyCosts.set(mk, existingC);
       }
-    }
+    });
+
     const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
     // Build columns identical to ContractProjectionStrip: 12 monthly + year cols
     const nowSOM = startOfMonth(now);
@@ -382,8 +419,8 @@ const ProjectFinancials: React.FC = () => {
         if (yrH.total > 0) { monthlyHours.set(yrKey, yrH); monthlyCosts.set(yrKey, yrC); }
       }
     }
-    return { monthlyHours, monthlyCosts, columns, contour, tradeHours, totalRem, pctComplete, prevWeekCost };
-  }, [costSummary, c]);
+    return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost };
+  }, [costSummary, c, project, segmentsData]);
 
   const captureSnapshotMutation = useMutation({
     mutationFn: () => projectSnapshotsApi.create(Number(projectId)),
