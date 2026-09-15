@@ -39,9 +39,11 @@ interface Props {
   contract: VPContract;
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
+  schedulingMode?: 'summary' | 'cost_type' | 'phase';
 }
 
-const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll }) => {
+const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScroll, schedulingMode }) => {
+  const datesLocked = (schedulingMode ?? 'summary') !== 'summary';
   const queryClient = useQueryClient();
 
   const initialStart = dateToMonthOffset(contract.user_adjusted_start_date);
@@ -215,8 +217,8 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
           <tr>
             <th style={{ ...headerCellStyle, textAlign: 'right', minWidth: '70px' }}>Backlog</th>
             <th style={{ ...headerCellStyle, textAlign: 'right', minWidth: '60px' }}>% Comp</th>
-            <th style={{ ...headerCellStyle, textAlign: 'center', minWidth: '70px' }}>Start</th>
-            <th style={{ ...headerCellStyle, textAlign: 'center', minWidth: '70px' }}>End</th>
+            <th style={{ ...headerCellStyle, textAlign: 'center', minWidth: '70px' }}>Start{datesLocked ? ' 🔒' : ''}</th>
+            <th style={{ ...headerCellStyle, textAlign: 'center', minWidth: '70px' }}>End{datesLocked ? ' 🔒' : ''}</th>
             <th style={{ ...headerCellStyle, textAlign: 'center', minWidth: '90px' }}>Contour</th>
             {columns.map(col => (
               <th
@@ -242,7 +244,9 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
               {backlog > 0 ? (
                 <select
                   value={startOffset}
+                  disabled={datesLocked}
                   onChange={(e) => {
+                    if (datesLocked) return;
                     const newStart = parseInt(e.target.value);
                     setStartMonths(newStart);
                     const currentEnd = endMonths ?? (startOffset + remainingMonths - 1);
@@ -257,14 +261,16 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
                   style={{
                     padding: '0.15rem 0.25rem',
                     fontSize: '0.65rem',
-                    border: startMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                    border: datesLocked ? '1px solid #e5e7eb' : startMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
                     borderRadius: '3px',
-                    background: startMonths != null ? '#dcfce7' : 'transparent',
-                    color: startMonths != null ? '#15803d' : '#64748b',
-                    cursor: 'pointer',
+                    background: datesLocked ? '#f3f4f6' : startMonths != null ? '#dcfce7' : 'transparent',
+                    color: datesLocked ? '#6b7280' : startMonths != null ? '#15803d' : '#64748b',
+                    cursor: datesLocked ? 'not-allowed' : 'pointer',
                     width: '70px',
                   }}
-                  title="Click to adjust start date"
+                  title={datesLocked
+                    ? `Dates are controlled by the ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule. Switch to Summary mode on the Schedule tab to edit directly.`
+                    : 'Click to adjust start date'}
                 >
                   {Array.from({ length: 36 }, (_, i) => i).map(months => {
                     const startDate = addMonths(startOfMonth(new Date()), months);
@@ -277,7 +283,9 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
               {backlog > 0 ? (
                 <select
                   value={endMonths ?? (startOffset + remainingMonths - 1)}
+                  disabled={datesLocked}
                   onChange={(e) => {
+                    if (datesLocked) return;
                     const newEndMonths = parseInt(e.target.value);
                     setEndMonths(newEndMonths);
                     save({ user_adjusted_end_months: newEndMonths });
@@ -285,14 +293,16 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
                   style={{
                     padding: '0.15rem 0.25rem',
                     fontSize: '0.65rem',
-                    border: endMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                    border: datesLocked ? '1px solid #e5e7eb' : endMonths != null ? '1px solid #16a34a' : '1px solid #e2e8f0',
                     borderRadius: '3px',
-                    background: endMonths != null ? '#dcfce7' : 'transparent',
-                    color: endMonths != null ? '#15803d' : '#64748b',
-                    cursor: 'pointer',
+                    background: datesLocked ? '#f3f4f6' : endMonths != null ? '#dcfce7' : 'transparent',
+                    color: datesLocked ? '#6b7280' : endMonths != null ? '#15803d' : '#64748b',
+                    cursor: datesLocked ? 'not-allowed' : 'pointer',
                     width: '70px',
                   }}
-                  title="Click to adjust end date"
+                  title={datesLocked
+                    ? `Dates are controlled by the ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} schedule. Switch to Summary mode on the Schedule tab to edit directly.`
+                    : 'Click to adjust end date'}
                 >
                   {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > startOffset).map(months => {
                     const endDate = addMonths(startOfMonth(new Date()), months);

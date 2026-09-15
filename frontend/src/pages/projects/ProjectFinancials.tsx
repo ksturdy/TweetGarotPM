@@ -797,7 +797,7 @@ const ProjectFinancials: React.FC = () => {
           </div>
 
           {/* ===== PROJECTED REVENUE STRIP (synced with /projects/projected-revenue) ===== */}
-          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} />
+          <ContractProjectionStrip contract={c} scrollRef={projRevScrollRef} onScroll={syncFromProjRev} schedulingMode={project?.scheduling_mode} />
 
           {/* ===== LABOR FORECAST (expandable) ===== */}
           {laborForecastData && (
