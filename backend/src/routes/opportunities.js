@@ -172,12 +172,19 @@ router.get('/with-estimates', async (req, res, next) => {
         ps.name as stage_name, ps.probability as stage_probability,
         e.first_name || ' ' || e.last_name as assigned_to_name,
         COALESCE(c.name, c.customer_owner) as customer_name,
-        oe.labor_pct,
-        oe.pf_labor_pct, oe.sm_labor_pct, oe.pl_labor_pct,
-        oe.pf_shop_pct, oe.pf_field_pct,
-        oe.sm_shop_pct, oe.sm_field_pct,
-        oe.pl_shop_pct, oe.pl_field_pct,
-        oe.pf_labor_rate, oe.sm_labor_rate, oe.pl_labor_rate
+        COALESCE(oe.labor_pct, 0.35)        AS labor_pct,
+        COALESCE(oe.pf_labor_pct, 0.45)    AS pf_labor_pct,
+        COALESCE(oe.sm_labor_pct, 0.35)    AS sm_labor_pct,
+        COALESCE(oe.pl_labor_pct, 0.20)    AS pl_labor_pct,
+        COALESCE(oe.pf_shop_pct, 0.30)     AS pf_shop_pct,
+        COALESCE(oe.pf_field_pct, 0.70)    AS pf_field_pct,
+        COALESCE(oe.sm_shop_pct, 0.35)     AS sm_shop_pct,
+        COALESCE(oe.sm_field_pct, 0.65)    AS sm_field_pct,
+        COALESCE(oe.pl_shop_pct, 0.25)     AS pl_shop_pct,
+        COALESCE(oe.pl_field_pct, 0.75)    AS pl_field_pct,
+        COALESCE(oe.pf_labor_rate, 85)     AS pf_labor_rate,
+        COALESCE(oe.sm_labor_rate, 82)     AS sm_labor_rate,
+        COALESCE(oe.pl_labor_rate, 78)     AS pl_labor_rate
       FROM opportunities o
       LEFT JOIN pipeline_stages ps ON o.stage_id = ps.id
       LEFT JOIN employees e ON o.assigned_to = e.id
