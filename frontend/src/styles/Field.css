@@ -40,11 +40,9 @@ html {
   min-height: -webkit-fill-available;
   background: var(--field-bg);
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
   -webkit-tap-highlight-color: transparent;
   display: flex;
   flex-direction: column;
-  /* Prevent overscroll bounce on the container */
   overscroll-behavior-y: none;
 }
 
@@ -170,8 +168,9 @@ html {
   /* Extra 64px clears a fixed .field-actions-bar on pages that have one */
   padding-bottom: calc(var(--field-bottom-nav-height) + 76px + env(safe-area-inset-bottom));
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  /* Prevent horizontal overflow from wide tables */
+  /* Note: -webkit-overflow-scrolling: touch intentionally removed.
+     It causes position:fixed children to behave as position:absolute on iOS WebKit,
+     breaking the pinned action bar. iOS 13+ has native momentum scrolling without it. */
   overflow-x: hidden;
 }
 
@@ -186,8 +185,9 @@ html {
   border-top: 1px solid var(--field-border);
   display: flex;
   justify-content: space-around;
-  align-items: center;
-  min-height: var(--field-bottom-nav-height);
+  align-items: flex-start;
+  padding-top: 6px;
+  height: calc(var(--field-bottom-nav-height) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
