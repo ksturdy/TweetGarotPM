@@ -163,6 +163,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
     } else if (defaults) {
       setPct(defaults);
       setInitialized(true);
+      if (opportunityId) opportunitiesService.saveEstimate(opportunityId, defaults);
     }
   }, [savedEstimate, defaults, initialized]);
 

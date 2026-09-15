@@ -359,7 +359,7 @@ const LaborForecast: React.FC = () => {
   const [overridesInitialized, setOverridesInitialized] = useState(false);
 
   // View modes
-  const [viewMode, setViewMode] = useState<'table' | 'graph'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'graph'>('graph');
   const [dataView, setDataView] = useState<'project' | 'trade'>('trade');
 
   // Sorting state
@@ -386,7 +386,7 @@ const LaborForecast: React.FC = () => {
   const [hoursPerPersonPerMonth, setHoursPerPersonPerMonth] = useState<number>(173);
   const [durationRules, setDurationRules] = useState<DurationRule[]>(defaultDurationRules);
   const [showSettings, setShowSettings] = useState(false);
-  const [timeHorizon, setTimeHorizon] = useState<number>(12);
+  const [timeHorizon, setTimeHorizon] = useState<number>(24);
   const [granularity, setGranularity] = useState<'monthly' | 'weekly'>('monthly');
 
   const getDurationForValue = (contractValue: number): number => {
