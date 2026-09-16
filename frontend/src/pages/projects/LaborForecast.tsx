@@ -2924,6 +2924,22 @@ const LaborForecast: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {/* Secured work subtotal */}
+                  {(() => {
+                    const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                    const hpp = hoursPerPersonPerMonth;
+                    return (
+                      <tr style={{ background: '#e2e8f0', fontWeight: 600, borderTop: '2px solid #94a3b8' }}>
+                        <td colSpan={3} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem' }}>
+                          Secured Work ({drillDownProjects.length} projects)
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[0].color }}>{ct.pf > 0 ? (ct.pf / hpp).toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[1].color }}>{ct.sm > 0 ? (ct.sm / hpp).toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[2].color }}>{ct.pl > 0 ? (ct.pl / hpp).toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>{(ct.total / hpp).toFixed(1)}</td>
+                      </tr>
+                    );
+                  })()}
                   {drillDownOpps.length > 0 && (
                     <>
                       <tr style={{ borderTop: '2px dashed #f59e0b', background: '#fffbeb' }}>
@@ -2960,21 +2976,41 @@ const LaborForecast: React.FC = () => {
                           </tr>
                         );
                       })}
+                      {/* Opportunity subtotal */}
+                      {(() => {
+                        const ot = oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                        const hpp = hoursPerPersonPerMonth;
+                        return (
+                          <tr style={{ background: '#fef3c7', fontWeight: 600, borderTop: '2px dashed #f59e0b' }}>
+                            <td colSpan={3} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem', color: '#92400e' }}>
+                              Opportunities ({drillDownOpps.length} opps{oppWeighted ? ', weighted' : ''})
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#b45309' }}>{ot.pf > 0 ? (ot.pf / hpp).toFixed(1) : '-'}</td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#b45309' }}>{ot.sm > 0 ? (ot.sm / hpp).toFixed(1) : '-'}</td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#b45309' }}>{ot.pl > 0 ? (ot.pl / hpp).toFixed(1) : '-'}</td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: '#92400e' }}>{(ot.total / hpp).toFixed(1)}</td>
+                          </tr>
+                        );
+                      })()}
                     </>
                   )}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: '#f1f5f9', fontWeight: 600 }}>
-                    <td colSpan={3} style={{ padding: '0.5rem' }}>TOTAL ({drillDownProjects.length} projects)</td>
+                  <tr style={{ background: '#1e293b', color: '#fff', fontWeight: 700 }}>
+                    <td colSpan={3} style={{ padding: '0.5rem' }}>
+                      GRAND TOTAL ({drillDownProjects.length} projects{drillDownOpps.length > 0 ? ` + ${drillDownOpps.length} opps` : ''})
+                    </td>
                     {(() => {
                       const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const ot = drillDownOpps.length > 0 ? (oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
                       const hpp = hoursPerPersonPerMonth;
+                      const gPf = ct.pf + ot.pf, gSm = ct.sm + ot.sm, gPl = ct.pl + ot.pl, gTotal = ct.total + ot.total;
                       return (
                         <>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[0].color }}>{(ct.pf / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[1].color }}>{(ct.sm / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[2].color }}>{(ct.pl / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right' }}>{(ct.total / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[0].color }}>{(gPf / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[1].color }}>{(gSm / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[2].color }}>{(gPl / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right' }}>{(gTotal / hpp).toFixed(1)}</td>
                         </>
                       );
                     })()}
