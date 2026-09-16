@@ -328,6 +328,13 @@ const LaborForecast: React.FC = () => {
   const [oppMode, setOppMode] = useState<'off' | 'all' | 'select'>('off');
   const [selectedOppIds, setSelectedOppIds] = useState<number[]>([]);
   const [oppWeighted, setOppWeighted] = useState(true);
+  const [oppTradeFilter, setOppTradeFilter] = useState<TradeName[]>(['pf', 'sm', 'pl']);
+  const applyOppTradeFilter = useCallback((h: TradeMonthlyHours): TradeMonthlyHours => {
+    const pf = oppTradeFilter.includes('pf') ? h.pf : 0;
+    const sm = oppTradeFilter.includes('sm') ? h.sm : 0;
+    const pl = oppTradeFilter.includes('pl') ? h.pl : 0;
+    return { pf, sm, pl, total: pf + sm + pl };
+  }, [oppTradeFilter]);
   const [oppTeamFilter, setOppTeamFilter] = useState<string>('');
   const [oppStageFilter, setOppStageFilter] = useState<string[]>([]);
 
@@ -1029,18 +1036,18 @@ const LaborForecast: React.FC = () => {
         const h = getHoursForColumn(p.monthlyHours, col);
         agg.pf += h.pf; agg.sm += h.sm; agg.pl += h.pl; agg.total += h.total;
       });
-      totals.set(col.key, applyTradeFilter(agg));
+      totals.set(col.key, applyOppTradeFilter(agg));
     });
     return totals;
-  }, [opportunityProjections, displayColumns, getHoursForColumn, tradeFilter]);
+  }, [opportunityProjections, displayColumns, getHoursForColumn, applyOppTradeFilter]);
 
   const oppGrandTotalHours = useMemo(() => {
     let total = 0;
     opportunityProjections.forEach(p => {
-      p.weightedTradeHours.forEach(t => { if (tradeFilter.includes(t.key)) total += t.remaining; });
+      p.weightedTradeHours.forEach(t => { if (oppTradeFilter.includes(t.key)) total += t.remaining; });
     });
     return total;
-  }, [opportunityProjections, tradeFilter]);
+  }, [opportunityProjections, oppTradeFilter]);
 
   // ─── Drill-down data ────────────────────────────────────
 
@@ -2029,6 +2036,29 @@ const LaborForecast: React.FC = () => {
             />
             Probability weighted
           </label>
+        )}
+        {oppMode !== 'off' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#92400e' }}>Trades:</label>
+            {(['pf', 'sm', 'pl'] as TradeName[]).map((t, i, arr) => (
+              <button
+                key={t}
+                onClick={() => setOppTradeFilter(prev =>
+                  prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+                )}
+                style={{
+                  padding: '0.25rem 0.5rem', fontSize: '0.7rem',
+                  background: oppTradeFilter.includes(t) ? '#f59e0b' : '#fff',
+                  color: oppTradeFilter.includes(t) ? '#fff' : '#92400e',
+                  border: '1px solid #fcd34d',
+                  borderRadius: i === 0 ? '4px 0 0 4px' : i === arr.length - 1 ? '0 4px 4px 0' : '0',
+                  cursor: 'pointer', fontWeight: oppTradeFilter.includes(t) ? 600 : 400,
+                }}
+              >
+                {t.toUpperCase()}
+              </button>
+            ))}
+          </div>
         )}
         {oppMode !== 'off' && opportunityProjections.length > 0 && (
           <span style={{ fontSize: '0.75rem', color: '#92400e', marginLeft: 'auto' }}>
