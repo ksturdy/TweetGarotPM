@@ -74,6 +74,13 @@
   margin-bottom: 16px;
 }
 
+.opp-search-form-grid-4 {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
 .opp-search-form-full {
   margin-bottom: 16px;
 }
@@ -900,7 +907,8 @@
 /* Responsive */
 @media (max-width: 768px) {
   .opp-search-form-grid,
-  .opp-search-form-grid-3 {
+  .opp-search-form-grid-3,
+  .opp-search-form-grid-4 {
     grid-template-columns: 1fr;
   }
 

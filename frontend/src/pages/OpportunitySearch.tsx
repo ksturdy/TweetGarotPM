@@ -99,6 +99,7 @@ const OpportunitySearch: React.FC = () => {
   const [formData, setFormData] = useState<SearchCriteria>({
     market_sector: '',
     location: '',
+    radius_miles: undefined,
     construction_type: '',
     min_value: undefined,
     max_value: undefined,
@@ -224,6 +225,7 @@ const OpportunitySearch: React.FC = () => {
     setFormData({
       market_sector: recurringSearch.criteria.market_sector || '',
       location: recurringSearch.criteria.location || '',
+      radius_miles: recurringSearch.criteria.radius_miles,
       construction_type: recurringSearch.criteria.construction_type || '',
       min_value: recurringSearch.criteria.min_value,
       max_value: recurringSearch.criteria.max_value,
@@ -262,6 +264,7 @@ const OpportunitySearch: React.FC = () => {
     setFormData({
       market_sector: recurringSearch.criteria.market_sector || '',
       location: recurringSearch.criteria.location || '',
+      radius_miles: recurringSearch.criteria.radius_miles,
       construction_type: recurringSearch.criteria.construction_type || '',
       min_value: recurringSearch.criteria.min_value,
       max_value: recurringSearch.criteria.max_value,
@@ -289,6 +292,7 @@ const OpportunitySearch: React.FC = () => {
         setFormData({
           market_sector: saved.criteria.market_sector || '',
           location: saved.criteria.location || '',
+          radius_miles: saved.criteria.radius_miles,
           construction_type: saved.criteria.construction_type || '',
           min_value: saved.criteria.min_value,
           max_value: saved.criteria.max_value,
@@ -361,6 +365,8 @@ const OpportunitySearch: React.FC = () => {
     const { name, value } = e.target;
     if (name === 'min_value' || name === 'max_value') {
       setFormData(prev => ({ ...prev, [name]: parseFormattedNumber(value) }));
+    } else if (name === 'radius_miles') {
+      setFormData(prev => ({ ...prev, radius_miles: value ? Number(value) : undefined }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -374,6 +380,7 @@ const OpportunitySearch: React.FC = () => {
     const criteria: SearchCriteria = {};
     if (formData.market_sector) criteria.market_sector = formData.market_sector;
     if (formData.location) criteria.location = formData.location;
+    if (formData.radius_miles) criteria.radius_miles = Number(formData.radius_miles);
     if (formData.construction_type) criteria.construction_type = formData.construction_type;
     if (formData.min_value) criteria.min_value = Number(formData.min_value);
     if (formData.max_value) criteria.max_value = Number(formData.max_value);
@@ -394,6 +401,7 @@ const OpportunitySearch: React.FC = () => {
     setFormData({
       market_sector: '',
       location: '',
+      radius_miles: undefined,
       construction_type: '',
       min_value: undefined,
       max_value: undefined,
@@ -556,7 +564,7 @@ const OpportunitySearch: React.FC = () => {
           </div>
         </div>
 
-        <div className="opp-search-form-grid-3">
+        <div className="opp-search-form-grid-4">
           <div className="opp-search-form-group">
             <label htmlFor="location">Location / Region</label>
             <input
@@ -567,6 +575,24 @@ const OpportunitySearch: React.FC = () => {
               value={formData.location || ''}
               onChange={handleChange}
             />
+          </div>
+          <div className="opp-search-form-group">
+            <label htmlFor="radius_miles">Radius</label>
+            <select
+              id="radius_miles"
+              name="radius_miles"
+              value={formData.radius_miles ?? ''}
+              onChange={handleChange}
+            >
+              <option value="">Any Distance</option>
+              <option value="25">25 miles</option>
+              <option value="50">50 miles</option>
+              <option value="75">75 miles</option>
+              <option value="100">100 miles</option>
+              <option value="150">150 miles</option>
+              <option value="200">200 miles</option>
+              <option value="300">300 miles</option>
+            </select>
           </div>
           <div className="opp-search-form-group">
             <label htmlFor="min_value">Min Mechanical Value</label>

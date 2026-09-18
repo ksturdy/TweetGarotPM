@@ -7,6 +7,7 @@ export interface RecurringSearch {
   criteria: {
     market_sector?: string;
     location?: string;
+    radius_miles?: number;
     construction_type?: string;
     min_value?: number;
     max_value?: number;

@@ -25,7 +25,7 @@ CRITICAL RULES:
 - If you cannot find verified projects matching the criteria, say so honestly. Do NOT invent projects to fill results.
 - Include the source URL for every project.
 - Run AT LEAST 5-8 different web searches with varied search terms. Do NOT stop after 1-2 searches. Use different combinations of: location names, market sectors, project types, owner types, "construction planned", "new facility", permit databases, and industry publications. More searches = more leads found.
-- LOCATION INTERPRETATION: When given a specific city/location, interpret it broadly to include the surrounding region, metro area, and state. For example, "Marquette, MI" should include searches for Michigan, Upper Peninsula, Northern Michigan, etc. Look for projects within a reasonable service area (typically 100-200 mile radius for large mechanical contractors). Run separate searches for the city, metro area, surrounding counties, and state-level project lists.
+- LOCATION INTERPRETATION: If the user specifies an explicit radius (e.g., "within 100 miles", "50 mile radius"), treat that as a HARD geographic constraint — do NOT include projects outside that distance, even if they seem relevant. If no radius is specified, interpret the location broadly to include the surrounding region, metro area, and state, running separate searches for the city, metro area, surrounding counties, and state-level project lists. When in doubt about whether a city falls within a stated radius, look up the driving distance and exclude the project if it exceeds the limit.
 
 PROJECT PHASE FILTERING (VERY IMPORTANT):
 - ONLY return projects that are in planning, design, pre-construction, or early bidding phases — these are UPCOMING opportunities where a mechanical contractor can still win work.
@@ -44,9 +44,19 @@ PROJECT VALUE (IMPORTANT):
 For each verified project found, return ONLY a valid JSON object with this structure:
 {"projects":[{"project_name":"string","owner":"string","location":"string","estimated_value":"string or null","estimated_mechanical_value":"string or null","project_type":"Healthcare|Industrial|Manufacturing|Data Center|Commercial|Education|Government","construction_type":"New Construction|Renovation|Expansion","project_phase":"Planning|Design|Pre-Construction|Bidding|Announced","estimated_start":"string or null","estimated_completion":"string or null","square_footage":"string or null","general_contractor":"string or null","architect":"string or null","source_url":"string","source_date":"string","confidence":"high|medium|low","mechanical_scope":"string describing estimated HVAC plumbing piping scope based on project type and size","intelligence_notes":"string explaining why this is a real UPCOMING opportunity with current project phase and relevant context","recommended_contact":"string or null","next_steps":"string"}]}`;
 
+function extractRadiusFromCriteria(additionalCriteria) {
+  if (!additionalCriteria) return null;
+  const match = additionalCriteria.match(/within\s+(\d+)\s*mi(?:le)?s?\s+radius|(\d+)\s*mi(?:le)?\s+radius|radius\s+of\s+(\d+)\s*mi(?:le)?s?/i);
+  if (match) return parseInt(match[1] || match[2] || match[3]);
+  return null;
+}
+
 function buildUserMessage(criteria) {
   const today = new Date().toISOString().split('T')[0];
   const currentYear = new Date().getFullYear();
+  // Prefer the explicit radius_miles field; fall back to parsing additional_criteria for backwards compat
+  const specifiedRadius = criteria.radius_miles || extractRadiusFromCriteria(criteria.additional_criteria);
+
   const parts = [
     `Today's date is ${today}.`,
     `Search the web for real construction projects that are currently in PLANNING, DESIGN, or PRE-CONSTRUCTION phases — upcoming opportunities where a mechanical contractor can still bid/win work. These criteria apply:`
@@ -56,7 +66,10 @@ function buildUserMessage(criteria) {
     parts.push(`- Market Sector: ${criteria.market_sector}`);
   }
   if (criteria.location) {
-    parts.push(`- Location/Region: ${criteria.location} (search broadly - include surrounding metro area, region, and state)`);
+    const locNote = specifiedRadius
+      ? `(STRICT: only projects within ${specifiedRadius} miles of this location)`
+      : `(search broadly - include surrounding metro area, region, and state)`;
+    parts.push(`- Location/Region: ${criteria.location} ${locNote}`);
   }
   if (criteria.construction_type) {
     parts.push(`- Construction Type: ${criteria.construction_type}`);
@@ -77,7 +90,11 @@ function buildUserMessage(criteria) {
   parts.push(`- Include "${currentYear}" or "${currentYear + 1}" in your search queries to get recent results.`);
   parts.push(`- Search for terms like "planned", "proposed", "approved", "design phase", "seeking bids", "RFP" to find pre-construction projects.`);
   parts.push(`- SKIP any project that has already broken ground, is under construction, or is completed.`);
-  parts.push(`- Cast a wide net geographically - mechanical contractors typically service a 100-200 mile radius.`);
+  if (specifiedRadius) {
+    parts.push(`- STRICT GEOGRAPHIC CONSTRAINT: The user requires projects within ${specifiedRadius} miles of ${criteria.location || 'the specified location'}. Before including any project, verify its city is within that radius. Exclude any project outside that distance — do not make exceptions even for large or relevant projects.`);
+  } else {
+    parts.push(`- Cast a wide net geographically - mechanical contractors typically service a 100-200 mile radius.`);
+  }
   parts.push(`- Try hard to find the total project cost/budget for each project. If you find a project but no cost, do a follow-up search for "[project name] cost" or "[owner] [project name] million".`);
   parts.push('\nFor estimated_mechanical_value in your response: Only provide a value if the source explicitly states the mechanical/HVAC/plumbing scope cost. Otherwise, set it to null and the system will auto-estimate at 20% of total project value.');
   parts.push('\nReturn results as JSON only.');
@@ -283,6 +300,7 @@ router.post('/generate', async (req, res, next) => {
     const {
       market_sector,
       location,
+      radius_miles,
       construction_type,
       min_value,
       max_value,
@@ -300,7 +318,7 @@ router.post('/generate', async (req, res, next) => {
     console.log('[Opportunity Search] Generating leads with web search for tenant:', req.tenantId);
 
     const userMessage = buildUserMessage({
-      market_sector, location, construction_type,
+      market_sector, location, radius_miles, construction_type,
       min_value, max_value, keywords, additional_criteria
     });
 
