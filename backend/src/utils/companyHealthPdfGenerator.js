@@ -63,7 +63,7 @@ function buildNarrative(data) {
   const { kpis, backlog_by_market, opps_by_stage, dept_breakdown, labor_summary, as_of } = data;
 
   const dateLabel = as_of
-    ? new Date(as_of + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    ? new Date(as_of).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : 'the current period';
 
   const gmHealth = parseFloat(kpis.avg_gm_pct) >= 20 ? 'healthy'
@@ -117,7 +117,7 @@ function generateCompanyHealthHtml(data) {
   const { kpis, backlog_by_market, opps_by_stage, dept_breakdown, as_of } = data;
 
   const dateLabel = as_of
-    ? new Date(as_of + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    ? new Date(as_of).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const narrative = buildNarrative(data);

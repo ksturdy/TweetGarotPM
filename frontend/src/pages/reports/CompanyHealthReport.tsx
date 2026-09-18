@@ -373,7 +373,7 @@ const CompanyHealthReport: React.FC = () => {
   const labor = chRes.labor_forecast;
   const ls = chRes.labor_summary;
 
-  const asOf = chRes.as_of ? new Date(chRes.as_of + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Today';
+  const asOf = chRes.as_of ? new Date(chRes.as_of).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Today';
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '1.5rem' }}>

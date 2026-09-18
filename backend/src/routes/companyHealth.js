@@ -382,7 +382,7 @@ router.get('/pdf-download', async (req, res) => {
     const data = await buildData(req.tenantId);
     const pdfBuffer = await generateCompanyHealthPdfBuffer(data);
     const dateStr = data.as_of
-      ? new Date(data.as_of + 'T12:00:00').toISOString().split('T')[0]
+      ? new Date(data.as_of).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Company-Health-${dateStr}.pdf"`);
