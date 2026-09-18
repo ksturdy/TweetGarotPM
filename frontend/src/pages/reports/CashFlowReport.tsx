@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { cashFlowReportApi, CashFlowProject, CashFlowMetrics } from '../../services/cashFlowReport';
@@ -107,11 +107,23 @@ const CashFlowReport: React.FC = () => {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('Open');
+  const [statusFilter, setStatusFilter] = useState<string[]>(['Open', 'Soft-Closed']);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [pmFilter, setPmFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [marketFilter, setMarketFilter] = useState<string>('all');
   const [teamFilter, setTeamFilter] = useState<string>(initialTeam);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Sorting - default worst (most negative) cash flow first
   const [sortColumn, setSortColumn] = useState<string>('cash_flow');
@@ -166,7 +178,7 @@ const CashFlowReport: React.FC = () => {
   // Filter
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(p.status ?? '')) return false;
       if (pmFilter !== 'all' && p.manager_name !== pmFilter) return false;
       if (departmentFilter !== 'all' && p.department_number !== departmentFilter) return false;
       if (marketFilter !== 'all' && p.market !== marketFilter) return false;
@@ -355,7 +367,7 @@ const CashFlowReport: React.FC = () => {
         ? teams.find(t => String(t.id) === teamFilter)?.name
         : undefined;
       await cashFlowReportApi.downloadPdf({
-        status: statusFilter !== 'all' ? statusFilter : undefined,
+        status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
         pm: pmFilter !== 'all' ? pmFilter : undefined,
         department: departmentFilter !== 'all' ? departmentFilter : undefined,
         market: marketFilter !== 'all' ? marketFilter : undefined,
@@ -370,10 +382,12 @@ const CashFlowReport: React.FC = () => {
     }
   };
 
-  const anyFilterActive = statusFilter !== 'all' || pmFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm;
+  const DEFAULT_STATUSES = ['Open', 'Soft-Closed'];
+  const statusChanged = statusFilter.length !== DEFAULT_STATUSES.length || !DEFAULT_STATUSES.every(s => statusFilter.includes(s));
+  const anyFilterActive = statusChanged || pmFilter !== 'all' || departmentFilter !== 'all' || marketFilter !== 'all' || teamFilter !== 'all' || !!searchTerm;
 
   const clearAllFilters = () => {
-    setStatusFilter('all');
+    setStatusFilter(DEFAULT_STATUSES);
     setPmFilter('all');
     setDepartmentFilter('all');
     setMarketFilter('all');
@@ -606,12 +620,53 @@ const CashFlowReport: React.FC = () => {
             />
           </div>
         </div>
-        <div style={{ minWidth: '140px' }}>
+        <div style={{ minWidth: '160px', position: 'relative' }} ref={statusDropdownRef}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Status</label>
-          <select className="form-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '100%' }}>
-            <option value="all">All Statuses</option>
-            {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <button
+            type="button"
+            onClick={() => setStatusDropdownOpen(o => !o)}
+            style={{
+              width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.875rem',
+              background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
+              textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              color: '#374151',
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
+            </span>
+            <span style={{ fontSize: '0.65rem', marginLeft: 4, color: '#9ca3af' }}>▾</span>
+          </button>
+          {statusDropdownOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+              background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+              padding: '0.4rem 0', minWidth: '100%', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.35rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem', color: '#64748b', borderBottom: '1px solid #f1f5f9' }}>
+                <input
+                  type="checkbox"
+                  checked={statusFilter.length === 0}
+                  onChange={() => setStatusFilter([])}
+                />
+                All Statuses
+              </label>
+              {uniqueStatuses.map(s => (
+                <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.35rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem', color: '#1e293b' }}>
+                  <input
+                    type="checkbox"
+                    checked={statusFilter.includes(s)}
+                    onChange={() => {
+                      setStatusFilter(prev =>
+                        prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                      );
+                    }}
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ minWidth: '160px' }}>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Project Manager</label>

@@ -63,7 +63,10 @@ async function buildCashFlowData(tenantId, filters = {}) {
 
   // Apply filters if provided
   if (filters.status && filters.status !== 'all') {
-    rows = rows.filter(r => r.status === filters.status);
+    const statuses = filters.status.split(',').map(s => s.trim()).filter(Boolean);
+    if (statuses.length > 0) {
+      rows = rows.filter(r => statuses.includes(r.status));
+    }
   }
   if (filters.pm && filters.pm !== 'all') {
     rows = rows.filter(r => r.manager_name === filters.pm);

@@ -9,16 +9,26 @@ export interface CompanyHealthKPIs {
   total_gross_profit: number;
   avg_gm_pct: number;
   total_cash_flow: number;
+  total_open_receivables: number;
+  positive_cf_count: number;
+  active_linked_count: number;
+  backlog_gm_pct: number;
+  cf_positive_over15_count: number;
+  over15_count: number;
+  avg_pct_at_first_positive: number;
+  projects_that_turned_positive: number;
   total_pipeline_value: number;
   weighted_pipeline: number;
   total_opps_count: number;
 }
 
+export interface GmTrendPoint { month_label: string; month_date: string; gm_pct: number; }
 export interface BacklogByMarket { market: string; backlog: number; }
 export interface OppsByStage { stage_name: string; stage_color: string; count: number; total_value: number; weighted_value: number; }
 export interface OppsByMarket { market: string; count: number; total_value: number; }
 export interface ProjectStatusDist { status: string; count: number; }
-export interface DeptBreakdown { group_name: string; project_count: number; backlog: number; gm_pct: number; gross_profit: number; }
+export interface DeptBreakdown { department_number: string; group_name: string; project_count: number; backlog: number; gm_pct: number; gross_profit: number; }
+export interface MarketBreakdown { market: string; project_count: number; backlog: number; gm_pct: number; gross_profit: number; }
 
 export interface LaborSummary {
   total_employees: string;
@@ -33,6 +43,9 @@ export interface LaborByMonth {
   month_label: string;
   month_offset: number;
   total_headcount: number;
+  pf: number;
+  sm: number;
+  pl: number;
 }
 
 export interface LaborByTrade {
@@ -42,17 +55,10 @@ export interface LaborByTrade {
   h18: number;
 }
 
-export interface LaborByGroup {
-  emp_group: string;
-  h6: number;
-  h12: number;
-  h18: number;
-}
 
 export interface LaborForecast {
   by_month: LaborByMonth[];
   by_trade: LaborByTrade[];
-  by_group: LaborByGroup[];
   horizons: { h6: number; h12: number; h18: number };
 }
 
@@ -62,8 +68,9 @@ export interface CompanyHealthData {
   backlog_by_market: BacklogByMarket[];
   opps_by_stage: OppsByStage[];
   opps_by_market: OppsByMarket[];
-  project_status_dist: ProjectStatusDist[];
+  gm_trend: GmTrendPoint[];
   dept_breakdown: DeptBreakdown[];
+  market_breakdown: MarketBreakdown[];
   labor_summary: LaborSummary;
   labor_forecast: LaborForecast;
 }
@@ -73,6 +80,7 @@ export interface CompanyHealthNarrative {
   backlog: string;
   pipeline: string;
   financial: string;
+  backlogAnalysis: string;
   pmWorkload: string;
   labor: string;
 }

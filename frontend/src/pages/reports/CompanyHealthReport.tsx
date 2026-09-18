@@ -6,19 +6,21 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
-  ArcElement,
+  LineElement,
+  PointElement,
+  Filler,
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import { companyHealthApi, CompanyHealthNarrative } from '../../services/companyHealth';
 import { rolling12ReportApi } from '../../services/rolling12Report';
 import { pmWorkloadReportApi } from '../../services/pmWorkloadReport';
-import { cashFlowReportApi } from '../../services/cashFlowReport';
+import { backlogAnalysisApi, BacklogAnalysisData } from '../../services/backlogAnalysis';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Tooltip, Legend);
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,7 @@ const CompanyHealthReport: React.FC = () => {
   const [narrative, setNarrative] = useState<CompanyHealthNarrative | null>(null);
   const [narrativeError, setNarrativeError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const { data: chRes, isLoading: chLoading, error: chError } = useQuery({
     queryKey: ['company-health'],
@@ -142,28 +145,42 @@ const CompanyHealthReport: React.FC = () => {
     queryFn: () => pmWorkloadReportApi.getReport().then(r => r.data),
   });
 
-  const { data: cashFlow } = useQuery({
-    queryKey: ['cash-flow-company-health'],
-    queryFn: () => cashFlowReportApi.getData(),
+  const { data: backlogAnalysis } = useQuery<BacklogAnalysisData>({
+    queryKey: ['backlog-analysis-company-health'],
+    queryFn: () => backlogAnalysisApi.getData(),
   });
 
   const narrativeMutation = useMutation({
     mutationFn: () => {
       const cashFlowSummary = {
-        totalCashFlow: cashFlow?.reduce((s, p) => s + (p.cash_flow || 0), 0) ?? 0,
-        totalReceivables: cashFlow?.reduce((s, p) => s + (p.open_receivables || 0), 0) ?? 0,
-        positiveCfCount: cashFlow?.filter(p => (p.cash_flow || 0) > 0).length ?? 0,
-        totalProjects: cashFlow?.length ?? 0,
+        totalCashFlow: chRes?.kpis.total_cash_flow ?? 0,
+        totalReceivables: chRes?.kpis.total_open_receivables ?? 0,
+        positiveCfCount: chRes?.kpis.positive_cf_count ?? 0,
+        totalProjects: chRes?.kpis.active_linked_count ?? 0,
       };
       return companyHealthApi.generateNarrative({
         kpis: chRes?.kpis,
         backlog_by_market: chRes?.backlog_by_market,
+        market_breakdown: chRes?.market_breakdown,
         opps_by_stage: chRes?.opps_by_stage,
         dept_breakdown: chRes?.dept_breakdown,
         labor_forecast: chRes?.labor_forecast,
         rolling12: r12 ? { secured: r12.secured, awarded: r12.awarded, pursuits: r12.pursuits } : null,
         pmWorkload: pmWl ? { attention: pmWl.attention, pms: pmWl.pms } : null,
         cashFlowSummary,
+        backlogAnalysis: backlogAnalysis ? {
+          currentFYRevenue: backlogAnalysis.currentFYRevenue,
+          futureFYRevenue: backlogAnalysis.futureFYRevenue,
+          totalBacklogRevenue: backlogAnalysis.totalBacklogRevenue,
+          totalBacklogGM: backlogAnalysis.totalBacklogGM,
+          sgaMonthsCovered: backlogAnalysis.sgaMonthsCovered,
+          monthlySgAndA: backlogAnalysis.monthlySgAndA,
+          backlogSoldNotContracted: backlogAnalysis.backlogSoldNotContracted,
+          highPotentialBacklog: backlogAnalysis.highPotentialBacklog,
+          awardedNotInVistaCount: backlogAnalysis.awardedNotInVistaOpps.length,
+          highPotentialCount: backlogAnalysis.highPotentialOpps.length,
+          currentFY: backlogAnalysis.currentFY,
+        } : null,
       }).then(r => r.data);
     },
     onSuccess: (data) => { setNarrative(data.narrative); setNarrativeError(null); },
@@ -227,14 +244,11 @@ const CompanyHealthReport: React.FC = () => {
     const rows = chRes?.labor_forecast?.by_month ?? [];
     return {
       labels: rows.map(r => r.month_label),
-      datasets: [{
-        label: 'Headcount',
-        data: rows.map(r => r.total_headcount),
-        backgroundColor: rows.map(r =>
-          r.month_offset < 6 ? '#1a2b4a' : r.month_offset < 12 ? '#3b82f6' : '#8b5cf6'
-        ),
-        borderRadius: 2,
-      }],
+      datasets: [
+        { label: 'Plumber',    data: rows.map(r => r.pl ?? 0), backgroundColor: '#f59e0b', stack: 'labor', borderRadius: 1 },
+        { label: 'Sheet Metal', data: rows.map(r => r.sm ?? 0), backgroundColor: '#8b5cf6', stack: 'labor', borderRadius: 1 },
+        { label: 'Pipefitter',  data: rows.map(r => r.pf ?? 0), backgroundColor: '#3b82f6', stack: 'labor', borderRadius: 1 },
+      ],
     };
   }, [chRes]);
 
@@ -250,19 +264,84 @@ const CompanyHealthReport: React.FC = () => {
     };
   }, [chRes]);
 
-  const projectStatusChart = useMemo(() => {
-    const rows = chRes?.project_status_dist ?? [];
-    const colors: Record<string, string> = {
-      Open: '#1a2b4a', 'Soft-Closed': '#10b981', 'Hard-Closed': '#64748b',
-      completed: '#94a3b8', cancelled: '#ef4444',
-    };
+  const gmTrendChart = useMemo(() => {
+    const historical = chRes?.gm_trend ?? [];
+    const backlogGm = chRes?.kpis?.backlog_gm_pct ?? null;
+
+    const now = new Date();
+    const futureMonths: string[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      futureMonths.push(d.toLocaleString('en-US', { month: 'short' }) + " '" + String(d.getFullYear()).slice(2));
+    }
+
+    const histLabels = historical.map(r => r.month_label);
+    const histValues = historical.map(r => parseFloat(String(r.gm_pct)));
+    const lastHist = histValues.length ? histValues[histValues.length - 1] : backlogGm;
+    const allLabels = [...histLabels, ...futureMonths];
+
+    // Solid line covers history; nulls for future slots
+    const solidData: (number | null)[] = [...histValues, ...futureMonths.map(() => null)];
+
+    // Dashed line: nulls until the last historical slot (bridge point), then projects forward
+    const dashedData: (number | null)[] = [
+      ...histLabels.slice(0, -1).map(() => null),
+      lastHist,
+      ...(backlogGm != null ? futureMonths.map(() => backlogGm) : futureMonths.map(() => null)),
+    ];
+
+    const allNums = [...histValues, ...(backlogGm != null ? [backlogGm] : [])].filter((v): v is number => v != null);
+    const min = allNums.length ? Math.max(0, Math.min(...allNums) - 3) : 0;
+    const max = allNums.length ? Math.max(...allNums) + 3 : 30;
+
     return {
-      labels: rows.map(r => r.status),
-      datasets: [{
-        data: rows.map(r => r.count),
-        backgroundColor: rows.map(r => colors[r.status] || '#64748b'),
-        borderWidth: 0,
-      }],
+      data: {
+        labels: allLabels,
+        datasets: [
+          {
+            label: 'Actual GM%',
+            data: solidData,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            tension: 0.35,
+            fill: true,
+            pointBackgroundColor: '#10b981',
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: 'Projected (Backlog GM%)',
+            data: dashedData,
+            borderColor: '#3b82f6',
+            backgroundColor: 'transparent',
+            borderDash: [5, 4],
+            tension: 0.1,
+            fill: false,
+            pointBackgroundColor: '#3b82f6',
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom' as const, labels: { font: { size: 10 }, boxWidth: 10 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx: any) => ` ${ctx.dataset.label}: ${Number(ctx.raw).toFixed(1)}%`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0 } },
+          y: {
+            min, max,
+            grid: { color: '#f1f5f9' },
+            ticks: { font: { size: 10 }, callback: (v: number | string) => `${Number(v).toFixed(1)}%` },
+          },
+        },
+      },
     };
   }, [chRes]);
 
@@ -275,14 +354,6 @@ const CompanyHealthReport: React.FC = () => {
     return { overloaded, sideways, available, healthy, total: pmWl.pms.length };
   }, [pmWl]);
 
-  const cashFlowSummary = useMemo(() => {
-    if (!cashFlow?.length) return null;
-    const total = cashFlow.reduce((s, p) => s + (p.cash_flow || 0), 0);
-    const receivables = cashFlow.reduce((s, p) => s + (p.open_receivables || 0), 0);
-    const positive = cashFlow.filter(p => (p.cash_flow || 0) > 0).length;
-    const avgGm = cashFlow.reduce((s, p) => s + (p.gross_profit_percent || 0), 0) / cashFlow.length;
-    return { total, receivables, positive, total_projects: cashFlow.length, avgGm };
-  }, [cashFlow]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -330,7 +401,18 @@ const CompanyHealthReport: React.FC = () => {
             {narrativeMutation.isPending ? 'Generating…' : narrative ? 'Regenerate Analysis' : 'Generate AI Analysis'}
           </button>
           <button
-            onClick={async () => { setPdfLoading(true); try { await companyHealthApi.downloadPdf(); } finally { setPdfLoading(false); } }}
+            onClick={async () => {
+              setPdfLoading(true);
+              setPdfError(null);
+              try {
+                await companyHealthApi.downloadPdf();
+              } catch (err: any) {
+                const msg = err?.response?.data?.error || err?.message || 'PDF generation failed';
+                setPdfError(msg);
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
             disabled={pdfLoading}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
@@ -343,6 +425,13 @@ const CompanyHealthReport: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* PDF error */}
+      {pdfError && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: '#991b1b' }}>
+          <strong>PDF generation failed:</strong> {pdfError}
+        </div>
+      )}
 
       {/* AI error */}
       {narrativeError && (
@@ -428,19 +517,14 @@ const CompanyHealthReport: React.FC = () => {
           )}
         </Section>
 
-        <Section title="Project Status Mix">
-          {projectStatusChart.labels.length > 0 ? (
-            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Doughnut
-                data={projectStatusChart}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } } },
-                  cutout: '60%',
-                }}
-              />
+        <Section title="GM% Trend" subtitle="Weighted gross margin % — last 6 months">
+          {gmTrendChart.data.labels.length > 0 ? (
+            <div style={{ height: 220 }}>
+              <Line data={gmTrendChart.data} options={gmTrendChart.options as any} />
             </div>
-          ) : null}
+          ) : (
+            <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>No snapshot data</div>
+          )}
         </Section>
       </div>
 
@@ -452,23 +536,39 @@ const CompanyHealthReport: React.FC = () => {
           action={<Link to="/reports/cash-flow" style={{ fontSize: '0.75rem', color: '#3b82f6', textDecoration: 'none' }}>Cash Flow Report →</Link>}
         >
           <NarrativeBox text={narrative?.financial} loading={narrativeMutation.isPending} />
-          {cashFlowSummary ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              {[
-                { label: 'Net Cash Flow', value: fmtM(cashFlowSummary.total), accent: cashFlowSummary.total >= 0 ? '#10b981' : '#ef4444' },
-                { label: 'Open Receivables', value: fmtM(cashFlowSummary.receivables), accent: '#f97316' },
-                { label: 'Projects w/ Positive CF', value: `${cashFlowSummary.positive} / ${cashFlowSummary.total_projects}`, accent: '#3b82f6' },
-                { label: 'Avg Gross Margin', value: fmtPct(cashFlowSummary.avgGm), accent: '#10b981' },
-              ].map(item => (
-                <div key={item.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '0.85rem 1rem', borderLeft: `3px solid ${item.accent}` }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>{item.label}</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>{item.value}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Loading cash flow data…</div>
-          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+            {[
+              { label: 'Net Cash Flow', value: fmtM(kpis.total_cash_flow), sub: undefined as string | undefined, accent: kpis.total_cash_flow >= 0 ? '#10b981' : '#ef4444' },
+              { label: 'Open Receivables', value: fmtM(kpis.total_open_receivables), sub: undefined, accent: '#f97316' },
+              { label: 'Avg Gross Margin', value: fmtPct(kpis.avg_gm_pct), sub: undefined, accent: '#10b981' },
+              { label: 'GM in Backlog', value: fmtPct(kpis.backlog_gm_pct), sub: undefined, accent: '#8b5cf6' },
+              { label: 'Projects w/ Positive CF', value: `${kpis.positive_cf_count} / ${kpis.active_linked_count}`, sub: undefined, accent: '#3b82f6' },
+              {
+                label: 'CF+ Jobs >15% Complete',
+                value: kpis.over15_count > 0
+                  ? `${kpis.cf_positive_over15_count} / ${kpis.over15_count} (${Math.round(kpis.cf_positive_over15_count / kpis.over15_count * 100)}%)`
+                  : '—',
+                sub: undefined,
+                accent: '#f59e0b',
+              },
+              {
+                label: 'Avg % Comp at CF+',
+                value: kpis.projects_that_turned_positive > 0
+                  ? `${kpis.avg_pct_at_first_positive.toFixed(0)}%`
+                  : '—',
+                sub: kpis.projects_that_turned_positive > 0
+                  ? `${kpis.projects_that_turned_positive} jobs historically`
+                  : undefined,
+                accent: '#1a2b4a',
+              },
+            ].map(item => (
+              <div key={item.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '0.85rem 1rem', borderLeft: `3px solid ${item.accent}` }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>{item.label}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{item.value}</div>
+                {item.sub && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.15rem' }}>{item.sub}</div>}
+              </div>
+            ))}
+          </div>
         </Section>
 
         <Section
@@ -515,6 +615,68 @@ const CompanyHealthReport: React.FC = () => {
         </Section>
       </div>
 
+      {/* Backlog Analysis */}
+      {backlogAnalysis && (
+        <div style={{ marginBottom: '1rem' }}>
+          <Section
+            title="Backlog Analysis"
+            subtitle={`FY${backlogAnalysis.currentFY} revenue & GM forecast from contracted backlog`}
+            action={<Link to="/reports/backlog-analysis" style={{ fontSize: '0.75rem', color: '#3b82f6', textDecoration: 'none' }}>Full Report →</Link>}
+          >
+            <NarrativeBox text={narrative?.backlogAnalysis} loading={narrativeMutation.isPending} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
+              {[
+                { label: `Current FY Revenue`, value: fmtM(backlogAnalysis.currentFYRevenue), accent: '#1a2b4a' },
+                { label: 'Future FY Revenue', value: fmtM(backlogAnalysis.futureFYRevenue), accent: '#3b82f6' },
+                { label: 'Total Backlog GM$', value: fmtM(backlogAnalysis.totalBacklogGM), accent: '#10b981' },
+                {
+                  label: 'Backlog GM%',
+                  value: backlogAnalysis.totalBacklogRevenue > 0
+                    ? `${(backlogAnalysis.totalBacklogGM / backlogAnalysis.totalBacklogRevenue * 100).toFixed(1)}%`
+                    : '—',
+                  accent: '#8b5cf6',
+                },
+              ].map(item => (
+                <div key={item.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '0.85rem 1rem', borderLeft: `3px solid ${item.accent}` }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>{item.label}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+              {[
+                {
+                  label: 'SGA Coverage',
+                  value: backlogAnalysis.sgaMonthsCovered != null
+                    ? `${backlogAnalysis.sgaMonthsCovered.toFixed(1)} months`
+                    : '—',
+                  sub: backlogAnalysis.monthlySgAndA > 0 ? `${fmtM(backlogAnalysis.monthlySgAndA)}/mo` : undefined,
+                  accent: backlogAnalysis.sgaMonthsCovered != null && backlogAnalysis.sgaMonthsCovered >= 12 ? '#10b981' : '#f97316',
+                },
+                {
+                  label: 'Sold Not Contracted',
+                  value: fmtM(backlogAnalysis.backlogSoldNotContracted),
+                  sub: `${backlogAnalysis.awardedNotInVistaOpps.length} opportunities`,
+                  accent: '#f97316',
+                },
+                {
+                  label: 'High Potential',
+                  value: fmtM(backlogAnalysis.highPotentialBacklog),
+                  sub: `${backlogAnalysis.highPotentialOpps.length} opportunities`,
+                  accent: '#3b82f6',
+                },
+              ].map(item => (
+                <div key={item.label} style={{ background: '#f8fafc', borderRadius: 8, padding: '0.85rem 1rem', borderLeft: `3px solid ${item.accent}` }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>{item.label}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{item.value}</div>
+                  {item.sub && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.15rem' }}>{item.sub}</div>}
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+      )}
+
       {/* Labor Forecast */}
       <Section
         title="Labor Forecast"
@@ -552,10 +714,12 @@ const CompanyHealthReport: React.FC = () => {
             <div style={{ height: 200 }}>
               <Bar data={laborMonthChart} options={{
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: {
+                  legend: { display: true, position: 'bottom' as const, labels: { font: { size: 10 }, boxWidth: 10 } },
+                },
                 scales: {
-                  x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45 } },
-                  y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, stepSize: 1 } },
+                  x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45 } },
+                  y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, stepSize: 1 } },
                 },
               }} />
             </div>
@@ -576,19 +740,24 @@ const CompanyHealthReport: React.FC = () => {
         </div>
       </Section>
 
-      {/* Department Breakdown */}
-      <div style={{ marginTop: '1rem' }}>
+      {/* Department Breakdown + Market Breakdown */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
         <Section
-          title="Department / Market Breakdown"
-          subtitle="Active projects by group — backlog, gross margin, and profitability"
+          title="Department Breakdown"
+          subtitle="Active projects by department — backlog, gross margin, and profitability"
         >
           {chRes.dept_breakdown.length > 0 ? (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                    {['Group', 'Projects', 'Backlog', 'Gross Profit', 'GM%'].map(h => (
-                      <th key={h} style={{ textAlign: h === 'Group' ? 'left' : 'right', padding: '0.5rem 0.75rem', fontWeight: 600, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                    {['Dept #', 'Department Name', 'Projects', 'Backlog', 'Gross Profit', 'GM%'].map(h => (
+                      <th key={h} style={{
+                        textAlign: h === 'Dept #' || h === 'Department Name' ? 'left' : 'right',
+                        padding: '0.5rem 0.6rem',
+                        fontWeight: 600, color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -597,12 +766,13 @@ const CompanyHealthReport: React.FC = () => {
                     const gm = parseFloat(d.gm_pct as unknown as string);
                     const gmColor = isNaN(gm) ? '#94a3b8' : gm >= 20 ? '#10b981' : gm >= 10 ? '#f59e0b' : '#ef4444';
                     return (
-                      <tr key={d.group_name} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                        <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600, color: '#1e293b' }}>{d.group_name}</td>
-                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: '#64748b' }}>{d.project_count}</td>
-                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', fontWeight: 500 }}>{fmtM(d.backlog)}</td>
-                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right' }}>{fmtM(d.gross_profit)}</td>
-                        <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', fontWeight: 700, color: gmColor }}>{fmtPct(d.gm_pct)}</td>
+                      <tr key={`${d.department_number}-${d.group_name}`} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '0.5rem 0.6rem', color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>{d.department_number || '—'}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600, color: '#1e293b' }}>{d.group_name}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#64748b' }}>{d.project_count}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 500 }}>{fmtM(d.backlog)}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{fmtM(d.gross_profit)}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 700, color: gmColor }}>{fmtPct(d.gm_pct)}</td>
                       </tr>
                     );
                   })}
@@ -611,6 +781,46 @@ const CompanyHealthReport: React.FC = () => {
             </div>
           ) : (
             <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No department data available</div>
+          )}
+        </Section>
+
+        <Section
+          title="Market Breakdown"
+          subtitle="Active projects by market segment — backlog, gross margin, and profitability"
+        >
+          {(chRes.market_breakdown ?? []).length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                    {['Market', 'Projects', 'Backlog', 'Gross Profit', 'GM%'].map(h => (
+                      <th key={h} style={{
+                        textAlign: h === 'Market' ? 'left' : 'right',
+                        padding: '0.5rem 0.6rem',
+                        fontWeight: 600, color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(chRes.market_breakdown ?? []).map((m, i) => {
+                    const gm = parseFloat(m.gm_pct as unknown as string);
+                    const gmColor = isNaN(gm) ? '#94a3b8' : gm >= 20 ? '#10b981' : gm >= 10 ? '#f59e0b' : '#ef4444';
+                    return (
+                      <tr key={m.market} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '0.5rem 0.6rem', fontWeight: 600, color: '#1e293b' }}>{m.market}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', color: '#64748b' }}>{m.project_count}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 500 }}>{fmtM(m.backlog)}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right' }}>{fmtM(m.gross_profit)}</td>
+                        <td style={{ padding: '0.5rem 0.6rem', textAlign: 'right', fontWeight: 700, color: gmColor }}>{fmtPct(m.gm_pct)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No market data available</div>
           )}
         </Section>
       </div>
