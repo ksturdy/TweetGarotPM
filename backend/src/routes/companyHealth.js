@@ -512,7 +512,8 @@ Labor Forecast (peak headcount by horizon):
 - "pmWorkload": 1-2 sentences on PM capacity and any overload signals
 - "labor": 1-2 sentences on labor demand and workforce forecast by trade
 
-Be specific with numbers from the data. Speak as a trusted advisor, not a data reader. Flag risks clearly.`,
+CRITICAL: Every dollar amount, percentage, and count you write MUST come directly from the data provided. Do NOT calculate, estimate, combine, or extrapolate numbers. If a number is not explicitly in the data, do not include it. Use the exact figures as given — do not round differently or substitute related figures.
+Speak as a trusted advisor. Flag risks clearly.`,
       messages: [{ role: 'user', content: dataText }],
     });
 
