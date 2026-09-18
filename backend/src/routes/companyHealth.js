@@ -377,12 +377,15 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/reports/company-health/pdf-download
-// Body: { narrative? } — optional AI narrative to embed in the PDF
+// Body: { narrative?, rolling12? } — optional AI narrative + rolling12 chart data
 router.post('/pdf-download', async (req, res) => {
   try {
-    const narrative = req.body?.narrative ?? null;
+    const narrative     = req.body?.narrative     ?? null;
+    const rolling12     = req.body?.rolling12     ?? null;
+    const pmWorkload    = req.body?.pmWorkload    ?? null;
+    const backlogAnalysis = req.body?.backlogAnalysis ?? null;
     const data = await buildData(req.tenantId);
-    const pdfBuffer = await generateCompanyHealthPdfBuffer(data, narrative);
+    const pdfBuffer = await generateCompanyHealthPdfBuffer(data, narrative, rolling12, pmWorkload, backlogAnalysis);
     const dateStr = data.as_of
       ? new Date(data.as_of).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
@@ -463,7 +466,8 @@ KPIs:
 
 Backlog by Market: ${topMarkets || 'N/A'}
 
-Pipeline by Stage: ${topStages || 'N/A'}
+Pipeline by Stage (total value per stage — includes work already contracted in Vista): ${topStages || 'N/A'}
+NOTE: The Awarded/Won stage totals above include opportunities already entered into Vista as jobs. They are NOT all "uncontracted." The only figure for work that is awarded-but-NOT-yet-contracted in Vista is "Sold Not Contracted" in the Backlog Analysis section below.
 
 Rolling 12-Month Revenue:
 - Secured: ${r12Secured != null ? fmt$(r12Secured) : 'N/A'}
@@ -513,6 +517,7 @@ Labor Forecast (peak headcount by horizon):
 - "labor": 1-2 sentences on labor demand and workforce forecast by trade
 
 CRITICAL: Every dollar amount, percentage, and count you write MUST come directly from the data provided. Do NOT calculate, estimate, combine, or extrapolate numbers. If a number is not explicitly in the data, do not include it. Use the exact figures as given — do not round differently or substitute related figures.
+CRITICAL: Do NOT describe the Pipeline by Stage "Awarded" or "Won" totals as "uncontracted," "not yet contracted," or "pending contract." Those totals include work already contracted in Vista. The ONLY correct figure for awarded-but-not-yet-contracted work is the "Sold Not Contracted" value in the Backlog Analysis section (e.g. $12.2M / 5 opps). Use that figure when discussing uncontracted awarded work.
 Speak as a trusted advisor. Flag risks clearly.`,
       messages: [{ role: 'user', content: dataText }],
     });

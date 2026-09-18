@@ -206,12 +206,12 @@ const CompanyHealthReport: React.FC = () => {
         {
           label: 'Awarded',
           data: cols.map(c => r12.awarded[c.key] || 0),
-          backgroundColor: '#3b82f6',
+          backgroundColor: '#10b981',
         },
         {
           label: 'Pursuits (weighted)',
           data: cols.map(c => r12.pursuits[c.key] || 0),
-          backgroundColor: '#c7d7ff',
+          backgroundColor: '#f59e0b',
         },
       ],
     };
@@ -405,7 +405,37 @@ const CompanyHealthReport: React.FC = () => {
               setPdfLoading(true);
               setPdfError(null);
               try {
-                await companyHealthApi.downloadPdf(narrative);
+                await companyHealthApi.downloadPdf(
+                  narrative,
+                  r12 ? { columns: r12.columns, secured: r12.secured, awarded: r12.awarded, pursuits: r12.pursuits } : null,
+                  pmWl ? {
+                    counts: {
+                      overloaded: pmWl.attention.overloaded.length,
+                      sideways:   pmWl.attention.sideways.length,
+                      available:  pmWl.attention.available.length,
+                      healthy:    pmWl.pms.length - pmWl.attention.overloaded.length - pmWl.attention.sideways.length - pmWl.attention.available.length,
+                      total:      pmWl.pms.length,
+                    },
+                    overloaded: pmWl.attention.overloaded.slice(0, 6).map((pm: any) => ({
+                      pmName: pm.pmName,
+                      activeProjects: pm.activeProjects,
+                      backlogDollars: pm.backlogDollars,
+                    })),
+                  } : null,
+                  backlogAnalysis ? {
+                    currentFY:                backlogAnalysis.currentFY,
+                    currentFYRevenue:         backlogAnalysis.currentFYRevenue,
+                    futureFYRevenue:          backlogAnalysis.futureFYRevenue,
+                    totalBacklogGM:           backlogAnalysis.totalBacklogGM,
+                    totalBacklogRevenue:      backlogAnalysis.totalBacklogRevenue,
+                    sgaMonthsCovered:         backlogAnalysis.sgaMonthsCovered,
+                    monthlySgAndA:            backlogAnalysis.monthlySgAndA,
+                    backlogSoldNotContracted: backlogAnalysis.backlogSoldNotContracted,
+                    awardedNotInVistaCount:   backlogAnalysis.awardedNotInVistaOpps.length,
+                    highPotentialBacklog:     backlogAnalysis.highPotentialBacklog,
+                    highPotentialCount:       backlogAnalysis.highPotentialOpps.length,
+                  } : null,
+                );
               } catch (err: any) {
                 const msg = err?.response?.data?.error || err?.message || 'PDF generation failed';
                 setPdfError(msg);

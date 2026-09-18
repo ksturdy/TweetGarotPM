@@ -211,7 +211,7 @@ async function buildRolling12Data(tenantId, { departments = [], teams = [] } = {
     }
 
     if (isWon) {
-      if (opp.awarded_status === 'Completed') continue;
+      if (opp.awarded_status !== null) continue; // already in Vista → counted under Secured
       const dist = distributeWithContour(value);
       for (const [key, val] of Object.entries(dist)) {
         awardedByMonth[key] = (awardedByMonth[key] || 0) + val;

@@ -1099,13 +1099,13 @@ const ProjectFinancials: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
               <MetricChip label="Estimating Margin %" value={fmtPct(c.original_estimated_margin_pct)} />
               <MetricChip label="Override Margin %" value={fmtPct(project?.override_original_estimated_margin_pct)} />
-              <MetricChip label="Prev Margin %" value={fmtPct(c.prev_gross_profit_percent)} />
+              <MetricChip label="Prev Margin %" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmtPct(c.prev_gross_profit_percent)} />
               <MetricChip label="Current Margin %" value={fmtPct(c.gross_profit_percent)}
                 valueColor={getGrossProfitColor(c.gross_profit_percent, c.original_estimated_margin_pct)} />
               <MetricChip label="Projected Revenue" value={fmt(c.projected_revenue)} />
               <MetricChip label="Estimating Margin" value={fmt(c.original_estimated_margin)} />
               <MetricChip label="Override Margin" value={fmt(project?.override_original_estimated_margin)} />
-              <MetricChip label="Prev Margin" value={fmt(c.prev_gross_profit_dollars)} />
+              <MetricChip label="Prev Margin" value={Number(c.prev_gross_profit_percent) >= 0.85 ? '—' : fmt(c.prev_gross_profit_dollars)} />
               <MetricChip label="Current Margin" value={fmt(c.gross_profit_dollars)}
                 valueColor={getGrossProfitColor(c.gross_profit_dollars, c.original_estimated_margin)} />
               <MetricChip label="Prev Projected Revenue" value={fmt(c.prev_projected_revenue)} />

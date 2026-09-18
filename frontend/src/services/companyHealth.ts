@@ -94,10 +94,15 @@ export const companyHealthApi = {
       payload
     ),
 
-  downloadPdf: async (narrative?: CompanyHealthNarrative | null) => {
+  downloadPdf: async (
+    narrative?: CompanyHealthNarrative | null,
+    rolling12?: { columns: any[]; secured: Record<string,number>; awarded: Record<string,number>; pursuits: Record<string,number> } | null,
+    pmWorkload?: { counts: { overloaded: number; sideways: number; available: number; healthy: number; total: number }; overloaded: { pmName: string; activeProjects: number; backlogDollars: number }[] } | null,
+    backlogAnalysis?: { currentFY: number; currentFYRevenue: number; futureFYRevenue: number; totalBacklogGM: number; totalBacklogRevenue: number; sgaMonthsCovered: number | null; monthlySgAndA: number; backlogSoldNotContracted: number; awardedNotInVistaCount: number; highPotentialBacklog: number; highPotentialCount: number } | null,
+  ) => {
     const response = await api.post(
       '/reports/company-health/pdf-download',
-      { narrative: narrative ?? null },
+      { narrative: narrative ?? null, rolling12: rolling12 ?? null, pmWorkload: pmWorkload ?? null, backlogAnalysis: backlogAnalysis ?? null },
       { responseType: 'blob' }
     );
     const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));

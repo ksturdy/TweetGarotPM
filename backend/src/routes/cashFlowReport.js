@@ -303,7 +303,8 @@ async function buildGmTrend(tenantId, options = {}) {
        FROM project_snapshots ps
        WHERE ps.tenant_id = $1
          AND ps.gross_profit_percent IS NOT NULL
-         AND ps.gross_profit_percent < 0.995
+         AND ps.gross_profit_percent < 0.85
+         AND ps.projected_cost > 0
        ORDER BY ps.project_id, ps.snapshot_date DESC
      ),
      window_points AS (
@@ -317,7 +318,8 @@ async function buildGmTrend(tenantId, options = {}) {
        JOIN latest l ON l.project_id = ps.project_id
        WHERE ps.tenant_id = $1
          AND ps.gross_profit_percent IS NOT NULL
-         AND ps.gross_profit_percent < 0.995
+         AND ps.gross_profit_percent < 0.85
+         AND ps.projected_cost > 0
          AND ps.snapshot_date >= l.latest_date - ($2::int * INTERVAL '1 day')
          AND ps.snapshot_date <= l.latest_date
      ),
@@ -333,6 +335,7 @@ async function buildGmTrend(tenantId, options = {}) {
        GROUP BY project_id
        HAVING COUNT(*) >= 2
          AND regr_slope(gross_profit_percent, day_num) IS NOT NULL
+         AND (MAX(gross_profit_percent) - MIN(gross_profit_percent)) < 0.25
      )
      SELECT
        p.id,

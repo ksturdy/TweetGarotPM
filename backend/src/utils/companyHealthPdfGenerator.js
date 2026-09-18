@@ -56,6 +56,61 @@ function buildHorizBarSvg(rows, { W = 680, barH = 18, gap = 5, padL = 150, padR 
   return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">${svgRows}</svg>`;
 }
 
+// ── Stacked bar SVG (rolling 12, labor by month, etc.) ───────────────────────
+
+function buildStackedBarSvg(columns, datasets, opts = {}) {
+  // columns: [{key, label}]
+  // datasets: [{label, color, data: {key: value}}]
+  const { W = 680, H = 155, padL = 52, padR = 16, padT = 10, padB = 38, yFmt } = opts;
+  const fmt = yFmt || fmtM;
+  const n = columns.length;
+  if (!n) return '';
+
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const slotW = chartW / n;
+  const barW = Math.max(4, slotW * 0.7);
+
+  const totals = columns.map(c => datasets.reduce((s, ds) => s + (Number(ds.data[c.key]) || 0), 0));
+  const maxVal = Math.max(...totals, 1);
+  const toH = v => Math.max(0, (Number(v) / maxVal) * chartH);
+  const cx = i => padL + (i + 0.5) * slotW;
+
+  let grid = '';
+  const yTicks = 4;
+  for (let t = 0; t <= yTicks; t++) {
+    const v = maxVal * (t / yTicks);
+    const y = padT + chartH - toH(v);
+    grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${(W - padR).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#f1f5f9" stroke-width="0.75"/>`;
+    grid += `<text x="${(padL - 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="6.5" fill="#94a3b8" text-anchor="end">${esc(fmt(v))}</text>`;
+  }
+  grid += `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${(padT + chartH).toFixed(1)}" stroke="#e2e8f0" stroke-width="0.75"/>`;
+
+  let bars = '';
+  for (let i = 0; i < n; i++) {
+    let baseY = padT + chartH;
+    for (const ds of datasets) {
+      const val = Number(ds.data[columns[i].key]) || 0;
+      if (val <= 0) continue;
+      const bh = toH(val);
+      bars += `<rect x="${(cx(i) - barW / 2).toFixed(1)}" y="${(baseY - bh).toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${ds.color}"/>`;
+      baseY -= bh;
+    }
+    bars += `<text x="${cx(i).toFixed(1)}" y="${(padT + chartH + 11).toFixed(1)}" font-size="6.5" fill="#475569" text-anchor="middle">${esc(columns[i].label)}</text>`;
+  }
+
+  const legendY = H - 8;
+  let legend = '';
+  let lx = padL;
+  for (const ds of datasets) {
+    legend += `<rect x="${lx}" y="${(legendY - 5).toFixed(1)}" width="8" height="5" fill="${ds.color}" rx="1"/>`;
+    legend += `<text x="${(lx + 11).toFixed(1)}" y="${legendY.toFixed(1)}" font-size="7" fill="#475569">${esc(ds.label)}</text>`;
+    lx += 110;
+  }
+
+  return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">${grid}${bars}${legend}</svg>`;
+}
+
 // ── GM% Trend line SVG ────────────────────────────────────────────────────────
 
 function buildGmTrendSvg(gmTrend, backlogGmPct, { W = 680, H = 130, padL = 42, padR = 16, padT = 12, padB = 30 } = {}) {
@@ -220,7 +275,7 @@ const footer = `
 
 // ── Main HTML builder ─────────────────────────────────────────────────────────
 
-function generateCompanyHealthHtml(data, narrative) {
+function generateCompanyHealthHtml(data, narrative, rolling12 = null, pmWorkload = null, backlogAnalysis = null) {
   const { kpis, backlog_by_market, opps_by_stage, dept_breakdown, market_breakdown, gm_trend, labor_summary, labor_forecast, as_of } = data;
   const ai = narrative || {};
 
@@ -263,6 +318,32 @@ function generateCompanyHealthHtml(data, narrative) {
 
   // ── SVG: GM% Trend ─────────────────────────────────────────────────────────
   const gmTrendSvg = buildGmTrendSvg(gm_trend || [], kpis.backlog_gm_pct, { W: 300, H: 130 });
+
+  // ── SVG: Rolling 12 Revenue ────────────────────────────────────────────────
+  let rolling12Svg = '';
+  if (rolling12 && rolling12.columns && rolling12.columns.length > 0) {
+    const r12Datasets = [
+      { label: 'Secured', color: '#1a2b4a', data: rolling12.secured || {} },
+      { label: 'Awarded', color: '#10b981', data: rolling12.awarded || {} },
+      { label: 'Pursuits (weighted)', color: '#f59e0b', data: rolling12.pursuits || {} },
+    ];
+    rolling12Svg = buildStackedBarSvg(rolling12.columns, r12Datasets, { W: 680, H: 155 });
+  }
+
+  // ── SVG: Labor by month ────────────────────────────────────────────────────
+  const byMonth = labor_forecast?.by_month || [];
+  let laborMonthSvg = '';
+  if (byMonth.length > 0) {
+    const lmColumns = byMonth.map(r => ({ key: r.month_key, label: r.month_label }));
+    const lmDatasets = [
+      { label: 'Pipefitter', color: '#3b82f6', data: Object.fromEntries(byMonth.map(r => [r.month_key, r.pf || 0])) },
+      { label: 'Sheet Metal', color: '#8b5cf6', data: Object.fromEntries(byMonth.map(r => [r.month_key, r.sm || 0])) },
+      { label: 'Plumber', color: '#f59e0b', data: Object.fromEntries(byMonth.map(r => [r.month_key, r.pl || 0])) },
+    ];
+    laborMonthSvg = buildStackedBarSvg(lmColumns, lmDatasets, {
+      W: 680, H: 145, yFmt: v => String(Math.round(v)),
+    });
+  }
 
   // ── Financial health tiles ──────────────────────────────────────────────────
   const cfOver15Val = kpis.over15_count > 0
@@ -396,6 +477,14 @@ ${pageHeaderStrip(dateLabel)}
   </div>
 </div>
 
+<!-- Rolling 12 Revenue Forecast -->
+${rolling12Svg ? `
+<div class="chart-wrap" style="margin-bottom:12px">
+  <h2 class="section-title">Revenue Forecast — Rolling 12 Months</h2>
+  <div class="section-sub">Secured revenue + awarded/pursuit opportunities by month</div>
+  ${rolling12Svg}
+</div>` : ''}
+
 <!-- Pipeline + GM% Trend side by side -->
 <div style="display:flex;gap:12px;margin-bottom:0">
   ${stageSvg ? `
@@ -414,7 +503,7 @@ ${pageHeaderStrip(dateLabel)}
 </div>
 ${footer}
 
-<!-- ══ PAGE 3: Labor · Department · Market ══════════════════════════════════ -->
+<!-- ══ PAGE 3: Labor ══════════════════════════════════════════════════════════ -->
 <div class="page-break"></div>
 ${pageHeaderStrip(dateLabel)}
 
@@ -433,6 +522,11 @@ ${pageHeaderStrip(dateLabel)}
     ${laborStatTile('Peak 6–12 Mo', `${horizons.h12} workers`)}
     ${laborStatTile('Peak 12–18 Mo', `${horizons.h18} workers`)}
   </div>
+  ${laborMonthSvg ? `
+  <div style="margin-bottom:8px">
+    <div style="font-size:8.5px;font-weight:600;color:#64748b;margin-bottom:4px">Headcount by Month — 18-Month Outlook</div>
+    ${laborMonthSvg}
+  </div>` : ''}
   ${byTrade.length > 0 ? `
   <table style="width:100%;border-collapse:collapse;font-size:8px;max-width:420px">
     <thead>${tableHeader([
@@ -449,6 +543,110 @@ ${pageHeaderStrip(dateLabel)}
     </tbody>
   </table>` : ''}
 </div>
+${footer}
+
+<!-- ══ PAGE 4: PM Workload · Backlog Analysis · Department · Market ═════════ -->
+<div class="page-break"></div>
+${pageHeaderStrip(dateLabel)}
+
+<!-- PM Workload -->
+${(() => {
+  if (!pmWorkload) return '';
+  const c = pmWorkload.counts || {};
+  const buckets = [
+    { label: 'Overloaded', count: c.overloaded || 0, color: '#ef4444', bg: '#fef2f2' },
+    { label: 'At Risk',    count: c.sideways   || 0, color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Healthy',   count: c.healthy    || 0, color: '#10b981', bg: '#ecfdf5' },
+    { label: 'Available', count: c.available  || 0, color: '#3b82f6', bg: '#eff6ff' },
+  ];
+  const tileHtml = buckets.map(b => `
+    <div style="flex:1;background:${b.bg};border-radius:8px;padding:8px 10px;text-align:center;border:1px solid ${b.color}22">
+      <div style="font-size:18px;font-weight:700;color:${b.color}">${b.count}</div>
+      <div style="font-size:7px;color:#64748b;font-weight:600">${esc(b.label)}</div>
+    </div>`).join('');
+  const overloadedList = (pmWorkload.overloaded || []).slice(0, 6);
+  const listHtml = overloadedList.length ? `
+    <div style="margin-top:8px">
+      <div style="font-size:8px;font-weight:700;color:#ef4444;margin-bottom:4px">Overloaded PMs</div>
+      <table style="width:100%;border-collapse:collapse;font-size:8px;max-width:500px">
+        <thead><tr style="background:#fef2f2">
+          <th style="padding:4px 6px;text-align:left;font-weight:600;color:#64748b;font-size:7.5px">PM</th>
+          <th style="padding:4px 6px;text-align:right;font-weight:600;color:#64748b;font-size:7.5px">Active Jobs</th>
+          <th style="padding:4px 6px;text-align:right;font-weight:600;color:#64748b;font-size:7.5px">Backlog</th>
+        </tr></thead>
+        <tbody>${overloadedList.map((pm, i) => `
+          <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+            <td style="padding:4px 6px;font-weight:600;color:#1e293b;font-size:8px;border-bottom:1px solid #f1f5f9">${esc(pm.pmName)}</td>
+            <td style="padding:4px 6px;text-align:right;color:#475569;font-size:8px;border-bottom:1px solid #f1f5f9">${pm.activeProjects}</td>
+            <td style="padding:4px 6px;text-align:right;font-weight:500;font-size:8px;border-bottom:1px solid #f1f5f9">${fmtM(pm.backlogDollars)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : '<div style="font-size:8px;color:#10b981;font-weight:500;margin-top:6px">All PMs within capacity</div>';
+  return `
+  <div style="margin-bottom:12px">
+    <h2 class="section-title">PM Workload</h2>
+    <div class="section-sub">Project manager capacity and workload signals</div>
+    ${aiBlurb(ai.pmWorkload)}
+    <div style="display:flex;gap:8px;margin-bottom:4px">${tileHtml}</div>
+    ${listHtml}
+  </div>`;
+})()}
+
+<!-- Backlog Analysis -->
+${(() => {
+  if (!backlogAnalysis) return '';
+  const ba = backlogAnalysis;
+  const backlogGmPct = ba.totalBacklogRevenue > 0
+    ? ((ba.totalBacklogGM / ba.totalBacklogRevenue) * 100).toFixed(1) + '%'
+    : '—';
+  const sgaColor = ba.sgaMonthsCovered != null && ba.sgaMonthsCovered >= 12 ? '#059669' : '#d97706';
+  const tiles4 = [
+    { label: `Current FY${ba.currentFY ? ' FY' + String(ba.currentFY).slice(2) : ''} Revenue`, value: fmtM(ba.currentFYRevenue), accent: '#1a2b4a' },
+    { label: 'Future FY Revenue',    value: fmtM(ba.futureFYRevenue),    accent: '#3b82f6' },
+    { label: 'Total Backlog GM$',    value: fmtM(ba.totalBacklogGM),     accent: '#10b981' },
+    { label: 'Backlog GM%',          value: backlogGmPct,                accent: '#8b5cf6' },
+  ];
+  const tiles3 = [
+    {
+      label: 'SGA Coverage',
+      value: ba.sgaMonthsCovered != null ? ba.sgaMonthsCovered.toFixed(1) + ' months' : '—',
+      sub: ba.monthlySgAndA > 0 ? fmtM(ba.monthlySgAndA) + '/mo' : undefined,
+      accent: sgaColor,
+    },
+    {
+      label: 'Sold Not Contracted',
+      value: fmtM(ba.backlogSoldNotContracted),
+      sub: `${ba.awardedNotInVistaCount} opportunities`,
+      accent: '#f97316',
+    },
+    {
+      label: 'High Potential',
+      value: fmtM(ba.highPotentialBacklog),
+      sub: `${ba.highPotentialCount} opportunities`,
+      accent: '#3b82f6',
+    },
+  ];
+  const tile4Html = tiles4.map(t => `
+    <div style="background:#f8fafc;border-radius:7px;padding:8px 10px;border-left:3px solid ${t.accent}">
+      <div style="font-size:6.5px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">${esc(t.label)}</div>
+      <div style="font-size:12px;font-weight:700;color:#1e293b">${esc(t.value)}</div>
+    </div>`).join('');
+  const tile3Html = tiles3.map(t => `
+    <div style="background:#f8fafc;border-radius:7px;padding:8px 10px;border-left:3px solid ${t.accent}">
+      <div style="font-size:6.5px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px">${esc(t.label)}</div>
+      <div style="font-size:12px;font-weight:700;color:#1e293b">${esc(t.value)}</div>
+      ${t.sub ? `<div style="font-size:7px;color:#94a3b8;margin-top:2px">${esc(t.sub)}</div>` : ''}
+    </div>`).join('');
+  return `
+  <div style="margin-bottom:12px">
+    <h2 class="section-title">Backlog Analysis</h2>
+    <div class="section-sub">FY revenue &amp; GM forecast from contracted backlog</div>
+    ${aiBlurb(ai.backlogAnalysis)}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:7px">${tile4Html}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">${tile3Html}</div>
+  </div>`;
+})()}
 
 <!-- Department + Market side by side -->
 <div style="display:flex;gap:12px">
@@ -490,8 +688,8 @@ ${footer}
 
 // ── PDF buffer export ─────────────────────────────────────────────────────────
 
-async function generateCompanyHealthPdfBuffer(data, narrative = null) {
-  const html = generateCompanyHealthHtml(data, narrative);
+async function generateCompanyHealthPdfBuffer(data, narrative = null, rolling12 = null, pmWorkload = null, backlogAnalysis = null) {
+  const html = generateCompanyHealthHtml(data, narrative, rolling12, pmWorkload, backlogAnalysis);
   let browser = null;
   try {
     browser = await launchBrowser();
