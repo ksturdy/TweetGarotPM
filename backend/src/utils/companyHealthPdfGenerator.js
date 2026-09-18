@@ -200,6 +200,12 @@ function buildNarrative(data) {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
+const aiBlurb = (text) => text
+  ? `<div style="background:#f0f4ff;border:1px solid #c7d7ff;border-radius:7px;padding:8px 10px;margin-bottom:10px;font-size:8px;color:#1e293b;line-height:1.6">
+       <span style="font-weight:700;color:#1a2b4a;margin-right:5px">AI Analysis:</span>${esc(text)}
+     </div>`
+  : '';
+
 const pageHeaderStrip = (dateLabel) => `
   <div style="background:#f1f5f9;border-radius:6px;padding:7px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid #1a2b4a">
     <span style="font-size:10px;font-weight:700;color:#1a2b4a">Company Health Report</span>
@@ -214,14 +220,15 @@ const footer = `
 
 // ── Main HTML builder ─────────────────────────────────────────────────────────
 
-function generateCompanyHealthHtml(data) {
+function generateCompanyHealthHtml(data, narrative) {
   const { kpis, backlog_by_market, opps_by_stage, dept_breakdown, market_breakdown, gm_trend, labor_summary, labor_forecast, as_of } = data;
+  const ai = narrative || {};
 
   const dateLabel = as_of
     ? new Date(as_of).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-  const narrative = buildNarrative(data);
+  const autoNarrative = buildNarrative(data);
 
   // ── KPI tile helper ─────────────────────────────────────────────────────────
   const kpiTile = (label, value, sub, accent) => `
@@ -344,17 +351,27 @@ function generateCompanyHealthHtml(data) {
   ${kpiTile('GM in Backlog', fmtPct(kpis.backlog_gm_pct), `${fmtInt(kpis.active_projects)} active projects`, '#8b5cf6')}
 </div>
 
-<!-- Narrative -->
-<div style="background:#fafbff;border:1px solid #dde4f0;border-left:4px solid #1a2b4a;border-radius:0 8px 8px 0;padding:11px 15px;margin-bottom:14px">
+<!-- Executive Summary -->
+${ai.overview ? `
+<div style="background:linear-gradient(135deg,#1a2b4a 0%,#2d4a7a 100%);border-radius:8px;padding:12px 16px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+    <span style="font-size:9px;font-weight:700;color:#f97316">★</span>
+    <span style="font-size:8.5px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.06em">AI Executive Summary</span>
+    <span style="font-size:7px;color:#94a3b8;margin-left:auto">AI-generated analysis</span>
+  </div>
+  <div style="font-size:8.5px;color:#e2e8f0;line-height:1.65;white-space:pre-line">${esc(ai.overview)}</div>
+</div>` : `
+<div style="background:#fafbff;border:1px solid #dde4f0;border-left:4px solid #1a2b4a;border-radius:0 8px 8px 0;padding:11px 15px;margin-bottom:12px">
   <div style="font-size:8px;font-weight:700;color:#1a2b4a;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Executive Summary</div>
-  ${narrative.map(s => `<p style="font-size:9px;color:#334155;line-height:1.55;margin-bottom:4px">${s}</p>`).join('')}
-</div>
+  ${autoNarrative.map(s => `<p style="font-size:8.5px;color:#334155;line-height:1.55;margin-bottom:4px">${s}</p>`).join('')}
+</div>`}
 
 <!-- Backlog by Market -->
 ${backlogSvg ? `
 <div class="chart-wrap" style="margin-bottom:0">
   <h2 class="section-title">Backlog by Market</h2>
   <div class="section-sub">Active project backlog remaining by market segment</div>
+  ${aiBlurb(ai.backlog)}
   ${backlogSvg}
 </div>` : ''}
 ${footer}
@@ -367,6 +384,7 @@ ${pageHeaderStrip(dateLabel)}
 <div style="margin-bottom:12px">
   <h2 class="section-title">Financial Health</h2>
   <div class="section-sub">Cash flow and margin metrics — Open &amp; Soft-Closed projects only</div>
+  ${aiBlurb(ai.financial)}
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px">
     ${finTile('Net Cash Flow', fmtM(kpis.total_cash_flow), undefined, cfAccent)}
     ${finTile('Open Receivables', fmtM(kpis.total_open_receivables), undefined, '#f97316')}
@@ -384,6 +402,7 @@ ${pageHeaderStrip(dateLabel)}
   <div class="chart-wrap" style="flex:1.2">
     <h2 class="section-title">Pipeline by Stage</h2>
     <div class="section-sub">Opportunity value per pipeline stage</div>
+    ${aiBlurb(ai.pipeline)}
     ${stageSvg}
   </div>` : ''}
   ${gmTrendSvg ? `
@@ -403,6 +422,7 @@ ${pageHeaderStrip(dateLabel)}
 <div style="margin-bottom:12px">
   <h2 class="section-title">Labor Forecast</h2>
   <div class="section-sub">Current headcount status and 18-month Vista-based outlook by trade</div>
+  ${aiBlurb(ai.labor)}
   <div style="display:flex;gap:7px;margin-bottom:8px">
     ${laborStatTile('Total Employees', labor_summary?.total_employees || '—')}
     ${laborStatTile('Currently Assigned', labor_summary?.currently_assigned || '—')}
@@ -470,8 +490,8 @@ ${footer}
 
 // ── PDF buffer export ─────────────────────────────────────────────────────────
 
-async function generateCompanyHealthPdfBuffer(data) {
-  const html = generateCompanyHealthHtml(data);
+async function generateCompanyHealthPdfBuffer(data, narrative = null) {
+  const html = generateCompanyHealthHtml(data, narrative);
   let browser = null;
   try {
     browser = await launchBrowser();

@@ -376,11 +376,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/reports/company-health/pdf-download
-router.get('/pdf-download', async (req, res) => {
+// POST /api/reports/company-health/pdf-download
+// Body: { narrative? } — optional AI narrative to embed in the PDF
+router.post('/pdf-download', async (req, res) => {
   try {
+    const narrative = req.body?.narrative ?? null;
     const data = await buildData(req.tenantId);
-    const pdfBuffer = await generateCompanyHealthPdfBuffer(data);
+    const pdfBuffer = await generateCompanyHealthPdfBuffer(data, narrative);
     const dateStr = data.as_of
       ? new Date(data.as_of).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];

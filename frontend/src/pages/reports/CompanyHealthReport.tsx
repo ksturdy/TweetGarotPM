@@ -405,7 +405,7 @@ const CompanyHealthReport: React.FC = () => {
               setPdfLoading(true);
               setPdfError(null);
               try {
-                await companyHealthApi.downloadPdf();
+                await companyHealthApi.downloadPdf(narrative);
               } catch (err: any) {
                 const msg = err?.response?.data?.error || err?.message || 'PDF generation failed';
                 setPdfError(msg);

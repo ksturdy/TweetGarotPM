@@ -94,8 +94,12 @@ export const companyHealthApi = {
       payload
     ),
 
-  downloadPdf: async () => {
-    const response = await api.get('/reports/company-health/pdf-download', { responseType: 'blob' });
+  downloadPdf: async (narrative?: CompanyHealthNarrative | null) => {
+    const response = await api.post(
+      '/reports/company-health/pdf-download',
+      { narrative: narrative ?? null },
+      { responseType: 'blob' }
+    );
     const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
     const a = document.createElement('a');
     a.href = url;
