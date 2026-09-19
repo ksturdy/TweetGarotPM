@@ -657,6 +657,10 @@ const CustomerDetail: React.FC = () => {
           <div className="cd-kpi-value">{formatCurrency(metrics?.ytd_revenue)}</div>
           <div className="cd-kpi-label">YTD Sales</div>
         </div>
+        <div className="cd-kpi-card teal" title={`WO: ${formatCurrency(metrics?.wo_contract_total)} | Proj: ${formatCurrency(metrics?.proj_contract_total)}`}>
+          <div className="cd-kpi-value">{formatCurrency((parseFloat(metrics?.wo_contract_total || 0) + parseFloat(metrics?.proj_contract_total || 0)))}</div>
+          <div className="cd-kpi-label">Total Contracts</div>
+        </div>
         <div className="cd-kpi-card blue" title={`WO: ${formatCurrency(metrics?.wo_avg_annual_revenue)} | Proj: ${formatCurrency(metrics?.proj_avg_annual_revenue)}`}>
           <div className="cd-kpi-value">{formatCurrency(metrics?.avg_annual_revenue)}</div>
           <div className="cd-kpi-label">Avg Annual ({metrics?.year_span || 1} yr{(metrics?.year_span || 1) > 1 ? 's' : ''})</div>

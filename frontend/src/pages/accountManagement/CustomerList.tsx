@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Building2, CheckCircle, MapPin, Star } from 'lucide-react';
 import { customersApi, Customer } from '../../services/customers';
 import { favoritesService } from '../../services/favorites';
 import CustomerFormModal from '../../components/modals/CustomerFormModal';
@@ -315,21 +316,21 @@ const CustomerList: React.FC = () => {
       {/* Stats Cards - Dynamic based on filtered customers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)', width: '36px', height: '36px', fontSize: '1rem' }}>🏢</div>
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #f43f5e)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Building2 size={18} color="white" strokeWidth={2} /></div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.length}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Companies</div>
           </div>
         </div>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', width: '36px', height: '36px', fontSize: '1rem' }}>✅</div>
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CheckCircle size={18} color="white" strokeWidth={2} /></div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{filteredCustomers.filter(c => c.active_customer).length}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>Active</div>
           </div>
         </div>
         <div className="sales-kpi-card" style={{ padding: '0.75rem' }}>
-          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', width: '36px', height: '36px', fontSize: '1rem' }}>📍</div>
+          <div className="sales-kpi-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MapPin size={18} color="white" strokeWidth={2} /></div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>{new Set(filteredCustomers.map(c => c.state).filter(Boolean)).size}</div>
             <div className="sales-kpi-label" style={{ fontSize: '0.7rem' }}>States</div>
@@ -342,7 +343,7 @@ const CustomerList: React.FC = () => {
             return avg >= 80 ? 'linear-gradient(135deg, #10b981, #06b6d4)' :
                    avg >= 60 ? 'linear-gradient(135deg, #f59e0b, #f97316)' :
                    'linear-gradient(135deg, #ef4444, #f43f5e)';
-          })(), width: '36px', height: '36px', fontSize: '1rem' }}>⭐</div>
+          })(), width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Star size={18} color="white" strokeWidth={2} /></div>
           <div className="sales-kpi-content">
             <div className="sales-kpi-value" style={{ fontSize: '1.25rem' }}>
               {(() => {
