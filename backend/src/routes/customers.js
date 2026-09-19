@@ -4,6 +4,15 @@ const Customer = require('../models/Customer');
 const opportunities = require('../models/opportunities');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
+const { createUploadMiddleware } = require('../middleware/uploadHandler');
+const { getFileInfo, getFileUrl, deleteFile } = require('../utils/fileStorage');
+
+const logoUpload = createUploadMiddleware({
+  destination: 'uploads/customer-logos',
+  allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+  allowedExtensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
+  maxSize: 5 * 1024 * 1024,
+});
 
 // Apply authentication and tenant context to all routes
 router.use(authenticate);
@@ -195,6 +204,9 @@ router.get('/:id', async (req, res, next) => {
     if (!customer) {
       return res.status(404).json({ error: 'Customer not found' });
     }
+    if (customer.logo_url) {
+      try { customer.logo_url = await getFileUrl(customer.logo_url); } catch (e) { /* leave raw path */ }
+    }
     res.json(customer);
   } catch (error) {
     next(error);
@@ -238,6 +250,18 @@ router.get('/:id/work-orders', async (req, res, next) => {
     }
     const workOrders = await Customer.getWorkOrders(req.params.id, req.tenantId);
     res.json(workOrders);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Annual revenue history for charts
+router.get('/:id/annual-revenue', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    const data = await Customer.getAnnualRevenue(req.params.id, req.tenantId);
+    res.json(data);
   } catch (error) {
     next(error);
   }
@@ -513,6 +537,48 @@ router.put('/:id', async (req, res, next) => {
 
     const updated = await Customer.update(req.params.id, req.body, req.tenantId);
     res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Upload customer logo
+router.post('/:id/logo', logoUpload.single('file'), async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    // Delete old logo if exists
+    if (customer.logo_url) {
+      try { await deleteFile(customer.logo_url); } catch (e) { /* ignore */ }
+    }
+
+    const fileInfo = getFileInfo(req.file);
+    const fileUrl = await getFileUrl(fileInfo.filePath);
+
+    await Customer.update(req.params.id, { logo_url: fileInfo.filePath }, req.tenantId);
+    res.json({ logo_url: fileUrl, logo_path: fileInfo.filePath });
+  } catch (error) {
+    if (req.file) {
+      const fileInfo = getFileInfo(req.file);
+      try { await deleteFile(fileInfo.filePath); } catch (e) { /* ignore */ }
+    }
+    next(error);
+  }
+});
+
+// Delete customer logo
+router.delete('/:id/logo', async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    if (customer.logo_url) {
+      try { await deleteFile(customer.logo_url); } catch (e) { /* ignore */ }
+      await Customer.update(req.params.id, req.tenantId, { logo_url: null });
+    }
+    res.json({ message: 'Logo removed' });
   } catch (error) {
     next(error);
   }

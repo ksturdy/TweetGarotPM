@@ -191,7 +191,7 @@ const Customer = {
       'name', 'account_manager', 'field_leads',
       'address', 'city', 'state', 'zip_code',
       'controls', 'department', 'market', 'customer_score', 'active_customer', 'notes',
-      'customer_type'
+      'customer_type', 'logo_url'
     ];
 
     const updates = [];
@@ -428,6 +428,49 @@ const Customer = {
     return result.rows;
   },
 
+  async getAnnualRevenue(customerId, tenantId) {
+    const result = await db.query(`
+      WITH wo_by_year AS (
+        SELECT
+          EXTRACT(YEAR FROM entered_date)::int AS year,
+          SUM(COALESCE(billed_amount, contract_amount, 0)) AS wo_revenue,
+          SUM(COALESCE(contract_amount, 0)) AS wo_contract
+        FROM vp_work_orders
+        WHERE tenant_id = $2 AND linked_customer_id = $1
+          AND entered_date IS NOT NULL
+          AND EXTRACT(YEAR FROM entered_date) >= 2015
+        GROUP BY 1
+      ),
+      proj_by_year AS (
+        SELECT
+          EXTRACT(YEAR FROM start_date)::int AS year,
+          SUM(COALESCE(contract_value, 0)) AS proj_revenue,
+          AVG(CASE WHEN gross_margin_percent > 0 THEN gross_margin_percent END) AS avg_gm
+        FROM projects
+        WHERE tenant_id = $2 AND (customer_id = $1 OR owner_customer_id = $1)
+          AND start_date IS NOT NULL
+          AND EXTRACT(YEAR FROM start_date) >= 2015
+        GROUP BY 1
+      ),
+      all_years AS (
+        SELECT year FROM wo_by_year
+        UNION
+        SELECT year FROM proj_by_year
+      )
+      SELECT
+        ay.year,
+        COALESCE(w.wo_revenue, 0) AS wo_revenue,
+        COALESCE(p.proj_revenue, 0) AS proj_revenue,
+        COALESCE(w.wo_revenue, 0) + COALESCE(p.proj_revenue, 0) AS total_revenue,
+        ROUND(COALESCE(p.avg_gm, 0)::numeric, 1) AS avg_gm_percent
+      FROM all_years ay
+      LEFT JOIN wo_by_year w USING (year)
+      LEFT JOIN proj_by_year p USING (year)
+      ORDER BY ay.year
+    `, [customerId, tenantId]);
+    return result.rows;
+  },
+
   async getProjects(customerId, tenantId) {
     const result = await db.query(`
       SELECT
@@ -437,7 +480,7 @@ const Customer = {
         p.start_date as date,
         COALESCE(p.contract_value, 0) as contract_value,
         COALESCE(p.backlog, 0) as backlog,
-        0 as gm_percent,
+        ROUND(COALESCE(p.gross_margin_percent, 0)::numeric, 1) as gm_percent,
         p.status,
         p.description,
         e.first_name || ' ' || e.last_name as manager_name,

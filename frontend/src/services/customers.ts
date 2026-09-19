@@ -4,6 +4,7 @@ import { favoritesService } from './favorites';
 export interface Customer {
   id: number;
   name: string;
+  logo_url?: string;
   customer_number?: string;
   account_manager?: string;
   field_leads?: string;
@@ -218,5 +219,23 @@ export const getCompanyBids = async (id: string) => {
 };
 export const getCompanyOpportunities = async (id: string) => {
   const response = await api.get(`/customers/${id}/opportunities`);
+  return response.data;
+};
+export const getCustomerAnnualRevenue = async (id: string) => {
+  const response = await api.get(`/customers/${id}/annual-revenue`);
+  return response.data;
+};
+
+export const uploadCustomerLogo = async (id: string | number, file: File | Blob, filename?: string) => {
+  const form = new FormData();
+  form.append('file', file, filename || (file instanceof File ? file.name : 'logo.png'));
+  const response = await api.post(`/customers/${id}/logo`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data as { logo_url: string; logo_path: string };
+};
+
+export const deleteCustomerLogo = async (id: string | number) => {
+  const response = await api.delete(`/customers/${id}/logo`);
   return response.data;
 };

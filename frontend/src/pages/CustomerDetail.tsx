@@ -1,6 +1,15 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Building2, User, MapPin, Users, HardHat, Wrench, BarChart2, Briefcase, Info, Star, Pencil } from 'lucide-react';
+import {
+  Chart as ChartJS,
+  CategoryScale, LinearScale, BarElement, LineElement, PointElement,
+  Tooltip, Legend, Filler,
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
 import {
   getCustomer,
   getCompanyMetrics,
@@ -14,8 +23,13 @@ import {
   updateCustomerLocation,
   deleteCustomerLocation,
   customersApi,
-  CustomerLocation
+  CustomerLocation,
+  getCustomerAnnualRevenue,
+  uploadCustomerLogo,
+  deleteCustomerLogo,
 } from '../services/customers';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
 import CustomerFormModal from '../components/modals/CustomerFormModal';
 import ContactModal from '../components/modals/ContactModal';
 import AssessmentScoring from '../components/assessments/AssessmentScoring';
@@ -52,6 +66,13 @@ const CustomerDetail: React.FC = () => {
   const { toast } = useTitanFeedback();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const [pendingFilename, setPendingFilename] = useState('logo.png');
+  const cropImgRef = useRef<HTMLImageElement>(null);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -63,6 +84,10 @@ const CustomerDetail: React.FC = () => {
   const [woSortDir, setWoSortDir] = useState<SortDirection>('desc');
   const [projSortField, setProjSortField] = useState<ProjectSortField>('number');
   const [projSortDir, setProjSortDir] = useState<SortDirection>('desc');
+
+  // Filter state
+  const [projStatusFilter, setProjStatusFilter] = useState<string>('Open');
+  const [oppStageFilter, setOppStageFilter] = useState<string>('all');
 
   // Fetch data
   const { data: customer, isLoading: customerLoading } = useQuery({
@@ -99,6 +124,12 @@ const CustomerDetail: React.FC = () => {
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ['customer-contacts', id],
     queryFn: () => getCustomerContacts(id!),
+  });
+
+  const { data: annualRevenue = [] } = useQuery({
+    queryKey: ['customer-annual-revenue', id],
+    queryFn: () => getCustomerAnnualRevenue(id!),
+    enabled: !!customer,
   });
 
   const { data: locations = [] } = useQuery<CustomerLocation[]>({
@@ -243,10 +274,74 @@ const CustomerDetail: React.FC = () => {
     });
   }, [workOrders, woSortField, woSortDir]);
 
-  // Sort projects
+  // Derived filter options
+  const oppStages = useMemo(() => {
+    const seen = new Set<string>();
+    return opportunities
+      .map((o: any) => o.stage_name)
+      .filter((s: string) => s && !seen.has(s) && seen.add(s));
+  }, [opportunities]);
+
+  // Filtered opportunities
+  const filteredOpportunities = useMemo(() =>
+    oppStageFilter === 'all'
+      ? opportunities
+      : opportunities.filter((o: any) => o.stage_name === oppStageFilter),
+    [opportunities, oppStageFilter]
+  );
+
+  // Project metrics (dynamic with filter)
+  const projKpis = useMemo(() => {
+    const list = projStatusFilter === 'all' ? projects : projects.filter((p: any) => p.status === projStatusFilter);
+    const contractValue = list.reduce((s: number, p: any) => s + (parseFloat(p.contract_value) || 0), 0);
+    const backlog = list.reduce((s: number, p: any) => s + (parseFloat(p.backlog) || 0), 0);
+    const gcCount = list.filter((p: any) => p.relationship === 'GC' || p.relationship === 'GC & Owner').length;
+    const ownerCount = list.filter((p: any) => p.relationship === 'Owner' || p.relationship === 'GC & Owner').length;
+    return { contractValue, backlog, count: list.length, gcCount, ownerCount };
+  }, [projects, projStatusFilter]);
+
+  // Opportunity metrics (dynamic with filter)
+  const oppKpis = useMemo(() => {
+    const pipeline = filteredOpportunities.reduce((s: number, o: any) => s + (parseFloat(o.estimated_value) || 0), 0);
+    const avgDeal = filteredOpportunities.length > 0 ? pipeline / filteredOpportunities.length : 0;
+    return { pipeline, avgDeal, count: filteredOpportunities.length };
+  }, [filteredOpportunities]);
+
+  // Bid volume by year (count of estimates per year)
+  const bidVolumeByYear = useMemo(() => {
+    const byYear: Record<number, number> = {};
+    estimates.forEach((e: any) => {
+      if (!e.date) return;
+      const year = new Date(e.date.includes('T') ? e.date : e.date + 'T00:00:00').getFullYear();
+      if (year < 2015) return;
+      byYear[year] = (byYear[year] || 0) + 1;
+    });
+    return Object.entries(byYear)
+      .map(([year, count]) => ({ year: parseInt(year), count }))
+      .sort((a, b) => a.year - b.year);
+  }, [estimates]);
+
+  // Project count by year
+  const projectCountByYear = useMemo(() => {
+    const byYear: Record<number, number> = {};
+    projects.forEach((p: any) => {
+      if (!p.date) return;
+      const year = new Date(p.date.includes('T') ? p.date : p.date + 'T00:00:00').getFullYear();
+      if (year < 2015) return;
+      byYear[year] = (byYear[year] || 0) + 1;
+    });
+    return Object.entries(byYear)
+      .map(([year, count]) => ({ year: parseInt(year), count }))
+      .sort((a, b) => a.year - b.year);
+  }, [projects]);
+
+  // Sort projects (with status filter)
   const sortedProjects = useMemo(() => {
-    if (!projects.length) return [];
-    return [...projects].sort((a: any, b: any) => {
+    const filtered = projStatusFilter === 'all'
+      ? projects
+      : projects.filter((p: any) => p.status === projStatusFilter);
+    if (!filtered.length) return [];
+    return [...filtered].sort((a: any, b: any) => {
       let aVal = a[projSortField];
       let bVal = b[projSortField];
       if (aVal == null) aVal = '';
@@ -267,7 +362,7 @@ const CustomerDetail: React.FC = () => {
       }
       return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [projects, projSortField, projSortDir]);
+  }, [projects, projSortField, projSortDir, projStatusFilter]);
 
   const handleWoSort = (field: WorkOrderSortField) => {
     if (woSortField === field) setWoSortDir(woSortDir === 'asc' ? 'desc' : 'asc');
@@ -278,6 +373,85 @@ const CustomerDetail: React.FC = () => {
     if (projSortField === field) setProjSortDir(projSortDir === 'asc' ? 'desc' : 'asc');
     else { setProjSortField(field); setProjSortDir('desc'); }
   };
+
+  // Opens the crop modal; does NOT upload yet
+  const handleLogoFile = useCallback((file: File | Blob, filename?: string) => {
+    const name = filename || (file instanceof File ? file.name : 'logo.png');
+    setPendingFilename(name);
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  const handleLogoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleLogoFile(file);
+    e.target.value = '';
+  };
+
+  const doUpload = async (blob: Blob, name: string) => {
+    setLogoUploading(true);
+    try {
+      await uploadCustomerLogo(id!, blob, name);
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      toast.success('Logo updated');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Upload failed';
+      toast.error(`Logo upload failed: ${msg}`);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleUploadCropped = async () => {
+    if (!cropImgRef.current || !completedCrop?.width) return;
+    const img = cropImgRef.current;
+    const canvas = document.createElement('canvas');
+    const scaleX = img.naturalWidth / img.width;
+    const scaleY = img.naturalHeight / img.height;
+    canvas.width = completedCrop.width;
+    canvas.height = completedCrop.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, completedCrop.x * scaleX, completedCrop.y * scaleY,
+      completedCrop.width * scaleX, completedCrop.height * scaleY,
+      0, 0, completedCrop.width, completedCrop.height);
+    setCropSrc(null);
+    canvas.toBlob(blob => { if (blob) doUpload(blob, pendingFilename); }, 'image/png');
+  };
+
+  const handleUploadFull = async () => {
+    if (!cropSrc) return;
+    setCropSrc(null);
+    const res = await fetch(cropSrc);
+    const blob = await res.blob();
+    doUpload(blob, pendingFilename);
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      await deleteCustomerLogo(id!);
+      queryClient.invalidateQueries({ queryKey: ['customer', id] });
+      toast.success('Logo removed');
+    } catch {
+      toast.error('Failed to remove logo');
+    }
+  };
+
+  // Global paste listener — must be before early returns to satisfy Rules of Hooks
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'));
+      if (item) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (blob) handleLogoFile(blob, 'pasted-logo.png');
+      }
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [handleLogoFile]);
 
   if (customerLoading) {
     return <div className="customer-detail-page"><div className="loading-state">Loading...</div></div>;
@@ -300,6 +474,15 @@ const CustomerDetail: React.FC = () => {
 
   const displayName = customer.name || 'Unnamed Company';
 
+  const resolveFileUrl = (url: string | undefined) => {
+    if (!url) return undefined;
+    if (url.startsWith('/')) {
+      const base = (process.env.REACT_APP_API_URL || 'http://localhost:3001/api').replace('/api', '');
+      return base + url;
+    }
+    return url;
+  };
+
   return (
     <div className="customer-detail-page">
       {/* Row 1: Header Strip */}
@@ -311,7 +494,45 @@ const CustomerDetail: React.FC = () => {
                 &larr; Back to Customers
               </Link>
               <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                👥 {displayName}
+                {/* Logo / upload widget */}
+                <span
+                  className={`cd-logo-widget${logoUploading ? ' cd-logo-uploading' : ''}`}
+                  onClick={() => logoInputRef.current?.click()}
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && logoInputRef.current?.click()}
+                  title="Click to upload logo, or paste (Ctrl+V) a screenshot"
+                >
+                  {customer.logo_url
+                    ? <img src={resolveFileUrl(customer.logo_url)} alt="logo" className="cd-logo-img" />
+                    : <Building2 size={32} strokeWidth={1.5} className="cd-logo-placeholder-icon" />}
+                  <span className="cd-logo-overlay">{logoUploading ? '…' : '↑'}</span>
+                  {customer.logo_url && (
+                    <>
+                      <button
+                        className="cd-logo-action cd-logo-crop-btn"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const url = resolveFileUrl(customer.logo_url);
+                          if (!url) return;
+                          // Fetch via backend to avoid CORS on R2 presigned URLs
+                          const res = await fetch(url);
+                          const blob = await res.blob();
+                          const reader = new FileReader();
+                          reader.onload = () => { setCropSrc(reader.result as string); setPendingFilename('logo.png'); };
+                          reader.readAsDataURL(blob);
+                        }}
+                        title="Crop logo"
+                      >✂</button>
+                      <button
+                        className="cd-logo-action cd-logo-remove"
+                        onClick={(e) => { e.stopPropagation(); handleRemoveLogo(); }}
+                        title="Remove logo"
+                      >✕</button>
+                    </>
+                  )}
+                </span>
+                <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoInputChange} />
+                {displayName}
                 {customer.customer_type === 'prospect' && (
                   <span style={{
                     fontSize: '0.55em',
@@ -331,23 +552,23 @@ const CustomerDetail: React.FC = () => {
           </div>
           <div className="cd-header-right">
             <div className="cd-quick-tags">
-              {customer.market && <span className="cd-tag"><span className="cd-tag-icon">🏢</span>{customer.market}</span>}
-              {customer.account_manager && <span className="cd-tag"><span className="cd-tag-icon">👤</span>{customer.account_manager}</span>}
+              {customer.market && <span className="cd-tag"><span className="cd-tag-icon"><Building2 size={11} strokeWidth={2} /></span>{customer.market}</span>}
+              {customer.account_manager && <span className="cd-tag"><span className="cd-tag-icon"><User size={11} strokeWidth={2} /></span>{customer.account_manager}</span>}
               {customer.active_customer && <span className="cd-tag cd-tag-active"><span className="cd-tag-dot"></span>Active</span>}
             </div>
-            <button className={`cd-info-toggle ${showInfoDrawer ? 'active' : ''}`} onClick={() => setShowInfoDrawer(!showInfoDrawer)}>
-              ℹ️ Info
+            <button className={`cd-info-toggle ${showInfoDrawer ? 'active' : ''}`} onClick={() => setShowInfoDrawer(!showInfoDrawer)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Info size={13} strokeWidth={2} /> Info
             </button>
             {customer.customer_type === 'prospect' && (
               <button className="sales-btn sales-btn-secondary" onClick={() => setShowMergeModal(true)}>
                 Merge into Customer
               </button>
             )}
-            <button className="sales-btn sales-btn-secondary" onClick={() => setShowAssessment(true)}>
-              📊 Score
+            <button className="sales-btn sales-btn-secondary" onClick={() => setShowAssessment(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Star size={14} strokeWidth={2} /> Score
             </button>
-            <button className="sales-btn sales-btn-secondary" onClick={() => setShowEditModal(true)}>
-              ✏️ Edit
+            <button className="sales-btn sales-btn-secondary" onClick={() => setShowEditModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Pencil size={14} strokeWidth={2} /> Edit
             </button>
           </div>
         </div>
@@ -404,7 +625,7 @@ const CustomerDetail: React.FC = () => {
             <div className="cd-info-section">
               <div className="cd-info-section-header">
                 <h4>Titan Information</h4>
-                <button onClick={() => setShowEditModal(true)} className="cd-edit-btn">✏️ Edit</button>
+                <button onClick={() => setShowEditModal(true)} className="cd-edit-btn" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><Pencil size={11} strokeWidth={2} /> Edit</button>
               </div>
               <div className="cd-info-grid">
                 <div className="cd-info-item cd-info-item-full">
@@ -440,8 +661,8 @@ const CustomerDetail: React.FC = () => {
           <div className="cd-kpi-value">{formatCurrency(metrics?.avg_annual_revenue)}</div>
           <div className="cd-kpi-label">Avg Annual ({metrics?.year_span || 1} yr{(metrics?.year_span || 1) > 1 ? 's' : ''})</div>
         </div>
-        <div className="cd-kpi-card amber" title={`Proj: ${metrics?.proj_gm_percent || 0}% | Est: ${metrics?.estimate_gm_percent || 0}%`}>
-          <div className="cd-kpi-value">{metrics?.avg_gm_percent || 0}%</div>
+        <div className="cd-kpi-card amber" title={`Proj: ${(parseFloat(metrics?.proj_gm_percent || 0) * 100).toFixed(1)}% | Est: ${(parseFloat(metrics?.estimate_gm_percent || 0) * 100).toFixed(1)}%`}>
+          <div className="cd-kpi-value">{(parseFloat(metrics?.avg_gm_percent || 0) * 100).toFixed(1)}%</div>
           <div className="cd-kpi-label">Avg GM%</div>
         </div>
         <div className="cd-kpi-card purple" title={`WO: ${formatCurrency(metrics?.wo_backlog)} | Proj: ${formatCurrency(metrics?.proj_backlog)}`}>
@@ -458,382 +679,422 @@ const CustomerDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Row 4: Main Content */}
-      <div className="cd-main-grid">
-        {/* Left Column: Locations + Contacts */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+      {/* Charts Strip — always 5 charts */}
+      <div className="cd-charts-strip">
+        <div className="cd-chart-card">
+          <div className="cd-chart-title">Revenue by Year</div>
+          <div className="cd-chart-body">
+            <Bar
+              data={{
+                labels: annualRevenue.map((r: any) => r.year),
+                datasets: [
+                  { label: 'WO', data: annualRevenue.map((r: any) => parseFloat(r.wo_revenue) || 0), backgroundColor: 'rgba(59, 130, 246, 0.75)', borderRadius: 2 },
+                  { label: 'Proj', data: annualRevenue.map((r: any) => parseFloat(r.proj_revenue) || 0), backgroundColor: 'rgba(139, 92, 246, 0.75)', borderRadius: 2 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'bottom', labels: { font: { size: 8 }, boxWidth: 7, padding: 3 } },
+                  tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: $${((ctx.raw as number) / 1000000).toFixed(1)}M` } },
+                },
+                scales: {
+                  x: { stacked: true, grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                  y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, callback: (v) => `$${(Number(v) / 1000000).toFixed(0)}M` } },
+                },
+              }}
+            />
+          </div>
+        </div>
+        <div className="cd-chart-card">
+          <div className="cd-chart-title">Avg GM% by Year</div>
+          <div className="cd-chart-body">
+            <Line
+              data={{
+                labels: annualRevenue.map((r: any) => r.year),
+                datasets: [{
+                  label: 'GM%',
+                  data: annualRevenue.map((r: any) => Math.round((parseFloat(r.avg_gm_percent) || 0) * 100 * 10) / 10),
+                  borderColor: 'rgba(217, 119, 6, 0.9)',
+                  backgroundColor: 'rgba(217, 119, 6, 0.15)',
+                  borderWidth: 2,
+                  pointRadius: 3,
+                  pointBackgroundColor: 'rgba(217, 119, 6, 0.9)',
+                  fill: true,
+                  tension: 0.3,
+                }],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { callbacks: { label: (ctx) => ` GM%: ${(ctx.raw as number).toFixed(1)}%` } },
+                },
+                scales: {
+                  x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                  y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, callback: (v) => `${v}%` } },
+                },
+              }}
+            />
+          </div>
+        </div>
+        <div className="cd-chart-card">
+          <div className="cd-chart-title">Projects by Year</div>
+          <div className="cd-chart-body">
+            <Bar
+              data={{
+                labels: projectCountByYear.map(d => d.year),
+                datasets: [{
+                  label: 'Projects',
+                  data: projectCountByYear.map(d => d.count),
+                  backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                  borderRadius: 2,
+                }],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} projects` } },
+                },
+                scales: {
+                  x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                  y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, stepSize: 1 } },
+                },
+              }}
+            />
+          </div>
+        </div>
+        <div className="cd-chart-card">
+          <div className="cd-chart-title">Hit Rate by Year</div>
+          <div className="cd-chart-body">
+            <Bar
+              data={{
+                labels: bidVolumeByYear.map(d => d.year),
+                datasets: [{
+                  label: 'Hit Rate',
+                  data: bidVolumeByYear.map(d => {
+                    const estsByYear = estimates.filter((e: any) => {
+                      if (!e.date) return false;
+                      return new Date(e.date.includes('T') ? e.date : e.date + 'T00:00:00').getFullYear() === d.year;
+                    });
+                    const won = estsByYear.filter((e: any) => ['won','awarded'].includes((e.status||'').toLowerCase())).length;
+                    const decided = estsByYear.filter((e: any) => ['won','awarded','lost','no-bid','no bid'].includes((e.status||'').toLowerCase())).length;
+                    return decided > 0 ? Math.round(won / decided * 100) : 0;
+                  }),
+                  backgroundColor: 'rgba(99, 102, 241, 0.75)',
+                  borderRadius: 2,
+                }],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw}%` } },
+                },
+                scales: {
+                  x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                  y: { min: 0, max: 100, grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, callback: (v) => `${v}%` } },
+                },
+              }}
+            />
+          </div>
+        </div>
+        <div className="cd-chart-card">
+          <div className="cd-chart-title">Bid Volume by Year</div>
+          <div className="cd-chart-body">
+            <Bar
+              data={{
+                labels: bidVolumeByYear.map(d => d.year),
+                datasets: [{
+                  label: 'Bids',
+                  data: bidVolumeByYear.map(d => d.count),
+                  backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                  borderRadius: 2,
+                }],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} bids` } },
+                },
+                scales: {
+                  x: { grid: { display: false }, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                  y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 8 }, stepSize: 1 } },
+                },
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Content Layout: Projects | Opportunities | Right Stack */}
+      <div className="cd-content-layout">
+        {/* Right Stack: Locations, Contacts, Work Orders, Estimates */}
+        <div className="cd-right-stack">
           {/* Locations */}
-          <div className="cd-locations-panel" style={{ flex: 1, minHeight: 0 }}>
-            <div className="cd-panel-header">
-              <h3><span className="cd-panel-icon">📍</span> Locations <span className="cd-count">{locations.length}</span></h3>
-              <button
-                className="sales-btn sales-btn-primary"
+          <div className="cd-stack-panel">
+            <div className="cd-stack-panel-header">
+              <span><MapPin size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> <strong>Locations</strong> <span className="cd-count">{locations.length}</span></span>
+              <button className="sales-btn sales-btn-primary"
                 onClick={() => { setAddingLocation(true); setTimeout(() => locInputRef.current?.focus(), 50); }}
-                title="Add location"
-                style={{ padding: '2px 8px', fontSize: '10px' }}
-              >+ New</button>
+                style={{ padding: '1px 6px', fontSize: '9px' }}>+ New</button>
             </div>
-            <div className="cd-locations-list">
+            <div className="cd-stack-panel-body">
               {addingLocation && (
-                <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '4px' }}>
-                  <input
-                    ref={locInputRef}
-                    type="text"
-                    value={newLocationName}
+                <div style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '4px' }}>
+                  <input ref={locInputRef} type="text" value={newLocationName}
                     onChange={(e) => setNewLocationName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && newLocationName.trim()) addLocationMutation.mutate(newLocationName.trim());
                       if (e.key === 'Escape') { setAddingLocation(false); setNewLocationName(''); }
                     }}
                     placeholder="Location name..."
-                    style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
+                    style={{ flex: 1, fontSize: '11px', padding: '2px 5px', border: '1px solid var(--border)', borderRadius: '3px' }}
                   />
-                  <button
-                    onClick={() => newLocationName.trim() && addLocationMutation.mutate(newLocationName.trim())}
+                  <button onClick={() => newLocationName.trim() && addLocationMutation.mutate(newLocationName.trim())}
                     disabled={!newLocationName.trim() || addLocationMutation.isPending}
-                    style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !newLocationName.trim() ? 0.5 : 1 }}
-                  >{addLocationMutation.isPending ? '...' : 'Add'}</button>
-                  <button
-                    onClick={() => { setAddingLocation(false); setNewLocationName(''); }}
-                    style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                  >Cancel</button>
+                    style={{ fontSize: '9px', padding: '2px 6px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                    {addLocationMutation.isPending ? '…' : 'Add'}
+                  </button>
+                  <button onClick={() => { setAddingLocation(false); setNewLocationName(''); }}
+                    style={{ fontSize: '9px', padding: '2px 4px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '3px', cursor: 'pointer' }}>✕</button>
                 </div>
               )}
-              {locations.length === 0 && !addingLocation ? (
-                <div className="cd-empty-mini">No locations added</div>
-              ) : (
-                locations.map((loc: CustomerLocation) => (
+              {locations.length === 0 && !addingLocation
+                ? <div className="cd-stack-empty">No locations</div>
+                : locations.map((loc: CustomerLocation) => (
                   editingLocationId === loc.id ? (
-                    <div key={loc.id} style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <input
-                        ref={editLocRef}
-                        type="text"
-                        value={editLocName}
-                        onChange={(e) => setEditLocName(e.target.value)}
+                    <div key={loc.id} style={{ padding: '4px 6px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <input ref={editLocRef} type="text" value={editLocName} onChange={(e) => setEditLocName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
-                        placeholder="Name *"
-                        style={{ fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }}
-                      />
-                      <input
-                        type="text"
-                        value={editLocAddress}
-                        onChange={(e) => setEditLocAddress(e.target.value)}
+                        placeholder="Name *" style={{ fontSize: '11px', padding: '2px 5px', border: '1px solid var(--border)', borderRadius: '3px' }} />
+                      <input type="text" value={editLocAddress} onChange={(e) => setEditLocAddress(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
-                        placeholder="Address"
-                        style={{ fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px', width: '100%', boxSizing: 'border-box' }}
-                      />
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <input
-                          type="text"
-                          value={editLocCity}
-                          onChange={(e) => setEditLocCity(e.target.value)}
+                        placeholder="Address" style={{ fontSize: '11px', padding: '2px 5px', border: '1px solid var(--border)', borderRadius: '3px' }} />
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        <input type="text" value={editLocCity} onChange={(e) => setEditLocCity(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
-                          placeholder="City"
-                          style={{ flex: 2, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                        <input
-                          type="text"
-                          value={editLocState}
-                          onChange={(e) => setEditLocState(e.target.value)}
+                          placeholder="City" style={{ flex: 2, fontSize: '11px', padding: '2px 4px', border: '1px solid var(--border)', borderRadius: '3px' }} />
+                        <input type="text" value={editLocState} onChange={(e) => setEditLocState(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
-                          placeholder="State"
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
-                        <input
-                          type="text"
-                          value={editLocZip}
-                          onChange={(e) => setEditLocZip(e.target.value)}
+                          placeholder="ST" style={{ flex: 1, fontSize: '11px', padding: '2px 4px', border: '1px solid var(--border)', borderRadius: '3px' }} />
+                        <input type="text" value={editLocZip} onChange={(e) => setEditLocZip(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveEditLocation(); if (e.key === 'Escape') cancelEditLocation(); }}
-                          placeholder="Zip"
-                          style={{ flex: 1, fontSize: '11px', padding: '3px 6px', border: '1px solid var(--border)', borderRadius: '4px' }}
-                        />
+                          placeholder="Zip" style={{ flex: 1, fontSize: '11px', padding: '2px 4px', border: '1px solid var(--border)', borderRadius: '3px' }} />
                       </div>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-                        <button
-                          onClick={saveEditLocation}
-                          disabled={!editLocName.trim() || updateLocationMutation.isPending}
-                          style={{ fontSize: '10px', padding: '2px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', opacity: !editLocName.trim() ? 0.5 : 1 }}
-                        >{updateLocationMutation.isPending ? '...' : 'Save'}</button>
-                        <button
-                          onClick={cancelEditLocation}
-                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                        >Cancel</button>
+                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'flex-end' }}>
+                        <button onClick={saveEditLocation} disabled={!editLocName.trim() || updateLocationMutation.isPending}
+                          style={{ fontSize: '9px', padding: '2px 6px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                          {updateLocationMutation.isPending ? '…' : 'Save'}
+                        </button>
+                        <button onClick={cancelEditLocation}
+                          style={{ fontSize: '9px', padding: '2px 4px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '3px', cursor: 'pointer' }}>Cancel</button>
                       </div>
                     </div>
                   ) : deleteLocConfirm === loc.id ? (
-                    <div key={loc.id} className="cd-location-item" style={{ background: '#fef2f2', borderLeftColor: '#ef4444' }}>
-                      <div className="cd-location-info">
-                        <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>Delete "{loc.name}"?</div>
-                        <div style={{ fontSize: '10px', color: '#b91c1c' }}>This cannot be undone. Opportunities linked to this location will be unlinked.</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                        <button
-                          onClick={() => deleteLocationMutation.mutate(loc.id)}
-                          disabled={deleteLocationMutation.isPending}
-                          style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >{deleteLocationMutation.isPending ? '...' : 'Delete'}</button>
-                        <button
-                          onClick={() => setDeleteLocConfirm(null)}
-                          style={{ fontSize: '10px', padding: '2px 6px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
-                        >Cancel</button>
+                    <div key={loc.id} className="cd-stack-item" style={{ background: '#fef2f2', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+                      <div style={{ fontSize: '10px', color: '#991b1b', fontWeight: 600 }}>Delete "{loc.name}"?</div>
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        <button onClick={() => deleteLocationMutation.mutate(loc.id)} disabled={deleteLocationMutation.isPending}
+                          style={{ fontSize: '9px', padding: '2px 6px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                          {deleteLocationMutation.isPending ? '…' : 'Delete'}
+                        </button>
+                        <button onClick={() => setDeleteLocConfirm(null)}
+                          style={{ fontSize: '9px', padding: '2px 4px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '3px', cursor: 'pointer' }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
-                    <div key={loc.id} className="cd-location-item" style={{ cursor: 'pointer' }} onClick={() => startEditLocation(loc)}>
-                      <div className="cd-location-info">
-                        <div className="cd-location-name">{loc.name}</div>
-                        {(loc.address || loc.city || loc.state) && (
-                          <div className="cd-location-address">
-                            {loc.address && <span>{loc.address}</span>}
-                            {loc.address && (loc.city || loc.state) && <span> · </span>}
-                            {[loc.city, loc.state, loc.zip_code].filter(Boolean).join(', ')}
+                    <div key={loc.id} className="cd-stack-item" onClick={() => startEditLocation(loc)}>
+                      <MapPin size={11} strokeWidth={2} style={{ flexShrink: 0, color: '#6b7280' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loc.name}</div>
+                        {(loc.city || loc.state) && (
+                          <div style={{ fontSize: '10px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[loc.city, loc.state].filter(Boolean).join(', ')}
                           </div>
                         )}
                       </div>
-                      <button
-                        className="cd-icon-btn cd-loc-delete-btn"
+                      <button className="cd-icon-btn cd-loc-delete-btn"
                         onClick={(e) => { e.stopPropagation(); setDeleteLocConfirm(loc.id); }}
-                        title="Delete location"
-                        style={{ fontSize: '11px', width: '20px', height: '20px', color: '#ef4444', opacity: 0 }}
-                      >✕</button>
+                        style={{ fontSize: '10px', width: '16px', height: '16px', color: '#ef4444', opacity: 0, flexShrink: 0 }}>✕</button>
                     </div>
                   )
                 ))
-              )}
+              }
             </div>
           </div>
 
           {/* Contacts */}
-          <div className="cd-locations-panel" style={{ flex: 1, minHeight: 0 }}>
-            <div className="cd-panel-header">
-              <h3><span className="cd-panel-icon">👥</span> Contacts <span className="cd-count">{contacts.length}</span></h3>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  className="sales-btn"
-                  onClick={() => navigate(`/customers/${id}/org-chart`)}
-                  title="View org chart"
-                  style={{ padding: '2px 8px', fontSize: '10px', background: '#10b981', color: 'white' }}
-                >Org Chart</button>
-                <button
-                  className="sales-btn sales-btn-primary"
-                  onClick={() => setShowContactModal(true)}
-                  title="Add contact"
-                  style={{ padding: '2px 8px', fontSize: '10px' }}
-                >+ New</button>
-                <button
-                  className="sales-btn"
-                  onClick={() => navigate(`/customers/${id}/contacts`)}
-                  title="View all contacts"
-                  style={{ padding: '2px 8px', fontSize: '10px', background: '#3b82f6', color: 'white' }}
-                >Contacts</button>
+          <div className="cd-stack-panel">
+            <div className="cd-stack-panel-header">
+              <span><Users size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> <strong>Contacts</strong> <span className="cd-count">{contacts.length}</span></span>
+              <div style={{ display: 'flex', gap: '3px' }}>
+                <button className="sales-btn" onClick={() => navigate(`/customers/${id}/org-chart`)}
+                  style={{ padding: '1px 5px', fontSize: '9px', background: '#10b981', color: 'white' }}>Org</button>
+                <button className="sales-btn sales-btn-primary" onClick={() => setShowContactModal(true)}
+                  style={{ padding: '1px 5px', fontSize: '9px' }}>+ New</button>
               </div>
             </div>
-            <div className="cd-locations-list">
-              {contacts.length === 0 ? (
-                <div className="cd-empty-mini">No contacts added</div>
-              ) : (
-                contacts.map((contact: Contact) => (
-                  <div key={contact.id} className="cd-location-item" onClick={() => navigate(`/customers/${id}/contacts`)} style={{ cursor: 'pointer' }}>
-                    <div className="cd-location-info">
-                      <div className="cd-location-name">
+            <div className="cd-stack-panel-body">
+              {contacts.length === 0
+                ? <div className="cd-stack-empty">No contacts</div>
+                : contacts.map((contact: Contact) => (
+                  <div key={contact.id} className="cd-stack-item" onClick={() => navigate(`/customers/${id}/contacts`)}>
+                    <User size={11} strokeWidth={2} style={{ flexShrink: 0, color: '#6b7280' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {contact.first_name} {contact.last_name}
                         {contact.is_primary && <span style={{ fontSize: '8px', marginLeft: '4px', color: '#3b82f6', fontWeight: 600 }}>PRIMARY</span>}
                       </div>
-                      <div className="cd-location-address">
-                        {[contact.title, contact.email, contact.phone].filter(Boolean).join(' · ')}
-                      </div>
+                      {contact.title && <div style={{ fontSize: '10px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.title}</div>}
                     </div>
                   </div>
                 ))
-              )}
+              }
             </div>
           </div>
+
         </div>
 
-        {/* Right Column: Projects */}
-        <div className="cd-module-card">
-          <div className="cd-module-header">
-            <span className="cd-module-title">🏗️ Projects <span className="cd-count">{projects.length}</span></span>
-          </div>
-          <div className="cd-module-body">
-            {sortedProjects.length === 0 ? (
-              <div className="cd-empty-state"><p>No projects</p></div>
-            ) : (
-              <table className="cd-table cd-projects-table">
-                <colgroup>
-                  <col style={{ width: '8%' }} />
-                  <col style={{ width: '30%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '14%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th className="cd-sortable" onClick={() => handleProjSort('number')}># <SortIcon active={projSortField === 'number'} direction={projSortDir} /></th>
-                    <th className="cd-sortable" onClick={() => handleProjSort('name')}>Project <SortIcon active={projSortField === 'name'} direction={projSortDir} /></th>
-                    <th>PM</th>
-                    <th className="cd-sortable" onClick={() => handleProjSort('date')}>Date <SortIcon active={projSortField === 'date'} direction={projSortDir} /></th>
-                    <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} /></th>
-                    <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} /></th>
-                    <th className="cd-sortable" onClick={() => handleProjSort('status')}>Status <SortIcon active={projSortField === 'status'} direction={projSortDir} /></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedProjects.map((project: any) => (
-                    <tr key={project.id} onClick={() => navigate(`/projects/${project.id}`)} style={{ cursor: 'pointer' }}>
-                      <td><strong>{project.number || '-'}</strong></td>
-                      <td className="cd-truncate">{project.name}</td>
-                      <td className="cd-truncate">{project.manager_name || '-'}</td>
-                      <td>{formatDate(project.date)}</td>
-                      <td>{formatCurrency(project.contract_value)}</td>
-                      <td>{formatCurrency(project.backlog)}</td>
-                      <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        {/* Bottom Row: Work Orders, Estimates, Opportunities */}
-        <div className="cd-modules-row">
-          {/* Work Orders */}
-          <div className="cd-module-card">
+        {/* Projects */}
+        <div className="cd-projects-panel cd-module-card">
             <div className="cd-module-header">
-              <span className="cd-module-title">🔧 Work Orders <span className="cd-count">{workOrders.length}</span></span>
+              <span className="cd-module-title">
+                <HardHat size={13} strokeWidth={2} /> Projects{' '}
+                <span className="cd-count">{sortedProjects.length}{projStatusFilter !== 'all' ? `/${projects.length}` : ''}</span>
+              </span>
+              <div style={{ display: 'flex', gap: '3px' }}>
+                {(['all', 'Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => (
+                  <button key={s} onClick={() => setProjStatusFilter(s)} style={{
+                    padding: '2px 6px', fontSize: '9px',
+                    fontWeight: projStatusFilter === s ? 600 : 400,
+                    background: projStatusFilter === s ? '#3b82f6' : 'transparent',
+                    color: projStatusFilter === s ? '#fff' : '#6b7280',
+                    border: `1px solid ${projStatusFilter === s ? '#3b82f6' : '#e5e7eb'}`,
+                    borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}>
+                    {s === 'all' ? 'All' : s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="cd-stats-bar">
+              <div className="cd-stats-cell cd-stats-cell--blue">
+                <span className="cd-stats-label">Contract Value</span>
+                <span className="cd-stats-value">{formatCurrency(projKpis.contractValue)}</span>
+              </div>
+              <div className="cd-stats-cell cd-stats-cell--purple">
+                <span className="cd-stats-label">Backlog</span>
+                <span className="cd-stats-value">{formatCurrency(projKpis.backlog)}</span>
+              </div>
+              <div className="cd-stats-cell cd-stats-cell--slate">
+                <span className="cd-stats-label">GC Role</span>
+                <span className="cd-stats-value">{projKpis.gcCount}</span>
+              </div>
+              <div className="cd-stats-cell cd-stats-cell--teal">
+                <span className="cd-stats-label">Owner Role</span>
+                <span className="cd-stats-value">{projKpis.ownerCount}</span>
+              </div>
             </div>
             <div className="cd-module-body">
-              {sortedWorkOrders.length === 0 ? (
-                <div className="cd-empty-state"><p>No work orders</p></div>
+              {sortedProjects.length === 0 ? (
+                <div className="cd-empty-state"><p>{projects.length === 0 ? 'No projects' : 'No matches'}</p></div>
               ) : (
-                <table className="cd-table">
-                  <thead>
-                    <tr>
-                      <th className="cd-sortable" onClick={() => handleWoSort('work_order_number')}>WO # <SortIcon active={woSortField === 'work_order_number'} direction={woSortDir} /></th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('description')}>Description <SortIcon active={woSortField === 'description'} direction={woSortDir} /></th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('entered_date')}>Date <SortIcon active={woSortField === 'entered_date'} direction={woSortDir} /></th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('contract_amount')}>Amount <SortIcon active={woSortField === 'contract_amount'} direction={woSortDir} /></th>
-                      <th className="cd-sortable" onClick={() => handleWoSort('status')}>Status <SortIcon active={woSortField === 'status'} direction={woSortDir} /></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedWorkOrders.map((wo: any) => (
-                      <tr key={wo.id}>
-                        <td><strong>{wo.work_order_number}</strong></td>
-                        <td className="cd-truncate">{wo.description || '-'}</td>
-                        <td>{formatDate(wo.entered_date)}</td>
-                        <td>{formatCurrency(wo.contract_amount)}</td>
-                        <td><span className={`cd-status cd-status-${(wo.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{wo.status || '-'}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-
-          {/* Estimates */}
-          <div className="cd-module-card">
-            <div className="cd-module-header">
-              <span className="cd-module-title">📊 Estimates <span className="cd-count">{estimates.length}</span></span>
-              <button
-                className="sales-btn sales-btn-primary"
-                style={{ padding: '2px 8px', fontSize: '10px' }}
-                onClick={() => navigate('/estimating/estimates/new', {
-                  state: {
-                    customerId: parseInt(id!),
-                    customerName: displayName,
-                  }
-                })}
-              >
-                + New
-              </button>
-            </div>
-            <div className="cd-module-body">
-              {estimates.length === 0 ? (
-                <div className="cd-empty-state"><p>No estimates</p></div>
-              ) : (
-                <table className="cd-table">
+                <table className="cd-table cd-projects-table">
                   <colgroup>
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '38%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '7%' }} /><col style={{ width: '27%' }} /><col style={{ width: '12%' }} />
+                    <col style={{ width: '9%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} />
+                    <col style={{ width: '8%' }} /><col style={{ width: '13%' }} />
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Estimate</th>
-                      <th>Stage</th>
-                      <th>Value</th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('number')}># <SortIcon active={projSortField === 'number'} direction={projSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('name')}>Project <SortIcon active={projSortField === 'name'} direction={projSortDir} /></th>
+                      <th>PM</th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('date')}>Date <SortIcon active={projSortField === 'date'} direction={projSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} /></th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} /></th>
                       <th>GM%</th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('status')}>Status <SortIcon active={projSortField === 'status'} direction={projSortDir} /></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estimates.map((estimate: any) => (
-                      <tr key={estimate.id} onClick={() => navigate(`/estimating/estimates/${estimate.id}`)} style={{ cursor: 'pointer' }}>
-                        <td>{formatDate(estimate.date)}</td>
-                        <td className="cd-truncate"><strong>{estimate.name?.includes(' - ') ? estimate.name.split(' - ').slice(1).join(' - ') : estimate.name}</strong></td>
-                        <td><span className={`cd-status cd-status-${(estimate.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{estimate.status || '-'}</span></td>
-                        <td>{formatCurrency(estimate.value)}</td>
-                        <td>{estimate.gm_percent}%</td>
-                      </tr>
-                    ))}
+                    {sortedProjects.map((project: any) => {
+                      const gm = Math.round((parseFloat(project.gm_percent) || 0) * 100 * 10) / 10;
+                      const gmColor = gm >= 15 ? '#059669' : gm >= 10 ? '#d97706' : gm > 0 ? '#dc2626' : '#94a3b8';
+                      return (
+                        <tr key={project.id} onClick={() => navigate(`/projects/${project.id}`)} style={{ cursor: 'pointer' }}>
+                          <td><strong>{project.number || '-'}</strong></td>
+                          <td className="cd-truncate">{project.name}</td>
+                          <td className="cd-truncate">{project.manager_name || '-'}</td>
+                          <td>{formatDate(project.date)}</td>
+                          <td>{formatCurrency(project.contract_value)}</td>
+                          <td>{formatCurrency(project.backlog)}</td>
+                          <td style={{ color: gmColor, fontWeight: 600 }}>{gm > 0 ? `${gm}%` : '-'}</td>
+                          <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </div>
           </div>
 
-          {/* Opportunities */}
-          <div className="cd-module-card">
+        {/* Opportunities + Work Orders + Estimates */}
+        <div className="cd-opps-column">
+          <div className="cd-opps-panel cd-module-card">
             <div className="cd-module-header">
-              <span className="cd-module-title">💼 Opportunities <span className="cd-count">{opportunities.length}</span></span>
-              <button
-                className="sales-btn sales-btn-primary"
-                style={{ padding: '2px 8px', fontSize: '10px' }}
-                onClick={() => navigate('/sales/pipeline/new', { state: { customerId: parseInt(id!) } })}
-              >
-                + New
-              </button>
+              <span className="cd-module-title">
+                <Briefcase size={13} strokeWidth={2} /> Opportunities{' '}
+                <span className="cd-count">{filteredOpportunities.length}{oppStageFilter !== 'all' ? `/${opportunities.length}` : ''}</span>
+              </span>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {oppStages.length > 0 && (
+                  <select value={oppStageFilter} onChange={(e) => setOppStageFilter(e.target.value)}
+                    style={{ fontSize: '9px', padding: '2px 4px', border: '1px solid #e5e7eb', borderRadius: '4px', cursor: 'pointer', color: '#374151', background: '#fff' }}>
+                    <option value="all">All Stages</option>
+                    {oppStages.map((stage: string) => <option key={stage} value={stage}>{stage}</option>)}
+                  </select>
+                )}
+                <button className="sales-btn sales-btn-primary" style={{ padding: '2px 8px', fontSize: '10px' }}
+                  onClick={() => navigate('/sales/pipeline/new', { state: { customerId: parseInt(id!) } })}>+ New</button>
+              </div>
+            </div>
+            <div className="cd-stats-bar">
+              <div className="cd-stats-cell cd-stats-cell--emerald">
+                <span className="cd-stats-label">Pipeline</span>
+                <span className="cd-stats-value">{formatCurrency(oppKpis.pipeline)}</span>
+              </div>
+              <div className="cd-stats-cell cd-stats-cell--amber">
+                <span className="cd-stats-label">Avg Deal</span>
+                <span className="cd-stats-value">{oppKpis.count > 0 ? formatCurrency(oppKpis.avgDeal) : '—'}</span>
+              </div>
             </div>
             <div className="cd-module-body">
-              {opportunities.length === 0 ? (
-                <div className="cd-empty-state"><p>No opportunities</p></div>
+              {filteredOpportunities.length === 0 ? (
+                <div className="cd-empty-state"><p>{opportunities.length === 0 ? 'No opportunities' : 'No matches'}</p></div>
               ) : (
                 <table className="cd-table">
                   <colgroup>
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '32%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '12%' }} /><col style={{ width: '32%' }} /><col style={{ width: '16%' }} />
+                    <col style={{ width: '20%' }} /><col style={{ width: '20%' }} />
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Opportunity</th>
-                      <th>Assigned</th>
-                      <th>Stage</th>
-                      <th>Value</th>
+                      <th>Date</th><th>Opportunity</th><th>Assigned</th><th>Stage</th><th>Value</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {opportunities.map((opp: any) => (
+                    {filteredOpportunities.map((opp: any) => (
                       <tr key={opp.id} onClick={() => navigate('/sales', { state: { selectedOpportunityId: opp.id } })} style={{ cursor: 'pointer' }}>
                         <td>{formatDate(opp.created_at)}</td>
                         <td className="cd-truncate"><strong>{opp.title}</strong></td>
                         <td className="cd-truncate">{opp.assigned_to_name || '-'}</td>
                         <td>
-                          {opp.stage_name && (
-                            <span className="cd-stage-badge" style={{ background: opp.stage_color || '#6b7280' }}>
-                              {opp.stage_name}
-                            </span>
-                          )}
+                          {opp.stage_name && <span className="cd-stage-badge" style={{ background: opp.stage_color || '#6b7280' }}>{opp.stage_name}</span>}
                         </td>
                         <td>{formatCurrency(opp.estimated_value)}</td>
                       </tr>
@@ -843,8 +1104,98 @@ const CustomerDetail: React.FC = () => {
               )}
             </div>
           </div>
+          {/* Work Orders */}
+          <div className="cd-stack-panel">
+            <div className="cd-stack-panel-header">
+              <span><Wrench size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> <strong>Work Orders</strong> <span className="cd-count">{workOrders.length}</span></span>
+            </div>
+            <div className="cd-stack-panel-body">
+              {workOrders.length === 0
+                ? <div className="cd-stack-empty">No work orders</div>
+                : sortedWorkOrders.slice(0, 20).map((wo: any) => (
+                  <div key={wo.id} className="cd-stack-item" style={{ cursor: 'default' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <strong>#{wo.work_order_number}</strong>{wo.description ? ` — ${wo.description}` : ''}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>
+                        {formatDate(wo.entered_date)} · {formatCurrency(wo.contract_amount)}
+                      </div>
+                    </div>
+                    <span className={`cd-status cd-status-${(wo.status || '').toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: '9px', flexShrink: 0 }}>{wo.status || '-'}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+          {/* Estimates */}
+          <div className="cd-stack-panel">
+            <div className="cd-stack-panel-header">
+              <span><BarChart2 size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> <strong>Estimates</strong> <span className="cd-count">{estimates.length}</span></span>
+              <button className="sales-btn sales-btn-primary" style={{ padding: '1px 5px', fontSize: '9px' }}
+                onClick={() => navigate('/estimating/estimates/new', { state: { customerId: parseInt(id!), customerName: displayName } })}>
+                + New
+              </button>
+            </div>
+            <div className="cd-stack-panel-body">
+              {estimates.length === 0
+                ? <div className="cd-stack-empty">No estimates</div>
+                : estimates.map((estimate: any) => (
+                  <div key={estimate.id} className="cd-stack-item" onClick={() => navigate(`/estimating/estimates/${estimate.id}`)}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {estimate.name?.includes(' - ') ? estimate.name.split(' - ').slice(1).join(' - ') : estimate.name}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>
+                        {formatDate(estimate.date)} · {formatCurrency(estimate.value)}
+                      </div>
+                    </div>
+                    <span className={`cd-status cd-status-${(estimate.status || '').toLowerCase().replace(/\s+/g, '-')}`} style={{ fontSize: '9px', flexShrink: 0 }}>{estimate.status || '-'}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Logo crop modal */}
+      {cropSrc && (
+        <div className="cd-crop-backdrop" onClick={() => setCropSrc(null)}>
+          <div className="cd-crop-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-crop-header">
+              <strong>Crop Logo</strong>
+              <button className="cd-crop-close" onClick={() => setCropSrc(null)}>✕</button>
+            </div>
+            <div className="cd-crop-body">
+              <ReactCrop
+                crop={crop}
+                onChange={c => setCrop(c)}
+                onComplete={c => setCompletedCrop(c)}
+                aspect={undefined}
+                style={{ maxHeight: '60vh' }}
+              >
+                <img
+                  ref={cropImgRef}
+                  src={cropSrc}
+                  alt="crop preview"
+                  style={{ maxHeight: '60vh', maxWidth: '100%' }}
+                  onLoad={e => {
+                    const { width, height } = e.currentTarget;
+                    const c = centerCrop(makeAspectCrop({ unit: '%', width: 80 }, 1, width, height), width, height);
+                    setCrop(c);
+                  }}
+                />
+              </ReactCrop>
+            </div>
+            <div className="cd-crop-footer">
+              <button className="sales-btn sales-btn-secondary" onClick={() => setCropSrc(null)}>Cancel</button>
+              <button className="sales-btn sales-btn-secondary" onClick={handleUploadFull}>Use Full Image</button>
+              <button className="sales-btn sales-btn-primary" onClick={handleUploadCropped} disabled={!completedCrop?.width}>Upload Cropped</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showContactModal && (
