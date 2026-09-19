@@ -629,7 +629,8 @@
   background: var(--bg-card-hover);
 }
 
-.cd-location-item:hover .cd-loc-delete-btn {
+.cd-location-item:hover .cd-loc-delete-btn,
+.cd-stack-item:hover .cd-loc-delete-btn {
   opacity: 1 !important;
 }
 
