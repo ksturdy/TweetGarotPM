@@ -259,10 +259,11 @@ export const ASSIGNMENT_ROLES = [
   'Apprentice 2',
   'Apprentice 1',
   'Pre-Apprentice',
+  'Youth Apprentice',
   'Helper',
 ] as const;
 
-export const ASSIGNMENT_TRADES = ['Pipefitter', 'Plumber', 'Sheet Metal', 'HVAC Service'] as const;
+export const ASSIGNMENT_TRADES = ['Pipefitter', 'Plumber', 'Sheet Metal', 'Metal Trades', 'HVAC Service'] as const;
 
 export const SHIFT_PATTERNS = ['M-F', 'M-Th', 'M-Sa', 'T-F', 'Tu-Sa', 'Weekend', 'Su-Sa'] as const;
 

@@ -217,7 +217,7 @@ const LaborEmployeeDetail: React.FC = () => {
                 onNotify={(a) => setNotifyAssignment(a)}
                 onCancel={(a) => setConfirmAssignment(a)}
               />
-              <AssignmentSection title="Past Assignments" rows={past} pastMode />
+              <AssignmentSection title="Past Assignments" rows={past} onEdit={(a) => { setEditing(a); setAssignOpen(true); }} />
               <TimeOffSection employeeId={employeeId} timeOff={timeOff} />
             </>
           )}
