@@ -339,7 +339,7 @@ const CostDrillIn: React.FC = () => {
                 const remainingSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
                 return (
                   <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <Td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap', fontWeight: 500 }}>{row.phase}</Td>
+                    <Td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#1e293b' }}>{row.phase}</Td>
                     <Td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
                     {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
                     {isLabor && <Td align="right">{fmtNum(row.est_hours)}</Td>}
