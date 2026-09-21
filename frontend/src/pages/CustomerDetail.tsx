@@ -360,8 +360,8 @@ const CustomerDetail: React.FC = () => {
       if (aVal == null) aVal = '';
       if (bVal == null) bVal = '';
       if (projSortField === 'date') {
-        aVal = aVal ? new Date(aVal + 'T00:00:00').getTime() : 0;
-        bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
+        aVal = aVal ? new Date(String(aVal).includes('T') ? aVal : aVal + 'T00:00:00').getTime() : 0;
+        bVal = bVal ? new Date(String(bVal).includes('T') ? bVal : bVal + 'T00:00:00').getTime() : 0;
         return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
       }
       if (projSortField === 'contract_value' || projSortField === 'backlog' || projSortField === 'gm_percent') {
@@ -1047,9 +1047,9 @@ const CustomerDetail: React.FC = () => {
               ) : (
                 <table className="cd-table cd-projects-table">
                   <colgroup>
-                    <col style={{ width: '7%' }} /><col style={{ width: '27%' }} /><col style={{ width: '12%' }} />
-                    <col style={{ width: '9%' }} /><col style={{ width: '12%' }} /><col style={{ width: '12%' }} />
-                    <col style={{ width: '8%' }} /><col style={{ width: '13%' }} />
+                    <col style={{ width: '7%' }} /><col style={{ width: '28%' }} /><col style={{ width: '15%' }} />
+                    <col style={{ width: '8%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} />
+                    <col style={{ width: '8%' }} /><col style={{ width: '14%' }} />
                   </colgroup>
                   <thead>
                     <tr>

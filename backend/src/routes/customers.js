@@ -25,6 +25,11 @@ router.get('/', async (req, res, next) => {
     if (req.query.type) {
       customers = customers.filter(c => c.customer_type === req.query.type);
     }
+    for (const c of customers) {
+      if (c.logo_url) {
+        try { c.logo_url = await getFileUrl(c.logo_url); } catch (e) { /* leave raw */ }
+      }
+    }
     res.json(customers);
   } catch (error) {
     next(error);

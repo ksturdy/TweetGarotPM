@@ -8,6 +8,30 @@ import CustomerFormModal from '../../components/modals/CustomerFormModal';
 import { renderMarketIcon, getMarketGradient } from '../../utils/marketIcons';
 import '../../styles/SalesPipeline.css';
 
+const resolveLogoUrl = (url: string) =>
+  url.startsWith('/') ? `${(process.env.REACT_APP_API_URL || 'http://localhost:3001/api').replace('/api', '')}${url}` : url;
+
+const CustomerIcon: React.FC<{ customer: Customer }> = ({ customer }) => {
+  const [logoFailed, setLogoFailed] = useState(false);
+  if (customer.logo_url && !logoFailed) {
+    return (
+      <div className="sales-project-icon" style={{ background: '#fff', overflow: 'hidden', padding: '2px' }}>
+        <img
+          src={resolveLogoUrl(customer.logo_url)}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          onError={() => setLogoFailed(true)}
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="sales-project-icon" style={{ background: getMarketGradient(customer.market) }}>
+      {renderMarketIcon(customer.market)}
+    </div>
+  );
+};
+
 const CustomerList: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -485,9 +509,7 @@ const CustomerList: React.FC = () => {
                   </td>
                   <td>
                     <div className="sales-project-cell">
-                      <div className="sales-project-icon" style={{ background: getMarketGradient(customer.market) }}>
-                        {renderMarketIcon(customer.market)}
-                      </div>
+                      <CustomerIcon customer={customer} />
                       <div className="sales-project-info">
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {customer.name || <span style={{ color: '#ef4444', fontStyle: 'italic' }}>Missing Name</span>}
