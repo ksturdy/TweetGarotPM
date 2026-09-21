@@ -51,6 +51,7 @@ const DEFAULT_CARD_ORDER = [
   'gm-by-complete',
   'budget-variance',
   'productivity',
+  'percent-complete',
   'gm-vs-complete',
   'est-revenue-cost',
 ];
@@ -169,7 +170,7 @@ const SortableCard: React.FC<SortableCardProps> = ({ id, title, icon, footnote, 
 const ProjectPerformance: React.FC = () => {
   const { id: projectId } = useParams<{ id: string }>();
 
-  const storageKey = 'performanceCardOrder';
+  const storageKey = 'performanceCardOrder_v2';
 
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     try {
@@ -330,6 +331,20 @@ const ProjectPerformance: React.FC = () => {
         }),
         borderColor: '#06b6d4',
         backgroundColor: 'rgba(6, 182, 212, 0.1)',
+        tension: 0.3,
+        fill: true,
+      },
+    ],
+  };
+
+  const percentCompleteByDateData = {
+    labels: dates,
+    datasets: [
+      {
+        label: '% Complete',
+        data: snapshots.map(s => (s.percent_complete || 0) * 100),
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         tension: 0.3,
         fill: true,
       },
@@ -509,6 +524,21 @@ const ProjectPerformance: React.FC = () => {
     },
   };
 
+  const percentCompleteByDateOptions = {
+    ...chartOptions,
+    scales: {
+      ...chartOptions.scales,
+      y: {
+        min: 0,
+        max: 100,
+        ticks: {
+          font: { size: 10 },
+          callback: (value: any) => `${value}%`,
+        },
+      },
+    },
+  };
+
   const estRevenueVsCostOptions = {
     ...chartOptions,
     scales: {
@@ -571,6 +601,11 @@ const ProjectPerformance: React.FC = () => {
       icon: '⚡',
       footnote: 'Hours per $1000 revenue (lower is better)',
       chart: <Line data={productivityData} options={chartOptions} />,
+    },
+    'percent-complete': {
+      title: '% Complete by Date',
+      icon: '📅',
+      chart: <Line data={percentCompleteByDateData} options={percentCompleteByDateOptions} />,
     },
     'gm-vs-complete': {
       title: 'GM% × % Complete',
