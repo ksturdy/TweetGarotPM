@@ -48,6 +48,71 @@
   border-top: 1px solid #e5e7eb;
 }
 
+/* Chart drill-down panel */
+.cd-drilldown-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.cd-drilldown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cd-drilldown-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.cd-drilldown-close:hover { color: #fff; }
+.cd-drilldown-body {
+  overflow-y: auto;
+  flex: 1;
+}
+.cd-drill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.cd-drill-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.cd-drill-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+.cd-drill-table tr:hover td { background: #f8fafc; }
+
 /* Customer Detail Page - Compact Single-Screen Layout */
 .customer-detail-page {
   padding: 0;

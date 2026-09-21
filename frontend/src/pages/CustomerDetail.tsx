@@ -51,7 +51,7 @@ interface Contact {
 
 type SortDirection = 'asc' | 'desc';
 type WorkOrderSortField = 'work_order_number' | 'description' | 'entered_date' | 'contract_amount' | 'status';
-type ProjectSortField = 'number' | 'name' | 'date' | 'contract_value' | 'backlog' | 'status';
+type ProjectSortField = 'number' | 'name' | 'date' | 'contract_value' | 'backlog' | 'status' | 'manager_name' | 'gm_percent';
 
 const SortIcon: React.FC<{ active: boolean; direction: SortDirection }> = ({ active, direction }) => (
   <span className={`cd-sort-icon ${active ? 'active' : ''}`}>
@@ -66,6 +66,7 @@ const CustomerDetail: React.FC = () => {
   const { toast } = useTitanFeedback();
   const [showEditModal, setShowEditModal] = useState(false);
   const [showInfoDrawer, setShowInfoDrawer] = useState(false);
+  const [drillDown, setDrillDown] = useState<{ type: 'gm' | 'revenue' | 'projects' | 'hitrate' | 'bids'; year: number } | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
@@ -86,7 +87,7 @@ const CustomerDetail: React.FC = () => {
   const [projSortDir, setProjSortDir] = useState<SortDirection>('desc');
 
   // Filter state
-  const [projStatusFilter, setProjStatusFilter] = useState<string>('Open');
+  const [projStatusFilter, setProjStatusFilter] = useState<string[]>(['Open', 'Soft-Closed']);
   const [oppStageFilter, setOppStageFilter] = useState<string>('all');
 
   // Fetch data
@@ -290,15 +291,24 @@ const CustomerDetail: React.FC = () => {
     [opportunities, oppStageFilter]
   );
 
+  const parseYear = (d: any) => { if (!d) return 0; const s = String(d).includes('T') ? d : d + 'T00:00:00'; return new Date(s).getFullYear(); };
+
   // Project metrics (dynamic with filter)
   const projKpis = useMemo(() => {
-    const list = projStatusFilter === 'all' ? projects : projects.filter((p: any) => p.status === projStatusFilter);
+    const yearFiltered = drillDown && ['gm', 'revenue', 'projects'].includes(drillDown.type)
+      ? projects.filter((p: any) => parseYear(p.date) === drillDown.year)
+      : projects;
+    const list = projStatusFilter.length === 0 ? yearFiltered : yearFiltered.filter((p: any) => projStatusFilter.includes(p.status));
     const contractValue = list.reduce((s: number, p: any) => s + (parseFloat(p.contract_value) || 0), 0);
     const backlog = list.reduce((s: number, p: any) => s + (parseFloat(p.backlog) || 0), 0);
     const gcCount = list.filter((p: any) => p.relationship === 'GC' || p.relationship === 'GC & Owner').length;
     const ownerCount = list.filter((p: any) => p.relationship === 'Owner' || p.relationship === 'GC & Owner').length;
-    return { contractValue, backlog, count: list.length, gcCount, ownerCount };
-  }, [projects, projStatusFilter]);
+    const gmProjects = list.filter((p: any) => parseFloat(p.gm_percent) > 0 && parseFloat(p.gm_percent) < 1);
+    const totalGmDollars = gmProjects.reduce((s: number, p: any) => s + (parseFloat(p.contract_value) || 0) * parseFloat(p.gm_percent), 0);
+    const totalGmBase = gmProjects.reduce((s: number, p: any) => s + (parseFloat(p.contract_value) || 0), 0);
+    const weightedGm = totalGmBase > 0 ? (totalGmDollars / totalGmBase) * 100 : null;
+    return { contractValue, backlog, count: list.length, gcCount, ownerCount, weightedGm };
+  }, [projects, projStatusFilter, drillDown]);
 
   // Opportunity metrics (dynamic with filter)
   const oppKpis = useMemo(() => {
@@ -337,9 +347,12 @@ const CustomerDetail: React.FC = () => {
 
   // Sort projects (with status filter)
   const sortedProjects = useMemo(() => {
-    const filtered = projStatusFilter === 'all'
-      ? projects
-      : projects.filter((p: any) => p.status === projStatusFilter);
+    const yearFiltered = drillDown && ['gm', 'revenue', 'projects'].includes(drillDown.type)
+      ? projects.filter((p: any) => parseYear(p.date) === drillDown.year)
+      : projects;
+    const filtered = projStatusFilter.length === 0
+      ? yearFiltered
+      : yearFiltered.filter((p: any) => projStatusFilter.includes(p.status));
     if (!filtered.length) return [];
     return [...filtered].sort((a: any, b: any) => {
       let aVal = a[projSortField];
@@ -351,7 +364,7 @@ const CustomerDetail: React.FC = () => {
         bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
         return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
       }
-      if (projSortField === 'contract_value' || projSortField === 'backlog') {
+      if (projSortField === 'contract_value' || projSortField === 'backlog' || projSortField === 'gm_percent') {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
         return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
@@ -362,7 +375,7 @@ const CustomerDetail: React.FC = () => {
       }
       return projSortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [projects, projSortField, projSortDir, projStatusFilter]);
+  }, [projects, projSortField, projSortDir, projStatusFilter, drillDown]);
 
   const handleWoSort = (field: WorkOrderSortField) => {
     if (woSortField === field) setWoSortDir(woSortDir === 'asc' ? 'desc' : 'asc');
@@ -698,6 +711,7 @@ const CustomerDetail: React.FC = () => {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onClick: (_e, els, chart) => { if (els.length) { setDrillDown({ type: 'revenue', year: Number((chart.data.labels as any[])[els[0].index]) }); setProjStatusFilter([]); } },
                 plugins: {
                   legend: { position: 'bottom', labels: { font: { size: 8 }, boxWidth: 7, padding: 3 } },
                   tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: $${((ctx.raw as number) / 1000000).toFixed(1)}M` } },
@@ -730,6 +744,7 @@ const CustomerDetail: React.FC = () => {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onClick: (_e, els, chart) => { if (els.length) { setDrillDown({ type: 'gm', year: Number((chart.data.labels as any[])[els[0].index]) }); setProjStatusFilter([]); } },
                 plugins: {
                   legend: { display: false },
                   tooltip: { callbacks: { label: (ctx) => ` GM%: ${(ctx.raw as number).toFixed(1)}%` } },
@@ -757,6 +772,7 @@ const CustomerDetail: React.FC = () => {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onClick: (_e, els, chart) => { if (els.length) { setDrillDown({ type: 'projects', year: Number((chart.data.labels as any[])[els[0].index]) }); setProjStatusFilter([]); } },
                 plugins: {
                   legend: { display: false },
                   tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} projects` } },
@@ -792,6 +808,7 @@ const CustomerDetail: React.FC = () => {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onClick: (_e, els, chart) => { if (els.length) setDrillDown({ type: 'hitrate', year: Number((chart.data.labels as any[])[els[0].index]) }); },
                 plugins: {
                   legend: { display: false },
                   tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw}%` } },
@@ -819,6 +836,7 @@ const CustomerDetail: React.FC = () => {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onClick: (_e, els, chart) => { if (els.length) setDrillDown({ type: 'bids', year: Number((chart.data.labels as any[])[els[0].index]) }); },
                 plugins: {
                   legend: { display: false },
                   tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} bids` } },
@@ -967,27 +985,48 @@ const CustomerDetail: React.FC = () => {
             <div className="cd-module-header">
               <span className="cd-module-title">
                 <HardHat size={13} strokeWidth={2} /> Projects{' '}
-                <span className="cd-count">{sortedProjects.length}{projStatusFilter !== 'all' ? `/${projects.length}` : ''}</span>
+                <span className="cd-count">{sortedProjects.length}/{projects.length}</span>
+                {drillDown && ['gm', 'revenue', 'projects'].includes(drillDown.type) && (
+                  <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 500, color: '#f59e0b', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '4px', padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {drillDown.year}
+                    <button onClick={() => { setDrillDown(null); setProjStatusFilter(['Open', 'Soft-Closed']); }} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#92400e', fontWeight: 700, fontSize: '10px', lineHeight: 1 }}>✕</button>
+                  </span>
+                )}
               </span>
               <div style={{ display: 'flex', gap: '3px' }}>
-                {(['all', 'Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => (
-                  <button key={s} onClick={() => setProjStatusFilter(s)} style={{
-                    padding: '2px 6px', fontSize: '9px',
-                    fontWeight: projStatusFilter === s ? 600 : 400,
-                    background: projStatusFilter === s ? '#3b82f6' : 'transparent',
-                    color: projStatusFilter === s ? '#fff' : '#6b7280',
-                    border: `1px solid ${projStatusFilter === s ? '#3b82f6' : '#e5e7eb'}`,
-                    borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}>
-                    {s === 'all' ? 'All' : s}
-                  </button>
-                ))}
+                <button onClick={() => setProjStatusFilter([])} style={{
+                  padding: '2px 6px', fontSize: '9px',
+                  fontWeight: projStatusFilter.length === 0 ? 600 : 400,
+                  background: projStatusFilter.length === 0 ? '#3b82f6' : 'transparent',
+                  color: projStatusFilter.length === 0 ? '#fff' : '#6b7280',
+                  border: `1px solid ${projStatusFilter.length === 0 ? '#3b82f6' : '#e5e7eb'}`,
+                  borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}>All</button>
+                {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => {
+                  const active = projStatusFilter.includes(s);
+                  return (
+                    <button key={s} onClick={() => setProjStatusFilter(prev =>
+                      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+                    )} style={{
+                      padding: '2px 6px', fontSize: '9px',
+                      fontWeight: active ? 600 : 400,
+                      background: active ? '#3b82f6' : 'transparent',
+                      color: active ? '#fff' : '#6b7280',
+                      border: `1px solid ${active ? '#3b82f6' : '#e5e7eb'}`,
+                      borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}>{s}</button>
+                  );
+                })}
               </div>
             </div>
             <div className="cd-stats-bar">
               <div className="cd-stats-cell cd-stats-cell--blue">
                 <span className="cd-stats-label">Contract Value</span>
                 <span className="cd-stats-value">{formatCurrency(projKpis.contractValue)}</span>
+              </div>
+              <div className="cd-stats-cell cd-stats-cell--amber">
+                <span className="cd-stats-label">Avg GM%</span>
+                <span className="cd-stats-value">{projKpis.weightedGm != null ? `${projKpis.weightedGm.toFixed(1)}%` : '—'}</span>
               </div>
               <div className="cd-stats-cell cd-stats-cell--purple">
                 <span className="cd-stats-label">Backlog</span>
@@ -1016,11 +1055,11 @@ const CustomerDetail: React.FC = () => {
                     <tr>
                       <th className="cd-sortable" onClick={() => handleProjSort('number')}># <SortIcon active={projSortField === 'number'} direction={projSortDir} /></th>
                       <th className="cd-sortable" onClick={() => handleProjSort('name')}>Project <SortIcon active={projSortField === 'name'} direction={projSortDir} /></th>
-                      <th>PM</th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('manager_name')}>PM <SortIcon active={projSortField === 'manager_name'} direction={projSortDir} /></th>
                       <th className="cd-sortable" onClick={() => handleProjSort('date')}>Date <SortIcon active={projSortField === 'date'} direction={projSortDir} /></th>
                       <th className="cd-sortable" onClick={() => handleProjSort('contract_value')}>Value <SortIcon active={projSortField === 'contract_value'} direction={projSortDir} /></th>
                       <th className="cd-sortable" onClick={() => handleProjSort('backlog')}>Backlog <SortIcon active={projSortField === 'backlog'} direction={projSortDir} /></th>
-                      <th>GM%</th>
+                      <th className="cd-sortable" onClick={() => handleProjSort('gm_percent')}>GM% <SortIcon active={projSortField === 'gm_percent'} direction={projSortDir} /></th>
                       <th className="cd-sortable" onClick={() => handleProjSort('status')}>Status <SortIcon active={projSortField === 'status'} direction={projSortDir} /></th>
                     </tr>
                   </thead>
@@ -1036,7 +1075,9 @@ const CustomerDetail: React.FC = () => {
                           <td>{formatDate(project.date)}</td>
                           <td>{formatCurrency(project.contract_value)}</td>
                           <td>{formatCurrency(project.backlog)}</td>
-                          <td style={{ color: gmColor, fontWeight: 600 }}>{gm > 0 ? `${gm}%` : '-'}</td>
+                          <td style={{ color: project.gm_overridden ? '#f59e0b' : gmColor, fontWeight: 600, fontStyle: project.gm_overridden ? 'italic' : undefined }} title={project.gm_overridden ? 'Overridden from 0% or 100% (no cost projection yet)' : undefined}>
+                            {gm > 0 ? `${gm.toFixed(1)}%${project.gm_overridden ? '*' : ''}` : '-'}
+                          </td>
                           <td><span className={`cd-status cd-status-${(project.status || '').toLowerCase().replace(/\s+/g, '-')}`}>{project.status}</span></td>
                         </tr>
                       );

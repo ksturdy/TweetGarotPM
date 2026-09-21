@@ -359,9 +359,9 @@ const Customer = {
         wm.wo_earned_revenue, pm.proj_earned_revenue,
         (wm.wo_ytd_revenue + pm.proj_ytd_revenue) as ytd_revenue,
         wm.wo_ytd_revenue, pm.proj_ytd_revenue,
-        ROUND(COALESCE(pm.proj_avg_gm_percent, em.avg_gm_percent, 0)::numeric, 1) as avg_gm_percent,
-        ROUND(COALESCE(pm.proj_avg_gm_percent, 0)::numeric, 1) as proj_gm_percent,
-        ROUND(COALESCE(em.avg_gm_percent, 0)::numeric, 1) as estimate_gm_percent,
+        ROUND(COALESCE(pm.proj_avg_gm_percent, em.avg_gm_percent, 0)::numeric, 4) as avg_gm_percent,
+        ROUND(COALESCE(pm.proj_avg_gm_percent, 0)::numeric, 4) as proj_gm_percent,
+        ROUND(COALESCE(em.avg_gm_percent, 0)::numeric, 4) as estimate_gm_percent,
         wm.wo_first_year as first_year, wm.wo_last_year as last_year,
         CASE
           WHEN GREATEST(wm.wo_last_year, pm.proj_last_year) IS NOT NULL
@@ -443,14 +443,23 @@ const Customer = {
       ),
       proj_by_year AS (
         SELECT
-          EXTRACT(YEAR FROM start_date)::int AS year,
+          year,
           SUM(COALESCE(contract_value, 0)) AS proj_revenue,
-          AVG(CASE WHEN gross_margin_percent > 0 THEN gross_margin_percent END) AS avg_gm
-        FROM projects
-        WHERE tenant_id = $2 AND (customer_id = $1 OR owner_customer_id = $1)
-          AND start_date IS NOT NULL
-          AND EXTRACT(YEAR FROM start_date) >= 2015
-        GROUP BY 1
+          SUM(CASE WHEN eff_gm > 0 AND eff_gm < 1 THEN contract_value * eff_gm END) /
+            NULLIF(SUM(CASE WHEN eff_gm > 0 AND eff_gm < 1 THEN contract_value END), 0) AS avg_gm
+        FROM (
+          SELECT
+            EXTRACT(YEAR FROM start_date)::int AS year,
+            contract_value,
+            CASE WHEN (COALESCE(gross_margin_percent,0) >= 0.995 OR COALESCE(gross_margin_percent,0) = 0)
+                      AND override_gm_percent IS NOT NULL
+                 THEN override_gm_percent ELSE gross_margin_percent END AS eff_gm
+          FROM projects
+          WHERE tenant_id = $2 AND (customer_id = $1 OR owner_customer_id = $1)
+            AND start_date IS NOT NULL
+            AND EXTRACT(YEAR FROM start_date) >= 2015
+        ) sub
+        GROUP BY year
       ),
       all_years AS (
         SELECT year FROM wo_by_year
@@ -462,7 +471,7 @@ const Customer = {
         COALESCE(w.wo_revenue, 0) AS wo_revenue,
         COALESCE(p.proj_revenue, 0) AS proj_revenue,
         COALESCE(w.wo_revenue, 0) + COALESCE(p.proj_revenue, 0) AS total_revenue,
-        ROUND(COALESCE(p.avg_gm, 0)::numeric, 1) AS avg_gm_percent
+        ROUND(COALESCE(p.avg_gm, 0)::numeric, 4) AS avg_gm_percent
       FROM all_years ay
       LEFT JOIN wo_by_year w USING (year)
       LEFT JOIN proj_by_year p USING (year)
@@ -480,7 +489,14 @@ const Customer = {
         p.start_date as date,
         COALESCE(p.contract_value, 0) as contract_value,
         COALESCE(p.backlog, 0) as backlog,
-        ROUND(COALESCE(p.gross_margin_percent, 0)::numeric, 1) as gm_percent,
+        ROUND(COALESCE(
+          CASE WHEN (COALESCE(p.gross_margin_percent, 0) >= 0.995 OR COALESCE(p.gross_margin_percent, 0) = 0)
+                    AND p.override_gm_percent IS NOT NULL
+               THEN p.override_gm_percent
+               ELSE p.gross_margin_percent
+          END, 0)::numeric, 4) as gm_percent,
+        ((COALESCE(p.gross_margin_percent, 0) >= 0.995 OR COALESCE(p.gross_margin_percent, 0) = 0)
+          AND p.override_gm_percent IS NOT NULL) as gm_overridden,
         p.status,
         p.description,
         e.first_name || ' ' || e.last_name as manager_name,
