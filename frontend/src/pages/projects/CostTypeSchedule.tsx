@@ -315,15 +315,24 @@ const CostTypeSchedule: React.FC<Props> = ({
   // ── Shift settings ────────────────────────────────────────────────────────
   const shiftKey = `costTypeSchedule_shifts_${projectId}`;
   const loadShifts = (key: string): ShiftSettings => {
-    try {
-      const s = localStorage.getItem(key);
-      if (!s) return { ...SHIFT_DEFAULTS };
-      const parsed = JSON.parse(s);
-      // Discard old format (had hoursPerDay/daysPerWeek) — check first entry
-      const firstVal = Object.values(parsed)[0] as any;
-      if (firstVal && 'hoursPerDay' in firstVal) return { ...SHIFT_DEFAULTS };
-      return { ...SHIFT_DEFAULTS, ...parsed };
-    } catch { return { ...SHIFT_DEFAULTS }; }
+    const parse = (raw: string | null): ShiftSettings | null => {
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        const firstVal = Object.values(parsed)[0] as any;
+        if (firstVal && 'hoursPerDay' in firstVal) return null; // old incompatible format
+        return { ...SHIFT_DEFAULTS, ...parsed };
+      } catch { return null; }
+    };
+    // Try project-scoped key first; fall back to legacy global key (one-time migration)
+    const result = parse(localStorage.getItem(key));
+    if (result) return result;
+    const legacy = parse(localStorage.getItem('costTypeSchedule_shifts'));
+    if (legacy) {
+      localStorage.setItem(key, JSON.stringify(legacy)); // migrate
+      return legacy;
+    }
+    return { ...SHIFT_DEFAULTS };
   };
   const [shiftSettings, setShiftSettings] = useState<ShiftSettings>(() => loadShifts(shiftKey));
 
