@@ -332,6 +332,18 @@ const CostTypeSchedule: React.FC<Props> = ({
     setShiftSettings(loadShifts(`costTypeSchedule_shifts_${projectId}`));
   }, [projectId]);
 
+  // Sync any locally-stored shift schedules to DB on mount so the labor board
+  // picks up weekly_hours even when the user only changed dates (not shift cells).
+  useEffect(() => {
+    const settings = loadShifts(`costTypeSchedule_shifts_${projectId}`);
+    Object.entries(settings).forEach(([key, s]) => {
+      const wh = weeklyHours(s as ShiftSetting);
+      if (wh > 0) {
+        scheduleSegmentsService.updateSegment(projectId, key, { weekly_hours: wh }).catch(() => {});
+      }
+    });
+  }, [projectId]);
+
   const updateShift = useCallback((key: string, day: keyof ShiftSetting, value: number) => {
     setShiftSettings(prev => {
       const next = { ...prev, [key]: { ...(prev[key] ?? SHIFT_DEFAULTS[key] ?? DEFAULT_SHIFT), [day]: value } };
