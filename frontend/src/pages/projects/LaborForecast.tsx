@@ -1643,7 +1643,12 @@ const LaborForecast: React.FC = () => {
       const pm = (p.contract.project_manager_name || '-').split(',')[0].substring(0, 15);
       const periodCols = pdfTableColumns.map(pc => {
         const h = applyTradeFilter(aggHours(p.monthlyHours, pc.keys));
-        return useQuarterly ? fmtHours(h.total) : fmtHeadcount(h.total, hpp);
+        if (useQuarterly) return fmtHours(h.total);
+        const pfHPP = p.tradeHPM?.pf || hpp;
+        const smHPP = p.tradeHPM?.sm || hpp;
+        const plHPP = p.tradeHPM?.pl || hpp;
+        const totalHC = (h.pf / pfHPP) + (h.sm / smHPP) + (h.pl / plHPP);
+        return totalHC < 0.1 ? '-' : totalHC.toFixed(1);
       });
       const filteredRemaining = p.tradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
       return [
