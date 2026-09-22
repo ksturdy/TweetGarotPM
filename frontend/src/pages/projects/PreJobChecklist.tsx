@@ -4,8 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../services/projects';
 import { vistaDataService, PhaseCodeCostSummary, VPContract } from '../../services/vistaData';
-import { projectAssignmentsApi, ProjectAssignment, AssignToProjectInput } from '../../services/projectAssignments';
-import { ASSIGNMENT_TRADES } from '../../services/labor';
+import { projectAssignmentsApi, ProjectAssignment } from '../../services/projectAssignments';
 import api from '../../services/api';
 import {
   preJobChecklistApi,
@@ -33,33 +32,6 @@ const MGMT_ROLES = [
   'BIM Manager',
   'Project Engineer',
 ] as const;
-
-// Field roles route through labor coordinator as planned → confirmed
-const FIELD_ROLES = [
-  'Superintendent',
-  'Foreman',
-  'Journeyman',
-  'Apprentice 5',
-  'Apprentice 4',
-  'Apprentice 3',
-  'Apprentice 2',
-  'Apprentice 1',
-  'Pre-Apprentice',
-  'Helper',
-] as const;
-
-const isFieldRole = (r: string) => (FIELD_ROLES as readonly string[]).includes(r);
-
-interface EmployeeSearchResult {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email?: string;
-  job_title?: string;
-  title?: string | null;
-  trade?: string | null;
-}
-
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -406,153 +378,32 @@ const LaborForecastSummary: React.FC<LaborForecastProps> = ({ contract, costSumm
   );
 };
 
-// ── Shared employee search hook ────────────────────────────────────────────────
-const useEmpSearch = () => {
-  const [empQuery, setEmpQuery] = useState('');
-  const [empResults, setEmpResults] = useState<EmployeeSearchResult[]>([]);
-  const [selectedEmp, setSelectedEmp] = useState<EmployeeSearchResult | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
-
-  useEffect(() => {
-    if (empQuery.length < 2) { setEmpResults([]); setShowDropdown(false); return; }
-    api.get<EmployeeSearchResult[]>(`/project-assignments/search-employees?q=${encodeURIComponent(empQuery)}`)
-      .then(r => { setEmpResults(r.data); setShowDropdown(true); })
-      .catch(() => {});
-  }, [empQuery]);
-
-  const select = (emp: EmployeeSearchResult, onSelect?: (emp: EmployeeSearchResult) => void) => {
-    setSelectedEmp(emp);
-    setEmpQuery(`${emp.first_name} ${emp.last_name}`);
-    setShowDropdown(false);
-    onSelect?.(emp);
-  };
-
-  const reset = () => { setEmpQuery(''); setSelectedEmp(null); setEmpResults([]); setShowDropdown(false); };
-  const clearSelection = () => { setSelectedEmp(null); };
-
-  return { empQuery, setEmpQuery, empResults, selectedEmp, showDropdown, select, reset, clearSelection };
-};
-
-// ── Employee search input with dropdown ────────────────────────────────────────
-interface EmpSearchInputProps {
-  query: string;
-  results: EmployeeSearchResult[];
-  showDropdown: boolean;
-  onChange: (v: string) => void;
-  onSelect: (emp: EmployeeSearchResult) => void;
-  onClear: () => void;
-}
-const EmpSearchInput: React.FC<EmpSearchInputProps> = ({ query, results, showDropdown, onChange, onSelect, onClear }) => (
-  <div style={{ position: 'relative' }}>
-    <input type="text" className="pjc-nominate-input" value={query}
-      onChange={e => { onChange(e.target.value); onClear(); }}
-      placeholder="Search by name…" autoComplete="off" />
-    {showDropdown && results.length > 0 && (
-      <div className="pjc-emp-dropdown">
-        {results.map(e => (
-          <button key={e.id} className="pjc-emp-dropdown-item" onMouseDown={() => onSelect(e)}>
-            <span className="pjc-emp-name">{e.first_name} {e.last_name}</span>
-            {(e.title || e.trade) && (
-              <span className="pjc-emp-meta">{[e.title, e.trade].filter(Boolean).join(' · ')}</span>
-            )}
-          </button>
-        ))}
-      </div>
-    )}
-  </div>
-);
-
 // ── Office Team Section ────────────────────────────────────────────────────────
 interface OfficeSectionProps { assignments: ProjectAssignment[]; projectId: string }
 const OfficeSection: React.FC<OfficeSectionProps> = ({ assignments, projectId }) => {
-  const { toast } = useTitanFeedback();
-  const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [role, setRole] = useState('');
-  const empSearch = useEmpSearch();
-
-  const addMutation = useMutation({
-    mutationFn: () => {
-      if (!empSearch.selectedEmp || !role) throw new Error('Employee and role required');
-      return projectAssignmentsApi.addToProject(Number(projectId), {
-        employeeId: empSearch.selectedEmp.id,
-        role,
-        status: 'active',
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-assignments', projectId] });
-      toast.success('Team member assigned');
-      setShowForm(false); setRole(''); empSearch.reset();
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to assign'),
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: (id: number) => projectAssignmentsApi.deleteAssignment(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['project-assignments', projectId] }),
-    onError: () => toast.error('Could not remove'),
-  });
 
   return (
     <div className="pjc-crew-group">
       <div className="pjc-crew-group-header pjc-crew-group-header--office">
         <span>Management / Office</span>
+        <Link to={`/projects/${projectId}/pre-job-checklist/wizard?step=3`} className="pjc-link-cta" style={{ fontWeight: 400, fontSize: '0.75rem' }}>
+          Edit in Wizard (Step 3) →
+        </Link>
       </div>
-
-      {assignments.length > 0 && (
+      {assignments.length > 0 ? (
         <table className="pjc-team-table">
-          <thead><tr><th>Name</th><th>Role</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th></tr></thead>
           <tbody>
             {assignments.map(a => (
               <tr key={a.id}>
                 <td style={{ fontWeight: 500 }}>{[a.first_name, a.last_name].filter(Boolean).join(' ') || `Employee #${a.employee_id}`}</td>
                 <td>{a.role ?? '—'}</td>
-                <td>
-                  <button className="pjc-btn-icon" title="Remove" onClick={() => removeMutation.mutate(a.id)}>
-                    <TrashIcon />
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      )}
-
-      {showForm ? (
-        <div className="pjc-nominate-form">
-          <div className="pjc-nominate-row">
-            <div className="pjc-nominate-field pjc-nominate-field--wide">
-              <label className="pjc-field-label">Employee</label>
-              <EmpSearchInput
-                query={empSearch.empQuery}
-                results={empSearch.empResults}
-                showDropdown={empSearch.showDropdown}
-                onChange={empSearch.setEmpQuery}
-                onSelect={e => empSearch.select(e)}
-                onClear={empSearch.clearSelection}
-              />
-            </div>
-            <div className="pjc-nominate-field">
-              <label className="pjc-field-label">Role</label>
-              <select className="pjc-nominate-select" value={role} onChange={e => setRole(e.target.value)}>
-                <option value="">— select —</option>
-                {MGMT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="pjc-nominate-actions">
-            <button className="pjc-btn-ghost" onClick={() => { setShowForm(false); setRole(''); empSearch.reset(); }}>Cancel</button>
-            <button className="pjc-btn-save" disabled={!empSearch.selectedEmp || !role || addMutation.isPending}
-              onClick={() => addMutation.mutate()}>
-              {addMutation.isPending ? 'Saving…' : 'Assign to Team'}
-            </button>
-          </div>
-        </div>
       ) : (
-        <button className="pjc-btn-ghost pjc-crew-add-btn" onClick={() => setShowForm(true)}>
-          + Add Office / Management
-        </button>
+        <p className="pjc-crew-empty-msg">No office team assigned yet.</p>
       )}
     </div>
   );
@@ -561,140 +412,38 @@ const OfficeSection: React.FC<OfficeSectionProps> = ({ assignments, projectId })
 // ── Field Crew Section ─────────────────────────────────────────────────────────
 interface FieldSectionProps { assignments: ProjectAssignment[]; projectId: string }
 const FieldSection: React.FC<FieldSectionProps> = ({ assignments, projectId }) => {
-  const { toast } = useTitanFeedback();
-  const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [role, setRole] = useState('');
-  const [trade, setTrade] = useState('');
-  const [notes, setNotes] = useState('');
-  const empSearch = useEmpSearch();
-
   const STATUS_LABEL: Record<string, string> = {
-    planned: 'Pending Approval',
-    active: 'Confirmed',
-    completed: 'Completed',
-    cancelled: 'Cancelled',
+    planned: 'Pending Approval', active: 'Confirmed', completed: 'Completed', cancelled: 'Cancelled',
   };
-
-  const nominateMutation = useMutation({
-    mutationFn: () => {
-      if (!empSearch.selectedEmp || !role) throw new Error('Employee and role required');
-      return projectAssignmentsApi.addToProject(Number(projectId), {
-        employeeId: empSearch.selectedEmp.id,
-        role,
-        trade: trade || undefined,
-        notes: notes || undefined,
-        status: 'planned',
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-assignments', projectId] });
-      toast.success('Field nomination submitted — pending labor coordinator approval');
-      setShowForm(false); setRole(''); setTrade(''); setNotes(''); empSearch.reset();
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed to submit'),
-  });
-
-  const withdrawMutation = useMutation({
-    mutationFn: (id: number) => projectAssignmentsApi.deleteAssignment(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-assignments', projectId] });
-      toast.success('Nomination withdrawn');
-    },
-    onError: () => toast.error('Could not withdraw'),
-  });
 
   return (
     <div className="pjc-crew-group">
       <div className="pjc-crew-group-header pjc-crew-group-header--field">
         <span>Field Crew</span>
-        <Link to="/labor" className="pjc-link-cta" style={{ fontWeight: 400, fontSize: '0.75rem' }}>
-          Manage in Labor module →
+        <Link to={`/projects/${projectId}/pre-job-checklist/wizard?step=4`} className="pjc-link-cta" style={{ fontWeight: 400, fontSize: '0.75rem' }}>
+          Edit in Wizard (Step 4) →
         </Link>
       </div>
-
       {assignments.length === 0 ? (
         <p className="pjc-crew-empty-msg">No field crew nominated yet.</p>
       ) : (
         <table className="pjc-team-table">
-          <thead><tr><th>Name</th><th>Role</th><th>Trade</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th>Trade</th><th>Status</th></tr></thead>
           <tbody>
-            {assignments.map(a => {
-              const isPending = !a.status || a.status === 'planned';
-              return (
-                <tr key={a.id}>
-                  <td style={{ fontWeight: 500 }}>{[a.first_name, a.last_name].filter(Boolean).join(' ') || `Employee #${a.employee_id}`}</td>
-                  <td>{a.role ?? '—'}</td>
-                  <td>{a.trade ?? '—'}</td>
-                  <td>
-                    <span className={`pjc-status-badge pjc-status-${a.status ?? 'planned'}`}>
-                      {STATUS_LABEL[a.status ?? 'planned'] ?? a.status}
-                    </span>
-                  </td>
-                  <td>
-                    {isPending && (
-                      <button className="pjc-btn-icon" title="Withdraw" onClick={() => withdrawMutation.mutate(a.id)}>
-                        <TrashIcon />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {assignments.map(a => (
+              <tr key={a.id}>
+                <td style={{ fontWeight: 500 }}>{[a.first_name, a.last_name].filter(Boolean).join(' ') || `Employee #${a.employee_id}`}</td>
+                <td>{a.role ?? '—'}</td>
+                <td>{a.trade ?? '—'}</td>
+                <td>
+                  <span className={`pjc-status-badge pjc-status-${a.status ?? 'planned'}`}>
+                    {STATUS_LABEL[a.status ?? 'planned'] ?? a.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      )}
-
-      {showForm ? (
-        <div className="pjc-nominate-form">
-          <p className="pjc-nominate-notice pjc-nominate-notice--pending">
-            Field nominations are sent to the Labor Coordinator for approval before becoming active.
-          </p>
-          <div className="pjc-nominate-row">
-            <div className="pjc-nominate-field pjc-nominate-field--wide">
-              <label className="pjc-field-label">Employee</label>
-              <EmpSearchInput
-                query={empSearch.empQuery}
-                results={empSearch.empResults}
-                showDropdown={empSearch.showDropdown}
-                onChange={empSearch.setEmpQuery}
-                onSelect={e => empSearch.select(e, emp => { if (emp.trade && !trade) setTrade(emp.trade); })}
-                onClear={empSearch.clearSelection}
-              />
-            </div>
-            <div className="pjc-nominate-field">
-              <label className="pjc-field-label">Role</label>
-              <select className="pjc-nominate-select" value={role} onChange={e => setRole(e.target.value)}>
-                <option value="">— select —</option>
-                {FIELD_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div className="pjc-nominate-field">
-              <label className="pjc-field-label">Trade</label>
-              <select className="pjc-nominate-select" value={trade} onChange={e => setTrade(e.target.value)}>
-                <option value="">— select —</option>
-                {ASSIGNMENT_TRADES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <label className="pjc-field-label">Notes for Labor Coordinator (optional)</label>
-            <input type="text" className="pjc-nominate-input" value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Start date preference, specific skills needed…" />
-          </div>
-          <div className="pjc-nominate-actions">
-            <button className="pjc-btn-ghost" onClick={() => { setShowForm(false); setRole(''); setTrade(''); setNotes(''); empSearch.reset(); }}>Cancel</button>
-            <button className="pjc-btn-save" disabled={!empSearch.selectedEmp || !role || nominateMutation.isPending}
-              onClick={() => nominateMutation.mutate()}>
-              {nominateMutation.isPending ? 'Submitting…' : 'Submit for Approval →'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button className="pjc-btn-ghost pjc-crew-add-btn" onClick={() => setShowForm(true)}>
-          + Nominate Field Crew
-        </button>
       )}
     </div>
   );
@@ -1070,7 +819,7 @@ const PreJobChecklistPage: React.FC = () => {
 
   const WIZARD_STEPS = [
     'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
-    'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
+    'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
   const completedKey = `pjc_completed_${projectId}`;
@@ -1198,6 +947,20 @@ const PreJobChecklistPage: React.FC = () => {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {checklistIsEmpty && (
+            <button
+              onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'linear-gradient(135deg, #002356 0%, #004080 100%)',
+                color: 'white', border: 'none', borderRadius: '0.375rem',
+                padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
+                cursor: 'pointer', transition: 'opacity 0.15s',
+              }}
+            >
+              Start Guided Setup
+            </button>
+          )}
           {!checklistIsEmpty && (
             <button
               onClick={async () => {
@@ -1213,9 +976,9 @@ const PreJobChecklistPage: React.FC = () => {
               disabled={pdfDownloading}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                background: '#f1f5f9', color: '#475569',
-                border: '1px solid #e2e8f0', borderRadius: 8,
-                padding: '0.55rem 1rem', fontSize: '0.85rem', fontWeight: 700,
+                background: '#f1f5f9', color: '#374151',
+                border: '1px solid #e2e8f0', borderRadius: '0.375rem',
+                padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
                 cursor: pdfDownloading ? 'wait' : 'pointer', opacity: pdfDownloading ? 0.7 : 1,
               }}
             >
@@ -1223,20 +986,6 @@ const PreJobChecklistPage: React.FC = () => {
               {pdfDownloading ? 'Generating…' : 'Download PDF'}
             </button>
           )}
-          <button
-            onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: (checklistIsEmpty || wizardInProgress) ? 'linear-gradient(135deg, #002356, #003580)' : '#f1f5f9',
-              color: (checklistIsEmpty || wizardInProgress) ? 'white' : '#475569',
-              border: 'none', borderRadius: 8,
-              padding: '0.55rem 1.1rem', fontSize: '0.85rem', fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <span style={{ fontSize: '1rem' }}>🚀</span>
-            {wizardInProgress ? `Continue Setup (Step ${savedWizardStep} of ${WIZARD_STEPS.length})` : checklistIsEmpty ? 'Start Guided Setup' : wizardCompleted ? 'Revisit Guided Setup' : 'Re-run Guided Setup'}
-          </button>
         </div>
       </div>
 
@@ -1244,9 +993,7 @@ const PreJobChecklistPage: React.FC = () => {
       {(wizardInProgress || wizardCompleted || checklistIsEmpty) && (
         <div style={{
           margin: '0 0 1.5rem',
-          background: wizardCompleted && !checklistIsEmpty
-            ? 'linear-gradient(135deg, #14532d 0%, #166534 100%)'
-            : 'linear-gradient(135deg, #002356 0%, #003580 100%)',
+          background: 'linear-gradient(135deg, #002356 0%, #003580 100%)',
           borderRadius: 12, padding: '1.25rem 1.5rem',
           display: 'flex', gap: '1rem', alignItems: 'flex-start',
         }}>
@@ -1260,13 +1007,21 @@ const PreJobChecklistPage: React.FC = () => {
             <div style={{ color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Titan</div>
             {wizardCompleted && !checklistIsEmpty ? (
               <>
-                <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem', marginBottom: 4 }}>
-                  ✓ Guided setup complete — your checklist is populated and ready.
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 4 }}>
+                  <div style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem' }}>
+                    Pre-Job Checklist Setup
+                  </div>
+                  <div style={{ color: '#93c5fd', fontSize: '0.8rem', fontWeight: 600 }}>
+                    {wizardCompletedSteps.size} of {WIZARD_STEPS.length} steps complete ({Math.round((wizardCompletedSteps.size / WIZARD_STEPS.length) * 100)}%)
+                  </div>
                 </div>
-                <div style={{ color: '#86efac', fontSize: '0.82rem', marginBottom: 10 }}>
-                  To make changes, click any section header below to expand and edit it directly. Use "Revisit Guided Setup" to step through the wizard again.
+                <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 99, height: 6, marginBottom: 12, overflow: 'hidden' }}>
+                  <div style={{ background: '#f97316', height: '100%', borderRadius: 99, width: `${Math.round((wizardCompletedSteps.size / WIZARD_STEPS.length) * 100)}%`, transition: 'width 0.3s' }} />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                <div style={{ color: '#93c5fd', fontSize: '0.8rem', marginBottom: 10 }}>
+                  Click any step below to jump directly to that section in the wizard and make changes.
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
                   {WIZARD_STEPS.map((label, i) => {
                     const num = i + 1;
                     const done = wizardCompletedSteps.has(num);
@@ -1275,26 +1030,29 @@ const PreJobChecklistPage: React.FC = () => {
                         key={label}
                         onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard?step=${num}`)}
                         title={`Go to ${label}`}
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                       >
                         <div style={{
-                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                           background: done ? '#16a34a' : 'rgba(255,255,255,0.15)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.65rem', fontWeight: 700, color: 'white',
+                          fontSize: '0.7rem', fontWeight: 700, color: 'white',
                         }}>
                           {done ? '✓' : num}
                         </div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: done ? '#86efac' : '#93c5fd', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.6rem', fontWeight: done ? 700 : 400, color: done ? '#86efac' : '#93c5fd', textAlign: 'center', maxWidth: 72 }}>
                           {label}
                         </span>
                       </button>
                     );
                   })}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: 10 }}>
-                  ↑ Click any step above to jump directly to that section in the wizard.
-                </div>
+                <button
+                  onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard`)}
+                  style={{ background: '#f97316', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem 1.25rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', transition: 'opacity 0.15s' }}
+                >
+                  Revisit Guided Setup →
+                </button>
               </>
             ) : wizardInProgress ? (
               <>
@@ -1304,22 +1062,22 @@ const PreJobChecklistPage: React.FC = () => {
                 <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 99, height: 6, marginBottom: 10, overflow: 'hidden' }}>
                   <div style={{ background: '#f97316', height: '100%', borderRadius: 99, width: `${Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}%`, transition: 'width 0.3s' }} />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
                   {WIZARD_STEPS.map((label, i) => {
                     const num = i + 1;
                     const done = wizardCompletedSteps.has(num);
                     const current = savedWizardStep === num;
                     return (
-                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                         <div style={{
-                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                           background: done ? '#16a34a' : current ? '#f97316' : 'rgba(255,255,255,0.15)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.65rem', fontWeight: 700, color: 'white',
+                          fontSize: '0.7rem', fontWeight: 700, color: 'white',
                         }}>
                           {done ? '✓' : num}
                         </div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: done ? '#86efac' : current ? '#fed7aa' : '#93c5fd', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.6rem', fontWeight: done ? 700 : 400, color: done ? '#86efac' : current ? '#fed7aa' : '#93c5fd', textAlign: 'center', maxWidth: 72 }}>
                           {label}
                         </span>
                       </div>
@@ -1509,489 +1267,6 @@ const PreJobChecklistPage: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
-
-      {/* ── ORIENTATION & SITE ACCESS ── */}
-      {checklist?.orientation && (
-        checklist.orientation.badge_required != null ||
-        checklist.orientation.orientation_required != null ||
-        checklist.orientation.safety_training_required != null ||
-        checklist.orientation.contact_name ||
-        checklist.orientation.orientation_link ||
-        checklist.orientation.directions ||
-        checklist.orientation.parking_notes ||
-        checklist.orientation.site_map_attachment_id
-      ) && (
-        <OrientationCard orientation={checklist.orientation} projectId={projectId!} />
-      )}
-
-      {/* ── COST TYPE SECTIONS ── */}
-      <div className="pjc-sections">
-
-        {/* ── 1. LABOR ── */}
-        <div className={`pjc-section ${expanded.labor ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('labor')}>
-            <Chevron open={!!expanded.labor} />
-            <div className="pjc-section-title">
-              <h3>Labor</h3>
-              <span className="pjc-cost-type-label">Cost Type 1</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi">
-                <span className="pjc-kpi-label">Est Hrs</span>
-                <span className="pjc-kpi-value">{laborTotal ? laborTotal.est_hours.toLocaleString() : '—'}</span>
-              </div>
-              <div className="pjc-kpi">
-                <span className="pjc-kpi-label">JTD Hrs</span>
-                <span className="pjc-kpi-value">{laborTotal ? laborTotal.jtd_hours.toLocaleString() : '—'}</span>
-              </div>
-              <div className="pjc-kpi">
-                <span className="pjc-kpi-label">Est Cost</span>
-                <span className="pjc-kpi-value">{fmt(laborTotal?.est_cost)}</span>
-              </div>
-              <div className="pjc-kpi">
-                <span className="pjc-kpi-label">Projected</span>
-                <span className="pjc-kpi-value">{fmt(laborTotal?.projected_cost)}</span>
-              </div>
-            </div>
-          </div>
-
-          {expanded.labor && (
-            <div className="pjc-section-body">
-
-              {/* Vista phase code labor detail */}
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">
-                  Vista Phase Code Labor <span className="pjc-vista-badge">LIVE</span>
-                </p>
-                {costSummary ? (
-                  <VistaLaborTable costSummary={costSummary} />
-                ) : (
-                  <p className="pjc-vista-no-data">No Vista contract linked to this project.</p>
-                )}
-              </div>
-
-              {/* Labor Forecast Summary */}
-              {contract ? (
-                <div className="pjc-vista-block" style={{ marginTop: '0' }}>
-                  <p className="pjc-vista-block-title">
-                    Labor Forecast <span className="pjc-vista-badge">LIVE</span>
-                    {missingDates && (
-                      <span style={{ marginLeft: '0.5rem', color: '#f59e0b', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>
-                        — enter project dates above to see monthly calculations
-                      </span>
-                    )}
-                  </p>
-                  <LaborForecastSummary
-                    contract={contract}
-                    costSummary={costSummary}
-                    startDate={startDate}
-                    endDate={endDate}
-                    projectId={projectId!}
-                  />
-                </div>
-              ) : (
-                <div className="pjc-no-vista">No Vista contract linked — labor forecast unavailable.</div>
-              )}
-
-              {/* PM Labor Plan */}
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — Labor</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">Approach / Strategy</label>
-                    <textarea
-                      className="pjc-textarea"
-                      value={labor.approach_notes ?? ''}
-                      onChange={e => setLaborDraft({ ...labor, approach_notes: e.target.value })}
-                      placeholder="Overall labor execution strategy, crew plan, sequencing approach, peak workforce needs..."
-                    />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">Hour & Rate Goals by Trade</label>
-                    <table className="pjc-detail-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: '30%' }}>Trade / Category</th>
-                          <th className="right" style={{ width: '18%' }}>Goal Hours</th>
-                          <th className="right" style={{ width: '18%' }}>Target Rate ($/hr)</th>
-                          <th style={{ width: '28%' }}>Notes</th>
-                          <th style={{ width: 32 }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {effectiveLaborTrades.map(t => (
-                          <tr key={t.id}>
-                            <td><input type="text" value={t.trade} onChange={e => updateLaborTrade(t.id, 'trade', e.target.value)} placeholder="Trade name" /></td>
-                            <td><input type="number" value={t.goal_hours ?? ''} onChange={e => updateLaborTrade(t.id, 'goal_hours', e.target.value ? Number(e.target.value) : undefined)} placeholder="0" /></td>
-                            <td><input type="number" value={t.target_rate ?? ''} onChange={e => updateLaborTrade(t.id, 'target_rate', e.target.value ? Number(e.target.value) : undefined)} placeholder="0.00" /></td>
-                            <td><input type="text" value={t.notes ?? ''} onChange={e => updateLaborTrade(t.id, 'notes', e.target.value)} placeholder="Notes..." /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeLaborTrade(t.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar">
-                      <button className="pjc-btn-ghost" onClick={addLaborTrade}>+ Add Row</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('labor', { ...labor, trades: effectiveLaborTrades }); setLaborDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save Labor Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── 2. MATERIAL ── */}
-        <div className={`pjc-section ${expanded.material ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('material')}>
-            <Chevron open={!!expanded.material} />
-            <div className="pjc-section-title">
-              <h3>Material</h3>
-              <span className="pjc-cost-type-label">Cost Type 2</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Estimated</span><span className="pjc-kpi-value">{fmt(matData?.est_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">JTD</span><span className="pjc-kpi-value">{fmt(matData?.jtd_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Projected</span><span className="pjc-kpi-value">{fmt(matData?.projected_cost)}</span></div>
-            </div>
-          </div>
-
-          {expanded.material && (
-            <div className="pjc-section-body">
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">Vista Material Summary <span className="pjc-vista-badge">LIVE</span></p>
-                {matData ? (
-                  <table className="pjc-vista-table">
-                    <thead><tr><th>Category</th><th>Estimated</th><th>JTD</th><th>Committed</th><th>Projected</th></tr></thead>
-                    <tbody><VistaCostRow label="Material (CT2)" data={matData} /></tbody>
-                  </table>
-                ) : <p className="pjc-vista-no-data">No Vista material data.</p>}
-              </div>
-
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — Material</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">Procurement Approach</label>
-                    <textarea className="pjc-textarea" value={material.approach_notes ?? ''}
-                      onChange={e => setMaterialDraft({ ...material, approach_notes: e.target.value })}
-                      placeholder="Procurement strategy, key vendors, early release items, budget targets..." />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">Material Breakdown by Category</label>
-                    <table className="pjc-detail-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: '28%' }}>Category</th>
-                          <th className="right" style={{ width: '16%' }}>Budget</th>
-                          <th style={{ width: '20%' }}>Key Vendor</th>
-                          <th style={{ width: '14%' }}>Lead Time</th>
-                          <th style={{ width: '16%' }}>Notes</th>
-                          <th style={{ width: 32 }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {materialItems.map(i => (
-                          <tr key={i.id}>
-                            <td><input type="text" value={i.description} onChange={e => updateMaterialItem(i.id, 'description', e.target.value)} placeholder="Category" /></td>
-                            <td><input type="number" value={i.budget ?? ''} onChange={e => updateMaterialItem(i.id, 'budget', e.target.value ? Number(e.target.value) : undefined)} placeholder="$0" /></td>
-                            <td><input type="text" value={i.vendor ?? ''} onChange={e => updateMaterialItem(i.id, 'vendor', e.target.value)} placeholder="Vendor" /></td>
-                            <td><input type="text" value={i.lead_time ?? ''} onChange={e => updateMaterialItem(i.id, 'lead_time', e.target.value)} placeholder="e.g. 8 wks" /></td>
-                            <td><input type="text" value={i.notes ?? ''} onChange={e => updateMaterialItem(i.id, 'notes', e.target.value)} placeholder="Notes" /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeMaterialItem(i.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar"><button className="pjc-btn-ghost" onClick={addMaterialItem}>+ Add Row</button></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('material', { ...material, items: materialItems }); setMaterialDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save Material Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── 3. SUBCONTRACTS ── */}
-        <div className={`pjc-section ${expanded.subcontracts ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('subcontracts')}>
-            <Chevron open={!!expanded.subcontracts} />
-            <div className="pjc-section-title">
-              <h3>Subcontracts</h3>
-              <span className="pjc-cost-type-label">Cost Type 3</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Estimated</span><span className="pjc-kpi-value">{fmt(subData?.est_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">JTD</span><span className="pjc-kpi-value">{fmt(subData?.jtd_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Projected</span><span className="pjc-kpi-value">{fmt(subData?.projected_cost)}</span></div>
-            </div>
-          </div>
-
-          {expanded.subcontracts && (
-            <div className="pjc-section-body">
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">Vista Subcontract Summary <span className="pjc-vista-badge">LIVE</span></p>
-                {subData ? (
-                  <table className="pjc-vista-table">
-                    <thead><tr><th>Category</th><th>Estimated</th><th>JTD</th><th>Committed</th><th>Projected</th></tr></thead>
-                    <tbody><VistaCostRow label="Subcontracts (CT3)" data={subData} /></tbody>
-                  </table>
-                ) : <p className="pjc-vista-no-data">No Vista subcontract data.</p>}
-              </div>
-
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — Subcontracts</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">Subcontract Strategy</label>
-                    <textarea className="pjc-textarea" value={subs.approach_notes ?? ''}
-                      onChange={e => setSubcontractsDraft({ ...subs, approach_notes: e.target.value })}
-                      placeholder="Bid strategy, preferred subs, scope breakdown plan, key concerns..." />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">Subcontractor List</label>
-                    <table className="pjc-detail-table">
-                      <thead>
-                        <tr>
-                          <th style={{ width: '28%' }}>Scope</th>
-                          <th style={{ width: '24%' }}>Subcontractor</th>
-                          <th className="right" style={{ width: '14%' }}>Budget</th>
-                          <th style={{ width: '28%' }}>Notes</th>
-                          <th style={{ width: 32 }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {subItems.map(i => (
-                          <tr key={i.id}>
-                            <td><input type="text" value={i.description} onChange={e => updateSubItem(i.id, 'description', e.target.value)} placeholder="Scope of work" /></td>
-                            <td><input type="text" value={i.subcontractor ?? ''} onChange={e => updateSubItem(i.id, 'subcontractor', e.target.value)} placeholder="Company name" /></td>
-                            <td><input type="number" value={i.budget ?? ''} onChange={e => updateSubItem(i.id, 'budget', e.target.value ? Number(e.target.value) : undefined)} placeholder="$0" /></td>
-                            <td><input type="text" value={i.notes ?? ''} onChange={e => updateSubItem(i.id, 'notes', e.target.value)} placeholder="Notes" /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeSubItem(i.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar"><button className="pjc-btn-ghost" onClick={addSubItem}>+ Add Subcontractor</button></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('subcontracts', { ...subs, items: subItems }); setSubcontractsDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save Subcontracts Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── 4. RENTAL ── */}
-        <div className={`pjc-section ${expanded.rental ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('rental')}>
-            <Chevron open={!!expanded.rental} />
-            <div className="pjc-section-title">
-              <h3>Rental</h3>
-              <span className="pjc-cost-type-label">Cost Type 4</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Estimated</span><span className="pjc-kpi-value">{fmt(rentalData?.est_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">JTD</span><span className="pjc-kpi-value">{fmt(rentalData?.jtd_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Projected</span><span className="pjc-kpi-value">{fmt(rentalData?.projected_cost)}</span></div>
-            </div>
-          </div>
-
-          {expanded.rental && (
-            <div className="pjc-section-body">
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">Vista Rental Summary <span className="pjc-vista-badge">LIVE</span></p>
-                {rentalData ? (
-                  <table className="pjc-vista-table">
-                    <thead><tr><th>Category</th><th>Estimated</th><th>JTD</th><th>Committed</th><th>Projected</th></tr></thead>
-                    <tbody><VistaCostRow label="Rental (CT4)" data={rentalData} /></tbody>
-                  </table>
-                ) : <p className="pjc-vista-no-data">No Vista rental data.</p>}
-              </div>
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — Rental Equipment</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">Rental Strategy</label>
-                    <textarea className="pjc-textarea" value={rental.approach_notes ?? ''}
-                      onChange={e => setRentalDraft({ ...rental, approach_notes: e.target.value })}
-                      placeholder="Key equipment needs, rental durations, preferred vendors, ownership vs. rental decisions..." />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">Rental Equipment List</label>
-                    <table className="pjc-detail-table">
-                      <thead><tr><th style={{ width: '50%' }}>Equipment / Description</th><th className="right" style={{ width: '20%' }}>Budget</th><th style={{ width: '24%' }}>Notes</th><th style={{ width: 32 }}></th></tr></thead>
-                      <tbody>
-                        {rentalItems.map(i => (
-                          <tr key={i.id}>
-                            <td><input type="text" value={i.description} onChange={e => updateRentalItem(i.id, 'description', e.target.value)} placeholder="Equipment name" /></td>
-                            <td><input type="number" value={i.budget ?? ''} onChange={e => updateRentalItem(i.id, 'budget', e.target.value ? Number(e.target.value) : undefined)} placeholder="$0" /></td>
-                            <td><input type="text" value={i.notes ?? ''} onChange={e => updateRentalItem(i.id, 'notes', e.target.value)} placeholder="Notes" /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeRentalItem(i.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar"><button className="pjc-btn-ghost" onClick={addRentalItem}>+ Add Equipment</button></div>
-                  </div>
-                </div>
-              </div>
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('rental', { ...rental, items: rentalItems }); setRentalDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save Rental Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── 5. MEP EQUIPMENT ── */}
-        <div className={`pjc-section ${expanded.mep_equipment ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('mep_equipment')}>
-            <Chevron open={!!expanded.mep_equipment} />
-            <div className="pjc-section-title">
-              <h3>MEP Equipment</h3>
-              <span className="pjc-cost-type-label">Cost Type 5</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Estimated</span><span className="pjc-kpi-value">{fmt(mepData?.est_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">JTD</span><span className="pjc-kpi-value">{fmt(mepData?.jtd_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Projected</span><span className="pjc-kpi-value">{fmt(mepData?.projected_cost)}</span></div>
-            </div>
-          </div>
-
-          {expanded.mep_equipment && (
-            <div className="pjc-section-body">
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">Vista MEP Equipment Summary <span className="pjc-vista-badge">LIVE</span></p>
-                {mepData ? (
-                  <table className="pjc-vista-table">
-                    <thead><tr><th>Category</th><th>Estimated</th><th>JTD</th><th>Committed</th><th>Projected</th></tr></thead>
-                    <tbody><VistaCostRow label="MEP Equipment (CT5)" data={mepData} /></tbody>
-                  </table>
-                ) : <p className="pjc-vista-no-data">No Vista MEP equipment data.</p>}
-              </div>
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — MEP Equipment</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">Procurement Strategy</label>
-                    <textarea className="pjc-textarea" value={mep.approach_notes ?? ''}
-                      onChange={e => setMepDraft({ ...mep, approach_notes: e.target.value })}
-                      placeholder="Equipment procurement plan, long lead items, owner-furnished equipment, startup plan..." />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">Equipment List</label>
-                    <table className="pjc-detail-table">
-                      <thead><tr><th style={{ width: '50%' }}>Equipment / Description</th><th className="right" style={{ width: '20%' }}>Budget</th><th style={{ width: '24%' }}>Notes</th><th style={{ width: 32 }}></th></tr></thead>
-                      <tbody>
-                        {mepItems.map(i => (
-                          <tr key={i.id}>
-                            <td><input type="text" value={i.description} onChange={e => updateMepItem(i.id, 'description', e.target.value)} placeholder="Equipment name" /></td>
-                            <td><input type="number" value={i.budget ?? ''} onChange={e => updateMepItem(i.id, 'budget', e.target.value ? Number(e.target.value) : undefined)} placeholder="$0" /></td>
-                            <td><input type="text" value={i.notes ?? ''} onChange={e => updateMepItem(i.id, 'notes', e.target.value)} placeholder="Notes" /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeMepItem(i.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar"><button className="pjc-btn-ghost" onClick={addMepItem}>+ Add Equipment</button></div>
-                  </div>
-                </div>
-              </div>
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('mep_equipment', { ...mep, items: mepItems }); setMepDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save MEP Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── 6. GENERAL CONDITIONS ── */}
-        <div className={`pjc-section ${expanded.general_conditions ? 'expanded' : ''}`}>
-          <div className="pjc-section-header" onClick={() => toggle('general_conditions')}>
-            <Chevron open={!!expanded.general_conditions} />
-            <div className="pjc-section-title">
-              <h3>General Conditions</h3>
-              <span className="pjc-cost-type-label">Cost Type 6</span>
-            </div>
-            <div className="pjc-section-kpis">
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Estimated</span><span className="pjc-kpi-value">{fmt(gcData?.est_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">JTD</span><span className="pjc-kpi-value">{fmt(gcData?.jtd_cost)}</span></div>
-              <div className="pjc-kpi"><span className="pjc-kpi-label">Projected</span><span className="pjc-kpi-value">{fmt(gcData?.projected_cost)}</span></div>
-            </div>
-          </div>
-
-          {expanded.general_conditions && (
-            <div className="pjc-section-body">
-              <div className="pjc-vista-block">
-                <p className="pjc-vista-block-title">Vista General Conditions Summary <span className="pjc-vista-badge">LIVE</span></p>
-                {gcData ? (
-                  <table className="pjc-vista-table">
-                    <thead><tr><th>Category</th><th>Estimated</th><th>JTD</th><th>Committed</th><th>Projected</th></tr></thead>
-                    <tbody><VistaCostRow label="General Conditions (CT6)" data={gcData} /></tbody>
-                  </table>
-                ) : <p className="pjc-vista-no-data">No Vista general conditions data.</p>}
-              </div>
-              <div className="pjc-pm-block">
-                <div className="pjc-pm-block-header"><span>PM Goal Plan — General Conditions</span></div>
-                <div className="pjc-pm-block-body">
-                  <div>
-                    <label className="pjc-field-label">General Conditions Strategy</label>
-                    <textarea className="pjc-textarea" value={gc.approach_notes ?? ''}
-                      onChange={e => setGcDraft({ ...gc, approach_notes: e.target.value })}
-                      placeholder="Staffing plan, trailer/office setup, safety plan, site logistics, temporary utilities..." />
-                  </div>
-                  <div>
-                    <label className="pjc-field-label">General Conditions Items</label>
-                    <table className="pjc-detail-table">
-                      <thead><tr><th style={{ width: '50%' }}>Item / Description</th><th className="right" style={{ width: '20%' }}>Budget</th><th style={{ width: '24%' }}>Notes</th><th style={{ width: 32 }}></th></tr></thead>
-                      <tbody>
-                        {gcItems.map(i => (
-                          <tr key={i.id}>
-                            <td><input type="text" value={i.description} onChange={e => updateGcItem(i.id, 'description', e.target.value)} placeholder="Description" /></td>
-                            <td><input type="number" value={i.budget ?? ''} onChange={e => updateGcItem(i.id, 'budget', e.target.value ? Number(e.target.value) : undefined)} placeholder="$0" /></td>
-                            <td><input type="text" value={i.notes ?? ''} onChange={e => updateGcItem(i.id, 'notes', e.target.value)} placeholder="Notes" /></td>
-                            <td><button className="pjc-btn-icon" onClick={() => removeGcItem(i.id)} title="Remove"><TrashIcon /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="pjc-add-row-bar"><button className="pjc-btn-ghost" onClick={addGcItem}>+ Add Item</button></div>
-                  </div>
-                </div>
-              </div>
-              <div className="pjc-section-actions">
-                <button className="pjc-btn-save" disabled={isSaving}
-                  onClick={() => { save('general_conditions', { ...gc, items: gcItems }); setGcDraft(null); }}>
-                  {isSaving ? 'Saving…' : 'Save GC Plan'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
       </div>
     </div>
   );

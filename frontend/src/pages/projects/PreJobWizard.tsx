@@ -45,7 +45,7 @@ const DEFAULT_LABOR_TRADES = (): LaborTradeRow[] =>
 
 const DEFAULT_MATERIAL_ITEMS = (): MaterialItemRow[] =>
   ['Sheet Metal', 'Piping', 'Plumbing', 'Insulation', 'Controls/BAS'].map(d => ({
-    id: uid(), description: d, budget: undefined, vendor: '', lead_time: '', notes: '',
+    id: uid(), description: d, vendor: '', lead_time: '', notes: '',
   }));
 
 interface EmpResult {
@@ -87,7 +87,7 @@ const TitanCard: React.FC<{ question: string; hint?: string }> = ({ question, hi
 // ── Progress bar ──────────────────────────────────────────────────────────────
 const STEPS = [
   'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
-  'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
+  'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
 ];
 
 const ProgressBar: React.FC<{
@@ -215,6 +215,15 @@ const PreJobWizard: React.FC = () => {
     });
   };
 
+  const unmarkStepComplete = (stepNum: number) => {
+    setCompletedStepsRaw(prev => {
+      const next = new Set(prev);
+      next.delete(stepNum);
+      localStorage.setItem(completedKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const setStep = (val: number | ((s: number) => number)) => {
     setStepRaw(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
@@ -235,6 +244,8 @@ const PreJobWizard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [schedulingMode, setSchedulingMode] = useState<'summary' | 'cost_type' | 'phase'>('cost_type');
+  const costStepsLocked = schedulingMode !== 'summary';
+  const lockTooltip = `Controlled by ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} scheduling — switch to Summary on the Schedule tab to edit here`;
   const [specialConditions, setSpecialConditions] = useState('');
   const [bidScopeNotes, setBidScopeNotes] = useState('');
   const [laborApproach, setLaborApproach] = useState('');
@@ -368,6 +379,12 @@ const PreJobWizard: React.FC = () => {
     enabled: !!projectId && !!readiness?.vistaLinked,
   });
 
+  const { data: phaseCodesGC = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId, 'ct6'],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), { costType: 6 }),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
   const { data: segmentCosts = [] } = useQuery<SegmentCosts[]>({
     queryKey: ['segmentCosts', projectId],
     queryFn: () => scheduleSegmentsService.getCosts(Number(projectId)),
@@ -454,10 +471,10 @@ const PreJobWizard: React.FC = () => {
     if (checklist.labor.trades?.length || checklist.labor.approach_notes) dbComplete.add(8);
     if (checklist.material.items?.length || checklist.material.approach_notes) dbComplete.add(9);
     if (checklist.subcontracts.items?.length || checklist.subcontracts.approach_notes) dbComplete.add(10);
-    if (checklist.rental.items?.length || checklist.rental.approach_notes ||
-        checklist.mep_equipment.items?.length || checklist.mep_equipment.approach_notes ||
-        checklist.general_conditions.items?.length || checklist.general_conditions.approach_notes) dbComplete.add(11);
-    if (pi.other_contacts?.length) dbComplete.add(12);
+    if (checklist.rental.items?.length || checklist.rental.approach_notes) dbComplete.add(11);
+    if (checklist.mep_equipment.items?.length || checklist.mep_equipment.approach_notes) dbComplete.add(12);
+    if (checklist.general_conditions.items?.length || checklist.general_conditions.approach_notes) dbComplete.add(13);
+    if (pi.other_contacts?.length) dbComplete.add(14);
 
     if (dbComplete.size === 0) return;
 
@@ -470,8 +487,9 @@ const PreJobWizard: React.FC = () => {
       return next;
     });
 
-    const maxC = Math.max(...dbComplete);
-    const newMax = Math.min(maxC + 1, STEPS.length + 1);
+    // If any checklist data exists, unlock all steps so newly-added steps (Rentals, MEP, GC)
+    // are always accessible on existing projects.
+    const newMax = STEPS.length + 1;
     if (newMax > maxStepReached) {
       setMaxStepReachedRaw(newMax);
       localStorage.setItem(maxStepKey, String(newMax));
@@ -498,8 +516,8 @@ const PreJobWizard: React.FC = () => {
     if (!phaseCodesMaterial.length || checklist === undefined) return;
     if (checklist?.material?.items?.length) return;
     const rows: MaterialItemRow[] = phaseCodesMaterial
-      .filter(p => p.est_cost > 0)
-      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), vendor: '', lead_time: '', notes: '' }));
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
     if (rows.length > 0) setMaterialItems(rows);
   }, [phaseCodesMaterial, checklist]);
 
@@ -508,8 +526,8 @@ const PreJobWizard: React.FC = () => {
     if (!phaseCodesSubs.length || checklist === undefined) return;
     if (checklist?.subcontracts?.items?.length) return;
     const rows: SubcontractItemRow[] = phaseCodesSubs
-      .filter(p => p.est_cost > 0)
-      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), subcontractor: '', scope: '', notes: '' }));
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, subcontractor: '', lead_time: '', notes: '' }));
     if (rows.length > 0) setSubItems(rows);
   }, [phaseCodesSubs, checklist]);
 
@@ -518,8 +536,8 @@ const PreJobWizard: React.FC = () => {
     if (!phaseCodesRental.length || checklist === undefined) return;
     if (checklist?.rental?.items?.length) return;
     const rows: GenericItemRow[] = phaseCodesRental
-      .filter(p => p.est_cost > 0)
-      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), notes: '' }));
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
     if (rows.length > 0) setRentalItems(rows);
   }, [phaseCodesRental, checklist]);
 
@@ -528,10 +546,20 @@ const PreJobWizard: React.FC = () => {
     if (!phaseCodesMEP.length || checklist === undefined) return;
     if (checklist?.mep_equipment?.items?.length) return;
     const rows: GenericItemRow[] = phaseCodesMEP
-      .filter(p => p.est_cost > 0)
-      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), notes: '' }));
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
     if (rows.length > 0) setMepItems(rows);
   }, [phaseCodesMEP, checklist]);
+
+  // Pre-populate general conditions items from Vista cost type 6 phase codes
+  useEffect(() => {
+    if (!phaseCodesGC.length || checklist === undefined) return;
+    if (checklist?.general_conditions?.items?.length) return;
+    const rows: GenericItemRow[] = phaseCodesGC
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setGcItems(rows);
+  }, [phaseCodesGC, checklist]);
 
   useEffect(() => {
     if (project) {
@@ -668,14 +696,18 @@ const PreJobWizard: React.FC = () => {
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 11:
-        await Promise.all([
-          preJobChecklistApi.updateSection(pid, 'rental', { approach_notes: rentalApproach, items: rentalItems }),
-          preJobChecklistApi.updateSection(pid, 'mep_equipment', { approach_notes: mepApproach, items: mepItems }),
-          preJobChecklistApi.updateSection(pid, 'general_conditions', { approach_notes: gcApproach, items: gcItems }),
-        ]);
+        await preJobChecklistApi.updateSection(pid, 'rental', { approach_notes: rentalApproach, items: rentalItems });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
       case 12:
+        await preJobChecklistApi.updateSection(pid, 'mep_equipment', { approach_notes: mepApproach, items: mepItems });
+        qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
+        break;
+      case 13:
+        await preJobChecklistApi.updateSection(pid, 'general_conditions', { approach_notes: gcApproach, items: gcItems });
+        qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
+        break;
+      case 14:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), other_contacts: contacts });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
@@ -715,6 +747,38 @@ const PreJobWizard: React.FC = () => {
   };
 
   const handleBack = () => { setStep(s => Math.max(0, s - 1)); window.scrollTo(0, 0); };
+
+  // ── Vista reset helpers ───────────────────────────────────────────────────
+  const resetMaterialFromVista = () => {
+    const rows: MaterialItemRow[] = phaseCodesMaterial
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setMaterialItems(rows);
+  };
+  const resetSubsFromVista = () => {
+    const rows: SubcontractItemRow[] = phaseCodesSubs
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, subcontractor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setSubItems(rows);
+  };
+  const resetRentalsFromVista = () => {
+    const rows: GenericItemRow[] = phaseCodesRental
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setRentalItems(rows);
+  };
+  const resetMEPFromVista = () => {
+    const rows: GenericItemRow[] = phaseCodesMEP
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setMepItems(rows);
+  };
+  const resetGCFromVista = () => {
+    const rows: GenericItemRow[] = phaseCodesGC
+      .filter(p => p.phase_description)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, est_cost: p.est_cost || undefined, jtd_cost: p.jtd_cost || undefined, projected_cost: p.projected_cost || undefined, vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setGcItems(rows);
+  };
 
   // ── Render helpers for generic item tables ────────────────────────────────
   const renderLaborTable = () => {
@@ -812,93 +876,199 @@ const PreJobWizard: React.FC = () => {
     );
   };
 
-  const renderMaterialTable = () => (
-    <div style={{ overflowX: 'auto', marginTop: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-        <thead>
-          <tr style={{ background: '#f8fafc' }}>
-            <th style={thStyle}>Category</th>
-            <th style={thStyle}>Budget</th>
-            <th style={thStyle}>Key Vendor</th>
-            <th style={thStyle}>Lead Time</th>
-            <th style={thStyle}>Notes</th>
-            <th style={thStyle} />
-          </tr>
-        </thead>
-        <tbody>
-          {materialItems.map((row, i) => (
-            <tr key={row.id}>
-              <td style={tdStyle}><input style={colStyle} value={row.description} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} type="number" min={0} value={row.budget ?? ''} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, budget: e.target.value ? Number(e.target.value) : undefined } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.vendor ?? ''} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, vendor: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.lead_time ?? ''} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, lead_time: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.notes ?? ''} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
-              <td style={tdStyle}><button style={delBtn} onClick={() => setMaterialItems(m => m.filter((_, j) => j !== i))}>✕</button></td>
+  const renderMaterialTable = (locked = false) => {
+    const vistaCell: React.CSSProperties = { ...tdStyle, background: '#eff6ff', textAlign: 'right', paddingRight: 8, fontWeight: 600, color: '#1d4ed8', fontSize: '0.8rem', whiteSpace: 'nowrap' };
+    const fmtC = (n: number | undefined) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—';
+    const outcomeColors = { under: '#16a34a', on: '#2563eb', over: '#dc2626' };
+    const outcomeLabels = { under: 'Under', on: 'On', over: 'Over' };
+    const lockedInput: React.CSSProperties = locked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {};
+    return (
+      <div style={{ marginTop: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '3%' }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: '#f8fafc' }}>
+              <th style={thStyle}>Phase / Category</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Est. Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>JTD Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Proj. Cost</th>
+              <th style={{ ...thStyle, textAlign: 'center' }}><div>Expected Outcome</div><div style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.65rem', textTransform: 'none', letterSpacing: 0 }}>Budget</div></th>
+              <th style={thStyle}>Key Vendor</th>
+              <th style={thStyle}>Lead Time</th>
+              <th style={thStyle}>Notes</th>
+              <th style={thStyle} />
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button style={addRowBtn} onClick={() => setMaterialItems(m => [...m, { id: uid(), description: '', budget: undefined, vendor: '', lead_time: '', notes: '' }])}>+ Add Category</button>
-    </div>
-  );
+          </thead>
+          <tbody>
+            {materialItems.map((row, i) => (
+              <tr key={row.id}>
+                <td style={tdStyle}><input style={{ ...colStyle, width: '100%', ...lockedInput }} value={row.description} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} /></td>
+                <td style={vistaCell}>{fmtC(row.est_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.jtd_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.projected_cost)}</td>
+                <td style={{ ...tdStyle, verticalAlign: 'middle', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }} title={locked ? lockTooltip : undefined}>
+                    {(['under', 'on', 'over'] as const).map(val => (
+                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', cursor: locked ? 'not-allowed' : 'pointer', color: locked ? '#9ca3af' : outcomeColors[val], fontWeight: row.expected_outcome === val ? 700 : 400, whiteSpace: 'nowrap' }}>
+                        <input type="radio" name={`outcome-mat-${row.id}`} value={val} checked={row.expected_outcome === val} disabled={locked} onChange={() => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, expected_outcome: val } : r))} style={{ cursor: locked ? 'not-allowed' : 'pointer' }} />
+                        {outcomeLabels[val]}
+                      </label>
+                    ))}
+                  </div>
+                </td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.vendor ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, vendor: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.lead_time ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, lead_time: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.notes ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setMaterialItems(m => m.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
+                <td style={tdStyle}>{!locked && <button style={delBtn} onClick={() => setMaterialItems(m => m.filter((_, j) => j !== i))}>✕</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!locked && <button style={addRowBtn} onClick={() => setMaterialItems(m => [...m, { id: uid(), description: '', vendor: '', lead_time: '', notes: '' }])}>+ Add Category</button>}
+      </div>
+    );
+  };
 
-  const renderSubTable = () => (
-    <div style={{ overflowX: 'auto', marginTop: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-        <thead>
-          <tr style={{ background: '#f8fafc' }}>
-            <th style={thStyle}>Scope</th>
-            <th style={thStyle}>Subcontractor</th>
-            <th style={thStyle}>Budget</th>
-            <th style={thStyle}>Notes</th>
-            <th style={thStyle} />
-          </tr>
-        </thead>
-        <tbody>
-          {subItems.map((row, i) => (
-            <tr key={row.id}>
-              <td style={tdStyle}><input style={colStyle} value={row.scope ?? ''} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, scope: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.subcontractor ?? ''} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, subcontractor: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} type="number" min={0} value={row.budget ?? ''} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, budget: e.target.value ? Number(e.target.value) : undefined } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.notes ?? ''} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
-              <td style={tdStyle}><button style={delBtn} onClick={() => setSubItems(s => s.filter((_, j) => j !== i))}>✕</button></td>
+  const renderSubTable = (locked = false) => {
+    const vistaCell: React.CSSProperties = { ...tdStyle, background: '#eff6ff', textAlign: 'right', paddingRight: 8, fontWeight: 600, color: '#1d4ed8', fontSize: '0.8rem', whiteSpace: 'nowrap' };
+    const fmtC = (n: number | undefined) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—';
+    const outcomeColors = { under: '#16a34a', on: '#2563eb', over: '#dc2626' };
+    const outcomeLabels = { under: 'Under', on: 'On', over: 'Over' };
+    const lockedInput: React.CSSProperties = locked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {};
+    return (
+      <div style={{ marginTop: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '3%' }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: '#f8fafc' }}>
+              <th style={thStyle}>Phase / Category</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Est. Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>JTD Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Proj. Cost</th>
+              <th style={{ ...thStyle, textAlign: 'center' }}><div>Expected Outcome</div><div style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.65rem', textTransform: 'none', letterSpacing: 0 }}>Budget</div></th>
+              <th style={thStyle}>Subcontractor</th>
+              <th style={thStyle}>Lead Time</th>
+              <th style={thStyle}>Notes</th>
+              <th style={thStyle} />
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button style={addRowBtn} onClick={() => setSubItems(s => [...s, { id: uid(), description: '', scope: '', subcontractor: '', budget: undefined, notes: '' }])}>+ Add Subcontractor</button>
-    </div>
-  );
+          </thead>
+          <tbody>
+            {subItems.map((row, i) => (
+              <tr key={row.id}>
+                <td style={tdStyle}><input style={{ ...colStyle, width: '100%', ...lockedInput }} value={row.description} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} /></td>
+                <td style={vistaCell}>{fmtC(row.est_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.jtd_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.projected_cost)}</td>
+                <td style={{ ...tdStyle, verticalAlign: 'middle', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }} title={locked ? lockTooltip : undefined}>
+                    {(['under', 'on', 'over'] as const).map(val => (
+                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', cursor: locked ? 'not-allowed' : 'pointer', color: locked ? '#9ca3af' : outcomeColors[val], fontWeight: row.expected_outcome === val ? 700 : 400, whiteSpace: 'nowrap' }}>
+                        <input type="radio" name={`outcome-sub-${row.id}`} value={val} checked={row.expected_outcome === val} disabled={locked} onChange={() => setSubItems(s => s.map((r, j) => j === i ? { ...r, expected_outcome: val } : r))} style={{ cursor: locked ? 'not-allowed' : 'pointer' }} />
+                        {outcomeLabels[val]}
+                      </label>
+                    ))}
+                  </div>
+                </td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.subcontractor ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, subcontractor: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.lead_time ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, lead_time: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.notes ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setSubItems(s => s.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
+                <td style={tdStyle}>{!locked && <button style={delBtn} onClick={() => setSubItems(s => s.filter((_, j) => j !== i))}>✕</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!locked && <button style={addRowBtn} onClick={() => setSubItems(s => [...s, { id: uid(), description: '', subcontractor: '', lead_time: '', notes: '' }])}>+ Add Subcontractor</button>}
+      </div>
+    );
+  };
 
   const renderGenericTable = (
     items: GenericItemRow[],
     setItems: React.Dispatch<React.SetStateAction<GenericItemRow[]>>,
     addLabel: string,
-  ) => (
-    <div style={{ overflowX: 'auto', marginTop: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-        <thead>
-          <tr style={{ background: '#f8fafc' }}>
-            <th style={thStyle}>Description</th>
-            <th style={thStyle}>Budget</th>
-            <th style={thStyle}>Notes</th>
-            <th style={thStyle} />
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((row, i) => (
-            <tr key={row.id}>
-              <td style={tdStyle}><input style={colStyle} value={row.description} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} type="number" min={0} value={row.budget ?? ''} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, budget: e.target.value ? Number(e.target.value) : undefined } : r))} /></td>
-              <td style={tdStyle}><input style={colStyle} value={row.notes ?? ''} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
-              <td style={tdStyle}><button style={delBtn} onClick={() => setItems(it => it.filter((_, j) => j !== i))}>✕</button></td>
+    locked = false,
+  ) => {
+    const vistaCell: React.CSSProperties = { ...tdStyle, background: '#eff6ff', textAlign: 'right', paddingRight: 8, fontWeight: 600, color: '#1d4ed8', fontSize: '0.8rem', whiteSpace: 'nowrap' };
+    const fmtC = (n: number | undefined) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—';
+    const outcomeColors = { under: '#16a34a', on: '#2563eb', over: '#dc2626' };
+    const outcomeLabels = { under: 'Under', on: 'On', over: 'Over' };
+    const lockedInput: React.CSSProperties = locked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {};
+    return (
+      <div style={{ marginTop: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '3%' }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: '#f8fafc' }}>
+              <th style={thStyle}>Phase / Category</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Est. Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>JTD Cost</th>
+              <th style={{ ...thStyle, background: '#eff6ff', color: '#1d4ed8', textAlign: 'right' }}>Proj. Cost</th>
+              <th style={{ ...thStyle, textAlign: 'center' }}><div>Expected Outcome</div><div style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.65rem', textTransform: 'none', letterSpacing: 0 }}>Budget</div></th>
+              <th style={thStyle}>Key Vendor</th>
+              <th style={thStyle}>Lead Time</th>
+              <th style={thStyle}>Notes</th>
+              <th style={thStyle} />
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button style={addRowBtn} onClick={() => setItems(it => [...it, { id: uid(), description: '', budget: undefined, notes: '' }])}>{addLabel}</button>
-    </div>
-  );
+          </thead>
+          <tbody>
+            {items.map((row, i) => (
+              <tr key={row.id}>
+                <td style={tdStyle}><input style={{ ...colStyle, width: '100%', ...lockedInput }} value={row.description} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, description: e.target.value } : r))} /></td>
+                <td style={vistaCell}>{fmtC(row.est_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.jtd_cost)}</td>
+                <td style={vistaCell}>{fmtC(row.projected_cost)}</td>
+                <td style={{ ...tdStyle, verticalAlign: 'middle', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }} title={locked ? lockTooltip : undefined}>
+                    {(['under', 'on', 'over'] as const).map(val => (
+                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', cursor: locked ? 'not-allowed' : 'pointer', color: locked ? '#9ca3af' : outcomeColors[val], fontWeight: row.expected_outcome === val ? 700 : 400, whiteSpace: 'nowrap' }}>
+                        <input type="radio" name={`outcome-gen-${row.id}`} value={val} checked={row.expected_outcome === val} disabled={locked} onChange={() => setItems(it => it.map((r, j) => j === i ? { ...r, expected_outcome: val } : r))} style={{ cursor: locked ? 'not-allowed' : 'pointer' }} />
+                        {outcomeLabels[val]}
+                      </label>
+                    ))}
+                  </div>
+                </td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.vendor ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, vendor: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.lead_time ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, lead_time: e.target.value } : r))} /></td>
+                <td style={tdStyle}><input style={{ ...colStyle, ...lockedInput }} value={row.notes ?? ''} disabled={locked} title={locked ? lockTooltip : undefined} onChange={e => setItems(it => it.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))} /></td>
+                <td style={tdStyle}>{!locked && <button style={delBtn} onClick={() => setItems(it => it.filter((_, j) => j !== i))}>✕</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!locked && <button style={addRowBtn} onClick={() => setItems(it => [...it, { id: uid(), description: '', vendor: '', lead_time: '', notes: '' }])}>{addLabel}</button>}
+      </div>
+    );
+  };
 
   const renderContactsTable = () => (
     <div style={{ overflowX: 'auto', marginTop: 8 }}>
@@ -925,6 +1095,16 @@ const PreJobWizard: React.FC = () => {
         </tbody>
       </table>
       <button style={addRowBtn} onClick={() => setContacts(cs => [...cs, { id: uid(), role: '', name: '', phone: '', email: '' }])}>+ Add Contact</button>
+    </div>
+  );
+
+  const lockBanner = (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: '0.65rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: '#92400e' }}>
+      <span style={{ fontSize: '1rem', lineHeight: 1.2 }}>🔒</span>
+      <div>
+        <strong>Read-only — {schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} scheduling is active.</strong>
+        {' '}These line items are derived from Vista and cannot be edited here. To edit manually, go to the <strong>Schedule tab</strong> and switch the schedule mode to <strong>Summary</strong>.
+      </div>
     </div>
   );
 
@@ -1008,11 +1188,11 @@ const PreJobWizard: React.FC = () => {
                 disabled={!readiness?.ready}
                 onClick={() => { setStep(1); window.scrollTo(0, 0); }}
                 style={{
-                  background: readiness?.ready ? 'linear-gradient(135deg, #002356, #003580)' : '#e2e8f0',
+                  background: readiness?.ready ? 'linear-gradient(135deg, #002356 0%, #004080 100%)' : '#e2e8f0',
                   color: readiness?.ready ? 'white' : '#94a3b8',
-                  border: 'none', borderRadius: 8, padding: '0.85rem 2rem',
-                  fontSize: '1rem', fontWeight: 700, cursor: readiness?.ready ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s',
+                  border: 'none', borderRadius: '0.375rem', padding: '0.5rem 1.25rem',
+                  fontSize: '0.875rem', fontWeight: 600, cursor: readiness?.ready ? 'pointer' : 'not-allowed',
+                  transition: 'opacity 0.15s',
                 }}
               >
                 {readiness?.ready ? 'Start Pre-Job Checklist →' : 'Prerequisites not met'}
@@ -1225,7 +1405,7 @@ const PreJobWizard: React.FC = () => {
                 <button
                   disabled={!empSearch.selected || !teamRole || addTeamMutation.isPending}
                   onClick={() => addTeamMutation.mutate()}
-                  style={{ padding: '0.55rem 1.25rem', background: '#002356', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', opacity: empSearch.selected && teamRole ? 1 : 0.45 }}
+                  style={{ padding: '0.5rem 1.25rem', background: 'linear-gradient(135deg, #002356 0%, #004080 100%)', color: 'white', border: 'none', borderRadius: '0.375rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem', opacity: empSearch.selected && teamRole ? 1 : 0.45, transition: 'opacity 0.15s' }}
                 >
                   {addTeamMutation.isPending ? 'Adding…' : '+ Add'}
                 </button>
@@ -1328,7 +1508,7 @@ const PreJobWizard: React.FC = () => {
                 <button
                   disabled={!fieldEmpSearch.selected || !fieldRole || nominateFieldMutation.isPending}
                   onClick={() => nominateFieldMutation.mutate()}
-                  style={{ padding: '0.55rem 1.5rem', background: '#002356', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', opacity: fieldEmpSearch.selected && fieldRole ? 1 : 0.45 }}
+                  style={{ padding: '0.5rem 1.25rem', background: 'linear-gradient(135deg, #002356 0%, #004080 100%)', color: 'white', border: 'none', borderRadius: '0.375rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.875rem', opacity: fieldEmpSearch.selected && fieldRole ? 1 : 0.45, transition: 'opacity 0.15s' }}
                 >
                   {nominateFieldMutation.isPending ? 'Submitting…' : 'Submit for Approval →'}
                 </button>
@@ -1527,17 +1707,27 @@ const PreJobWizard: React.FC = () => {
               question="How are you handling material procurement for this project?"
               hint="Identify your key material categories, budget targets, preferred vendors, and any long-lead items."
             />
+            {costStepsLocked && lockBanner}
             {md && <VistaBox label="Material" estCost={md.est_cost} jtdCost={md.jtd_cost} />}
             <label style={fieldLabel}>Procurement Strategy</label>
             <textarea
               rows={3}
-              style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem' }}
+              style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem', ...(costStepsLocked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {}) }}
               placeholder="Key procurement milestones, preferred vendors, buy-out strategy…"
               value={materialApproach}
+              disabled={costStepsLocked}
+              title={costStepsLocked ? lockTooltip : undefined}
               onChange={e => setMaterialApproach(e.target.value)}
             />
-            <label style={fieldLabel}>Material Breakdown</label>
-            {renderMaterialTable()}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ ...fieldLabel, marginBottom: 0 }}>Material Breakdown</label>
+              {readiness?.vistaLinked && !costStepsLocked && (
+                <button onClick={resetMaterialFromVista} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                  ↻ Reset from Vista
+                </button>
+              )}
+            </div>
+            {renderMaterialTable(costStepsLocked)}
           </div>
         );
       }
@@ -1551,52 +1741,111 @@ const PreJobWizard: React.FC = () => {
               question="Any subcontractors involved? Tell me about their scopes and who you're planning to use."
               hint="Include any subs already selected, as well as scopes still out for bid."
             />
+            {costStepsLocked && lockBanner}
             {sd && <VistaBox label="Subcontracts" estCost={sd.est_cost} jtdCost={sd.jtd_cost} />}
             <label style={fieldLabel}>Subcontract Strategy</label>
             <textarea
               rows={3}
-              style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem' }}
+              style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem', ...(costStepsLocked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {}) }}
               placeholder="Buy-out timeline, key subcontract risks, coordination requirements…"
               value={subApproach}
+              disabled={costStepsLocked}
+              title={costStepsLocked ? lockTooltip : undefined}
               onChange={e => setSubApproach(e.target.value)}
             />
-            <label style={fieldLabel}>Subcontractors</label>
-            {renderSubTable()}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ ...fieldLabel, marginBottom: 0 }}>Subcontractors</label>
+              {readiness?.vistaLinked && !costStepsLocked && (
+                <button onClick={resetSubsFromVista} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                  ↻ Reset from Vista
+                </button>
+              )}
+            </div>
+            {renderSubTable(costStepsLocked)}
           </div>
         );
       }
 
-      // STEP 11 — OTHER COSTS
+      // STEP 11 — RENTALS
       case 11: {
         const rd = costSummary?.costs?.rentals;
+        return (
+          <div>
+            <TitanCard
+              question="Any rental equipment on this project?"
+              hint="Cranes, lifts, scaffolding, compressors — anything you'll be renting for the job."
+            />
+            {costStepsLocked && lockBanner}
+            {rd && <VistaBox label="Rentals" estCost={rd.est_cost} jtdCost={rd.jtd_cost} />}
+            <label style={fieldLabel}>Rental Strategy</label>
+            <textarea rows={3} style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem', ...(costStepsLocked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {}) }} placeholder="Rental strategy or key items…" value={rentalApproach} disabled={costStepsLocked} title={costStepsLocked ? lockTooltip : undefined} onChange={e => setRentalApproach(e.target.value)} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ ...fieldLabel, marginBottom: 0 }}>Rental Equipment</label>
+              {readiness?.vistaLinked && !costStepsLocked && (
+                <button onClick={resetRentalsFromVista} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                  ↻ Reset from Vista
+                </button>
+              )}
+            </div>
+            {renderGenericTable(rentalItems, setRentalItems, '+ Add Equipment', costStepsLocked)}
+          </div>
+        );
+      }
+
+      // STEP 12 — MEP EQUIPMENT
+      case 12: {
         const mpd = costSummary?.costs?.mep_equipment;
+        return (
+          <div>
+            <TitanCard
+              question="Any MEP or owner-furnished equipment on this project?"
+              hint="Equipment furnished by the owner or GC that you're responsible for installing."
+            />
+            {costStepsLocked && lockBanner}
+            {mpd && <VistaBox label="MEP Equipment" estCost={mpd.est_cost} jtdCost={mpd.jtd_cost} />}
+            <label style={fieldLabel}>MEP Equipment Strategy</label>
+            <textarea rows={3} style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem', ...(costStepsLocked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {}) }} placeholder="MEP procurement strategy, owner-supplied items…" value={mepApproach} disabled={costStepsLocked} title={costStepsLocked ? lockTooltip : undefined} onChange={e => setMepApproach(e.target.value)} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ ...fieldLabel, marginBottom: 0 }}>MEP Equipment</label>
+              {readiness?.vistaLinked && !costStepsLocked && (
+                <button onClick={resetMEPFromVista} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                  ↻ Reset from Vista
+                </button>
+              )}
+            </div>
+            {renderGenericTable(mepItems, setMepItems, '+ Add Equipment', costStepsLocked)}
+          </div>
+        );
+      }
+
+      // STEP 13 — GENERAL CONDITIONS
+      case 13: {
         const gcd = costSummary?.costs?.general_conditions;
         return (
           <div>
             <TitanCard
-              question="Quick check on the remaining cost buckets — rental equipment, MEP/owner-furnished equipment, and general conditions."
-              hint="Skip any that don't apply. You can always add detail later in the full checklist."
+              question="What general conditions costs does this project carry?"
+              hint="Trailer, dumpsters, temp utilities, safety supplies, permits, site signage."
             />
-            <SectionDivider label="Rental Equipment" />
-            {rd && <VistaBox label="Rental" estCost={rd.est_cost} jtdCost={rd.jtd_cost} />}
-            <textarea rows={2} style={{ ...fieldInput, resize: 'vertical', marginBottom: 6 }} placeholder="Rental strategy or key items…" value={rentalApproach} onChange={e => setRentalApproach(e.target.value)} />
-            {renderGenericTable(rentalItems, setRentalItems, '+ Add Equipment')}
-
-            <SectionDivider label="MEP / Owner-Furnished Equipment" />
-            {mpd && <VistaBox label="MEP Equipment" estCost={mpd.est_cost} jtdCost={mpd.jtd_cost} />}
-            <textarea rows={2} style={{ ...fieldInput, resize: 'vertical', marginBottom: 6 }} placeholder="MEP procurement strategy, owner-supplied items…" value={mepApproach} onChange={e => setMepApproach(e.target.value)} />
-            {renderGenericTable(mepItems, setMepItems, '+ Add Equipment')}
-
-            <SectionDivider label="General Conditions" />
+            {costStepsLocked && lockBanner}
             {gcd && <VistaBox label="General Conditions" estCost={gcd.est_cost} jtdCost={gcd.jtd_cost} />}
-            <textarea rows={2} style={{ ...fieldInput, resize: 'vertical', marginBottom: 6 }} placeholder="GC items strategy, trailer, dumpsters, temp utilities…" value={gcApproach} onChange={e => setGcApproach(e.target.value)} />
-            {renderGenericTable(gcItems, setGcItems, '+ Add Item')}
+            <label style={fieldLabel}>General Conditions Strategy</label>
+            <textarea rows={3} style={{ ...fieldInput, resize: 'vertical', marginBottom: '1rem', ...(costStepsLocked ? { background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' } : {}) }} placeholder="GC items strategy, trailer, dumpsters, temp utilities…" value={gcApproach} disabled={costStepsLocked} title={costStepsLocked ? lockTooltip : undefined} onChange={e => setGcApproach(e.target.value)} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label style={{ ...fieldLabel, marginBottom: 0 }}>General Conditions Items</label>
+              {readiness?.vistaLinked && !costStepsLocked && (
+                <button onClick={resetGCFromVista} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                  ↻ Reset from Vista
+                </button>
+              )}
+            </div>
+            {renderGenericTable(gcItems, setGcItems, '+ Add Item', costStepsLocked)}
           </div>
         );
       }
 
-      // STEP 12 — OTHER CONTACTS
-      case 12:
+      // STEP 14 — OTHER CONTACTS
+      case 14:
         return (
           <div>
             <TitanCard
@@ -1607,8 +1856,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 13 — SUMMARY
-      case 13:
+      // STEP 15 — SUMMARY
+      case 15:
         return (
           <div>
             <TitanCard
@@ -1638,7 +1887,7 @@ const PreJobWizard: React.FC = () => {
             <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
               <button
                 onClick={() => { localStorage.removeItem(wizardKey); navigate(`/projects/${projectId}/pre-job-checklist`); }}
-                style={{ background: 'linear-gradient(135deg, #002356, #003580)', color: 'white', border: 'none', borderRadius: 10, padding: '1rem 2.5rem', fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer' }}
+                style={{ background: 'linear-gradient(135deg, #002356 0%, #004080 100%)', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.15s' }}
               >
                 Open Full Pre-Job Checklist →
               </button>
@@ -1673,23 +1922,28 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 14 && <ProgressBar step={step} completedSteps={completedSteps} maxStepReached={maxStepReached} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
+      {step > 0 && step < 16 && <ProgressBar step={step} completedSteps={completedSteps} maxStepReached={maxStepReached} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
 
       {/* Content */}
-      <div style={{ maxWidth: step === 2 && schedulingMode === 'cost_type' ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ maxWidth: (step === 2 && schedulingMode === 'cost_type') || [9, 10, 11, 12, 13].includes(step) ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
         {renderStepContent()}
       </div>
 
       {/* Navigation (hide on gate and summary) */}
-      {step > 0 && step < 13 && (
+      {step > 0 && step < 15 && (
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
+          <button onClick={handleBack} style={{ ...navBtn('#f1f5f9', '#374151'), border: '1px solid #e2e8f0' }}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={handleFinishLater} disabled={saving} style={navBtn('#f1f5f9', '#475569')}>
+            {completedSteps.has(step) && (
+              <button onClick={() => unmarkStepComplete(step)} style={{ ...navBtn('#fef2f2', '#dc2626'), border: '1px solid #fecaca' }}>
+                Mark Incomplete
+              </button>
+            )}
+            <button onClick={handleFinishLater} disabled={saving} style={{ ...navBtn('#f1f5f9', '#374151'), border: '1px solid #e2e8f0' }}>
               {saving ? 'Saving…' : 'Finish Later'}
             </button>
-            <button onClick={handleMarkComplete} disabled={saving} style={navBtn('#002356', 'white')}>
-              {saving ? 'Saving…' : step === 12 ? 'Mark Complete & Review →' : 'Mark Complete →'}
+            <button onClick={handleMarkComplete} disabled={saving} style={navBtn('linear-gradient(135deg, #002356 0%, #004080 100%)', 'white')}>
+              {saving ? 'Saving…' : step === 14 ? 'Mark Complete & Review →' : 'Mark Complete →'}
             </button>
           </div>
         </div>
@@ -1748,9 +2002,9 @@ const fieldInput: React.CSSProperties = {
 };
 
 const navBtn = (bg: string, color: string): React.CSSProperties => ({
-  background: bg, color, border: 'none', borderRadius: 8,
-  padding: '0.65rem 1.5rem', fontSize: '0.9rem', fontWeight: 700,
-  cursor: 'pointer',
+  background: bg, color, border: 'none', borderRadius: '0.375rem',
+  padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: 600,
+  cursor: 'pointer', transition: 'opacity 0.15s',
 });
 
 const addRowBtn: React.CSSProperties = {

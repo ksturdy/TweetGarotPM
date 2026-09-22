@@ -51,7 +51,10 @@ export interface LaborData {
 export interface MaterialItemRow {
   id: string;
   description: string;
-  budget?: number;
+  est_cost?: number;
+  jtd_cost?: number;
+  projected_cost?: number;
+  expected_outcome?: 'under' | 'on' | 'over';
   vendor?: string;
   lead_time?: string;
   notes?: string;
@@ -65,9 +68,12 @@ export interface MaterialData {
 export interface SubcontractItemRow {
   id: string;
   description: string;
+  est_cost?: number;
+  jtd_cost?: number;
+  projected_cost?: number;
+  expected_outcome?: 'under' | 'on' | 'over';
   subcontractor?: string;
-  budget?: number;
-  scope?: string;
+  lead_time?: string;
   notes?: string;
 }
 
@@ -79,7 +85,12 @@ export interface SubcontractsData {
 export interface GenericItemRow {
   id: string;
   description: string;
-  budget?: number;
+  est_cost?: number;
+  jtd_cost?: number;
+  projected_cost?: number;
+  expected_outcome?: 'under' | 'on' | 'over';
+  vendor?: string;
+  lead_time?: string;
   notes?: string;
 }
 

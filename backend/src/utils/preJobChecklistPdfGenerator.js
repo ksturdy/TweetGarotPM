@@ -352,13 +352,39 @@ function hasSectionContent(notes, items) {
   return !!(notes || (Array.isArray(items) && items.length > 0));
 }
 
-function genericRows(items) {
+const OUTCOME_COLOR = { under: '#16a34a', on: '#2563eb', over: '#dc2626' };
+const OUTCOME_LABEL = { under: 'Under', on: 'On Budget', over: 'Over' };
+
+function outcomeCell(val) {
+  if (!val) return '—';
+  return `<span style="color:${OUTCOME_COLOR[val]||'#64748b'};font-weight:700;">${OUTCOME_LABEL[val] || val}</span>`;
+}
+
+function costTableRows(items, vendorKey = 'vendor') {
   return items.map(it => `
     <tr>
       <td>${esc(it.description)}</td>
-      <td style="text-align:right">${it.budget ? fmt$(it.budget) : '—'}</td>
+      <td style="text-align:right;background:#eff6ff;color:#1d4ed8;font-weight:600;">${it.est_cost != null ? fmt$(it.est_cost) : '—'}</td>
+      <td style="text-align:right;background:#eff6ff;color:#1d4ed8;font-weight:600;">${it.jtd_cost != null ? fmt$(it.jtd_cost) : '—'}</td>
+      <td style="text-align:right;background:#eff6ff;color:#1d4ed8;font-weight:600;">${it.projected_cost != null ? fmt$(it.projected_cost) : '—'}</td>
+      <td style="text-align:center;">${outcomeCell(it.expected_outcome)}</td>
+      <td>${esc(it[vendorKey] || '')}</td>
+      <td>${esc(it.lead_time || '')}</td>
       <td>${esc(it.notes || '')}</td>
     </tr>`).join('');
+}
+
+function costTableHeader(vendorLabel = 'Key Vendor') {
+  return `<tr>
+    <th>Phase / Category</th>
+    <th style="text-align:right;background:#dbeafe;color:#1e40af;">Est. Cost</th>
+    <th style="text-align:right;background:#dbeafe;color:#1e40af;">JTD Cost</th>
+    <th style="text-align:right;background:#dbeafe;color:#1e40af;">Proj. Cost</th>
+    <th style="text-align:center;">Outcome</th>
+    <th>${esc(vendorLabel)}</th>
+    <th>Lead Time</th>
+    <th>Notes</th>
+  </tr>`;
 }
 
 function generatePreJobChecklistPdfHtml(data, logoBase64 = '') {
@@ -668,12 +694,8 @@ ${hasSectionContent(material.approach_notes, materialItems) ? `
     ${material.approach_notes ? `<div class="notes-text" style="margin-bottom:8px">${esc(material.approach_notes)}</div>` : ''}
     ${materialItems.length > 0 ? `
     <table class="data">
-      <tr><th>Description</th><th>Vendor</th><th style="text-align:right">Budget</th><th>Lead Time</th><th>Notes</th></tr>
-      ${materialItems.map(it => `<tr>
-        <td>${esc(it.description)}</td><td>${esc(it.vendor || '')}</td>
-        <td style="text-align:right">${it.budget ? fmt$(it.budget) : '—'}</td>
-        <td>${esc(it.lead_time || '')}</td><td>${esc(it.notes || '')}</td>
-      </tr>`).join('')}
+      ${costTableHeader('Key Vendor')}
+      ${costTableRows(materialItems, 'vendor')}
     </table>` : ''}
   </div>
 </div>` : ''}
@@ -686,33 +708,39 @@ ${hasSectionContent(subs.approach_notes, subItems) ? `
     ${subs.approach_notes ? `<div class="notes-text" style="margin-bottom:8px">${esc(subs.approach_notes)}</div>` : ''}
     ${subItems.length > 0 ? `
     <table class="data">
-      <tr><th>Description</th><th>Subcontractor</th><th style="text-align:right">Budget</th><th>Scope</th><th>Notes</th></tr>
-      ${subItems.map(it => `<tr>
-        <td>${esc(it.description)}</td><td>${esc(it.subcontractor || '')}</td>
-        <td style="text-align:right">${it.budget ? fmt$(it.budget) : '—'}</td>
-        <td>${esc(it.scope || '')}</td><td>${esc(it.notes || '')}</td>
-      </tr>`).join('')}
+      ${costTableHeader('Subcontractor')}
+      ${costTableRows(subItems, 'subcontractor')}
     </table>` : ''}
   </div>
 </div>` : ''}
 
-<!-- Other Costs -->
-${(hasSectionContent(rental.approach_notes, rentalItems) || hasSectionContent(mep.approach_notes, mepItems) || hasSectionContent(gc.approach_notes, gcItems)) ? `
+<!-- Rentals -->
+${hasSectionContent(rental.approach_notes, rentalItems) ? `
 <div class="section">
-  ${sectionHeader('Other Costs', '#1e3a5f')}
+  ${sectionHeader('Rentals', '#1e3a5f')}
   <div class="section-body">
-    ${hasSectionContent(rental.approach_notes, rentalItems) ? `
-    <div class="team-group-label" style="margin-bottom:4px">Rentals</div>
-    ${rental.approach_notes ? `<div class="notes-text">${esc(rental.approach_notes)}</div>` : ''}
-    ${rentalItems.length > 0 ? `<table class="data" style="margin-bottom:10px"><tr><th>Description</th><th style="text-align:right">Budget</th><th>Notes</th></tr>${genericRows(rentalItems)}</table>` : ''}` : ''}
-    ${hasSectionContent(mep.approach_notes, mepItems) ? `
-    <div class="team-group-label" style="margin-bottom:4px">MEP Equipment</div>
-    ${mep.approach_notes ? `<div class="notes-text">${esc(mep.approach_notes)}</div>` : ''}
-    ${mepItems.length > 0 ? `<table class="data" style="margin-bottom:10px"><tr><th>Description</th><th style="text-align:right">Budget</th><th>Notes</th></tr>${genericRows(mepItems)}</table>` : ''}` : ''}
-    ${hasSectionContent(gc.approach_notes, gcItems) ? `
-    <div class="team-group-label" style="margin-bottom:4px">General Conditions</div>
-    ${gc.approach_notes ? `<div class="notes-text">${esc(gc.approach_notes)}</div>` : ''}
-    ${gcItems.length > 0 ? `<table class="data"><tr><th>Description</th><th style="text-align:right">Budget</th><th>Notes</th></tr>${genericRows(gcItems)}</table>` : ''}` : ''}
+    ${rental.approach_notes ? `<div class="notes-text" style="margin-bottom:8px">${esc(rental.approach_notes)}</div>` : ''}
+    ${rentalItems.length > 0 ? `<table class="data">${costTableHeader('Key Vendor')}${costTableRows(rentalItems, 'vendor')}</table>` : ''}
+  </div>
+</div>` : ''}
+
+<!-- MEP Equipment -->
+${hasSectionContent(mep.approach_notes, mepItems) ? `
+<div class="section">
+  ${sectionHeader('MEP Equipment', '#1e3a5f')}
+  <div class="section-body">
+    ${mep.approach_notes ? `<div class="notes-text" style="margin-bottom:8px">${esc(mep.approach_notes)}</div>` : ''}
+    ${mepItems.length > 0 ? `<table class="data">${costTableHeader('Key Vendor')}${costTableRows(mepItems, 'vendor')}</table>` : ''}
+  </div>
+</div>` : ''}
+
+<!-- General Conditions -->
+${hasSectionContent(gc.approach_notes, gcItems) ? `
+<div class="section">
+  ${sectionHeader('General Conditions', '#1e3a5f')}
+  <div class="section-body">
+    ${gc.approach_notes ? `<div class="notes-text" style="margin-bottom:8px">${esc(gc.approach_notes)}</div>` : ''}
+    ${gcItems.length > 0 ? `<table class="data">${costTableHeader('Key Vendor')}${costTableRows(gcItems, 'vendor')}</table>` : ''}
   </div>
 </div>` : ''}
 

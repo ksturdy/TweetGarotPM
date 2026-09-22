@@ -70,14 +70,26 @@ async function getActiveSegmentKeys(projectId, tenantId) {
   const { rows } = await db.query(
     `SELECT DISTINCT
        CASE
-         WHEN UPPER(phase) LIKE 'BAS%' THEN 'bas'
-         ELSE LEFT(phase, 2)
+         WHEN UPPER(phase) LIKE 'BAS%'             THEN 'bas'
+         WHEN cost_type = 1 AND LEFT(phase,2)='30' THEN '30'
+         WHEN cost_type = 1 AND LEFT(phase,2)='35' THEN '35'
+         WHEN cost_type = 1 AND LEFT(phase,2)='40' THEN '40'
+         WHEN cost_type = 1 AND LEFT(phase,2)='45' THEN '45'
+         WHEN cost_type = 1 AND LEFT(phase,2)='50' THEN '50'
+         WHEN cost_type = 1 AND LEFT(phase,2)='55' THEN '55'
+         WHEN cost_type = 1 AND LEFT(phase,2)='70' THEN '70'
+         WHEN cost_type = 2 THEN 'material'
+         WHEN cost_type = 3 THEN 'subcontract'
+         WHEN cost_type = 4 THEN 'rental'
+         WHEN cost_type = 5 THEN 'equipment'
+         WHEN cost_type = 6 THEN 'gc'
+         ELSE NULL
        END AS segment_key
      FROM vp_phase_codes
      WHERE linked_project_id = $1 AND tenant_id = $2`,
     [projectId, tenantId]
   );
-  return rows.map((r) => r.segment_key);
+  return rows.filter((r) => r.segment_key != null).map((r) => r.segment_key);
 }
 
 // Aggregates vp_phase_codes costs rolled up per segment key
