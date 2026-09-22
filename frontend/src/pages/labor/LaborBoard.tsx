@@ -598,6 +598,12 @@ const BoardRow: React.FC<{
             <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {row.first_name} {row.last_name}
             </span>
+            {row.has_conflict && (
+              <span
+                title="Double-booked — has overlapping assignments"
+                style={{ color: '#d97706', fontSize: '0.9rem', flexShrink: 0, lineHeight: 1 }}
+              >⚠</span>
+            )}
           </Link>
         );
       case 'availability': {

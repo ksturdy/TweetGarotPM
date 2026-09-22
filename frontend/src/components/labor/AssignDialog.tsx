@@ -8,6 +8,7 @@ import {
   SHIFT_PATTERNS,
   AssignmentRecord,
   AssignmentStatus,
+  AssignmentConflict,
   LaborAccount,
 } from '../../services/labor';
 import { projectsApi, Project } from '../../services/projects';
@@ -69,6 +70,11 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
   const [notes, setNotes] = useState(editing?.notes || '');
   const [tagsText, setTagsText] = useState((editing?.tags || []).join(', '));
   const [error, setError] = useState<string | null>(null);
+  const [conflicts, setConflicts] = useState<AssignmentConflict[] | null>(null);
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
+
+  // Reset conflict state whenever employee or dates change so a stale warning doesn't linger
+  useEffect(() => { setConflicts(null); }, [employeeId, startDate, endDate]);
 
   useEffect(() => {
     if (!open) return;
@@ -87,6 +93,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setStatus((editing.status as AssignmentStatus) || 'planned');
       setNotes(editing.notes || '');
       setTagsText((editing.tags || []).join(', '));
+      setConflicts(null);
     } else {
       setAssignTarget(lockedProjectId ? 'project' : 'project');
       setProjectId(lockedProjectId);
@@ -111,6 +118,8 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setNotes('');
       setTagsText('');
       setError(null);
+      setConflicts(null);
+      setCheckingConflicts(false);
     }
   }, [open, editing]);
 
@@ -245,6 +254,29 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setError(e?.response?.data?.error || e?.message || 'Failed to save assignment');
     },
   });
+
+  const handleSaveClick = async () => {
+    // If conflict warning is already dismissed (user clicked Assign Anyway), proceed directly
+    if (conflicts !== null) {
+      assignMutation.mutate();
+      return;
+    }
+    // Only run the conflict check when we have an employee and at least one date to compare
+    if (!employeeId || (!startDate && !endDate)) {
+      assignMutation.mutate();
+      return;
+    }
+    setCheckingConflicts(true);
+    try {
+      const found = await laborApi.checkConflicts(employeeId, startDate || null, endDate || null, editing?.id);
+      setConflicts(found);
+      if (found.length === 0) assignMutation.mutate();
+    } catch {
+      assignMutation.mutate();
+    } finally {
+      setCheckingConflicts(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -556,15 +588,47 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
           </div>
         </div>
 
+        {conflicts !== null && conflicts.length > 0 && (
+          <div style={{ margin: '0 2rem 1rem', background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 6, padding: '0.75rem 1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+              <span style={{ fontSize: '1rem' }}>⚠️</span>
+              <strong style={{ color: '#92400e', fontSize: '0.85rem' }}>Double-booking detected</strong>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#78350f', marginBottom: '0.4rem' }}>
+              {pickedEmployeeLabel || 'This employee'} is already assigned during this period:
+            </div>
+            {conflicts.map((c) => (
+              <div key={c.id} style={{ fontSize: '0.8rem', color: '#92400e', padding: '0.25rem 0', borderTop: '1px solid #fde68a' }}>
+                <strong>{c.assignment_name || 'Unknown'}</strong>
+                {' · '}
+                {c.start_date ? new Date(c.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : 'no start'}
+                {' – '}
+                {c.end_date ? new Date(c.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : 'ongoing'}
+                {c.role ? ` · ${c.role}` : ''}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={footerStyle}>
           <button onClick={onClose} style={btnSecondary}>Cancel</button>
-          <button
-            onClick={() => assignMutation.mutate()}
-            disabled={assignMutation.isPending}
-            style={btnPrimary}
-          >
-            {assignMutation.isPending ? 'Saving...' : editing ? 'Save Changes' : 'Assign'}
-          </button>
+          {conflicts !== null && conflicts.length > 0 ? (
+            <button
+              onClick={() => assignMutation.mutate()}
+              disabled={assignMutation.isPending}
+              style={{ ...btnPrimary, background: '#d97706' }}
+            >
+              {assignMutation.isPending ? 'Saving...' : 'Assign Anyway'}
+            </button>
+          ) : (
+            <button
+              onClick={handleSaveClick}
+              disabled={assignMutation.isPending || checkingConflicts}
+              style={btnPrimary}
+            >
+              {checkingConflicts ? 'Checking...' : assignMutation.isPending ? 'Saving...' : editing ? 'Save Changes' : 'Assign'}
+            </button>
+          )}
         </div>
       </div>
     </div>

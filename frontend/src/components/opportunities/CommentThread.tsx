@@ -9,7 +9,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 interface CommentThreadProps {
   opportunityId: number;
-  employees?: Array<{ id: number; first_name: string; last_name: string; job_title?: string | null }>;
+  employees?: Array<{ id: number; user_id?: number | null; first_name: string; last_name: string; job_title?: string | null }>;
 }
 
 function extractMentionIds(text: string): number[] {

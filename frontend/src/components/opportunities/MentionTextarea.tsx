@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 
 interface Employee {
   id: number;
+  user_id?: number | null;
   first_name: string;
   last_name: string;
   job_title?: string | null;
@@ -109,6 +110,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
   const filtered = mentionQuery !== null
     ? employees.filter(emp => {
+        if (!emp.user_id) return false;
         const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase();
         return fullName.includes(mentionQuery.toLowerCase());
       }).slice(0, 6)
@@ -170,7 +172,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const newMention: MentionRange = {
       start: mentionStart,
       end: mentionStart + displayMention.length,
-      employeeId: emp.id,
+      employeeId: emp.user_id!,
       displayName,
     };
 

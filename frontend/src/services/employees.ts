@@ -46,6 +46,7 @@ export interface EmployeeFilters {
 
 export interface AssignableEmployee {
   id: number;
+  user_id: number | null;
   first_name: string;
   last_name: string;
   job_title: string | null;

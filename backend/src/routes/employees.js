@@ -15,6 +15,7 @@ router.get('/assignable', async (req, res) => {
     const employees = await Employee.getAll({ employment_status: 'active' }, req.tenantId);
     const assignable = employees.map(e => ({
       id: e.id,
+      user_id: e.user_id,
       first_name: e.first_name,
       last_name: e.last_name,
       job_title: e.job_title,

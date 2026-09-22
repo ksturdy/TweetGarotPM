@@ -43,6 +43,24 @@ router.get('/:id/candidates', authorize('admin', 'manager'), async (req, res, ne
   }
 });
 
+// GET /api/project-assignments/conflicts  — check for date-range overlaps for an employee
+router.get('/conflicts', authorize('admin', 'manager'), async (req, res, next) => {
+  try {
+    const { employeeId, startDate, endDate, excludeId } = req.query;
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+    const conflicts = await ProjectAssignment.checkConflicts(
+      parseInt(employeeId, 10),
+      startDate || null,
+      endDate || null,
+      excludeId ? parseInt(excludeId, 10) : null,
+      req.tenantId
+    );
+    res.json({ conflicts });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/project-assignments/unfilled  — create an unfilled role
 router.post('/unfilled', authorize('admin', 'manager'), async (req, res, next) => {
   try {

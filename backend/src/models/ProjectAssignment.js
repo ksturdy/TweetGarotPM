@@ -215,7 +215,21 @@ const ProjectAssignment = {
                ELSE 'assigned'
              END as availability,
              cto.type as time_off_type,
-             cto.end_date as time_off_end_date
+             cto.end_date as time_off_end_date,
+             EXISTS (
+               SELECT 1 FROM project_assignments x
+               JOIN project_assignments y ON y.employee_id = x.employee_id
+                 AND y.id != x.id
+                 AND y.tenant_id = x.tenant_id
+                 AND y.is_unfilled = FALSE
+                 AND y.status NOT IN ('cancelled', 'completed')
+                 AND COALESCE(x.start_date, CURRENT_DATE) <= COALESCE(y.end_date, '2099-12-31'::date)
+                 AND COALESCE(x.end_date, '2099-12-31'::date) >= COALESCE(y.start_date, CURRENT_DATE)
+               WHERE x.employee_id = e.id
+                 AND x.tenant_id = $1
+                 AND x.is_unfilled = FALSE
+                 AND x.status NOT IN ('cancelled', 'completed')
+             ) AS has_conflict
       FROM employees e
       LEFT JOIN current_a ca ON ca.employee_id = e.id
       LEFT JOIN next_a na ON na.employee_id = e.id
@@ -754,6 +768,36 @@ const ProjectAssignment = {
       [employeeId, user_id, id, tenantId]
     );
     return result.rows[0];
+  },
+
+  async checkConflicts(employeeId, startDate, endDate, excludeAssignmentId, tenantId) {
+    // Returns assignments that overlap the given date range for the employee.
+    // Overlap condition: existing.start_date <= new.end_date AND existing.end_date >= new.start_date
+    // Treats NULL end_date as "open-ended" (2099-12-31) and NULL start_date as today.
+    const params = [tenantId, employeeId];
+    const excludeClause = excludeAssignmentId ? `AND pa.id != $${params.push(excludeAssignmentId)}` : '';
+    const startParam = `$${params.push(startDate || null)}`;
+    const endParam = `$${params.push(endDate || null)}`;
+
+    const result = await db.query(
+      `SELECT pa.id, pa.start_date, pa.end_date, pa.role,
+              COALESCE(p.name, la.name) AS assignment_name,
+              p.name AS project_name,
+              la.name AS account_name
+       FROM project_assignments pa
+       LEFT JOIN projects p ON p.id = pa.project_id
+       LEFT JOIN labor_accounts la ON la.id = pa.labor_account_id
+       WHERE pa.tenant_id = $1
+         AND pa.employee_id = $2
+         AND pa.is_unfilled = FALSE
+         AND pa.status NOT IN ('cancelled', 'completed')
+         ${excludeClause}
+         AND COALESCE(pa.start_date, CURRENT_DATE) <= COALESCE(${endParam}::date, '2099-12-31'::date)
+         AND COALESCE(pa.end_date, '2099-12-31'::date) >= COALESCE(${startParam}::date, CURRENT_DATE)
+       ORDER BY pa.start_date NULLS LAST`,
+      params
+    );
+    return result.rows;
   },
 };
 

@@ -78,6 +78,7 @@ export interface LaborBoardRow {
   availability: 'available' | 'assigned' | 'time_off';
   time_off_type: TimeOffType | null;
   time_off_end_date: string | null;
+  has_conflict: boolean;
 }
 
 export interface TimeOffRecord {
@@ -300,6 +301,16 @@ export interface HeadcountChartRow {
   total: number;
 }
 
+export interface AssignmentConflict {
+  id: number;
+  start_date: string | null;
+  end_date: string | null;
+  role: string | null;
+  assignment_name: string | null;
+  project_name: string | null;
+  account_name: string | null;
+}
+
 export const laborApi = {
   getBoard: (filters?: BoardFilters) => {
     const params = new URLSearchParams();
@@ -468,4 +479,12 @@ export const laborApi = {
 
   reassignNomination: (id: number, employeeId: number) =>
     api.post<AssignmentRecord>(`/project-assignments/${id}/reassign`, { employeeId }).then((r) => r.data),
+
+  checkConflicts: (employeeId: number, startDate?: string | null, endDate?: string | null, excludeId?: number) => {
+    const params = new URLSearchParams({ employeeId: String(employeeId) });
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (excludeId) params.append('excludeId', String(excludeId));
+    return api.get<{ conflicts: AssignmentConflict[] }>(`/project-assignments/conflicts?${params.toString()}`).then((r) => r.data.conflicts);
+  },
 };
