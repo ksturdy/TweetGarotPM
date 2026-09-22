@@ -549,11 +549,9 @@ const SalesPipeline: React.FC = () => {
         .reduce((sum, opp) => sum + (Number(opp.estimated_value) || 0), 0) / 1_000_000
     );
 
-    // Build a map of id → weighted value using the same probability logic as the KPI
     const weightedById = new Map(
       filteredOpportunities.map(opp => [opp.id, opp.value * getProbabilityPercent(opp.probability) / 100])
     );
-    const createdAtById = new Map(filteredApiOpportunities.map(o => [o.id, o.created_at]));
 
     const weightedValues = points.map(({ cutoff }) =>
       filteredApiOpportunities
@@ -785,7 +783,7 @@ const SalesPipeline: React.FC = () => {
         labels: {
           boxWidth: 20,
           boxHeight: 3,
-          font: { size: 11, weight: '600' },
+          font: { size: 11, weight: 600 },
           padding: 12,
           usePointStyle: false,
           color: '#374151',
