@@ -82,6 +82,9 @@ const SalesPipeline: React.FC = () => {
   const [excludedAwardedStatuses, setExcludedAwardedStatuses] = useState<Set<string>>(new Set(['In Progress', 'Completed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
+  const tableSectionRef = useRef<HTMLDivElement>(null);
+  const [chartMarketFilter, setChartMarketFilter] = useState<string | null>(null);
+  const [chartStageFilter, setChartStageFilter] = useState<string | null>(null);
 
   // Close stage filter dropdown on outside click
   useEffect(() => {
@@ -549,6 +552,29 @@ const SalesPipeline: React.FC = () => {
     };
   }, [filteredApiOpportunities]);
 
+  const hexToRgba = (hex: string, alpha: number): string => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const handleMarketChartClick = (_event: any, elements: any[]) => {
+    if (!elements.length) { setChartMarketFilter(null); return; }
+    const sector = marketSectors[elements[0].index];
+    setChartMarketFilter(prev => prev === sector ? null : sector);
+    setChartStageFilter(null);
+    setView('table');
+    setTimeout(() => tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const handleStageChartClick = (stageName: string) => {
+    setChartStageFilter(prev => prev === stageName ? null : stageName);
+    setChartMarketFilter(null);
+    setView('table');
+    setTimeout(() => tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
   const getSectorColor = (sector: string): string => {
     const colors: { [key: string]: string } = {
       'Amusement/Recreation':    '#ec4899',
@@ -591,7 +617,11 @@ const SalesPipeline: React.FC = () => {
       {
         label: 'Pipeline Value',
         data: marketSectors.map(sector => marketData[sector].value),
-        backgroundColor: marketSectors.map(sector => getSectorColor(sector)),
+        backgroundColor: marketSectors.map(sector => {
+          const color = getSectorColor(sector);
+          if (!chartMarketFilter || sector === chartMarketFilter) return color;
+          return hexToRgba(color, 0.25);
+        }),
         borderRadius: 6,
         barThickness: 40
       }
@@ -601,6 +631,7 @@ const SalesPipeline: React.FC = () => {
   const marketBarChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: handleMarketChartClick,
     plugins: {
       legend: {
         display: false
@@ -695,8 +726,14 @@ const SalesPipeline: React.FC = () => {
     );
   });
 
+  const chartFilteredOpportunities = searchFilteredOpportunities.filter(opp => {
+    if (chartMarketFilter && opp.market !== chartMarketFilter) return false;
+    if (chartStageFilter && opp.stageName !== chartStageFilter) return false;
+    return true;
+  });
+
   // Sort opportunities
-  const sortedOpportunities = [...searchFilteredOpportunities].sort((a, b) => {
+  const sortedOpportunities = [...chartFilteredOpportunities].sort((a, b) => {
     let aValue: any;
     let bValue: any;
 
@@ -1095,15 +1132,24 @@ const SalesPipeline: React.FC = () => {
                 const stageData = stageDataMap[stage.name] || { count: 0, value: 0, color: stage.color };
                 const widthPercent = maxStageValue > 0 ? (stageData.value / maxStageValue) * 100 : 0;
 
+                const isSelected = chartStageFilter === stage.name;
+                const isDimmed = !!chartStageFilter && !isSelected;
                 return (
-                  <div key={stage.id} className="sales-funnel-stage">
+                  <div
+                    key={stage.id}
+                    className="sales-funnel-stage"
+                    style={{ cursor: 'pointer', opacity: isDimmed ? 0.3 : 1, transition: 'opacity 0.15s' }}
+                    onClick={() => handleStageChartClick(stage.name)}
+                  >
                     <div className="sales-funnel-label">{stage.name}</div>
                     <div className="sales-funnel-bar-container">
                       <div
                         className="sales-funnel-bar"
                         style={{
                           width: `${widthPercent}%`,
-                          background: stageData.color
+                          background: stageData.color,
+                          outline: isSelected ? `2px solid ${stageData.color}` : 'none',
+                          outlineOffset: '2px',
                         }}
                       >
                         {stageData.count}
@@ -1125,7 +1171,7 @@ const SalesPipeline: React.FC = () => {
               <div className="sales-chart-subtitle">Pipeline by sector</div>
             </div>
           </div>
-          <div className="sales-chart-container">
+          <div className="sales-chart-container" style={{ cursor: 'pointer' }}>
             <Bar data={marketBarChartData} options={marketBarChartOptions} />
           </div>
         </div>
@@ -1172,10 +1218,33 @@ const SalesPipeline: React.FC = () => {
 
       {/* Table View */}
       {view === 'table' && (
-        <div className="sales-table-section">
+        <div className="sales-table-section" ref={tableSectionRef}>
           <div className="sales-table-header">
             <div className="sales-table-title">
-              {myOpportunitiesOnly ? 'My Opportunities' : myTeamOnly ? 'My Team' : 'All Opportunities'}
+              {chartMarketFilter
+                ? `Market: ${chartMarketFilter}`
+                : chartStageFilter
+                  ? `Stage: ${chartStageFilter}`
+                  : myOpportunitiesOnly ? 'My Opportunities' : myTeamOnly ? 'My Team' : 'All Opportunities'}
+              {(chartMarketFilter || chartStageFilter) && (
+                <button
+                  onClick={() => { setChartMarketFilter(null); setChartStageFilter(null); }}
+                  style={{
+                    marginLeft: '8px',
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    background: '#f1f5f9',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    fontWeight: 500,
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  × Clear
+                </button>
+              )}
               <div className="sales-search-box" style={{ marginLeft: '16px' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="11" cy="11" r="8"/>
