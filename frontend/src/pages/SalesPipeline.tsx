@@ -551,11 +551,35 @@ const SalesPipeline: React.FC = () => {
 
   const getSectorColor = (sector: string): string => {
     const colors: { [key: string]: string } = {
-      'Healthcare': '#10b981',
-      'Education': '#3b82f6',
-      'Commercial': '#8b5cf6',
-      'Industrial': '#f59e0b',
-      'Retail': '#06b6d4'
+      'Amusement/Recreation':    '#ec4899',
+      'Communication':           '#14b8a6',
+      'Conservation/Development':'#22c55e',
+      'Educational':             '#f59e0b',
+      'Health Care':             '#10b981',
+      'Highway/Street':          '#64748b',
+      'Lodging':                 '#f43f5e',
+      'Manufacturing':           '#6366f1',
+      'MFG-Food':                '#f97316',
+      'MFG-Other':               '#8b5cf6',
+      'MFG-Paper':               '#94a3b8',
+      'Mission Critical':        '#0ea5e9',
+      'Office':                  '#3b82f6',
+      'Power':                   '#eab308',
+      'Public Safety':           '#ef4444',
+      'Religious':               '#a855f7',
+      'Residential':             '#e879f9',
+      'Sewage/Waste Disposal':   '#84cc16',
+      'Transportation':          '#06b6d4',
+      'Water Supply':            '#0284c7',
+      // Legacy
+      'Healthcare':              '#10b981',
+      'Education':               '#f59e0b',
+      'Commercial':              '#3b82f6',
+      'Industrial':              '#6366f1',
+      'Retail':                  '#06b6d4',
+      'Government':              '#8b5cf6',
+      'Hospitality':             '#f43f5e',
+      'Data Center':             '#7c3aed',
     };
     return colors[sector] || '#6b7280';
   };
