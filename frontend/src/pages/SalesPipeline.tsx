@@ -56,7 +56,7 @@ interface SalesOpportunity {
   facilityLocationName: string;
   company: string;
   market: string;
-  locationGroup: string;
+  locationGroup?: string;
   icon: React.ReactNode;
   iconGradient: string;
 }
@@ -835,7 +835,7 @@ const SalesPipeline: React.FC = () => {
   const chartFilteredOpportunities = searchFilteredOpportunities.filter(opp => {
     if (chartMarketFilter && opp.market !== chartMarketFilter) return false;
     if (chartStageFilter && opp.stageName !== chartStageFilter) return false;
-    if (chartLocationFilter && opp.locationGroup !== chartLocationFilter) return false;
+    if (chartLocationFilter && (opp.locationGroup || '') !== chartLocationFilter) return false;
     return true;
   });
 
