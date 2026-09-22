@@ -81,8 +81,9 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
 // Column context menu (right-click on header)
 const ColumnContextMenu: React.FC<{
   x: number; y: number; colKey: string; colLabel: string;
+  isGroup?: boolean;
   onHide: () => void; onChooser: () => void; onClose: () => void;
-}> = ({ x, y, colLabel, onHide, onChooser, onClose }) => {
+}> = ({ x, y, colLabel, isGroup, onHide, onChooser, onClose }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -104,7 +105,7 @@ const ColumnContextMenu: React.FC<{
         style={{ padding: '6px 14px', cursor: 'pointer', color: '#1e293b' }}
         onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
         onMouseLeave={e => { e.currentTarget.style.backgroundColor = ''; }}>
-        Hide "{colLabel}"
+        {isGroup ? `Hide All "${colLabel}"` : `Hide "${colLabel}"`}
       </div>
       <div style={{ borderTop: '1px solid #e2e8f0', margin: '2px 0' }} />
       <div onClick={() => { onChooser(); onClose(); }}
@@ -122,17 +123,18 @@ const ColumnChooserDialog: React.FC<{
   columnDefs: ColumnDef[];
   hiddenCols: Set<string>;
   onToggle: (key: string) => void;
+  onToggleGroup: (group: string) => void;
   onShowAll: () => void;
   onClose: () => void;
-}> = ({ columnDefs, hiddenCols, onToggle, onShowAll, onClose }) => {
+}> = ({ columnDefs, hiddenCols, onToggle, onToggleGroup, onShowAll, onClose }) => {
   const hideableCols = columnDefs.filter(c => c.hideable);
   const groups = [...new Set(hideableCols.map(c => c.group).filter(Boolean))];
   const ungrouped = hideableCols.filter(c => !c.group);
 
   const renderCol = (col: ColumnDef) => (
-    <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', cursor: 'pointer', fontSize: '0.82rem' }}>
+    <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '3px 0 3px 18px', cursor: 'pointer', fontSize: '0.82rem' }}>
       <input type="checkbox" checked={!hiddenCols.has(col.key)} onChange={() => onToggle(col.key)} style={{ cursor: 'pointer' }} />
-      <span style={{ color: hiddenCols.has(col.key) ? '#94a3b8' : '#1e293b' }}>{col.group ? `${col.label} (${col.group})` : col.label}</span>
+      <span style={{ color: hiddenCols.has(col.key) ? '#94a3b8' : '#1e293b' }}>{col.label}</span>
     </label>
   );
 
@@ -154,12 +156,27 @@ const ColumnChooserDialog: React.FC<{
             </button>
           )}
           {ungrouped.map(renderCol)}
-          {groups.map(group => (
-            <div key={group} style={{ marginTop: ungrouped.length > 0 || groups.indexOf(group!) > 0 ? '0.5rem' : 0 }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{group}</div>
-              {hideableCols.filter(c => c.group === group).map(renderCol)}
-            </div>
-          ))}
+          {groups.map(group => {
+            const groupCols = hideableCols.filter(c => c.group === group);
+            const visibleCount = groupCols.filter(c => !hiddenCols.has(c.key)).length;
+            const allVisible = visibleCount === groupCols.length;
+            const someVisible = visibleCount > 0 && !allVisible;
+            return (
+              <div key={group} style={{ marginTop: ungrouped.length > 0 || groups.indexOf(group!) > 0 ? '0.5rem' : 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '2px 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={allVisible}
+                    ref={el => { if (el) el.indeterminate = someVisible; }}
+                    onChange={() => onToggleGroup(group!)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{group}</span>
+                </label>
+                {groupCols.map(renderCol)}
+              </div>
+            );
+          })}
         </div>
         <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>
           <button onClick={onClose} style={{ padding: '0.4rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.85rem' }}>Close</button>
@@ -2258,6 +2275,7 @@ const GanttView: React.FC<{
           columnDefs={GANTT_COLUMN_DEFS}
           hiddenCols={ganttHiddenCols}
           onToggle={toggleGanttCol}
+          onToggleGroup={() => {}}
           onShowAll={() => setGanttHiddenCols(new Set())}
           onClose={() => setShowGanttChooser(false)}
         />
@@ -2503,7 +2521,7 @@ const GridView: React.FC<{
       return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
     } catch { return new Set<string>(); }
   });
-  const [gridContextMenu, setGridContextMenu] = useState<{ x: number; y: number; key: string; label: string } | null>(null);
+  const [gridContextMenu, setGridContextMenu] = useState<{ x: number; y: number; key: string; label: string; isGroup?: boolean } | null>(null);
   const [showGridChooser, setShowGridChooser] = useState(false);
   useEffect(() => { localStorage.setItem('phaseSchedule_gridHiddenCols', JSON.stringify([...gridHiddenCols])); }, [gridHiddenCols]);
   const gv = (col: string) => !gridHiddenCols.has(col); // shorthand: visible?
@@ -2521,6 +2539,27 @@ const GridView: React.FC<{
     if (!def?.hideable) return;
     e.preventDefault();
     setGridContextMenu({ x: e.clientX, y: e.clientY, key, label });
+  };
+
+  const gridGroupHeaderContextMenu = (e: React.MouseEvent, groupName: string) => {
+    e.preventDefault();
+    setGridContextMenu({ x: e.clientX, y: e.clientY, key: `__group__${groupName}`, label: groupName, isGroup: true });
+  };
+
+  const hideGroupCols = (groupName: string) => {
+    const cols = GRID_COLUMN_DEFS.filter(c => c.group === groupName && c.hideable);
+    setGridHiddenCols(prev => { const next = new Set(prev); cols.forEach(c => next.add(c.key)); return next; });
+  };
+
+  const toggleGridColGroup = (groupName: string) => {
+    const cols = GRID_COLUMN_DEFS.filter(c => c.group === groupName && c.hideable);
+    const allVisible = cols.every(c => !gridHiddenCols.has(c.key));
+    setGridHiddenCols(prev => {
+      const next = new Set(prev);
+      if (allVisible) { cols.forEach(c => next.add(c.key)); }
+      else { cols.forEach(c => next.delete(c.key)); }
+      return next;
+    });
   };
 
   // Column resize handlers
@@ -2765,12 +2804,12 @@ const GridView: React.FC<{
             <th style={{ ...groupHeaderStyle(colWidths.gcLink, '#1e293b'), position: 'sticky', left: colWidths.sel + colWidths.rowNum, background: '#eef2f7', zIndex: 6, borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #cbd5e1' }}></th>
             <th style={{ ...groupHeaderStyle(colWidths.phase, '#1e293b'), textAlign: 'left', position: 'sticky', left: colWidths.sel + colWidths.rowNum + colWidths.gcLink, background: '#eef2f7', zIndex: 6, padding: '0.15rem 0.5rem', borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #cbd5e1' }}></th>
             {gv('ct') && <th style={{ ...groupHeaderStyle(colWidths.ct, ctFilter.size > 0 ? '#3b82f6' : '#1e293b'), position: 'sticky', left: colWidths.sel + colWidths.rowNum + colWidths.gcLink + colWidths.phase, background: '#eef2f7', zIndex: 6, borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #94a3b8' }}>{ctFilter.size > 0 ? [...ctFilter].sort().map(ct => COST_TYPE_NAMES[ct]?.charAt(0)).join('') : ''}</th>}
-            {estColSpan > 0 && <th colSpan={estColSpan} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8', borderRight: '2px solid #94a3b8' }}>Estimated</th>}
-            {jtdColSpan > 0 && <th colSpan={jtdColSpan} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' }}>JTD</th>}
-            {projColSpan > 0 && <th colSpan={projColSpan} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8' }}>Projected</th>}
-            {remColSpan > 0 && <th colSpan={remColSpan} style={{ ...groupHeaderStyle(remGroupW, '#7c3aed'), background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' }}>Remaining</th>}
-            {billColSpan > 0 && <th colSpan={billColSpan} style={{ ...groupHeaderStyle(billGroupW, '#db2777'), background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8' }}>Billing</th>}
-            {schedColSpan > 0 && <th colSpan={schedColSpan} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8' }}>Schedule</th>}
+            {estColSpan > 0 && <th colSpan={estColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'Estimated')} style={{ ...groupHeaderStyle(estGroupW, '#3b82f6'), background: COL_GROUP.est.hdr, borderLeft: '2px solid #94a3b8', borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>Estimated</th>}
+            {jtdColSpan > 0 && <th colSpan={jtdColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'JTD')} style={{ ...groupHeaderStyle(jtdGroupW, '#f59e0b'), background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>JTD</th>}
+            {projColSpan > 0 && <th colSpan={projColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'Projected')} style={{ ...groupHeaderStyle(projGroupW, '#10b981'), background: COL_GROUP.proj.hdr, borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>Projected</th>}
+            {remColSpan > 0 && <th colSpan={remColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'Remaining')} style={{ ...groupHeaderStyle(remGroupW, '#7c3aed'), background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>Remaining</th>}
+            {billColSpan > 0 && <th colSpan={billColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'Billing')} style={{ ...groupHeaderStyle(billGroupW, '#db2777'), background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>Billing</th>}
+            {schedColSpan > 0 && <th colSpan={schedColSpan} onContextMenu={e => gridGroupHeaderContextMenu(e, 'Schedule')} style={{ ...groupHeaderStyle(schedGroupW, '#64748b'), background: COL_GROUP.sched.hdr, borderRight: '2px solid #94a3b8', cursor: 'context-menu' }}>Schedule</th>}
             {months.length > 0 && (
               <th colSpan={months.length} style={groupHeaderStyle(months.length * monthColWidth, '#8b5cf6')}>{distributionLabel}</th>
             )}
@@ -3022,7 +3061,8 @@ const GridView: React.FC<{
         <ColumnContextMenu
           x={gridContextMenu.x} y={gridContextMenu.y}
           colKey={gridContextMenu.key} colLabel={gridContextMenu.label}
-          onHide={() => toggleGridCol(gridContextMenu.key)}
+          isGroup={gridContextMenu.isGroup}
+          onHide={() => gridContextMenu.isGroup ? hideGroupCols(gridContextMenu.label) : toggleGridCol(gridContextMenu.key)}
           onChooser={() => setShowGridChooser(true)}
           onClose={() => setGridContextMenu(null)}
         />
@@ -3032,6 +3072,7 @@ const GridView: React.FC<{
           columnDefs={GRID_COLUMN_DEFS}
           hiddenCols={gridHiddenCols}
           onToggle={toggleGridCol}
+          onToggleGroup={toggleGridColGroup}
           onShowAll={() => setGridHiddenCols(new Set())}
           onClose={() => setShowGridChooser(false)}
         />
