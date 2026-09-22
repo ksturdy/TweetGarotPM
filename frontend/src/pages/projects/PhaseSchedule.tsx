@@ -7,15 +7,16 @@ import { projectsApi, Project } from '../../services/projects';
 import { phaseScheduleApi, PhaseCode, PhaseScheduleItem, ProvisionalPhaseCode, ProvisionalPhaseCodeInput, PendingReconciliation } from '../../services/phaseSchedule';
 import { projectLaborRatesApi, ProjectLaborRate } from '../../services/projectLaborRates';
 import { vistaDataService } from '../../services/vistaData';
+import { scheduleSegmentsService, SEGMENT_DEFINITIONS } from '../../services/scheduleSegments';
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 import { format, addMonths, addDays, addWeeks, addQuarters, startOfMonth, startOfWeek, startOfQuarter, getQuarter, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend);
 
 // Cost type constants
 const COST_TYPE_NAMES: Record<number, string> = {
@@ -504,6 +505,44 @@ const SHIFT_HRS_PER_MONTH: Record<string, number> = {
   '6/8':  hoursPerWorkerPerPeriod('6/8',  'month'),  // 208
   '6/10': hoursPerWorkerPerPeriod('6/10', 'month'),  // 260
 };
+
+// Per-day shift settings for the manpower chart shift table
+type DayShift = { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number };
+const DAY_SHIFT_KEYS: (keyof DayShift)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const DAY_SHIFT_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DEFAULT_DAY_SHIFT: DayShift = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 };
+const weeklyHrsFromDay = (s: DayShift) => DAY_SHIFT_KEYS.reduce((sum, d) => sum + (s[d] ?? 0), 0);
+const hpwpFromDay = (s: DayShift, period: Period): number => {
+  const perWeek = weeklyHrsFromDay(s);
+  if (period === 'week') return perWeek;
+  if (period === 'quarter') return perWeek * 13;
+  return perWeek * 52 / 12;
+};
+const avgDayShiftFrom = (settings: Record<string, DayShift>, keys: string[]): DayShift => {
+  const activeKeys = keys.filter(k => settings[k]);
+  if (activeKeys.length === 0) return { ...DEFAULT_DAY_SHIFT };
+  const avg: DayShift = { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 };
+  DAY_SHIFT_KEYS.forEach(day => {
+    avg[day] = activeKeys.reduce((sum, k) => sum + (settings[k]?.[day] ?? DEFAULT_DAY_SHIFT[day]), 0) / activeKeys.length;
+  });
+  return avg;
+};
+const nearestShiftKey = (s: DayShift): ShiftKey => {
+  const wh = weeklyHrsFromDay(s);
+  return SHIFT_OPTIONS.reduce((best, k) => {
+    const kHrs = SHIFT_BASE[k as ShiftKey].days * SHIFT_BASE[k as ShiftKey].hours;
+    const bHrs = SHIFT_BASE[best as ShiftKey].days * SHIFT_BASE[best as ShiftKey].hours;
+    return Math.abs(wh - kHrs) < Math.abs(wh - bHrs) ? k : best;
+  }) as ShiftKey;
+};
+
+const LABOR_CHART_COLORS: Record<string, string> = {
+  '30': '#3b82f6', '35': '#1d4ed8',
+  '40': '#0ea5e9', '45': '#0369a1',
+  '50': '#06b6d4', '55': '#0e7490',
+  '70': '#64748b', bas: '#8b5cf6',
+};
+
 type GridMode = 'cost' | 'qty' | 'manpower' | 'billable';
 
 // Maps a project's per-cost-type markup % onto a lookup keyed by cost type number.
@@ -2393,7 +2432,7 @@ const GRID_COL_DEFAULTS = {
   // Remaining group
   remQty: 62, remLf: 62, remHrs: 62, remCost: 78,
   // Billing
-  rate: 130,
+  rate: 130, gm: 58,
   // Schedule
   start: 100, end: 100, dur: 44, pred: 44, contour: 74
 };
@@ -2403,7 +2442,7 @@ const GridView: React.FC<{
   allItems: PhaseScheduleItem[];
   months: Date[];
   mode: GridMode;
-  shift: ShiftKey;
+  shift: DayShift;
   period: Period;
   laborRates: ProjectLaborRate[];
   markupByCt: Record<number, number>;
@@ -2557,7 +2596,7 @@ const GridView: React.FC<{
     setColWidths(prev => ({ ...prev, [col]: maxW }));
   };
 
-  const hpwm = hoursPerWorkerPerPeriod(shift, period);
+  const hpwm = hpwpFromDay(shift, period);
   const laborRateById = useMemo(() => {
     const m = new Map<number, number>();
     laborRates.forEach(r => m.set(r.id, Number(r.billable_rate) || 0));
@@ -2613,7 +2652,7 @@ const GridView: React.FC<{
   const jtdCols = ['pctComp', 'jtdQty', 'jtdLf', 'jtdHrs', 'jtdCost', 'jtdPi'];
   const projCols = ['projQty', 'projLf', 'projHrs', 'projCostField', 'projCostVista', 'projPi'];
   const remCols = ['remQty', 'remLf', 'remHrs', 'remCost'];
-  const billCols = ['rate'];
+  const billCols = mode === 'billable' ? ['rate', 'gm'] : ['rate'];
   const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
   const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
   const jtdGroupW = jtdCols.reduce((s, c) => s + vw(c), 0);
@@ -2707,6 +2746,7 @@ const GridView: React.FC<{
           {gv('remHrs') && <col style={{ width: colWidths.remHrs }} />}
           {gv('remCost') && <col style={{ width: colWidths.remCost }} />}
           {gv('rate') && <col style={{ width: colWidths.rate }} />}
+          {mode === 'billable' && <col style={{ width: colWidths.gm }} />}
           {gv('start') && <col style={{ width: colWidths.start }} />}
           {gv('end') && <col style={{ width: colWidths.end }} />}
           {gv('dur') && <col style={{ width: colWidths.dur }} />}
@@ -2800,7 +2840,8 @@ const GridView: React.FC<{
             {gv('remHrs') && <th data-col="remHrs" onContextMenu={e => gridHeaderContextMenu(e, 'remHrs', 'Rem Hrs')} style={thStyle(colWidths.remHrs, { background: COL_GROUP.rem.hdr })}>Hrs{resizeHandle('remHrs')}</th>}
             {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
             {/* Billing group */}
-            {gv('rate') && <th data-col="rate" onContextMenu={e => gridHeaderContextMenu(e, 'rate', 'Rate')} style={thStyle(colWidths.rate, { background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8' })}>Rate{resizeHandle('rate')}</th>}
+            {gv('rate') && <th data-col="rate" onContextMenu={e => gridHeaderContextMenu(e, 'rate', 'Rate')} style={thStyle(colWidths.rate, { background: COL_GROUP.bill.hdr, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8' })}>Rate{resizeHandle('rate')}</th>}
+            {mode === 'billable' && <th style={thStyle(colWidths.gm, { background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8', textAlign: 'center' })}>GM%</th>}
             {/* Schedule group */}
             {gv('start') && <th data-col="start" onContextMenu={e => gridHeaderContextMenu(e, 'start', 'Start')} style={thStyle(colWidths.start, { background: COL_GROUP.sched.hdr })}>Start{resizeHandle('start')}</th>}
             {gv('end') && <th data-col="end" onContextMenu={e => gridHeaderContextMenu(e, 'end', 'End')} style={thStyle(colWidths.end, { background: COL_GROUP.sched.hdr })}>End{resizeHandle('end')}</th>}
@@ -2944,8 +2985,16 @@ const GridView: React.FC<{
                 {gv('remLf') && <td style={{ ...tdTot, width: colWidths.remLf, background: COL_GROUP.rem.cell }}>{(() => { const v = items.reduce((s, i) => s + Math.max(0, parseNum(i.stratus_qty_lf) - parseNum(i.stratus_installed_lf)), 0); return v > 0 ? Math.round(v).toLocaleString() : ''; })()}</td>}
                 {gv('remHrs') && <td style={{ ...tdTot, width: colWidths.remHrs, background: COL_GROUP.rem.cell }}>{fmtHrs(totRemHrs)}</td>}
                 {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
-                {/* Billing totals (Rate column is config-only — no rollup) */}
-                {gv('rate') && <td style={{ ...tdTot, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: COL_GROUP.bill.cell }}></td>}
+                {/* Billing totals */}
+                {gv('rate') && <td style={{ ...tdTot, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', background: COL_GROUP.bill.cell }}></td>}
+                {mode === 'billable' && (() => {
+                  const totBill = items.reduce((s, i) => s + Object.values(allMonthlyValues.get(i.id) || {}).reduce((a, b) => a + b, 0), 0);
+                  const totCostR = items.reduce((s, i) => s + Math.max(0, parseNum(i.total_projected_cost) - parseNum(i.total_jtd_cost)), 0);
+                  const gm = totBill > 0 ? (totBill - totCostR) / totBill * 100 : null;
+                  return <td style={{ ...tdTot, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: COL_GROUP.bill.cell, textAlign: 'center', fontWeight: 700, color: gm == null ? '#94a3b8' : gm >= 10 ? '#059669' : gm >= 0 ? '#d97706' : '#dc2626' }}>
+                    {gm != null ? `${gm.toFixed(1)}%` : '—'}
+                  </td>;
+                })()}
                 {/* Schedule totals */}
                 {gv('start') && <td style={{ ...tdTot, width: colWidths.start, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totEarliestStart)}</td>}
                 {gv('end') && <td style={{ ...tdTot, width: colWidths.end, background: COL_GROUP.sched.cell, fontSize: '0.63rem' }}>{fmtDateShort(totLatestEnd)}</td>}
@@ -3091,8 +3140,16 @@ const CostTypeSummaryRow: React.FC<{
       {sv('remLf') && <td style={{ ...tdS, width: colWidths.remLf, backgroundColor: COL_GROUP.rem.cell }}>{group.remLf > 0 ? Math.round(group.remLf).toLocaleString() : ''}</td>}
       {sv('remHrs') && <td style={{ ...tdS, width: colWidths.remHrs, backgroundColor: COL_GROUP.rem.cell }}>{fmtHrs(group.remHrs)}</td>}
       {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
-      {/* Billing (Rate column is config-only — blank at group level) */}
-      {sv('rate') && <td style={{ ...tdS, width: colWidths.rate, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell }}></td>}
+      {/* Billing */}
+      {sv('rate') && <td style={{ ...tdS, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell }}></td>}
+      {mode === 'billable' && (() => {
+        const grpBill = Object.values(monthlyTotals).reduce((a, b) => a + b, 0);
+        const grpCostR = group.remCost;
+        const gm = grpBill > 0 ? (grpBill - grpCostR) / grpBill * 100 : null;
+        return <td style={{ ...tdS, width: colWidths.gm, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell, textAlign: 'center', fontWeight: 600, color: gm == null ? '#94a3b8' : gm >= 10 ? '#059669' : gm >= 0 ? '#d97706' : '#dc2626' }}>
+          {gm != null ? `${gm.toFixed(1)}%` : '—'}
+        </td>;
+      })()}
       {/* Schedule */}
       {sv('start') && <td style={{ ...tdS, width: colWidths.start, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.earliestStart)}</td>}
       {sv('end') && <td style={{ ...tdS, width: colWidths.end, textAlign: 'center', fontSize: '0.63rem', backgroundColor: COL_GROUP.sched.cell }}>{fmtDateShort(group.latestEnd)}</td>}
@@ -3243,12 +3300,22 @@ const GridRow: React.FC<{
   };
 
   // Selection-aware background: selected row overrides group tints
+  const itemBillable = mode === 'billable' ? Object.values(monthlyVals).reduce((a, b) => a + b, 0) : 0;
+  const itemRemCost = mode === 'billable' ? Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost)) : 0;
+  const itemGmPct = mode === 'billable' && itemBillable > 0 ? (itemBillable - itemRemCost) / itemBillable * 100 : null;
+  const isUnrated = mode === 'billable' && (item.cost_types?.[0] || 0) === 1 && itemRemCost > 0 && itemBillable === 0;
+  const billableRowBg = !isSelected && mode === 'billable' && itemRemCost > 0
+    ? isUnrated || (itemGmPct !== null && itemGmPct < 0) ? '#fef2f2'
+    : itemGmPct !== null && itemGmPct < 10 ? '#fffbeb'
+    : '#f0fdf4'
+    : undefined;
+
   const bg = (tint: string) => isSelected ? '#eff6ff' : tint;
   // Editable cell = white, Read-only cell = group tint
   const editBg = bg('#fff');
 
   return (
-    <tr style={{ backgroundColor: isSelected ? '#eff6ff' : undefined }}>
+    <tr style={{ backgroundColor: isSelected ? '#eff6ff' : billableRowBg }}>
       {/* Selection checkbox */}
       <td style={{ ...tdBase, textAlign: 'center', width: colWidths.sel, position: 'sticky', left: 0, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #cbd5e1' }}>
         <input type="checkbox" checked={isSelected} onChange={() => onToggleSelection(item.id)} style={{ cursor: 'pointer' }} />
@@ -3262,7 +3329,8 @@ const GridRow: React.FC<{
         <PhaseGCLinkChips item={item} projectId={projectId} variant="badge" compact />
       </td>
       {/* Phase name - click to open edit panel */}
-      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel + colWidths.rowNum + colWidths.gcLink, backgroundColor: isSelected ? '#eff6ff' : '#fff', zIndex: 1, borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #cbd5e1', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer', fontSize: '0.7rem', color: '#1e293b' }}
+      <td style={{ ...tdBase, position: 'sticky', left: colWidths.sel + colWidths.rowNum + colWidths.gcLink, backgroundColor: isSelected ? '#eff6ff' : billableRowBg ?? '#fff', zIndex: 1, borderRight: 'none', boxShadow: 'inset -1px 0 0 0 #cbd5e1', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: colWidths.phase, maxWidth: colWidths.phase, cursor: 'pointer', fontSize: '0.7rem', color: '#1e293b',
+        borderLeft: billableRowBg ? `3px solid ${isUnrated || (itemGmPct !== null && itemGmPct < 0) ? '#dc2626' : itemGmPct !== null && itemGmPct < 10 ? '#d97706' : '#10b981'}` : undefined }}
         onClick={() => onEdit(item)} title={item.name}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
           {item.cost_types?.map(ct => (
@@ -3399,13 +3467,14 @@ const GridRow: React.FC<{
       {/* === BILLING GROUP (Rate dropdown — labor lines only) === */}
       {rv('rate') && (() => {
         const isLabor = (item.cost_types?.[0] || 0) === 1;
+        const rateBorder = mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8';
         if (!isLabor) {
           return (
-            <td style={{ ...tdMuted, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.bill.cell), color: '#cbd5e1' }}>—</td>
+            <td style={{ ...tdMuted, width: colWidths.rate, borderRight: rateBorder, background: bg(COL_GROUP.bill.cell), color: '#cbd5e1' }}>—</td>
           );
         }
         return (
-          <td style={{ ...tdBase, width: colWidths.rate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.bill.cell) }}>
+          <td style={{ ...tdBase, width: colWidths.rate, borderRight: rateBorder, background: bg(COL_GROUP.bill.cell) }}>
             <select
               value={item.billable_rate_id ?? ''}
               onChange={e => {
@@ -3422,6 +3491,20 @@ const GridRow: React.FC<{
             </select>
           </td>
         );
+      })()}
+      {/* GM% cell — billable mode only */}
+      {mode === 'billable' && (() => {
+        const cellBg = bg(COL_GROUP.bill.cell);
+        if (isUnrated) {
+          return <td style={{ ...tdMuted, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: cellBg, textAlign: 'center', fontSize: '0.62rem', fontWeight: 600, color: '#dc2626' }}>Unrated</td>;
+        }
+        if (itemRemCost <= 0) {
+          return <td style={{ ...tdMuted, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: cellBg, color: '#cbd5e1', textAlign: 'center' }}>—</td>;
+        }
+        const color = itemGmPct === null ? '#94a3b8' : itemGmPct >= 10 ? '#059669' : itemGmPct >= 0 ? '#d97706' : '#dc2626';
+        return <td style={{ ...tdMuted, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: cellBg, textAlign: 'center', fontWeight: 600, color }}>
+          {itemGmPct !== null ? `${itemGmPct.toFixed(1)}%` : '—'}
+        </td>;
       })()}
 
       {/* === SCHEDULE GROUP === */}
@@ -3487,7 +3570,7 @@ const GridRow: React.FC<{
         const key = periodKey(m, period);
         const val = monthlyVals[key] || 0;
         const intensity = maxVal > 0 ? val / maxVal : 0;
-        const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : 'transparent';
+        const bgColor = val > 0 ? `rgba(59, 130, 246, ${0.05 + intensity * 0.25})` : (billableRowBg ?? 'transparent');
         return (
           <td key={key} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', borderBottom: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1', fontSize: '0.63rem', backgroundColor: bgColor, whiteSpace: 'nowrap', width: monthColWidth, color: val > 0 ? '#1e293b' : '#cbd5e1' }}>
             {val > 0 ? ((mode === 'cost' || mode === 'billable') ? fmtCompact(val) : mode === 'manpower' ? val.toFixed(1) : val.toFixed(0)) : ''}
@@ -3893,11 +3976,30 @@ const PhaseSchedule: React.FC = () => {
   const { confirm, toast } = useTitanFeedback();
   const [viewMode, setViewMode] = useState<'gantt' | 'grid'>('grid');
   const [gridMode, setGridMode] = useState<GridMode>('cost');
-  const [shift, setShift] = useState<ShiftKey>(() => {
-    const saved = localStorage.getItem('phaseSchedule_shift');
-    return (saved && SHIFT_OPTIONS.includes(saved as ShiftKey) ? saved : '5/8') as ShiftKey;
-  });
-  useEffect(() => { localStorage.setItem('phaseSchedule_shift', shift); }, [shift]);
+  // Shift settings per trade segment — shared localStorage key with CostTypeSchedule for consistency
+  const shiftStorageKey = `costTypeSchedule_shifts_${projectId}`;
+  const loadShiftSettings = useCallback((key: string): Record<string, DayShift> => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const firstVal = Object.values(parsed)[0] as any;
+        if (firstVal && 'hoursPerDay' in firstVal) return {}; // old incompatible format
+        return parsed;
+      }
+    } catch {}
+    return {};
+  }, []);
+  const [shiftSettings, setShiftSettings] = useState<Record<string, DayShift>>(() => loadShiftSettings(shiftStorageKey));
+  const updateShiftDay = useCallback((segKey: string, day: keyof DayShift, val: number) => {
+    setShiftSettings(prev => {
+      const cur = prev[segKey] ?? { ...DEFAULT_DAY_SHIFT };
+      const next = { ...prev, [segKey]: { ...cur, [day]: Math.max(0, Math.min(16, val)) } };
+      try { localStorage.setItem(shiftStorageKey, JSON.stringify(next)); } catch {}
+      scheduleSegmentsService.updateSegment(Number(projectId), segKey, { weekly_hours: weeklyHrsFromDay(next[segKey]) }).catch(() => {});
+      return next;
+    });
+  }, [projectId, shiftStorageKey]);
   const [period, setPeriod] = useState<Period>(() => {
     const saved = localStorage.getItem('phaseSchedule_period');
     return (saved && (PERIOD_OPTIONS as readonly string[]).includes(saved) ? saved : 'month') as Period;
@@ -3997,6 +4099,13 @@ const PhaseSchedule: React.FC = () => {
     queryFn: () => vistaDataService.getProjectJobs(Number(projectId)),
     enabled: !!projectId,
   });
+
+  const { data: segmentsData } = useQuery({
+    queryKey: ['schedule-segments', projectId],
+    queryFn: () => scheduleSegmentsService.getSegments(Number(projectId)),
+    enabled: !!projectId,
+  });
+  const activeSegmentKeys = segmentsData?.activeKeys ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data: { projectId: number; phaseCodeIds: number[]; groupBy: string }) => phaseScheduleApi.createItems(data),
@@ -4266,7 +4375,9 @@ const PhaseSchedule: React.FC = () => {
       return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     };
 
-    const hpwp = hoursPerWorkerPerPeriod(shift, period);
+    const activeLaborKeys = SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeSegmentKeys.includes(d.key)).map(d => d.key);
+    const avgShift = avgDayShiftFrom(shiftSettings, activeLaborKeys.length > 0 ? activeLaborKeys : SEGMENT_DEFINITIONS.filter(d => d.isLabor).map(d => d.key));
+    const hpwp = hpwpFromDay(avgShift, period);
 
     scheduleItems.forEach(item => {
       if (!item.start_date || !item.end_date) return;
@@ -4350,8 +4461,45 @@ const PhaseSchedule: React.FC = () => {
     });
 
     const labels = periods.map(p => periodLabel(p, period));
-    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine };
-  }, [scheduleItems, periods, period, shift, totalJtdCost]);
+
+    const projRev = Number(project?.projected_revenue ?? 0);
+    const projCostVal = Number(project?.projected_cost ?? 0);
+    const revMultiplier = projRev > 0 && projCostVal > 0 ? projRev / projCostVal : 0;
+    const revenueData = periodCost.map(c => c * revMultiplier);
+
+    // Billable chart data
+    const lrMap = new Map<number, number>();
+    laborRates.forEach(r => lrMap.set(r.id, Number(r.billable_rate) || 0));
+    const markup = buildMarkupByCt(project);
+    const periodBillable: number[] = new Array(periods.length).fill(0);
+    scheduleItems.forEach(item => {
+      const vals = computeMonthlyValues(item, periods, 'billable', hpwp, lrMap, markup, period);
+      periods.forEach((p, i) => {
+        const key = periodKey(p, period);
+        if (vals[key]) periodBillable[i] += vals[key];
+      });
+    });
+    const cumulativeBillable: number[] = [];
+    let runB = 0;
+    periodBillable.forEach(v => { runB += v; cumulativeBillable.push(runB); });
+    const marginData = periodBillable.map((b, i) => b - periodCost[i]);
+    const totalBillable = runB;
+    const totalCostRemaining = periodCost.reduce((a, b) => a + b, 0);
+    const gmPct = totalBillable > 0 ? (totalBillable - totalCostRemaining) / totalBillable * 100 : null;
+
+    const unratedItems = scheduleItems.filter(item => {
+      const ct = item.cost_types?.[0] || 0;
+      if (ct !== 1) return false;
+      const remCostItem = Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost));
+      if (remCostItem <= 0) return false;
+      const itemBill = Object.values(computeMonthlyValues(item, periods, 'billable', hpwp, lrMap, markup, period)).reduce((a, b) => a + b, 0);
+      return itemBill === 0;
+    });
+    const unratedCount = unratedItems.length;
+    const unratedCost = unratedItems.reduce((s, i) => s + Math.max(0, parseNum(i.total_projected_cost) - parseNum(i.total_jtd_cost)), 0);
+
+    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine, revenueData, periodBillable, cumulativeBillable, marginData, totalBillable, totalCostRemaining, gmPct, unratedCount, unratedCost };
+  }, [scheduleItems, periods, period, shiftSettings, activeSegmentKeys, totalJtdCost, project?.projected_revenue, project?.projected_cost, laborRates, project]);
 
   const handleAdd = (ids: number[], groupBy: string) => {
     createMutation.mutate({ projectId: Number(projectId), phaseCodeIds: ids, groupBy });
@@ -4501,8 +4649,172 @@ const PhaseSchedule: React.FC = () => {
 
   return (
     <div>
-      {/* Header: charts on top, then title+stats+buttons below */}
-      {chartData && (
+      {/* Header: charts on top — content switches based on selected grid mode */}
+      {gridMode === 'manpower' && chartData ? (
+        <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
+          {/* Shift Schedule card */}
+          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ padding: '0.5rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.68rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Shift Schedule
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+              <span style={{ flex: 1, fontSize: '0.6rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trade</span>
+              {DAY_SHIFT_LABELS.map((lbl, i) => (
+                <span key={i} style={{ width: 32, textAlign: 'center', fontSize: '0.6rem', fontWeight: 700, color: i >= 5 ? '#f59e0b' : '#64748b', flexShrink: 0 }}>{lbl}</span>
+              ))}
+              <span style={{ width: 40, textAlign: 'right', fontSize: '0.6rem', color: '#94a3b8', flexShrink: 0 }}>Wk</span>
+            </div>
+            {SEGMENT_DEFINITIONS.filter(d => d.isLabor && (activeSegmentKeys.length > 0 ? activeSegmentKeys.includes(d.key) : true)).map((def, ri) => {
+              const s = shiftSettings[def.key] ?? { ...DEFAULT_DAY_SHIFT };
+              const total = weeklyHrsFromDay(s);
+              return (
+                <div key={def.key} style={{ display: 'flex', alignItems: 'center', padding: '0.28rem 0.75rem', borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 110 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: LABOR_CHART_COLORS[def.key] ?? '#6b7280', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.7rem', color: '#374151', whiteSpace: 'nowrap' }}>{def.label}</span>
+                  </div>
+                  {DAY_SHIFT_KEYS.map((day, di) => (
+                    <input key={day} type="number" min={0} max={16} step={0.5} value={s[day]}
+                      onChange={e => updateShiftDay(def.key, day, Number(e.target.value))}
+                      style={{ width: 32, padding: '0.15rem 0', border: '1px solid #e2e8f0', borderRadius: 3, fontSize: '0.7rem', textAlign: 'center', fontFamily: 'inherit', flexShrink: 0, background: di >= 5 ? '#fffbeb' : '#fff', color: s[day] === 0 ? '#cbd5e1' : '#1e293b' }}
+                    />
+                  ))}
+                  <span style={{ width: 40, textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{total}h</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Labor Resources by Month */}
+          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Labor Resources by Month
+            </div>
+            <div style={{ height: 160, position: 'relative' }}>
+              <Line
+                data={{ labels: chartData.labels, datasets: [{ label: 'Workers', data: chartData.headcount, borderColor: '#3b82f6', backgroundColor: '#3b82f618', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 }] }}
+                options={{
+                  maintainAspectRatio: false, responsive: true,
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                  scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1 } },
+                  },
+                }}
+              />
+            </div>
+          </div>
+          {/* Revenue by Month */}
+          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              Revenue by Month
+              {!project?.projected_revenue && (
+                <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(projected cost — add revenue to project to scale)</span>
+              )}
+            </div>
+            <div style={{ height: 160, position: 'relative' }}>
+              <Bar
+                data={{ labels: chartData.labels, datasets: [{ label: project?.projected_revenue ? 'Revenue' : 'Projected Cost', data: chartData.revenueData, backgroundColor: '#10b98170', borderColor: '#10b981', borderWidth: 1, borderRadius: 2 }] }}
+                options={{
+                  maintainAspectRatio: false, responsive: true,
+                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`; if (v >= 1000) return `$${Math.round(v / 1000)}K`; return `$${Math.round(v)}`; } } } },
+                  scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`; if (n >= 1000) return `$${Math.round(n / 1000)}K`; return `$${n}`; } } },
+                  },
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : gridMode === 'billable' && chartData ? (
+        <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
+          {/* GM% stats card */}
+          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', minWidth: 140 }}>
+            <div style={{ padding: '0.5rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.68rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Billable Summary
+            </div>
+            <div style={{ padding: '0.75rem' }}>
+              {[
+                { label: 'GM%', value: chartData.gmPct != null ? `${chartData.gmPct.toFixed(1)}%` : '—', color: chartData.gmPct != null ? (chartData.gmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b', big: true },
+                { label: 'Total Billable', value: (() => { const v = chartData.totalBillable; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: '#db2777', big: false },
+                { label: 'Total Cost', value: (() => { const v = chartData.totalCostRemaining; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: '#64748b', big: false },
+                { label: 'Margin', value: (() => { const v = chartData.totalBillable - chartData.totalCostRemaining; if (Math.abs(v) >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: (chartData.totalBillable - chartData.totalCostRemaining) >= 0 ? '#10b981' : '#ef4444', big: false },
+              ].map(s => (
+                <div key={s.label} style={{ marginBottom: '0.6rem' }}>
+                  <div style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>{s.label}</div>
+                  <div style={{ fontSize: s.big ? '1.6rem' : '0.9rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                </div>
+              ))}
+              {chartData.unratedCount > 0 && (
+                <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.5rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4 }}>
+                  <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#dc2626', marginBottom: '0.15rem' }}>
+                    {chartData.unratedCount} Unrated Item{chartData.unratedCount !== 1 ? 's' : ''}
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: '#7f1d1d' }}>
+                    {(() => { const v = chartData.unratedCost; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })()} labor cost with no billing rate
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Monthly Billable */}
+          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monthly Billable</div>
+            <div style={{ height: 160, position: 'relative' }}>
+              <Bar
+                data={{ labels: chartData.labels, datasets: [{ label: 'Billable', data: chartData.periodBillable, backgroundColor: '#db277750', borderColor: '#db2777', borderWidth: 1, borderRadius: 2 }] }}
+                options={{
+                  maintainAspectRatio: false, responsive: true,
+                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; } } } },
+                  scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (n >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                  },
+                }}
+              />
+            </div>
+          </div>
+          {/* Cumulative Billable vs Cost */}
+          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cumulative Billable vs Cost</div>
+            <div style={{ height: 160, position: 'relative' }}>
+              <Line
+                data={{ labels: chartData.labels, datasets: [
+                  { label: 'Billable', data: chartData.cumulativeBillable, borderColor: '#db2777', backgroundColor: '#db277718', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 },
+                  { label: 'Cost', data: chartData.cumulativeCost, borderColor: '#64748b', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 1.5, borderDash: [5, 3] },
+                ] }}
+                options={{
+                  maintainAspectRatio: false, responsive: true,
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (v >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
+                  scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (n >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                  },
+                }}
+              />
+            </div>
+          </div>
+          {/* Margin by Month */}
+          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Margin by Month</div>
+            <div style={{ height: 160, position: 'relative' }}>
+              <Bar
+                data={{ labels: chartData.labels, datasets: [{ label: 'Margin', data: chartData.marginData, backgroundColor: chartData.marginData.map(v => v >= 0 ? '#10b98150' : '#ef444450'), borderColor: chartData.marginData.map(v => v >= 0 ? '#10b981' : '#ef4444'), borderWidth: 1, borderRadius: 2 }] }}
+                options={{
+                  maintainAspectRatio: false, responsive: true,
+                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (Math.abs(v) >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; } } } },
+                  scales: {
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (Math.abs(n) >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                  },
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : chartData ? (
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.6rem', alignItems: 'stretch' }}>
           <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
@@ -4565,7 +4877,7 @@ const PhaseSchedule: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
       {/* Single horizontal toolbar: title · stats · view/mode/shift/zoom · spacer · actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <div style={{ flexShrink: 0 }}>
@@ -4596,21 +4908,6 @@ const PhaseSchedule: React.FC = () => {
             <button onClick={() => setGridMode('qty')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'qty' ? '#10b981' : 'white', color: gridMode === 'qty' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Qty</button>
             <button onClick={() => setGridMode('manpower')} style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'manpower' ? '#10b981' : 'white', color: gridMode === 'manpower' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>Manpower</button>
             <button onClick={() => setGridMode('billable')} title="Customer billing forecast using labor rates + cost-type markup %" style={{ padding: '0.3rem 0.6rem', border: 'none', borderLeft: '1px solid #e2e8f0', backgroundColor: gridMode === 'billable' ? '#db2777' : 'white', color: gridMode === 'billable' ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.75rem' }}>$ Billable</button>
-          </div>
-        )}
-        {viewMode === 'grid' && gridMode === 'manpower' && (
-          <div title="Work shift — days per week / hours per day" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Shift</span>
-            <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
-              {SHIFT_OPTIONS.map((s, i) => (
-                <button key={s} onClick={() => setShift(s)} title={`${s} — ${SHIFT_HRS_PER_MONTH[s].toFixed(0)} hr/worker/mo`}
-                  style={{ padding: '0.3rem 0.5rem', border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #e2e8f0',
-                    backgroundColor: shift === s ? '#7c3aed' : 'white',
-                    color: shift === s ? 'white' : '#1e293b', cursor: 'pointer', fontSize: '0.72rem' }}>
-                  {s}
-                </button>
-              ))}
-            </div>
           </div>
         )}
         {viewMode === 'grid' && (
@@ -4772,7 +5069,7 @@ const PhaseSchedule: React.FC = () => {
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
               ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
               availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
-          : <GridView items={filteredItems} allItems={scheduleItems} months={periods} mode={gridMode} shift={shift} period={period} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          : <GridView items={filteredItems} allItems={scheduleItems} months={periods} mode={gridMode} shift={avgDayShiftFrom(shiftSettings, SEGMENT_DEFINITIONS.filter(d => d.isLabor && (activeSegmentKeys.length > 0 ? activeSegmentKeys.includes(d.key) : true)).map(d => d.key))} period={period} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
@@ -4820,7 +5117,7 @@ const PhaseSchedule: React.FC = () => {
       {showExportModal && (
         <ExportOptionsModal
           initialMode={gridMode}
-          initialShift={shift}
+          initialShift={nearestShiftKey(avgDayShiftFrom(shiftSettings, SEGMENT_DEFINITIONS.filter(d => d.isLabor && (activeSegmentKeys.length > 0 ? activeSegmentKeys.includes(d.key) : true)).map(d => d.key)))}
           loading={exportLoading}
           onExport={handleExport}
           onClose={() => setShowExportModal(false)}
