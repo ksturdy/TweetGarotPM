@@ -301,7 +301,7 @@ interface Props {
   projectId: number;
   segments: ScheduleSegment[];
   activeKeys: string[];
-  onSegmentUpdate: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
+  onSegmentUpdate: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string; weekly_hours?: number | null }) => void;
   onInitialize: () => void;
   initPending: boolean;
   project?: Project;
@@ -313,9 +313,10 @@ const CostTypeSchedule: React.FC<Props> = ({
   const [viewMode, setViewMode] = useState<'gantt' | 'table'>('gantt');
 
   // ── Shift settings ────────────────────────────────────────────────────────
-  const [shiftSettings, setShiftSettings] = useState<ShiftSettings>(() => {
+  const shiftKey = `costTypeSchedule_shifts_${projectId}`;
+  const loadShifts = (key: string): ShiftSettings => {
     try {
-      const s = localStorage.getItem('costTypeSchedule_shifts');
+      const s = localStorage.getItem(key);
       if (!s) return { ...SHIFT_DEFAULTS };
       const parsed = JSON.parse(s);
       // Discard old format (had hoursPerDay/daysPerWeek) — check first entry
@@ -323,14 +324,24 @@ const CostTypeSchedule: React.FC<Props> = ({
       if (firstVal && 'hoursPerDay' in firstVal) return { ...SHIFT_DEFAULTS };
       return { ...SHIFT_DEFAULTS, ...parsed };
     } catch { return { ...SHIFT_DEFAULTS }; }
-  });
+  };
+  const [shiftSettings, setShiftSettings] = useState<ShiftSettings>(() => loadShifts(shiftKey));
+
+  // Reload shift settings when projectId changes (component stays mounted across navigation)
+  useEffect(() => {
+    setShiftSettings(loadShifts(`costTypeSchedule_shifts_${projectId}`));
+  }, [projectId]);
+
   const updateShift = useCallback((key: string, day: keyof ShiftSetting, value: number) => {
     setShiftSettings(prev => {
       const next = { ...prev, [key]: { ...(prev[key] ?? SHIFT_DEFAULTS[key] ?? DEFAULT_SHIFT), [day]: value } };
-      localStorage.setItem('costTypeSchedule_shifts', JSON.stringify(next));
+      localStorage.setItem(`costTypeSchedule_shifts_${projectId}`, JSON.stringify(next));
+      // Persist weekly_hours only — targeted update that never touches dates or contour.
+      const wh = weeklyHours(next[key]);
+      scheduleSegmentsService.updateSegment(projectId, key, { weekly_hours: wh }).catch(() => {});
       return next;
     });
-  }, []);
+  }, [projectId]);
 
   // ── Column widths ─────────────────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<typeof GANTT_COL_DEFAULTS>(() => {

@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
+import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
 import opportunitiesService, { OpportunityWithEstimate } from '../../services/opportunities';
 import { getForecastRules, ForecastDurationRule } from '../../services/tenant';
 import { useAuth } from '../../context/AuthContext';
@@ -229,6 +230,7 @@ interface ProjectLaborProjection {
   tradeHours: TradeHours[];
   totalRemainingHours: number;
   monthlyHours: Map<string, TradeMonthlyHours>;
+  tradeHPM?: { pf: number; sm: number; pl: number };
 }
 
 interface OpportunityLaborProjection {
@@ -415,6 +417,26 @@ const LaborForecast: React.FC = () => {
   const { data: shopFieldData } = useQuery({
     queryKey: ['vpShopFieldHours'],
     queryFn: () => vistaDataService.getShopFieldHours(),
+  });
+
+  const linkedCostTypeProjectIds = useMemo(() => {
+    if (!contracts) return [];
+    const seen = new Set<number>();
+    const ids: number[] = [];
+    for (const c of contracts) {
+      if (c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type' && !seen.has(c.linked_project_id)) {
+        ids.push(c.linked_project_id);
+        seen.add(c.linked_project_id);
+      }
+    }
+    return ids;
+  }, [contracts]);
+
+  const { data: bulkSegments } = useQuery({
+    queryKey: ['bulkSegments', linkedCostTypeProjectIds],
+    queryFn: () => scheduleSegmentsService.getBulk(linkedCostTypeProjectIds),
+    enabled: linkedCostTypeProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Opportunity data (lazy-loaded when overlay is enabled)
@@ -727,9 +749,13 @@ const LaborForecast: React.FC = () => {
         const projCost = (tradeData.shop?.projected_cost || 0) + (tradeData.field?.projected_cost || 0);
 
         // Derive projected hours: Projected Cost / labor rate
+        // Don't switch to JTD rate until ≥5% of estimated hours are burned — early-job
+        // mobilization skews $/hr low and balloons the remaining-hours forecast.
         let projectedHours: number;
         if (projCost > 0) {
-          const rate = jtdHours > 0 ? jtdCost / jtdHours
+          const jtdRateReliable = jtdHours >= estHours * 0.05;
+          const rate = jtdRateReliable
+            ? jtdCost / jtdHours
             : estHours > 0 ? estCost / estHours : 0;
           projectedHours = rate > 0 ? projCost / rate : estHours;
         } else {
@@ -796,7 +822,60 @@ const LaborForecast: React.FC = () => {
       // Distribute hours across months (offset by startOffset)
       const monthlyHours = new Map<string, TradeMonthlyHours>();
 
-      if (remainingMonths > 0) {
+      // Cost-type mode: each trade's field and shop hours have independent segment windows.
+      const projectSegs = (
+        contract.linked_project_id &&
+        contract.linked_project_scheduling_mode === 'cost_type' &&
+        bulkSegments
+      ) ? (bulkSegments[contract.linked_project_id] ?? null) : null;
+
+      if (projectSegs) {
+        const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
+        const TRADE_SHOP_SEG:  Record<string, string>  = { pf: '45', sm: '35', pl: '55' };
+
+        const distributeSegHours = (tradeKey: 'pf' | 'sm' | 'pl', hours: number, segKey: string) => {
+          if (hours <= 0) return;
+          const seg = projectSegs.find((s: ScheduleSegment) => s.segment_key === segKey);
+          let sOff: number, eOff: number, segContour: ContourType;
+          if (seg?.start_date) {
+            sOff = Math.max(0, dateToMonthOffset(seg.start_date) ?? 0);
+            const eUserOff = dateToMonthOffset(seg.end_date);
+            eOff = eUserOff != null
+              ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
+              : sOff + Math.max(1, Math.min(36, remainingMonths > 0 ? remainingMonths : 3));
+            segContour = (seg.contour_type as ContourType) || getDefaultContour(pctComplete);
+          } else {
+            sOff = startOffset; eOff = endOffset; segContour = contour;
+          }
+          const remMonths = eOff - sOff;
+          if (remMonths <= 0) return;
+          const mults = getContourMultipliers(remMonths, segContour);
+          for (let i = 0; i < remMonths; i++) {
+            const mk = format(addMonths(now, sOff + i), 'yyyy-MM');
+            const h = (hours / remMonths) * mults[i];
+            const existing = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+            existing[tradeKey] += h;
+            existing.total += h;
+            monthlyHours.set(mk, existing);
+          }
+        };
+
+        TRADES.forEach((trade, idx) => {
+          const tradeData = sfData?.[trade.key];
+          const rem = tradeHours[idx].remaining;
+          if (rem <= 0) return;
+          const estField = tradeData?.field?.est || 0;
+          const estShop  = tradeData?.shop?.est  || 0;
+          const estTotal = estField + estShop;
+          const fieldFrac = estTotal > 0 ? estField / estTotal : 1;
+          const shopFrac  = estTotal > 0 ? estShop  / estTotal : 0;
+          // locationFilter already applied to rem; route it to the correct segment(s)
+          const fieldHours = locationFilter === 'shop'  ? 0 : locationFilter === 'field' ? rem : rem * fieldFrac;
+          const shopHours  = locationFilter === 'field' ? 0 : locationFilter === 'shop'  ? rem : rem * shopFrac;
+          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, TRADE_FIELD_SEG[trade.key]);
+          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  TRADE_SHOP_SEG[trade.key]);
+        });
+      } else if (remainingMonths > 0) {
         const multipliers = getContourMultipliers(remainingMonths, contour);
 
         for (let i = 0; i < remainingMonths; i++) {
@@ -818,9 +897,36 @@ const LaborForecast: React.FC = () => {
         }
       }
 
+      // Compute per-trade HPM from segment shift schedules (cost_type mode only)
+      let tradeHPM: { pf: number; sm: number; pl: number } | undefined;
+      if (projectSegs) {
+        const segHPM = (segKey: string): number | null => {
+          const seg = projectSegs.find((s: ScheduleSegment) => s.segment_key === segKey);
+          return seg?.weekly_hours ? seg.weekly_hours * (52 / 12) : null;
+        };
+        const computeWeightedHPM = (tradeKey: string, fFrac: number, sFrac: number): number => {
+          const fHPM = segHPM(({ pf: '40', sm: '30', pl: '50' } as Record<string, string>)[tradeKey] ?? '');
+          const sHPM = segHPM(({ pf: '45', sm: '35', pl: '55' } as Record<string, string>)[tradeKey] ?? '');
+          if (!fHPM && !sHPM) return 0; // no data — caller falls back to global
+          return fFrac * (fHPM ?? sHPM ?? 0) + sFrac * (sHPM ?? fHPM ?? 0);
+        };
+        const hpmValues = TRADES.map((trade, idx) => {
+          const tradeData = sfData?.[trade.key];
+          const estField = tradeData?.field?.est || 0;
+          const estShop  = tradeData?.shop?.est  || 0;
+          const estTotal = estField + estShop;
+          const fFrac = estTotal > 0 ? estField / estTotal : 1;
+          const sFrac = estTotal > 0 ? estShop  / estTotal : 0;
+          return computeWeightedHPM(trade.key, fFrac, sFrac);
+        });
+        if (hpmValues.some(v => v > 0)) {
+          tradeHPM = { pf: hpmValues[0] || 0, sm: hpmValues[1] || 0, pl: hpmValues[2] || 0 };
+        }
+      }
+
       results.push({
         contract, startOffset, remainingMonths, contour, isAutoContour, pctComplete,
-        tradeHours, totalRemainingHours, monthlyHours,
+        tradeHours, totalRemainingHours, monthlyHours, tradeHPM,
       });
     }
 
@@ -846,7 +952,7 @@ const LaborForecast: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap, myProjectsOnly, myTeamOnly, user, teamMemberNames]);
+  }, [contracts, departmentFilter, locationGroupFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, locationFilter, shopFieldMap, myProjectsOnly, myTeamOnly, user, teamMemberNames, bulkSegments]);
 
   // ─── Opportunity projections ──────────────────────────────
 
@@ -2909,18 +3015,26 @@ const LaborForecast: React.FC = () => {
                         <td style={{ padding: '0.4rem 0.5rem', color: '#64748b', whiteSpace: 'nowrap' }}>
                           {p.contract.project_manager_name || '-'}
                         </td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pf > 0 ? TRADES[0].color : '#cbd5e1' }}>
-                          {h.pf > 0 ? (h.pf / hpp).toFixed(1) : '-'}
-                        </td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.sm > 0 ? TRADES[1].color : '#cbd5e1' }}>
-                          {h.sm > 0 ? (h.sm / hpp).toFixed(1) : '-'}
-                        </td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pl > 0 ? TRADES[2].color : '#cbd5e1' }}>
-                          {h.pl > 0 ? (h.pl / hpp).toFixed(1) : '-'}
-                        </td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600 }}>
-                          {(h.total / hpp).toFixed(1)}
-                        </td>
+                        {(() => {
+                          const pfHPP = p.tradeHPM?.pf || hpp;
+                          const smHPP = p.tradeHPM?.sm || hpp;
+                          const plHPP = p.tradeHPM?.pl || hpp;
+                          const totalHC = (h.pf / pfHPP) + (h.sm / smHPP) + (h.pl / plHPP);
+                          return (<>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pf > 0 ? TRADES[0].color : '#cbd5e1' }}>
+                              {h.pf > 0 ? (h.pf / pfHPP).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.sm > 0 ? TRADES[1].color : '#cbd5e1' }}>
+                              {h.sm > 0 ? (h.sm / smHPP).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pl > 0 ? TRADES[2].color : '#cbd5e1' }}>
+                              {h.pl > 0 ? (h.pl / plHPP).toFixed(1) : '-'}
+                            </td>
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600 }}>
+                              {totalHC.toFixed(1)}
+                            </td>
+                          </>);
+                        })()}
                       </tr>
                     );
                   })}

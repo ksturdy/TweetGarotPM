@@ -18,6 +18,18 @@ const verifyProject = async (req, res, next) => {
   }
 };
 
+// GET /schedule-segments/bulk?project_ids=1,2,3
+router.get('/schedule-segments/bulk', authenticate, tenantContext, async (req, res, next) => {
+  try {
+    const ids = (req.query.project_ids || '').split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+    if (ids.length === 0) return res.json({});
+    const result = await ProjectScheduleSegment.getBulkByProjects(ids, req.tenantId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /projects/:projectId/schedule-segments
 router.get('/projects/:projectId/schedule-segments', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
@@ -43,10 +55,17 @@ router.get('/projects/:projectId/schedule-segments/costs', authenticate, tenantC
 router.put('/projects/:projectId/schedule-segments/:segmentKey', authenticate, tenantContext, verifyProject, async (req, res, next) => {
   try {
     const { segmentKey } = req.params;
-    const { start_date, end_date, contour_type } = req.body;
+    const { start_date, end_date, contour_type, weekly_hours } = req.body;
 
     const def = ProjectScheduleSegment.SEGMENT_DEFINITIONS.find((s) => s.key === segmentKey);
     if (!def) return res.status(400).json({ error: 'Unknown segment key' });
+
+    // If only weekly_hours is provided (shift schedule update), do a targeted update
+    // that never touches start_date / end_date / contour_type.
+    if (weekly_hours != null && start_date === undefined && end_date === undefined && contour_type === undefined) {
+      await ProjectScheduleSegment.patchWeeklyHours(req.params.projectId, req.tenantId, segmentKey, Number(weekly_hours));
+      return res.json({ segment_key: segmentKey, weekly_hours: Number(weekly_hours) });
+    }
 
     const segment = await ProjectScheduleSegment.upsertSegment(
       req.params.projectId,
@@ -55,7 +74,8 @@ router.put('/projects/:projectId/schedule-segments/:segmentKey', authenticate, t
       def.label,
       start_date || null,
       end_date || null,
-      contour_type || null
+      contour_type || null,
+      weekly_hours != null ? Number(weekly_hours) : null
     );
     res.json(segment);
   } catch (err) {

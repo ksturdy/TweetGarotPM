@@ -19,7 +19,7 @@ const SEGMENT_DEFINITIONS = [
 
 async function getByProject(projectId, tenantId) {
   const { rows } = await db.query(
-    `SELECT segment_key, label, start_date, end_date, contour_type
+    `SELECT segment_key, label, start_date, end_date, contour_type, weekly_hours
        FROM project_schedule_segments
       WHERE project_id = $1 AND tenant_id = $2
       ORDER BY id`,
@@ -28,20 +28,21 @@ async function getByProject(projectId, tenantId) {
   return rows;
 }
 
-async function upsertSegment(projectId, tenantId, segmentKey, label, startDate, endDate, contourType) {
+async function upsertSegment(projectId, tenantId, segmentKey, label, startDate, endDate, contourType, weeklyHours) {
   const { rows } = await db.query(
     `INSERT INTO project_schedule_segments
-       (project_id, tenant_id, segment_key, label, start_date, end_date, contour_type, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       (project_id, tenant_id, segment_key, label, start_date, end_date, contour_type, weekly_hours, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (project_id, segment_key)
      DO UPDATE SET
        label        = EXCLUDED.label,
        start_date   = EXCLUDED.start_date,
        end_date     = EXCLUDED.end_date,
        contour_type = EXCLUDED.contour_type,
+       weekly_hours = COALESCE(EXCLUDED.weekly_hours, project_schedule_segments.weekly_hours),
        updated_at   = NOW()
-     RETURNING segment_key, label, start_date, end_date, contour_type`,
-    [projectId, tenantId, segmentKey, label, startDate || null, endDate || null, contourType || 'flat']
+     RETURNING segment_key, label, start_date, end_date, contour_type, weekly_hours`,
+    [projectId, tenantId, segmentKey, label, startDate || null, endDate || null, contourType || 'flat', weeklyHours ?? null]
   );
   return rows[0];
 }
@@ -130,9 +131,43 @@ async function getCostsByProject(projectId, tenantId) {
   return rows;
 }
 
+async function patchWeeklyHours(projectId, tenantId, segmentKey, weeklyHours) {
+  await db.query(
+    `UPDATE project_schedule_segments
+        SET weekly_hours = $1, updated_at = NOW()
+      WHERE project_id = $2 AND tenant_id = $3 AND segment_key = $4`,
+    [weeklyHours ?? null, projectId, tenantId, segmentKey]
+  );
+}
+
+async function getBulkByProjects(projectIds, tenantId) {
+  if (!projectIds || projectIds.length === 0) return {};
+  const { rows } = await db.query(
+    `SELECT project_id, segment_key, label, start_date, end_date, contour_type, weekly_hours
+       FROM project_schedule_segments
+      WHERE project_id = ANY($1::int[]) AND tenant_id = $2`,
+    [projectIds, tenantId]
+  );
+  const result = {};
+  for (const row of rows) {
+    if (!result[row.project_id]) result[row.project_id] = [];
+    result[row.project_id].push({
+      segment_key: row.segment_key,
+      label: row.label,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      contour_type: row.contour_type,
+      weekly_hours: row.weekly_hours,
+    });
+  }
+  return result;
+}
+
 module.exports = {
   SEGMENT_DEFINITIONS,
   getByProject,
+  getBulkByProjects,
+  patchWeeklyHours,
   upsertSegment,
   initializeSegments,
   getActiveSegmentKeys,

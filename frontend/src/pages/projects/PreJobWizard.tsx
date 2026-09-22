@@ -677,7 +677,7 @@ const PreJobWizard: React.FC = () => {
   });
 
   const handleSegmentUpdate = useCallback(
-    (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => {
+    (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string; weekly_hours?: number | null }) => {
       segmentUpdateMutation.mutate({ key, data });
     },
     [segmentUpdateMutation]

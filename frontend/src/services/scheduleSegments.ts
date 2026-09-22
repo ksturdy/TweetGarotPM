@@ -8,6 +8,7 @@ export interface ScheduleSegment {
   start_date: string | null;
   end_date: string | null;
   contour_type: string;
+  weekly_hours: number | null;
 }
 
 export interface SegmentCosts {
@@ -42,6 +43,13 @@ export const SEGMENT_DEFINITIONS: { key: string; label: string; isLabor: boolean
 ];
 
 export const scheduleSegmentsService = {
+  getBulk: (projectIds: number[]): Promise<Record<number, ScheduleSegment[]>> => {
+    if (!projectIds.length) return Promise.resolve({});
+    return api.get<Record<number, ScheduleSegment[]>>(
+      `/schedule-segments/bulk?project_ids=${projectIds.join(',')}`
+    ).then((r) => r.data);
+  },
+
   getSegments: (projectId: number) =>
     api.get<SegmentsResponse>(`/projects/${projectId}/schedule-segments`).then((r) => r.data),
 
@@ -51,7 +59,7 @@ export const scheduleSegmentsService = {
   updateSegment: (
     projectId: number,
     segmentKey: string,
-    data: { start_date?: string | null; end_date?: string | null; contour_type?: string }
+    data: { start_date?: string | null; end_date?: string | null; contour_type?: string; weekly_hours?: number | null }
   ) =>
     api.put<ScheduleSegment>(`/projects/${projectId}/schedule-segments/${segmentKey}`, data).then((r) => r.data),
 
