@@ -15,7 +15,7 @@ import './ProjectModuleSidebar.css';
 interface ModuleGroup {
   label: string;
   icon: React.ReactNode;
-  modules: { path: string; label: string }[];
+  modules: { path: string; label: string; search?: string }[];
 }
 
 const MODULE_GROUPS: ModuleGroup[] = [
@@ -53,7 +53,9 @@ const MODULE_GROUPS: ModuleGroup[] = [
     label: 'Schedule',
     icon: <DateRangeIcon />,
     modules: [
-      { path: 'schedule', label: 'Schedule' },
+      { path: 'schedule', label: 'Summary',   search: '?tab=summary' },
+      { path: 'schedule', label: 'Cost Type', search: '?tab=cost-type' },
+      { path: 'schedule', label: 'Phase',     search: '?tab=phase' },
       { path: 'gc-schedule', label: 'GC Schedule' },
     ],
   },
@@ -124,15 +126,24 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
   // Close flyout on navigation
   useEffect(() => {
     setHoveredGroup(null);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
-  const isModuleActive = useCallback((modulePath: string) => {
-    const base = `/projects/${projectId}/${modulePath}`;
-    return location.pathname === base || location.pathname.startsWith(base + '/');
-  }, [projectId, location.pathname]);
+  const isModuleActive = useCallback((mod: { path: string; search?: string }) => {
+    const base = `/projects/${projectId}/${mod.path}`;
+    const pathMatch = location.pathname === base || location.pathname.startsWith(base + '/');
+    if (!pathMatch) return false;
+    if (mod.search !== undefined) {
+      const expectedTab = new URLSearchParams(mod.search).get('tab');
+      const currentTab = new URLSearchParams(location.search).get('tab');
+      return expectedTab === 'summary'
+        ? !currentTab || currentTab === 'summary'
+        : currentTab === expectedTab;
+    }
+    return true;
+  }, [projectId, location.pathname, location.search]);
 
   const isGroupActive = useCallback((group: ModuleGroup) =>
-    group.modules.some(m => isModuleActive(m.path)),
+    group.modules.some(m => isModuleActive(m)),
   [isModuleActive]);
 
   const isOverviewActive = location.pathname === `/projects/${projectId}/info`;
@@ -197,9 +208,9 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
                   <div className="project-module-children">
                     {group.modules.map(mod => (
                       <Link
-                        key={mod.path}
-                        to={`/projects/${projectId}/${mod.path}`}
-                        className={`project-module-child-item ${isModuleActive(mod.path) ? 'active' : ''}`}
+                        key={mod.label}
+                        to={`/projects/${projectId}/${mod.path}${mod.search ?? ''}`}
+                        className={`project-module-child-item ${isModuleActive(mod) ? 'active' : ''}`}
                       >
                         {mod.label}
                       </Link>
@@ -235,9 +246,9 @@ const ProjectModuleSidebar: React.FC<Props> = ({ projectId, isCollapsed, onToggl
             <div className="project-modules-flyout-items">
               {group.modules.map(mod => (
                 <Link
-                  key={mod.path}
-                  to={`/projects/${projectId}/${mod.path}`}
-                  className={`project-modules-flyout-item ${isModuleActive(mod.path) ? 'active' : ''}`}
+                  key={mod.label}
+                  to={`/projects/${projectId}/${mod.path}${mod.search ?? ''}`}
+                  className={`project-modules-flyout-item ${isModuleActive(mod) ? 'active' : ''}`}
                   onClick={() => setHoveredGroup(null)}
                 >
                   {mod.label}
