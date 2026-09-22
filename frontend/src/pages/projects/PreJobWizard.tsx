@@ -90,14 +90,20 @@ const STEPS = [
   'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
 ];
 
-const ProgressBar: React.FC<{ step: number; onStepClick: (n: number) => void }> = ({ step, onStepClick }) => (
+const ProgressBar: React.FC<{
+  step: number;
+  completedSteps: Set<number>;
+  maxStepReached: number;
+  onStepClick: (n: number) => void;
+}> = ({ step, completedSteps, maxStepReached, onStepClick }) => (
   <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.875rem 2rem' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, maxWidth: 900, margin: '0 auto' }}>
       {STEPS.map((label, i) => {
         const num = i + 1;
-        const done = step > num;
+        const done = completedSteps.has(num);
         const active = step === num;
-        const clickable = done;
+        const visited = num <= maxStepReached;
+        const clickable = visited && !active;
         return (
           <React.Fragment key={label}>
             <div
@@ -107,12 +113,11 @@ const ProgressBar: React.FC<{ step: number; onStepClick: (n: number) => void }> 
             >
               <div style={{
                 width: 28, height: 28, borderRadius: '50%',
-                background: done ? '#16a34a' : active ? '#002356' : '#e2e8f0',
-                color: done || active ? 'white' : '#94a3b8',
+                background: done ? '#16a34a' : active ? '#002356' : visited ? '#94a3b8' : '#e2e8f0',
+                color: done || active || visited ? 'white' : '#94a3b8',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
-                transition: 'opacity 0.15s',
-                opacity: clickable ? 1 : undefined,
+                transition: 'background 0.15s',
               }}>
                 {done ? '✓' : num}
               </div>
@@ -184,11 +189,40 @@ const PreJobWizard: React.FC = () => {
   const [dateError, setDateError] = useState(false);
 
   const wizardKey = `pjc_wizard_step_${projectId}`;
+  const completedKey = `pjc_completed_${projectId}`;
+  const maxStepKey = `pjc_maxstep_${projectId}`;
+
+  const [completedSteps, setCompletedStepsRaw] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`pjc_completed_${projectId}`);
+      return new Set<number>(raw ? JSON.parse(raw) : []);
+    } catch { return new Set<number>(); }
+  });
+
+  const [maxStepReached, setMaxStepReachedRaw] = useState<number>(() =>
+    parseInt(localStorage.getItem(`pjc_maxstep_${projectId}`) ?? '0', 10)
+  );
+
+  const markStepComplete = (stepNum: number) => {
+    setCompletedStepsRaw(prev => {
+      const next = new Set([...prev, stepNum]);
+      localStorage.setItem(completedKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const setStep = (val: number | ((s: number) => number)) => {
     setStepRaw(prev => {
       const next = typeof val === 'function' ? val(prev) : val;
-      if (next > 0) localStorage.setItem(wizardKey, String(next));
-      else localStorage.removeItem(wizardKey);
+      if (next > 0) {
+        localStorage.setItem(wizardKey, String(next));
+        if (next > maxStepReached) {
+          setMaxStepReachedRaw(next);
+          localStorage.setItem(maxStepKey, String(next));
+        }
+      } else {
+        localStorage.removeItem(wizardKey);
+      }
       return next;
     });
   };
@@ -531,12 +565,26 @@ const PreJobWizard: React.FC = () => {
     }
   };
 
-  const handleContinue = async () => {
+  const handleMarkComplete = async () => {
     if (step === 1 && (!startDate || !endDate)) {
       setDateError(true);
       return;
     }
     setDateError(false);
+    setSaving(true);
+    try {
+      await saveCurrentStep();
+      markStepComplete(step);
+      setStep(s => s + 1);
+      window.scrollTo(0, 0);
+    } catch {
+      toast.error('Failed to save — check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFinishLater = async () => {
     setSaving(true);
     try {
       await saveCurrentStep();
@@ -1508,7 +1556,7 @@ const PreJobWizard: React.FC = () => {
       </div>
 
       {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 14 && <ProgressBar step={step} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
+      {step > 0 && step < 14 && <ProgressBar step={step} completedSteps={completedSteps} maxStepReached={maxStepReached} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
 
       {/* Content */}
       <div style={{ maxWidth: step === 2 && schedulingMode === 'cost_type' ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -1520,13 +1568,11 @@ const PreJobWizard: React.FC = () => {
         <div style={{ position: 'sticky', bottom: 0, background: 'white', borderTop: '1px solid #e2e8f0', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={handleBack} style={navBtn('#f1f5f9', '#475569')}>← Back</button>
           <div style={{ display: 'flex', gap: 10 }}>
-            {step !== 1 && (
-              <button onClick={() => { setStep(s => s + 1); window.scrollTo(0, 0); }} style={navBtn('#f1f5f9', '#94a3b8')}>
-                Skip
-              </button>
-            )}
-            <button onClick={handleContinue} disabled={saving} style={navBtn('#002356', 'white')}>
-              {saving ? 'Saving…' : step === 12 ? 'Save & Review →' : 'Save & Continue →'}
+            <button onClick={handleFinishLater} disabled={saving} style={navBtn('#f1f5f9', '#475569')}>
+              {saving ? 'Saving…' : 'Finish Later'}
+            </button>
+            <button onClick={handleMarkComplete} disabled={saving} style={navBtn('#002356', 'white')}>
+              {saving ? 'Saving…' : step === 12 ? 'Mark Complete & Review →' : 'Mark Complete →'}
             </button>
           </div>
         </div>
