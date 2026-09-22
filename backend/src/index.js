@@ -31,6 +31,7 @@ const { runScheduledReports } = require('./jobs/scheduledReportRunner');
 const { runTradeShowReminders } = require('./jobs/tradeShowReminders');
 const { runTradeShowAutoComplete } = require('./jobs/tradeShowAutoComplete');
 const { runOpportunityReminders } = require('./jobs/opportunityReminders');
+const { runStaleOpportunityStartDate } = require('./jobs/staleOpportunityStartDate');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -461,6 +462,14 @@ server.listen(config.port, () => {
     });
   });
   console.log(`  ✅ Trade show reminder cron active (every 5 min)`);
+
+  // Stale opportunity start dates - check daily at 8:00 AM ET
+  cron.schedule('0 8 * * *', () => {
+    runStaleOpportunityStartDate().catch(err => {
+      console.error('[Cron] Stale start date job failed:', err);
+    });
+  }, { timezone: 'America/New_York' });
+  console.log(`  ✅ Stale opportunity start date cron scheduled (daily 8:00 AM ET)`);
 
   // Opportunity follow-up reminders - check every 5 minutes
   cron.schedule('*/5 * * * *', () => {
