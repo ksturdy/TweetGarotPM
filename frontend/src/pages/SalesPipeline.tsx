@@ -696,7 +696,7 @@ const SalesPipeline: React.FC = () => {
   const locationBarChartData = {
     labels: locationGroups.map(g => {
       const lg = LOCATION_GROUPS.find(l => l.value === g);
-      return lg?.longLabel || g;
+      return lg?.label || g;
     }),
     datasets: [{
       label: 'Pipeline Value',
