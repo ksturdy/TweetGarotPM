@@ -439,6 +439,22 @@ const opportunitiesService = {
   async deleteScore(opportunityId: number, scoreId: number): Promise<void> {
     await api.delete(`/opportunities/${opportunityId}/scores/${scoreId}`);
   },
+
+  // ===== Reminders =====
+
+  async getReminders(opportunityId: number): Promise<OpportunityReminder[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/reminders`);
+    return response.data;
+  },
+
+  async createReminder(opportunityId: number, data: CreateReminderInput): Promise<OpportunityReminder> {
+    const response = await api.post(`/opportunities/${opportunityId}/reminders`, data);
+    return response.data;
+  },
+
+  async deleteReminder(opportunityId: number, reminderId: number): Promise<void> {
+    await api.delete(`/opportunities/${opportunityId}/reminders/${reminderId}`);
+  },
 };
 
 export interface OpportunityScoreData {
@@ -490,6 +506,23 @@ export interface OpportunityScoreInput {
   has_override?: boolean;
   override_reason?: string;
   notes?: string;
+}
+
+export interface OpportunityReminder {
+  id: number;
+  opportunity_id: number;
+  user_id: number;
+  remind_at: string;
+  note: string | null;
+  recurrence_days: number | null;
+  fired_at: string | null;
+  created_at: string;
+}
+
+export interface CreateReminderInput {
+  remind_at: string;
+  note?: string;
+  recurrence_days?: number | null;
 }
 
 export default opportunitiesService;

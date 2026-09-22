@@ -20,6 +20,12 @@ async function runOpportunityReminders() {
       ? ` · Repeats ${RECURRENCE_LABELS[r.recurrence_days] || `every ${r.recurrence_days} days`}`
       : '';
 
+    const link = `/sales?opportunityId=${r.opportunity_id}`;
+
+    const valueStr = r.estimated_value != null
+      ? `$${Number(r.estimated_value).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+      : null;
+
     await notify({
       tenantId: r.tenant_id,
       projectId: null,
@@ -30,11 +36,15 @@ async function runOpportunityReminders() {
       message: r.note
         ? `${r.note}${recurrenceLabel}`
         : `Follow-up reminder for "${r.opportunity_title}"${recurrenceLabel}`,
-      link: '/sales',
+      link,
       createdBy: r.user_id,
       emailSubject: `Reminder: ${r.opportunity_title}`,
       emailDetails: [
         { label: 'Opportunity', value: r.opportunity_title },
+        ...(r.stage_name ? [{ label: 'Stage', value: r.stage_name }] : []),
+        ...(r.company_name ? [{ label: 'Company', value: r.company_name }] : []),
+        ...(valueStr ? [{ label: 'Est. Value', value: valueStr }] : []),
+        ...(r.owner_name ? [{ label: 'Owner', value: r.owner_name }] : []),
         ...(r.note ? [{ label: 'Note', value: r.note }] : []),
         ...(r.recurrence_days ? [{ label: 'Recurrence', value: RECURRENCE_LABELS[r.recurrence_days] || `every ${r.recurrence_days} days` }] : []),
       ],

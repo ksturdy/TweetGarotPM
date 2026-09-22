@@ -9,6 +9,7 @@ import CompanyPicker from '../CompanyPicker';
 import LocationPicker from '../LocationPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
+import OpportunityReminders from './OpportunityReminders';
 import OpportunityLinks from './OpportunityLinks';
 import TitanEstimate from './TitanEstimate';
 import OpportunityScore from './OpportunityScore';
@@ -802,6 +803,9 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
               <div className="split-divider" />
               <div className="split-comments">
                 <CommentThread opportunityId={opportunity!.id} employees={employees} />
+                <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '0.75rem', paddingTop: '0.25rem' }}>
+                  <OpportunityReminders opportunityId={opportunity!.id} />
+                </div>
               </div>
             </div>
           ) : activeTab === 'estimate' ? (

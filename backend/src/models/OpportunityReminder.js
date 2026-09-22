@@ -36,10 +36,16 @@ const OpportunityReminder = {
   async findPending(asOf) {
     const result = await db.query(
       `SELECT r.*,
-              o.title AS opportunity_title,
+              o.title          AS opportunity_title,
+              o.estimated_value,
+              o.client_company  AS company_name,
+              ps.name           AS stage_name,
+              asgn.first_name || ' ' || asgn.last_name AS owner_name,
               u.email, u.first_name, u.last_name
        FROM opportunity_reminders r
        JOIN opportunities o ON o.id = r.opportunity_id
+       LEFT JOIN pipeline_stages ps ON ps.id = o.stage_id
+       LEFT JOIN users asgn ON asgn.id = o.assigned_to
        JOIN users u ON u.id = r.user_id
        WHERE r.remind_at <= $1
          AND r.fired_at IS NULL

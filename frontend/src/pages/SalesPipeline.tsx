@@ -219,21 +219,24 @@ const SalesPipeline: React.FC = () => {
 
   const opportunities: SalesOpportunity[] = apiOpportunities.map(mapApiToDisplay);
 
-  // Handle deep link — open opportunity modal from router state or ?opportunityId= query param
+  // Capture deep-link ID once at mount — avoids searchParams reactivity issues
+  const pendingDeepLinkId = useRef<number | null>(
+    locationState?.selectedOpportunityId
+      ?? (searchParams.get('opportunityId') ? Number(searchParams.get('opportunityId')) : null)
+  );
+
+  // Open the opportunity modal once data is available
   useEffect(() => {
-    if (apiOpportunities.length === 0) return;
-    const idFromState = locationState?.selectedOpportunityId;
-    const idFromQuery = searchParams.get('opportunityId') ? Number(searchParams.get('opportunityId')) : null;
-    const targetId = idFromState || idFromQuery;
-    if (!targetId) return;
+    const targetId = pendingDeepLinkId.current;
+    if (!targetId || apiOpportunities.length === 0) return;
+    pendingDeepLinkId.current = null;
     const apiOpp = apiOpportunities.find(a => a.id === targetId);
     if (apiOpp) {
       setSelectedOpportunity(apiOpp);
       setIsModalOpen(true);
     }
-    // Clear so refresh doesn't reopen
-    navigate(location.pathname, { replace: true });
-  }, [locationState, searchParams, apiOpportunities, navigate, location.pathname]);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [apiOpportunities, navigate, location.pathname]);
 
   // Get unique salespeople from opportunities
   const salespeople = useMemo(() => {
