@@ -1,6 +1,6 @@
 // @refresh reset
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -64,6 +64,7 @@ interface SalesOpportunity {
 const SalesPipeline: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const locationState = location.state as { selectedOpportunityId?: number; myItemsOnly?: boolean } | null;
@@ -218,18 +219,21 @@ const SalesPipeline: React.FC = () => {
 
   const opportunities: SalesOpportunity[] = apiOpportunities.map(mapApiToDisplay);
 
-  // Handle deep link from dashboard - open opportunity modal if ID is passed in state
+  // Handle deep link — open opportunity modal from router state or ?opportunityId= query param
   useEffect(() => {
-    if (locationState?.selectedOpportunityId && apiOpportunities.length > 0) {
-      const apiOpp = apiOpportunities.find(a => a.id === locationState.selectedOpportunityId);
-      if (apiOpp) {
-        setSelectedOpportunity(apiOpp);
-        setIsModalOpen(true);
-      }
-      // Clear the state so refreshing doesn't reopen
-      navigate(location.pathname, { replace: true });
+    if (apiOpportunities.length === 0) return;
+    const idFromState = locationState?.selectedOpportunityId;
+    const idFromQuery = searchParams.get('opportunityId') ? Number(searchParams.get('opportunityId')) : null;
+    const targetId = idFromState || idFromQuery;
+    if (!targetId) return;
+    const apiOpp = apiOpportunities.find(a => a.id === targetId);
+    if (apiOpp) {
+      setSelectedOpportunity(apiOpp);
+      setIsModalOpen(true);
     }
-  }, [locationState, apiOpportunities, navigate, location.pathname]);
+    // Clear so refresh doesn't reopen
+    navigate(location.pathname, { replace: true });
+  }, [locationState, searchParams, apiOpportunities, navigate, location.pathname]);
 
   // Get unique salespeople from opportunities
   const salespeople = useMemo(() => {
@@ -542,13 +546,16 @@ const SalesPipeline: React.FC = () => {
         .reduce((sum, opp) => sum + (Number(opp.estimated_value) || 0), 0) / 1_000_000
     );
 
+    // Build a map of id → weighted value using the same probability logic as the KPI
+    const weightedById = new Map(
+      filteredOpportunities.map(opp => [opp.id, opp.value * getProbabilityPercent(opp.probability) / 100])
+    );
+    const createdAtById = new Map(filteredApiOpportunities.map(o => [o.id, o.created_at]));
+
     const weightedValues = points.map(({ cutoff }) =>
       filteredApiOpportunities
         .filter(opp => new Date(opp.created_at) < cutoff)
-        .reduce((sum, opp) => {
-          const prob = Number(opp.probability || opp.stage_probability || 0);
-          return sum + (Number(opp.estimated_value) || 0) * prob / 100;
-        }, 0) / 1_000_000
+        .reduce((sum, opp) => sum + (weightedById.get(opp.id) || 0), 0) / 1_000_000
     );
 
     return {
@@ -575,7 +582,7 @@ const SalesPipeline: React.FC = () => {
         },
       ]
     };
-  }, [filteredApiOpportunities]);
+  }, [filteredApiOpportunities, filteredOpportunities]);
 
   const hexToRgba = (hex: string, alpha: number): string => {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -773,12 +780,12 @@ const SalesPipeline: React.FC = () => {
         display: true,
         position: 'top' as const,
         labels: {
-          boxWidth: 12,
-          boxHeight: 2,
-          font: { size: 10 },
-          padding: 8,
-          usePointStyle: true,
-          pointStyle: 'line',
+          boxWidth: 20,
+          boxHeight: 3,
+          font: { size: 11, weight: '600' },
+          padding: 12,
+          usePointStyle: false,
+          color: '#374151',
         }
       },
       datalabels: { display: false },
