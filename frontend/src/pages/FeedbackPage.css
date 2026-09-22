@@ -136,6 +136,109 @@
   margin: 3px 0;
 }
 
+/* ── Settings gear + flyout ─────────────────────────────────── */
+.feedback-settings-group {
+  position: relative;
+}
+
+.feedback-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: white;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.feedback-settings-btn:hover {
+  color: #002356;
+  border-color: #002356;
+}
+
+.feedback-settings-flyout {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1100;
+  width: 220px;
+  background: white;
+  border: 1px solid #ced4da;
+  border-top: 3px solid #E87722;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.feedback-settings-header {
+  background: linear-gradient(135deg, #002356 0%, #003580 100%);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 7px 12px;
+}
+
+.feedback-settings-body {
+  padding: 6px 0 4px;
+}
+
+.feedback-settings-desc {
+  font-size: 11px;
+  color: #6c757d;
+  padding: 2px 12px 6px;
+  line-height: 1.4;
+  border-bottom: 1px solid #f1f3f5;
+  margin-bottom: 2px;
+}
+
+.feedback-settings-footer {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid #f1f3f5;
+}
+
+.feedback-settings-save {
+  flex: 1;
+  background: #002356;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.feedback-settings-save:hover {
+  background: #003580;
+}
+
+.feedback-settings-reset {
+  background: transparent;
+  color: #6c757d;
+  border: 1px solid #ced4da;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.feedback-settings-reset:hover {
+  color: #495057;
+  border-color: #adb5bd;
+}
+
 .feedback-content {
   flex: 1;
   display: grid;

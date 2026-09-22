@@ -16,6 +16,14 @@ import './FeedbackPage.css';
 
 const ALL_STATUSES = ['submitted', 'read', 'under_review', 'in_progress', 'in_testing', 'completed', 'on_hold', 'rejected'];
 const DEFAULT_STATUSES = ALL_STATUSES.filter(s => s !== 'completed');
+const STORAGE_KEY = 'titan_feedback_default_statuses';
+
+const loadSavedDefaults = (): string[] => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_STATUSES;
+  } catch { return DEFAULT_STATUSES; }
+};
 
 const STATUS_LABELS: Record<string, string> = {
   submitted: 'Submitted',
@@ -31,14 +39,20 @@ const STATUS_LABELS: Record<string, string> = {
 const FeedbackPage: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(DEFAULT_STATUSES);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(loadSavedDefaults);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
-  const [filters, setFilters] = useState<FeedbackFilters>({
-    status: DEFAULT_STATUSES.join(','),
-    sortBy: 'votes',
-    order: 'desc'
+  const [filters, setFilters] = useState<FeedbackFilters>(() => {
+    const defaults = loadSavedDefaults();
+    return {
+      status: defaults.length === ALL_STATUSES.length ? undefined : defaults.join(','),
+      sortBy: 'votes',
+      order: 'desc',
+    };
   });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draftDefaults, setDraftDefaults] = useState<string[]>(loadSavedDefaults);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [userVotes, setUserVotes] = useState<Map<number, FeedbackVote | null>>(new Map());
   const [showForm, setShowForm] = useState(true);
@@ -209,6 +223,36 @@ const FeedbackPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Close settings flyout on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const toggleDraft = (status: string) => {
+    setDraftDefaults(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const saveDefaults = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draftDefaults));
+    setSelectedStatuses(draftDefaults);
+    setSettingsOpen(false);
+  };
+
+  const resetDefaults = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setDraftDefaults(DEFAULT_STATUSES);
+    setSelectedStatuses(DEFAULT_STATUSES);
+    setSettingsOpen(false);
+  };
+
   // Sync selectedStatuses → filters.status
   useEffect(() => {
     if (selectedStatuses.length === ALL_STATUSES.length || selectedStatuses.length === 0) {
@@ -346,6 +390,42 @@ const FeedbackPage: React.FC = () => {
             <option value="desc">Descending</option>
             <option value="asc">Ascending</option>
           </select>
+        </div>
+
+        <div className="filter-group feedback-settings-group" ref={settingsRef}>
+          <label>&nbsp;</label>
+          <button
+            type="button"
+            className="feedback-settings-btn"
+            onClick={() => { setDraftDefaults(loadSavedDefaults()); setSettingsOpen(p => !p); }}
+            title="Default filter settings"
+          >
+            ⚙
+          </button>
+          {settingsOpen && (
+            <div className="feedback-settings-flyout">
+              <div className="feedback-settings-header">Default Status Filters</div>
+              <div className="feedback-settings-body">
+                <div className="feedback-settings-desc">
+                  These statuses will be pre-selected each time you open this page.
+                </div>
+                {ALL_STATUSES.map(s => (
+                  <label key={s} className="multi-select-option">
+                    <input
+                      type="checkbox"
+                      checked={draftDefaults.includes(s)}
+                      onChange={() => toggleDraft(s)}
+                    />
+                    <span>{STATUS_LABELS[s]}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="feedback-settings-footer">
+                <button className="feedback-settings-save" onClick={saveDefaults}>Save as Default</button>
+                <button className="feedback-settings-reset" onClick={resetDefaults}>Reset</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
