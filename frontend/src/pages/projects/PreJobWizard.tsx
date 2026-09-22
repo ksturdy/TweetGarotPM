@@ -199,9 +199,13 @@ const PreJobWizard: React.FC = () => {
     } catch { return new Set<number>(); }
   });
 
-  const [maxStepReached, setMaxStepReachedRaw] = useState<number>(() =>
-    parseInt(localStorage.getItem(`pjc_maxstep_${projectId}`) ?? '0', 10)
-  );
+  const [maxStepReached, setMaxStepReachedRaw] = useState<number>(() => {
+    const fromNew = parseInt(localStorage.getItem(`pjc_maxstep_${projectId}`) ?? '', 10);
+    if (!isNaN(fromNew) && fromNew > 0) return fromNew;
+    // Fall back to legacy wizard-step key so returning users keep clickable steps
+    const fromOld = parseInt(localStorage.getItem(`pjc_wizard_step_${projectId}`) ?? '', 10);
+    return !isNaN(fromOld) && fromOld > 0 ? fromOld : 0;
+  });
 
   const markStepComplete = (stepNum: number) => {
     setCompletedStepsRaw(prev => {
@@ -236,7 +240,7 @@ const PreJobWizard: React.FC = () => {
   const [laborApproach, setLaborApproach] = useState('');
   const [laborTrades, setLaborTrades] = useState<LaborTradeRow[]>(DEFAULT_LABOR_TRADES());
   const [materialApproach, setMaterialApproach] = useState('');
-  const [materialItems, setMaterialItems] = useState<MaterialItemRow[]>(DEFAULT_MATERIAL_ITEMS());
+  const [materialItems, setMaterialItems] = useState<MaterialItemRow[]>([]);
   const [subApproach, setSubApproach] = useState('');
   const [subItems, setSubItems] = useState<SubcontractItemRow[]>([]);
   const [rentalApproach, setRentalApproach] = useState('');
@@ -263,6 +267,7 @@ const PreJobWizard: React.FC = () => {
   const [siteMapAttachmentId, setSiteMapAttachmentId] = useState<number | null>(null);
   const siteMapInputRef = useRef<HTMLInputElement>(null);
   const checklistLoaded = useRef(false);
+  const completedSeedRef = useRef(false);
 
   // ── Team step state ───────────────────────────────────────────────────────
   const empSearch = useEmpSearch();
@@ -321,7 +326,7 @@ const PreJobWizard: React.FC = () => {
     enabled: !!projectId,
   });
 
-  const { data: assignments = [] } = useQuery<ProjectAssignment[]>({
+  const { data: assignments = [], isFetched: assignmentsFetched } = useQuery<ProjectAssignment[]>({
     queryKey: ['project-assignments', projectId],
     queryFn: () => projectAssignmentsApi.getByProject(Number(projectId)),
     enabled: !!projectId,
@@ -336,6 +341,30 @@ const PreJobWizard: React.FC = () => {
   const { data: phaseCodeDetail = [] } = useQuery<PhaseCodeDetailRow[]>({
     queryKey: ['phaseCodeDetail', projectId],
     queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId)),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
+  const { data: phaseCodesMaterial = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId, 'ct2'],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), { costType: 2 }),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
+  const { data: phaseCodesSubs = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId, 'ct3'],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), { costType: 3 }),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
+  const { data: phaseCodesRental = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId, 'ct4'],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), { costType: 4 }),
+    enabled: !!projectId && !!readiness?.vistaLinked,
+  });
+
+  const { data: phaseCodesMEP = [] } = useQuery<PhaseCodeDetailRow[]>({
+    queryKey: ['phaseCodeDetail', projectId, 'ct5'],
+    queryFn: () => vistaDataService.getPhaseCodeDetail(Number(projectId), { costType: 5 }),
     enabled: !!projectId && !!readiness?.vistaLinked,
   });
 
@@ -401,6 +430,54 @@ const PreJobWizard: React.FC = () => {
     if (or.site_map_filename) setSiteMapFilename(or.site_map_filename);
   }, [checklist]);
 
+  // Supplement completedSteps from DB data once per mount — keeps wizard in sync with
+  // the checklist home page. Merges rather than replaces so explicit "Finish Later"
+  // choices made earlier in the same session are preserved.
+  useEffect(() => {
+    if (completedSeedRef.current) return;
+    if (!checklist || !project || !assignmentsFetched) return;
+    completedSeedRef.current = true;
+
+    const dbComplete = new Set<number>();
+    const pi = checklist.project_info;
+    const or = checklist.orientation;
+
+    if (project.start_date || project.end_date) dbComplete.add(1);
+    if (project.scheduling_mode) dbComplete.add(2);
+    if (assignments.filter(a => (MGMT_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(3);
+    if (assignments.filter(a => (FIELD_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(4);
+    if (or.badge_required || or.orientation_required || or.safety_training_required ||
+        or.orientation_link || or.contact_name || or.directions || or.parking_notes ||
+        or.site_map_attachment_id) dbComplete.add(5);
+    if (pi.special_conditions) dbComplete.add(6);
+    if (pi.bid_scope_notes) dbComplete.add(7);
+    if (checklist.labor.trades?.length || checklist.labor.approach_notes) dbComplete.add(8);
+    if (checklist.material.items?.length || checklist.material.approach_notes) dbComplete.add(9);
+    if (checklist.subcontracts.items?.length || checklist.subcontracts.approach_notes) dbComplete.add(10);
+    if (checklist.rental.items?.length || checklist.rental.approach_notes ||
+        checklist.mep_equipment.items?.length || checklist.mep_equipment.approach_notes ||
+        checklist.general_conditions.items?.length || checklist.general_conditions.approach_notes) dbComplete.add(11);
+    if (pi.other_contacts?.length) dbComplete.add(12);
+
+    if (dbComplete.size === 0) return;
+
+    setCompletedStepsRaw(prev => {
+      const next = new Set(prev);
+      let changed = false;
+      dbComplete.forEach(s => { if (!next.has(s)) { next.add(s); changed = true; } });
+      if (!changed) return prev;
+      localStorage.setItem(completedKey, JSON.stringify([...next]));
+      return next;
+    });
+
+    const maxC = Math.max(...dbComplete);
+    const newMax = Math.min(maxC + 1, STEPS.length + 1);
+    if (newMax > maxStepReached) {
+      setMaxStepReachedRaw(newMax);
+      localStorage.setItem(maxStepKey, String(newMax));
+    }
+  }, [checklist, project, assignments, assignmentsFetched]);
+
   // Pre-populate labor trades from Vista segment data when no saved trades exist
   useEffect(() => {
     if (!segmentCosts.length || checklist === undefined) return;
@@ -415,6 +492,46 @@ const PreJobWizard: React.FC = () => {
       });
     if (rows.length > 0) setLaborTrades(rows);
   }, [segmentCosts, checklist]);
+
+  // Pre-populate material items from Vista cost type 2 phase codes
+  useEffect(() => {
+    if (!phaseCodesMaterial.length || checklist === undefined) return;
+    if (checklist?.material?.items?.length) return;
+    const rows: MaterialItemRow[] = phaseCodesMaterial
+      .filter(p => p.est_cost > 0)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), vendor: '', lead_time: '', notes: '' }));
+    if (rows.length > 0) setMaterialItems(rows);
+  }, [phaseCodesMaterial, checklist]);
+
+  // Pre-populate subcontract items from Vista cost type 3 phase codes
+  useEffect(() => {
+    if (!phaseCodesSubs.length || checklist === undefined) return;
+    if (checklist?.subcontracts?.items?.length) return;
+    const rows: SubcontractItemRow[] = phaseCodesSubs
+      .filter(p => p.est_cost > 0)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), subcontractor: '', scope: '', notes: '' }));
+    if (rows.length > 0) setSubItems(rows);
+  }, [phaseCodesSubs, checklist]);
+
+  // Pre-populate rental items from Vista cost type 4 phase codes
+  useEffect(() => {
+    if (!phaseCodesRental.length || checklist === undefined) return;
+    if (checklist?.rental?.items?.length) return;
+    const rows: GenericItemRow[] = phaseCodesRental
+      .filter(p => p.est_cost > 0)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), notes: '' }));
+    if (rows.length > 0) setRentalItems(rows);
+  }, [phaseCodesRental, checklist]);
+
+  // Pre-populate MEP equipment items from Vista cost type 5 phase codes
+  useEffect(() => {
+    if (!phaseCodesMEP.length || checklist === undefined) return;
+    if (checklist?.mep_equipment?.items?.length) return;
+    const rows: GenericItemRow[] = phaseCodesMEP
+      .filter(p => p.est_cost > 0)
+      .map(p => ({ id: uid(), description: `${p.phase} — ${p.phase_description}`, budget: Math.round(p.est_cost), notes: '' }));
+    if (rows.length > 0) setMepItems(rows);
+  }, [phaseCodesMEP, checklist]);
 
   useEffect(() => {
     if (project) {
@@ -920,8 +1037,8 @@ const PreJobWizard: React.FC = () => {
                 ? "Your project dates are already on file. Review and confirm before continuing."
                 : "Let's start with the timeline. When does this project kick off, and when do you expect to wrap up?"}
               hint={datesAlreadySet
-                ? "These dates were pulled from the project schedule. Update them here if anything has changed — changes sync to the project record and Vista."
-                : "These dates sync with the project record and Vista contract overrides."}
+                ? "These dates were pulled from the project schedule. Update them here if anything has changed — changes sync to the project record."
+                : "These dates sync with the project record."}
             />
             <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>

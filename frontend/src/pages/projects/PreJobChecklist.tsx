@@ -1073,7 +1073,14 @@ const PreJobChecklistPage: React.FC = () => {
     'Labor Plan', 'Material Plan', 'Subcontracts', 'Other Costs', 'Contacts', 'Summary',
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
+  const completedKey = `pjc_completed_${projectId}`;
   const savedWizardStep = parseInt(localStorage.getItem(wizardKey) ?? '0', 10);
+  const wizardCompletedSteps = (() => {
+    try {
+      const raw = localStorage.getItem(completedKey);
+      return new Set<number>(raw ? JSON.parse(raw) : []);
+    } catch { return new Set<number>(); }
+  })();
   // Treat as completed if localStorage says so OR if the checklist already has content
   // (covers cases where localStorage was cleared after completing the wizard)
   const wizardCompleted = savedWizardStep >= WIZARD_STEPS.length || !checklistIsEmpty;
@@ -1259,17 +1266,31 @@ const PreJobChecklistPage: React.FC = () => {
                 <div style={{ color: '#86efac', fontSize: '0.82rem', marginBottom: 10 }}>
                   To make changes, click any section header below to expand and edit it directly. Use "Revisit Guided Setup" to step through the wizard again.
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {WIZARD_STEPS.map((label, i) => (
-                    <button
-                      key={label}
-                      onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard?step=${i + 1}`)}
-                      style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#16a34a', color: 'white', border: 'none', cursor: 'pointer' }}
-                      title={`Edit ${label} step`}
-                    >
-                      ✓ {label}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                  {WIZARD_STEPS.map((label, i) => {
+                    const num = i + 1;
+                    const done = wizardCompletedSteps.has(num);
+                    return (
+                      <button
+                        key={label}
+                        onClick={() => navigate(`/projects/${projectId}/pre-job-checklist/wizard?step=${num}`)}
+                        title={`Go to ${label}`}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+                      >
+                        <div style={{
+                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                          background: done ? '#16a34a' : 'rgba(255,255,255,0.15)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.65rem', fontWeight: 700, color: 'white',
+                        }}>
+                          {done ? '✓' : num}
+                        </div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: done ? '#86efac' : '#93c5fd', whiteSpace: 'nowrap' }}>
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#86efac', marginBottom: 10 }}>
                   ↑ Click any step above to jump directly to that section in the wizard.
@@ -1283,19 +1304,25 @@ const PreJobChecklistPage: React.FC = () => {
                 <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 99, height: 6, marginBottom: 10, overflow: 'hidden' }}>
                   <div style={{ background: '#f97316', height: '100%', borderRadius: 99, width: `${Math.round((savedWizardStep / WIZARD_STEPS.length) * 100)}%`, transition: 'width 0.3s' }} />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                   {WIZARD_STEPS.map((label, i) => {
                     const num = i + 1;
-                    const done = savedWizardStep > num;
+                    const done = wizardCompletedSteps.has(num);
                     const current = savedWizardStep === num;
                     return (
-                      <span key={label} style={{
-                        fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                        background: done ? '#16a34a' : current ? '#f97316' : 'rgba(255,255,255,0.1)',
-                        color: done || current ? 'white' : '#93c5fd',
-                      }}>
-                        {done ? '✓ ' : current ? '→ ' : ''}{label}
-                      </span>
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                          background: done ? '#16a34a' : current ? '#f97316' : 'rgba(255,255,255,0.15)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.65rem', fontWeight: 700, color: 'white',
+                        }}>
+                          {done ? '✓' : num}
+                        </div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: done ? '#86efac' : current ? '#fed7aa' : '#93c5fd', whiteSpace: 'nowrap' }}>
+                          {label}
+                        </span>
+                      </div>
                     );
                   })}
                 </div>
