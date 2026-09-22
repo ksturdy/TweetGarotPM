@@ -183,8 +183,8 @@ function buildScheduleTable(segments, segCosts, projectStart, projectEnd) {
     const dur    = seg.start_date && seg.end_date ? (monthsDiff(seg.start_date, seg.end_date) + 'mo') : '—';
     const contour = seg.contour_type ? (seg.contour_type.charAt(0).toUpperCase() + seg.contour_type.slice(1)) : '—';
 
-    // Gantt bar
-    let barHtml = '<div style="width:100%;height:14px;background:#f1f5f9;border-radius:2px;position:relative;"></div>';
+    // Gantt bar — only rendered when dates are actually set
+    let barHtml = '';
     if (seg.start_date && seg.end_date) {
       const x1 = ((dateToMs(seg.start_date) - minMs) / totalMs) * 100;
       const x2 = ((dateToMs(seg.end_date)   - minMs) / totalMs) * 100;

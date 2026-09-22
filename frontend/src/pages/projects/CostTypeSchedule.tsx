@@ -575,8 +575,8 @@ const CostTypeSchedule: React.FC<Props> = ({
                     {allMonths.map((_, i) => (
                       <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #e2e8f0' }} />
                     ))}
-                    {/* Bar */}
-                    {barWidth > 0 && (
+                    {/* Bar — only when row has Vista data and dates are set */}
+                    {isActive && barWidth > 0 && (
                       <div style={{
                         position: 'absolute', left: adjLeft, top: 4, height: ROW_H - 8, width: adjWidth,
                         backgroundColor: color + '50', border: `2px solid ${color}`, borderRadius: 4,

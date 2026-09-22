@@ -818,8 +818,8 @@ const PreJobChecklistPage: React.FC = () => {
     && !checklist?.orientation?.contact_name;
 
   const WIZARD_STEPS = [
-    'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
-    'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
+    'Vista Sync', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
+    'Schedule', 'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
   ];
   const wizardKey = `pjc_wizard_step_${projectId}`;
   const completedKey = `pjc_completed_${projectId}`;

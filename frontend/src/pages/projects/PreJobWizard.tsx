@@ -86,8 +86,8 @@ const TitanCard: React.FC<{ question: string; hint?: string }> = ({ question, hi
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 const STEPS = [
-  'Key Dates', 'Schedule', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
-  'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
+  'Vista Sync', 'Office Team', 'Field Team', 'Orientation', 'Site Conditions', 'Scope & Bid',
+  'Schedule', 'Labor Plan', 'Material Plan', 'Subcontracts', 'Rentals', 'MEP Equipment', 'Gen. Conditions', 'Contacts', 'Summary',
 ];
 
 const ProgressBar: React.FC<{
@@ -95,9 +95,30 @@ const ProgressBar: React.FC<{
   completedSteps: Set<number>;
   maxStepReached: number;
   onStepClick: (n: number) => void;
-}> = ({ step, completedSteps, maxStepReached, onStepClick }) => (
+  onStartClick: () => void;
+}> = ({ step, completedSteps, maxStepReached, onStepClick, onStartClick }) => (
   <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.875rem 2rem' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, maxWidth: 900, margin: '0 auto' }}>
+      {/* Start bubble — navigates back to checklist overview */}
+      <div
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, cursor: 'pointer' }}
+        onClick={onStartClick}
+        title="Back to checklist overview"
+      >
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: '#94a3b8',
+          color: 'white',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.72rem', fontWeight: 700, flexShrink: 0,
+        }}>
+          ⌂
+        </div>
+        <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 400, marginTop: 3, whiteSpace: 'nowrap' }}>
+          Start
+        </div>
+      </div>
+      <div style={{ flex: 1, height: 2, background: '#16a34a', margin: '0 4px', marginBottom: 18 }} />
       {STEPS.map((label, i) => {
         const num = i + 1;
         const done = completedSteps.has(num);
@@ -184,7 +205,7 @@ const PreJobWizard: React.FC = () => {
 
   const jumpToStep = parseInt(searchParams.get('step') ?? '', 10);
 
-  const [step, setStepRaw] = useState(0); // 0 = gate
+  const [step, setStepRaw] = useState(1);
   const [saving, setSaving] = useState(false);
   const [dateError, setDateError] = useState(false);
 
@@ -310,14 +331,14 @@ const PreJobWizard: React.FC = () => {
 
   // Jump to a specific step if ?step=N is in the URL, or restore saved progress
   useEffect(() => {
-    if (!readiness?.ready) return;
     if (jumpToStep > 0 && jumpToStep <= STEPS.length) {
       setStep(jumpToStep);
       return;
     }
     const saved = parseInt(localStorage.getItem(wizardKey) ?? '', 10);
     if (saved > 0 && saved <= STEPS.length) setStep(saved);
-  }, [readiness?.ready]);
+    // else stays at 1 (default)
+  }, []);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -459,15 +480,15 @@ const PreJobWizard: React.FC = () => {
     const pi = checklist.project_info;
     const or = checklist.orientation;
 
-    if (project.start_date || project.end_date) dbComplete.add(1);
-    if (project.scheduling_mode) dbComplete.add(2);
-    if (assignments.filter(a => (MGMT_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(3);
-    if (assignments.filter(a => (FIELD_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(4);
+    if (readiness?.vistaLinked) dbComplete.add(1); // Vista Sync
+    if (assignments.filter(a => (MGMT_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(2);
+    if (assignments.filter(a => (FIELD_ROLES as readonly string[]).includes(a.role ?? '')).length) dbComplete.add(3);
     if (or.badge_required || or.orientation_required || or.safety_training_required ||
         or.orientation_link || or.contact_name || or.directions || or.parking_notes ||
-        or.site_map_attachment_id) dbComplete.add(5);
-    if (pi.special_conditions) dbComplete.add(6);
-    if (pi.bid_scope_notes) dbComplete.add(7);
+        or.site_map_attachment_id) dbComplete.add(4);
+    if (pi.special_conditions) dbComplete.add(5);
+    if (pi.bid_scope_notes) dbComplete.add(6);
+    if ((project.start_date || project.end_date) && project.scheduling_mode) dbComplete.add(7); // Schedule
     if (checklist.labor.trades?.length || checklist.labor.approach_notes) dbComplete.add(8);
     if (checklist.material.items?.length || checklist.material.approach_notes) dbComplete.add(9);
     if (checklist.subcontracts.items?.length || checklist.subcontracts.approach_notes) dbComplete.add(10);
@@ -494,7 +515,7 @@ const PreJobWizard: React.FC = () => {
       setMaxStepReachedRaw(newMax);
       localStorage.setItem(maxStepKey, String(newMax));
     }
-  }, [checklist, project, assignments, assignmentsFetched]);
+  }, [checklist, project, assignments, assignmentsFetched, readiness]);
 
   // Pre-populate labor trades from Vista segment data when no saved trades exist
   useEffect(() => {
@@ -643,23 +664,10 @@ const PreJobWizard: React.FC = () => {
     const existingPi = checklist?.project_info ?? {};
 
     switch (step) {
-      case 1: // Dates
-        await projectsApi.update(pid, { start_date: startDate || undefined, end_date: endDate || undefined });
-        if (contract?.id && (startDate || endDate)) {
-          await vistaDataService.updateProjectionOverrides(contract.id, {
-            user_adjusted_start_date: startDate || undefined,
-            user_adjusted_end_date: endDate || undefined,
-          });
-        }
-        qc.invalidateQueries({ queryKey: ['project', projectId] });
-        break;
-      case 2:
-        await api.patch(`/projects/${pid}/summary-dates`, { scheduling_mode: schedulingMode });
-        qc.invalidateQueries({ queryKey: ['project', projectId] });
-        break;
-      case 3: break; // office team saves live per-add
-      case 4: break; // field nominations save live per-submit
-      case 5:
+      case 1: break; // Vista Sync — read only
+      case 2: break; // office team saves live per-add
+      case 3: break; // field nominations save live per-submit
+      case 4:
         await preJobChecklistApi.updateSection(pid, 'orientation', {
           badge_required: badgeRequired,
           orientation_required: orientationRequired,
@@ -675,13 +683,24 @@ const PreJobWizard: React.FC = () => {
         });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 6:
+      case 5:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...existingPi, special_conditions: specialConditions });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
         break;
-      case 7:
+      case 6:
         await preJobChecklistApi.updateSection(pid, 'project_info', { ...(checklist?.project_info ?? {}), bid_scope_notes: bidScopeNotes });
         qc.invalidateQueries({ queryKey: ['preJobChecklist', projectId] });
+        break;
+      case 7: // Schedule — dates + mode
+        await projectsApi.update(pid, { start_date: startDate || undefined, end_date: endDate || undefined });
+        if (contract?.id && (startDate || endDate)) {
+          await vistaDataService.updateProjectionOverrides(contract.id, {
+            user_adjusted_start_date: startDate || undefined,
+            user_adjusted_end_date: endDate || undefined,
+          });
+        }
+        await api.patch(`/projects/${pid}/summary-dates`, { scheduling_mode: schedulingMode });
+        qc.invalidateQueries({ queryKey: ['project', projectId] });
         break;
       case 8:
         await preJobChecklistApi.updateSection(pid, 'labor', { approach_notes: laborApproach, trades: laborTrades });
@@ -715,7 +734,7 @@ const PreJobWizard: React.FC = () => {
   };
 
   const handleMarkComplete = async () => {
-    if (step === 1 && (!startDate || !endDate)) {
+    if (step === 7 && (!startDate || !endDate)) {
       setDateError(true);
       return;
     }
@@ -1207,47 +1226,72 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 1 — KEY DATES
+      // STEP 1 — VISTA SYNC
       case 1: {
-        const datesAlreadySet = !!(startDate && endDate);
+        const linked = readiness?.vistaLinked;
+        const hasProjection = readiness?.hasProjection;
         return (
           <div>
             <TitanCard
-              question={datesAlreadySet
-                ? "Your project dates are already on file. Review and confirm before continuing."
-                : "Let's start with the timeline. When does this project kick off, and when do you expect to wrap up?"}
-              hint={datesAlreadySet
-                ? "These dates were pulled from the project schedule. Update them here if anything has changed — changes sync to the project record."
-                : "These dates sync with the project record."}
+              question="Confirm Vista is synced before we begin."
+              hint="The Vista sync pulls phase codes, cost data, and contract info into this checklist. If Vista is not linked yet, contact your project coordinator."
             />
-            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={fieldLabel}>Project Start Date <span style={{ color: '#ef4444' }}>*</span></label>
-                <input
-                  type="date"
-                  style={{ ...fieldInput, borderColor: dateError && !startDate ? '#ef4444' : undefined }}
-                  value={startDate}
-                  onChange={e => { setStartDate(e.target.value); if (e.target.value) setDateError(false); }}
-                />
-                {dateError && !startDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>Start date is required.</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{
+                background: linked ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${linked ? '#bbf7d0' : '#fecaca'}`,
+                borderRadius: 10, padding: '1rem 1.25rem',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <div style={{ fontSize: '1.5rem' }}>{linked ? '✅' : '❌'}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: linked ? '#166534' : '#991b1b' }}>
+                    {linked ? 'Vista Linked' : 'Vista Not Linked'}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: linked ? '#166534' : '#991b1b', marginTop: 2 }}>
+                    {linked ? `Contract: ${readiness?.vistaContractNumber || '—'}` : 'This project has no Vista contract linked.'}
+                  </div>
+                </div>
               </div>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={fieldLabel}>Estimated Completion <span style={{ color: '#ef4444' }}>*</span></label>
-                <input
-                  type="date"
-                  style={{ ...fieldInput, borderColor: dateError && !endDate ? '#ef4444' : undefined }}
-                  value={endDate}
-                  onChange={e => { setEndDate(e.target.value); if (e.target.value) setDateError(false); }}
-                />
-                {dateError && !endDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>End date is required.</div>}
+              <div style={{
+                background: hasProjection ? '#f0fdf4' : '#fffbeb',
+                border: `1px solid ${hasProjection ? '#bbf7d0' : '#fde68a'}`,
+                borderRadius: 10, padding: '1rem 1.25rem',
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <div style={{ fontSize: '1.5rem' }}>{hasProjection ? '✅' : '⚠️'}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: hasProjection ? '#166534' : '#92400e' }}>
+                    {hasProjection ? 'Cost Projection On File' : 'No Cost Projection Yet'}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: hasProjection ? '#166534' : '#92400e', marginTop: 2 }}>
+                    {hasProjection ? 'Phase code costs and hours are available.' : 'Upload a Vista projection to unlock cost data throughout this checklist.'}
+                  </div>
+                </div>
               </div>
+              {readiness?.vistaLinked && phaseCodeDetail.length > 0 && (
+                <div style={{
+                  background: hasPhaseCodeWarnings ? '#fffbeb' : '#f0fdf4',
+                  border: `1px solid ${hasPhaseCodeWarnings ? '#fde68a' : '#bbf7d0'}`,
+                  borderRadius: 10, padding: '1rem 1.25rem',
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: hasPhaseCodeWarnings ? '#92400e' : '#166534', marginBottom: 6 }}>
+                    {hasPhaseCodeWarnings ? '⚠️ Phase Code Gaps Detected' : '✅ Phase Codes Look Good'}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: hasPhaseCodeWarnings ? '#78350f' : '#166534', lineHeight: 1.6 }}>
+                    {noEstCost > 0 && <div>{noEstCost} phase code{noEstCost !== 1 ? 's are' : ' is'} missing estimated cost.</div>}
+                    {noProjectedCost > 0 && <div>{noProjectedCost} phase code{noProjectedCost !== 1 ? 's are' : ' is'} missing projected cost.</div>}
+                    {!hasPhaseCodeWarnings && <div>{phaseCodeDetail.length} phase codes are fully populated.</div>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
       }
 
-      // STEP 2 — SCHEDULE MODE
-      case 2: {
+      // STEP 7 — SCHEDULE (mode + dates)
+      case 7: {
         const modeCard = (
           mode: 'summary' | 'cost_type' | 'phase',
           title: string,
@@ -1302,14 +1346,26 @@ const PreJobWizard: React.FC = () => {
 
             <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 20, paddingTop: 20 }}>
 
-              {/* SUMMARY: dates already set */}
+              {/* SUMMARY: date inputs */}
               {schedulingMode === 'summary' && (
-                <div style={{ maxWidth: 780, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                  <div style={{ fontWeight: 700, color: '#166534', marginBottom: 4 }}>✓ You're all set for Summary scheduling</div>
-                  <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.6 }}>
-                    Your project window <strong>{startDate || '—'}</strong> → <strong>{endDate || '—'}</strong> (set in Step 1) is all Titan needs.
-                    Revenue and labor will be distributed evenly across this window.
-                    {(!startDate || !endDate) && <span style={{ color: '#b45309' }}> Go back to Step 1 to set your project dates first.</span>}
+                <div style={{ maxWidth: 780 }}>
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1rem' }}>
+                    <div style={{ fontWeight: 700, color: '#166534', marginBottom: 4 }}>Summary scheduling — set your project window</div>
+                    <div style={{ fontSize: '0.85rem', color: '#475569' }}>Revenue and labor will be distributed evenly across this window.</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={fieldLabel}>Project Start Date <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="date" style={{ ...fieldInput, borderColor: dateError && !startDate ? '#ef4444' : undefined }} value={startDate}
+                        onChange={e => { setStartDate(e.target.value); if (e.target.value) setDateError(false); }} />
+                      {dateError && !startDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>Start date is required.</div>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={fieldLabel}>Estimated Completion <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="date" style={{ ...fieldInput, borderColor: dateError && !endDate ? '#ef4444' : undefined }} value={endDate}
+                        onChange={e => { setEndDate(e.target.value); if (e.target.value) setDateError(false); }} />
+                      {dateError && !endDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>End date is required.</div>}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1326,19 +1382,30 @@ const PreJobWizard: React.FC = () => {
                 />
               )}
 
-              {/* PHASE: advisory */}
+              {/* PHASE: advisory + dates */}
               {schedulingMode === 'phase' && (
-                <div style={{ maxWidth: 780, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                  <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Phase scheduling is best built after project start</div>
-                  <div style={{ fontSize: '0.85rem', color: '#78350f', lineHeight: 1.7 }}>
-                    Phase mode gives you maximum forecasting precision — every Vista phase code gets its own start and end date.
-                    However, it requires your phase codes to be fully built out and active in Vista before it's useful.
+                <div style={{ maxWidth: 780 }}>
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1rem' }}>
+                    <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Phase scheduling is best built after project start</div>
+                    <div style={{ fontSize: '0.85rem', color: '#78350f', lineHeight: 1.7 }}>
+                      Phase mode gives you maximum forecasting precision — every Vista phase code gets its own start and end date.
+                      However, it requires your phase codes to be fully built out and active in Vista before it's useful.
+                    </div>
                   </div>
-                  <ul style={{ fontSize: '0.82rem', color: '#78350f', lineHeight: 1.8, margin: '8px 0 0 0', paddingLeft: 20 }}>
-                    <li>We'll save your Phase mode selection now.</li>
-                    <li>Once the project is underway and your phase schedule is established, go to the <strong>Schedule → Phase</strong> tab to set individual phase dates.</li>
-                    <li>For large jobs with many phase codes, this can take 30–60 minutes — plan accordingly.</li>
-                  </ul>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={fieldLabel}>Project Start Date <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="date" style={{ ...fieldInput, borderColor: dateError && !startDate ? '#ef4444' : undefined }} value={startDate}
+                        onChange={e => { setStartDate(e.target.value); if (e.target.value) setDateError(false); }} />
+                      {dateError && !startDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>Start date is required.</div>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <label style={fieldLabel}>Estimated Completion <span style={{ color: '#ef4444' }}>*</span></label>
+                      <input type="date" style={{ ...fieldInput, borderColor: dateError && !endDate ? '#ef4444' : undefined }} value={endDate}
+                        onChange={e => { setEndDate(e.target.value); if (e.target.value) setDateError(false); }} />
+                      {dateError && !endDate && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: 4 }}>End date is required.</div>}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1347,8 +1414,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 3 — PROJECT TEAM
-      case 3:
+      // STEP 2 — OFFICE TEAM
+      case 2:
         return (
           <div>
             <TitanCard
@@ -1414,8 +1481,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 4 — FIELD TEAM NOMINATIONS
-      case 4: {
+      // STEP 3 — FIELD TEAM
+      case 3: {
         const STATUS_LABEL: Record<string, string> = {
           planned: 'Pending Approval',
           active: 'Active',
@@ -1518,8 +1585,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 5 — ORIENTATION
-      case 5: {
+      // STEP 4 — ORIENTATION
+      case 4: {
         const toggleStyle = (active: boolean): React.CSSProperties => ({
           display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0.5rem 1rem',
           borderRadius: 8, border: `2px solid ${active ? '#002356' : '#e2e8f0'}`,
@@ -1630,8 +1697,8 @@ const PreJobWizard: React.FC = () => {
         );
       }
 
-      // STEP 6 — SITE CONDITIONS
-      case 6:
+      // STEP 5 — SITE CONDITIONS
+      case 5:
         return (
           <div>
             <TitanCard
@@ -1648,8 +1715,8 @@ const PreJobWizard: React.FC = () => {
           </div>
         );
 
-      // STEP 7 — SCOPE & BID NOTES
-      case 7:
+      // STEP 6 — SCOPE & BID NOTES
+      case 6:
         return (
           <div>
             <TitanCard
@@ -1906,26 +1973,20 @@ const PreJobWizard: React.FC = () => {
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       {/* Top bar */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <Link to={`/projects/${projectId}/pre-job-checklist`} style={{ color: '#6b7280', fontSize: '0.85rem', textDecoration: 'none' }}>
-            ← Back to Checklist
-          </Link>
-          <div style={{ fontWeight: 700, color: '#002356', fontSize: '1rem', marginTop: 2 }}>
-            Pre-Job Checklist — Guided Setup
-            {project?.name && <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 8 }}>· {project.name}</span>}
-          </div>
+      <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }}>
+        <div style={{ fontWeight: 700, color: '#002356', fontSize: '1rem' }}>
+          Pre-Job Checklist — Guided Setup
+          {project?.name && <span style={{ fontWeight: 400, color: '#64748b', marginLeft: 8 }}>· {project.name}</span>}
         </div>
-        <Link to={`/projects/${projectId}/pre-job-checklist`} style={{ color: '#94a3b8', fontSize: '0.8rem', textDecoration: 'none' }}>
-          Exit wizard
-        </Link>
       </div>
 
-      {/* Progress bar (hide on gate screen) */}
-      {step > 0 && step < 16 && <ProgressBar step={step} completedSteps={completedSteps} maxStepReached={maxStepReached} onStepClick={n => { setStep(n); window.scrollTo(0, 0); }} />}
+      {/* Progress bar */}
+      {step < 16 && <ProgressBar step={step} completedSteps={completedSteps} maxStepReached={maxStepReached}
+        onStepClick={n => { setStep(n); window.scrollTo(0, 0); }}
+        onStartClick={() => navigate(`/projects/${projectId}/pre-job-checklist`)} />}
 
       {/* Content */}
-      <div style={{ maxWidth: (step === 2 && schedulingMode === 'cost_type') || [9, 10, 11, 12, 13].includes(step) ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ maxWidth: (step === 7 && schedulingMode === 'cost_type') || [9, 10, 11, 12, 13].includes(step) ? '100%' : 780, margin: '0 auto', padding: '2rem 1.5rem' }}>
         {renderStepContent()}
       </div>
 
