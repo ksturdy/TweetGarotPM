@@ -648,7 +648,7 @@ const CostTypeSchedule: React.FC<Props> = ({
           {laborDatasets.length > 0 && (
             <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Manpower by Month
+                Labor Resources by Month
               </div>
               <div style={{ height: 200, position: 'relative' }}>
                 <Line
@@ -661,7 +661,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                       backgroundColor: ds.color + '18',
                       tension: 0.4,
                       pointRadius: 0,
-                      pointHoverRadius: 3,
+                      pointHoverRadius: 5,
                       borderWidth: 2,
                       fill: false,
                     })),
@@ -669,6 +669,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                   options={{
                     maintainAspectRatio: false,
                     responsive: true,
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
                       legend: {
                         display: laborDatasets.length > 1,
@@ -676,7 +677,9 @@ const CostTypeSchedule: React.FC<Props> = ({
                         labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 },
                       },
                       tooltip: {
-                        callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y ?? 0} people` },
+                        callbacks: {
+                          label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers`,
+                        },
                       },
                     },
                     scales: {
