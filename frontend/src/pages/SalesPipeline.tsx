@@ -56,6 +56,7 @@ interface SalesOpportunity {
   facilityLocationName: string;
   company: string;
   market: string;
+  locationGroup: string;
   icon: React.ReactNode;
   iconGradient: string;
 }
@@ -209,6 +210,7 @@ const SalesPipeline: React.FC = () => {
       facilityLocationName: opp.facility_location_name || opp.facility_name || '',
       company: opp.customer_id ? (opp.customer_name || '') : (opp.owner || ''),
       market: opp.market || '',
+      locationGroup: opp.location_group || '',
       icon: renderMarketIcon(opp.market),
       iconGradient: getMarketGradient(opp.market)
     };
@@ -534,22 +536,44 @@ const SalesPipeline: React.FC = () => {
       points.push({ label, cutoff: d });
     }
 
-    const values = points.map(({ cutoff }) =>
+    const totalValues = points.map(({ cutoff }) =>
       filteredApiOpportunities
         .filter(opp => new Date(opp.created_at) < cutoff)
         .reduce((sum, opp) => sum + (Number(opp.estimated_value) || 0), 0) / 1_000_000
     );
 
+    const weightedValues = points.map(({ cutoff }) =>
+      filteredApiOpportunities
+        .filter(opp => new Date(opp.created_at) < cutoff)
+        .reduce((sum, opp) => {
+          const prob = Number(opp.probability || opp.stage_probability || 0);
+          return sum + (Number(opp.estimated_value) || 0) * prob / 100;
+        }, 0) / 1_000_000
+    );
+
     return {
       labels: points.map(p => p.label),
-      datasets: [{
-        label: 'Pipeline Value',
-        data: values,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
+      datasets: [
+        {
+          label: 'Total Value',
+          data: totalValues,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.08)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 3,
+        },
+        {
+          label: 'Weighted',
+          data: weightedValues,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.0)',
+          tension: 0.4,
+          fill: false,
+          borderDash: [4, 3],
+          pointRadius: 3,
+        },
+      ]
     };
   }, [filteredApiOpportunities]);
 
@@ -746,24 +770,33 @@ const SalesPipeline: React.FC = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: false
+        display: true,
+        position: 'top' as const,
+        labels: {
+          boxWidth: 12,
+          boxHeight: 2,
+          font: { size: 10 },
+          padding: 8,
+          usePointStyle: true,
+          pointStyle: 'line',
+        }
       },
-      datalabels: {
-        display: false
+      datalabels: { display: false },
+      tooltip: {
+        callbacks: {
+          label: function(context: any) {
+            return `${context.dataset.label}: $${context.parsed.y.toFixed(1)}M`;
+          }
+        }
       }
     },
     scales: {
       y: {
         beginAtZero: true,
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)'
-        }
+        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+        ticks: { callback: function(value: any) { return `$${value}M`; } }
       },
-      x: {
-        grid: {
-          display: false
-        }
-      }
+      x: { grid: { display: false } }
     }
   };
 
@@ -802,10 +835,7 @@ const SalesPipeline: React.FC = () => {
   const chartFilteredOpportunities = searchFilteredOpportunities.filter(opp => {
     if (chartMarketFilter && opp.market !== chartMarketFilter) return false;
     if (chartStageFilter && opp.stageName !== chartStageFilter) return false;
-    if (chartLocationFilter) {
-      const apiOpp = apiOpportunities.find(a => a.id === opp.id);
-      if (apiOpp?.location_group !== chartLocationFilter) return false;
-    }
+    if (chartLocationFilter && opp.locationGroup !== chartLocationFilter) return false;
     return true;
   });
 
