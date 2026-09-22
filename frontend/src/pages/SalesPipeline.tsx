@@ -85,6 +85,7 @@ const SalesPipeline: React.FC = () => {
   const tableSectionRef = useRef<HTMLDivElement>(null);
   const [chartMarketFilter, setChartMarketFilter] = useState<string | null>(null);
   const [chartStageFilter, setChartStageFilter] = useState<string | null>(null);
+  const [chartLocationFilter, setChartLocationFilter] = useState<string | null>(null);
 
   // Close stage filter dropdown on outside click
   useEffect(() => {
@@ -564,6 +565,7 @@ const SalesPipeline: React.FC = () => {
     const sector = marketSectors[elements[0].index];
     setChartMarketFilter(prev => prev === sector ? null : sector);
     setChartStageFilter(null);
+    setChartLocationFilter(null);
     setView('table');
     setTimeout(() => tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
@@ -571,6 +573,17 @@ const SalesPipeline: React.FC = () => {
   const handleStageChartClick = (stageName: string) => {
     setChartStageFilter(prev => prev === stageName ? null : stageName);
     setChartMarketFilter(null);
+    setChartLocationFilter(null);
+    setView('table');
+    setTimeout(() => tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const handleLocationChartClick = (_event: any, elements: any[]) => {
+    if (!elements.length) { setChartLocationFilter(null); return; }
+    const group = locationGroups[elements[0].index];
+    setChartLocationFilter(prev => prev === group ? null : group);
+    setChartMarketFilter(null);
+    setChartStageFilter(null);
     setView('table');
     setTimeout(() => tableSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
@@ -668,6 +681,66 @@ const SalesPipeline: React.FC = () => {
     }
   };
 
+  // Location bar chart
+  const locationData = filteredApiOpportunities.reduce((acc, opp) => {
+    const group = opp.location_group;
+    if (!group) return acc;
+    if (!acc[group]) acc[group] = { count: 0, value: 0 };
+    acc[group].count += 1;
+    acc[group].value += Number(opp.estimated_value) || 0;
+    return acc;
+  }, {} as { [key: string]: { count: number; value: number } });
+
+  const locationGroups = Object.keys(locationData).sort((a, b) => locationData[b].value - locationData[a].value);
+
+  const locationBarChartData = {
+    labels: locationGroups.map(g => {
+      const lg = LOCATION_GROUPS.find(l => l.value === g);
+      return lg?.longLabel || g;
+    }),
+    datasets: [{
+      label: 'Pipeline Value',
+      data: locationGroups.map(g => locationData[g].value),
+      backgroundColor: locationGroups.map(g => {
+        const lg = LOCATION_GROUPS.find(l => l.value === g);
+        const color = lg?.color || '#6b7280';
+        if (!chartLocationFilter || g === chartLocationFilter) return color;
+        return hexToRgba(color, 0.25);
+      }),
+      borderRadius: 6,
+      barThickness: 35,
+    }],
+  };
+
+  const locationBarChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick: handleLocationChartClick,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        enabled: true,
+        callbacks: {
+          label: function(context: any) {
+            const group = locationGroups[context.dataIndex];
+            const lg = LOCATION_GROUPS.find(l => l.value === group);
+            const value = formatCurrency(context.parsed.y);
+            const count = locationData[group]?.count || 0;
+            return `${lg?.longLabel || group}: ${value} (${count} opportunities)`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+        ticks: { callback: function(value: any) { return formatCurrency(value); } }
+      },
+      x: { grid: { display: false } }
+    }
+  };
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -729,6 +802,10 @@ const SalesPipeline: React.FC = () => {
   const chartFilteredOpportunities = searchFilteredOpportunities.filter(opp => {
     if (chartMarketFilter && opp.market !== chartMarketFilter) return false;
     if (chartStageFilter && opp.stageName !== chartStageFilter) return false;
+    if (chartLocationFilter) {
+      const apiOpp = apiOpportunities.find(a => a.id === opp.id);
+      if (apiOpp?.location_group !== chartLocationFilter) return false;
+    }
     return true;
   });
 
@@ -1122,6 +1199,17 @@ const SalesPipeline: React.FC = () => {
         <div className="sales-chart-card">
           <div className="sales-chart-header">
             <div>
+              <div className="sales-chart-title">By Location</div>
+              <div className="sales-chart-subtitle">Pipeline by region</div>
+            </div>
+          </div>
+          <div className="sales-chart-container" style={{ cursor: 'pointer' }}>
+            <Bar data={locationBarChartData} options={locationBarChartOptions} />
+          </div>
+        </div>
+        <div className="sales-chart-card">
+          <div className="sales-chart-header">
+            <div>
               <div className="sales-chart-title">Stage Funnel</div>
               <div className="sales-chart-subtitle">Opportunities by stage</div>
             </div>
@@ -1225,10 +1313,12 @@ const SalesPipeline: React.FC = () => {
                 ? `Market: ${chartMarketFilter}`
                 : chartStageFilter
                   ? `Stage: ${chartStageFilter}`
-                  : myOpportunitiesOnly ? 'My Opportunities' : myTeamOnly ? 'My Team' : 'All Opportunities'}
-              {(chartMarketFilter || chartStageFilter) && (
+                  : chartLocationFilter
+                    ? `Location: ${LOCATION_GROUPS.find(g => g.value === chartLocationFilter)?.longLabel || chartLocationFilter}`
+                    : myOpportunitiesOnly ? 'My Opportunities' : myTeamOnly ? 'My Team' : 'All Opportunities'}
+              {(chartMarketFilter || chartStageFilter || chartLocationFilter) && (
                 <button
-                  onClick={() => { setChartMarketFilter(null); setChartStageFilter(null); }}
+                  onClick={() => { setChartMarketFilter(null); setChartStageFilter(null); setChartLocationFilter(null); }}
                   style={{
                     marginLeft: '8px',
                     padding: '2px 8px',

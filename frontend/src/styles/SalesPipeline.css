@@ -28,8 +28,10 @@
   max-width: 100%;
   padding: 12px 20px;
   background: var(--bg-dark);
-  min-height: 100vh;
-  overflow-x: hidden;
+  height: calc(100vh - 64px - 3rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -39,6 +41,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .sales-page-title {
@@ -108,6 +111,7 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .sales-kpi-card {
@@ -171,9 +175,10 @@
 /* Charts Section - Compact */
 .sales-charts-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
   gap: 12px;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .sales-chart-card {
@@ -282,7 +287,11 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
-  margin-bottom: 32px;
+  padding-bottom: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
 }
 
 .sales-pipeline-column {
@@ -384,6 +393,18 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sales-table-scroll-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .sales-table-header {
@@ -553,7 +574,9 @@
   color: var(--text-secondary);
   background: var(--bg-dark);
   border-bottom: 1px solid var(--border);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .sales-table th.sales-sortable {
@@ -888,10 +911,13 @@
 }
 
 /* Responsive */
-@media (max-width: 1400px) {
+@media (max-width: 1600px) {
   .sales-charts-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+@media (max-width: 1400px) {
   .sales-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -902,7 +928,7 @@
 
 @media (max-width: 1024px) {
   .sales-charts-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
   .sales-pipeline-board {
     grid-template-columns: repeat(2, 1fr);
@@ -944,6 +970,10 @@
 @media (max-width: 768px) {
   .sales-container {
     padding: 16px;
+    height: auto;
+    min-height: calc(100vh - 64px - 1.5rem);
+    display: block;
+    overflow: visible;
   }
 
   .sales-page-header {
