@@ -7,6 +7,11 @@ import {
   type SegmentCosts,
 } from '../../services/scheduleSegments';
 import { getContourMultipliers, contourOptions, ContourVisual, type ContourType } from '../../utils/contours';
+import type { Project } from '../../services/projects';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -26,6 +31,24 @@ const SEGMENT_COLOR: Record<string, string> = {
   material: '#10b981', subcontract: '#f59e0b',
   rental: '#8b5cf6', equipment: '#ef4444', gc: '#6b7280',
 };
+
+interface ShiftSetting { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number; }
+type ShiftSettings = Record<string, ShiftSetting>;
+
+const SHIFT_DAY_KEYS: (keyof ShiftSetting)[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const SHIFT_DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+const DEFAULT_SHIFT: ShiftSetting = { mon: 8, tue: 8, wed: 8, thu: 8, fri: 8, sat: 0, sun: 0 };
+
+const SHIFT_DEFAULTS: ShiftSettings = {
+  '30': { ...DEFAULT_SHIFT }, '35': { ...DEFAULT_SHIFT },
+  '40': { ...DEFAULT_SHIFT }, '45': { ...DEFAULT_SHIFT },
+  '50': { ...DEFAULT_SHIFT }, '55': { ...DEFAULT_SHIFT },
+  '70': { ...DEFAULT_SHIFT }, bas:  { ...DEFAULT_SHIFT },
+};
+
+const weeklyHours    = (s: ShiftSetting) => SHIFT_DAY_KEYS.reduce((sum, d) => sum + (s[d] ?? 0), 0);
+const hoursPerPersonPerMonth = (s: ShiftSetting) => weeklyHours(s) * (52 / 12);
 
 const ROW_H = 28;
 const GROUP_H = 22;
@@ -279,12 +302,33 @@ interface Props {
   onSegmentUpdate: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
   onInitialize: () => void;
   initPending: boolean;
+  project?: Project;
 }
 
 const CostTypeSchedule: React.FC<Props> = ({
-  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending,
+  projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project,
 }) => {
   const [viewMode, setViewMode] = useState<'gantt' | 'table'>('gantt');
+
+  // ── Shift settings ────────────────────────────────────────────────────────
+  const [shiftSettings, setShiftSettings] = useState<ShiftSettings>(() => {
+    try {
+      const s = localStorage.getItem('costTypeSchedule_shifts');
+      if (!s) return { ...SHIFT_DEFAULTS };
+      const parsed = JSON.parse(s);
+      // Discard old format (had hoursPerDay/daysPerWeek) — check first entry
+      const firstVal = Object.values(parsed)[0] as any;
+      if (firstVal && 'hoursPerDay' in firstVal) return { ...SHIFT_DEFAULTS };
+      return { ...SHIFT_DEFAULTS, ...parsed };
+    } catch { return { ...SHIFT_DEFAULTS }; }
+  });
+  const updateShift = useCallback((key: string, day: keyof ShiftSetting, value: number) => {
+    setShiftSettings(prev => {
+      const next = { ...prev, [key]: { ...(prev[key] ?? SHIFT_DEFAULTS[key] ?? DEFAULT_SHIFT), [day]: value } };
+      localStorage.setItem('costTypeSchedule_shifts', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   // ── Column widths ─────────────────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<typeof GANTT_COL_DEFAULTS>(() => {
@@ -412,6 +456,65 @@ const CostTypeSchedule: React.FC<Props> = ({
     rowItems.push({ type: 'seg', def, idx });
   });
 
+  // ── Chart data ────────────────────────────────────────────────────────────
+
+  const LABOR_CHART_COLORS: Record<string, string> = {
+    '30': '#3b82f6', '35': '#1d4ed8',
+    '40': '#0ea5e9', '45': '#0369a1',
+    '50': '#06b6d4', '55': '#0e7490',
+    '70': '#64748b', bas: '#8b5cf6',
+  };
+
+  const chartLabels = allMonths.map(m =>
+    m.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+  );
+
+  // Precompute monthly remaining-cost distribution per active segment
+  const segMonthlyRem = new Map<string, number[]>();
+  SEGMENT_DEFINITIONS.forEach(def => {
+    if (!activeKeys.includes(def.key)) return;
+    const seg = segmentMap.get(def.key);
+    const c   = costsMap.get(def.key);
+    const rem = (c?.projected_cost ?? 0) - (c?.jtd_cost ?? 0);
+    segMonthlyRem.set(def.key,
+      rem > 0
+        ? distributeMonthly(rem, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        : allMonths.map(() => 0)
+    );
+  });
+
+  // Manpower datasets: hours ÷ hrs-per-person-per-month
+  const laborDatasets = SEGMENT_DEFINITIONS
+    .filter(d => d.isLabor && activeKeys.includes(d.key))
+    .map(def => {
+      const seg      = segmentMap.get(def.key);
+      const c        = costsMap.get(def.key);
+      const shift    = shiftSettings[def.key] ?? SHIFT_DEFAULTS[def.key] ?? { hoursPerDay: 8, daysPerWeek: 5 };
+      const capacity = hoursPerPersonPerMonth(shift);
+      const hours    = c?.est_hours
+        ? distributeMonthly(c.est_hours, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        : allMonths.map(() => 0);
+      const data = hours.map(h => capacity > 0 ? Math.round((h / capacity) * 10) / 10 : 0);
+      return { label: def.label, data, color: LABOR_CHART_COLORS[def.key] ?? '#6b7280' };
+    })
+    .filter(ds => ds.data.some(v => v > 0));
+
+  // Monthly total cost and revenue
+  const monthlyTotalCost = allMonths.map((_, i) =>
+    SEGMENT_DEFINITIONS.reduce((sum, def) => sum + (segMonthlyRem.get(def.key)?.[i] ?? 0), 0)
+  );
+
+  const projRev = project?.projected_revenue ?? 0;
+  const projCost = project?.projected_cost ?? 0;
+  const revMultiplier = projRev > 0 && projCost > 0 ? projRev / projCost : 1;
+  const monthlyRevenue = monthlyTotalCost.map(c => c * revMultiplier);
+  const hasCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
+
+  // Shared chart options helpers
+  const chartScales = {
+    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 as const }, maxRotation: 45 as const, color: '#64748b' } },
+  };
+
   // ── Column resize handle ──────────────────────────────────────────────────
   const resizeHandle = (col: GanttColKey) => (
     <div
@@ -467,6 +570,136 @@ const CostTypeSchedule: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* ── CHARTS + SHIFT SETTINGS ────────────────────────────────────────── */}
+      {hasCharts && (
+        <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start' }}>
+
+          {/* ── Shift Settings card ── */}
+          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ padding: '0.5rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.68rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Shift Schedule
+            </div>
+            {/* Day header */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+              <span style={{ flex: 1, fontSize: '0.6rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Trade</span>
+              {SHIFT_DAY_LABELS.map((lbl, i) => (
+                <span key={i} style={{ width: 32, textAlign: 'center', fontSize: '0.6rem', fontWeight: 700, color: i >= 5 ? '#f59e0b' : '#64748b', flexShrink: 0 }}>{lbl}</span>
+              ))}
+              <span style={{ width: 40, textAlign: 'right', fontSize: '0.6rem', color: '#94a3b8', flexShrink: 0 }}>Wk</span>
+            </div>
+            {/* Trade rows */}
+            {SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeKeys.includes(d.key)).map((def, ri) => {
+              const shift = shiftSettings[def.key] ?? DEFAULT_SHIFT;
+              const total = weeklyHours(shift);
+              return (
+                <div key={def.key} style={{ display: 'flex', alignItems: 'center', padding: '0.28rem 0.75rem', borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 110 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: LABOR_CHART_COLORS[def.key] ?? '#6b7280', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.7rem', color: '#374151', whiteSpace: 'nowrap' }}>{def.label}</span>
+                  </div>
+                  {SHIFT_DAY_KEYS.map((day, di) => (
+                    <input key={day} type="number" min={0} max={16} step={0.5} value={shift[day]}
+                      onChange={e => updateShift(def.key, day, Math.max(0, Math.min(16, Number(e.target.value))))}
+                      style={{ width: 32, padding: '0.15rem 0', border: '1px solid #e2e8f0', borderRadius: 3, fontSize: '0.7rem', textAlign: 'center', fontFamily: 'inherit', flexShrink: 0, background: di >= 5 ? '#fffbeb' : '#fff', color: shift[day] === 0 ? '#cbd5e1' : '#1e293b' }}
+                    />
+                  ))}
+                  <span style={{ width: 40, textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#3b82f6', flexShrink: 0 }}>{total}h</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Manpower chart (middle) ── */}
+          {laborDatasets.length > 0 && (
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Manpower by Month
+              </div>
+              <div style={{ height: 200, position: 'relative' }}>
+                <Line
+                  data={{
+                    labels: chartLabels,
+                    datasets: laborDatasets.map(ds => ({
+                      label: ds.label,
+                      data: ds.data,
+                      borderColor: ds.color,
+                      backgroundColor: ds.color + '18',
+                      tension: 0.4,
+                      pointRadius: 0,
+                      pointHoverRadius: 3,
+                      borderWidth: 2,
+                      fill: false,
+                    })),
+                  }}
+                  options={{
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        display: laborDatasets.length > 1,
+                        position: 'top',
+                        labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 },
+                      },
+                      tooltip: {
+                        callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y ?? 0} people` },
+                      },
+                    },
+                    scales: {
+                      ...chartScales,
+                      y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1, callback: (v) => `${v}` } },
+                    },
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── Revenue chart ── */}
+          {monthlyRevenue.some(v => v > 0) && (
+            <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                Revenue by Month
+                {revMultiplier === 1 && projRev === 0 && (
+                  <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                    (projected cost — add revenue to project to scale)
+                  </span>
+                )}
+              </div>
+              <div style={{ height: 200, position: 'relative' }}>
+                <Bar
+                  data={{
+                    labels: chartLabels,
+                    datasets: [{
+                      label: revMultiplier !== 1 ? 'Revenue' : 'Projected Cost',
+                      data: monthlyRevenue,
+                      backgroundColor: '#10b981' + '70',
+                      borderColor: '#10b981',
+                      borderWidth: 1,
+                      borderRadius: 2,
+                    }],
+                  }}
+                  options={{
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        callbacks: { label: ctx => `${ctx.dataset.label}: ${fmtCompact(ctx.parsed.y)}` },
+                      },
+                    },
+                    scales: {
+                      ...chartScales,
+                      y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: (v) => fmtCompact(v as number) } },
+                    },
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
 
       {/* ── GANTT VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'gantt' && (

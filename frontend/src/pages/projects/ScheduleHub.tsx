@@ -352,6 +352,7 @@ const ScheduleHub: React.FC = () => {
           onSegmentUpdate={handleSegmentUpdate}
           onInitialize={() => initMutation.mutate()}
           initPending={initMutation.isPending}
+          project={project}
         />
       )}
 
