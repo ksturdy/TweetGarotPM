@@ -3344,7 +3344,7 @@ const GridRow: React.FC<{
   const itemBillable = mode === 'billable' ? Object.values(monthlyVals).reduce((a, b) => a + b, 0) : 0;
   const itemRemCost = mode === 'billable' ? Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost)) : 0;
   const itemGmPct = mode === 'billable' && itemBillable > 0 ? (itemBillable - itemRemCost) / itemBillable * 100 : null;
-  const isUnrated = mode === 'billable' && (item.cost_types?.[0] || 0) === 1 && itemRemCost > 0 && itemBillable === 0;
+  const isUnrated = mode === 'billable' && (item.cost_types?.[0] || 0) === 1 && itemRemCost > 0 && !item.billable_rate_id;
   const billableRowBg = !isSelected && mode === 'billable' && itemRemCost > 0
     ? isUnrated || (itemGmPct !== null && itemGmPct < 0) ? '#fef2f2'
     : itemGmPct !== null && itemGmPct < 10 ? '#fffbeb'
@@ -4533,8 +4533,7 @@ const PhaseSchedule: React.FC = () => {
       if (ct !== 1) return false;
       const remCostItem = Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost));
       if (remCostItem <= 0) return false;
-      const itemBill = Object.values(computeMonthlyValues(item, periods, 'billable', hpwp, lrMap, markup, period)).reduce((a, b) => a + b, 0);
-      return itemBill === 0;
+      return !item.billable_rate_id;
     });
     const unratedCount = unratedItems.length;
     const unratedCost = unratedItems.reduce((s, i) => s + Math.max(0, parseNum(i.total_projected_cost) - parseNum(i.total_jtd_cost)), 0);
