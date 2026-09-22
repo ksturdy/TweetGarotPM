@@ -96,11 +96,11 @@ async function getActiveSegmentKeys(projectId, tenantId) {
 async function getCostsByProject(projectId, tenantId) {
   const { rows } = await db.query(
     `SELECT segment_key,
-            SUM(est_cost)       AS est_cost,
-            SUM(est_hours)      AS est_hours,
-            SUM(jtd_cost)       AS jtd_cost,
-            SUM(jtd_hours)      AS jtd_hours,
-            SUM(projected_cost) AS projected_cost
+            SUM(NULLIF(est_cost,       'NaN'::numeric)) AS est_cost,
+            SUM(NULLIF(est_hours,      'NaN'::numeric)) AS est_hours,
+            SUM(NULLIF(jtd_cost,       'NaN'::numeric)) AS jtd_cost,
+            SUM(NULLIF(jtd_hours,      'NaN'::numeric)) AS jtd_hours,
+            SUM(NULLIF(projected_cost, 'NaN'::numeric)) AS projected_cost
        FROM (
          SELECT
            CASE

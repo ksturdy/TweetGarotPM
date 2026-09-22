@@ -67,8 +67,10 @@ const fmtDateShort = (s: string | null | undefined): string => {
   return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
 };
 
+const safeN = (v: number | null | undefined) => { const n = Number(v); return isNaN(n) ? 0 : n; };
+
 const fmtCompact = (v: number | null | undefined) => {
-  if (!v) return '—';
+  if (v == null || isNaN(v as number) || v === 0) return '—';
   const abs = Math.abs(v);
   if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000)     return `$${Math.round(v / 1000)}K`;
@@ -428,9 +430,9 @@ const CostTypeSchedule: React.FC<Props> = ({
   const costsMap   = new Map(costs.map(c => [c.segment_key, c]));
   const hasAnyDates = segments.some(s => s.start_date || s.end_date);
 
-  const totalEst = costs.reduce((s, c) => s + (c.est_cost ?? 0), 0);
-  const totalJtd = costs.reduce((s, c) => s + (c.jtd_cost ?? 0), 0);
-  const totalRem = costs.reduce((s, c) => s + ((c.projected_cost ?? 0) - (c.jtd_cost ?? 0)), 0);
+  const totalEst = costs.reduce((s, c) => s + safeN(c.est_cost), 0);
+  const totalJtd = costs.reduce((s, c) => s + safeN(c.jtd_cost), 0);
+  const totalRem = costs.reduce((s, c) => s + (safeN(c.projected_cost) - safeN(c.jtd_cost)), 0);
 
   // ── Timeline ──────────────────────────────────────────────────────────────
   const allStarts = segments.map(s => s.start_date ? new Date(s.start_date.slice(0, 10)).getTime() : null).filter(Boolean) as number[];
@@ -475,7 +477,7 @@ const CostTypeSchedule: React.FC<Props> = ({
     if (!activeKeys.includes(def.key)) return;
     const seg = segmentMap.get(def.key);
     const c   = costsMap.get(def.key);
-    const rem = (c?.projected_cost ?? 0) - (c?.jtd_cost ?? 0);
+    const rem = safeN(c?.projected_cost) - safeN(c?.jtd_cost);
     segMonthlyRem.set(def.key,
       rem > 0
         ? distributeMonthly(rem, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
