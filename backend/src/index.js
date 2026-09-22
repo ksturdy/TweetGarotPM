@@ -30,6 +30,7 @@ const { captureAllSnapshots } = require('./jobs/weeklySnapshots');
 const { runScheduledReports } = require('./jobs/scheduledReportRunner');
 const { runTradeShowReminders } = require('./jobs/tradeShowReminders');
 const { runTradeShowAutoComplete } = require('./jobs/tradeShowAutoComplete');
+const { runOpportunityReminders } = require('./jobs/opportunityReminders');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -460,6 +461,14 @@ server.listen(config.port, () => {
     });
   });
   console.log(`  ✅ Trade show reminder cron active (every 5 min)`);
+
+  // Opportunity follow-up reminders - check every 5 minutes
+  cron.schedule('*/5 * * * *', () => {
+    runOpportunityReminders().catch(err => {
+      console.error('[Cron] Opportunity reminder job failed:', err);
+    });
+  });
+  console.log(`  ✅ Opportunity reminder cron active (every 5 min)`);
 
   // Auto-complete past trade shows - nightly at 1:00 AM ET
   cron.schedule('0 1 * * *', () => {

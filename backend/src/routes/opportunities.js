@@ -8,6 +8,7 @@ const OpportunityLink = require('../models/OpportunityLink');
 const OpportunityFollower = require('../models/OpportunityFollower');
 const OpportunityEstimate = require('../models/OpportunityEstimate');
 const OpportunityScore = require('../models/OpportunityScore');
+const OpportunityReminder = require('../models/OpportunityReminder');
 const Notification = require('../models/Notification');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
@@ -915,6 +916,63 @@ router.delete('/:id/scores/:scoreId', async (req, res, next) => {
       return res.status(404).json({ error: 'Score not found' });
     }
     res.json({ message: 'Score deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Reminders =====
+
+// GET /:id/reminders — list reminders for the current user on this opportunity
+router.get('/:id/reminders', async (req, res, next) => {
+  try {
+    const reminders = await OpportunityReminder.findByOpportunity(
+      Number(req.params.id), req.user.id
+    );
+    res.json(reminders);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /:id/reminders — create a reminder
+router.post('/:id/reminders',
+  [
+    body('remind_at').notEmpty().withMessage('remind_at is required'),
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+      if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
+
+      const reminder = await OpportunityReminder.create({
+        tenantId: req.tenantId,
+        opportunityId: Number(req.params.id),
+        userId: req.user.id,
+        remindAt: req.body.remind_at,
+        note: req.body.note || null,
+        recurrenceDays: req.body.recurrence_days || null,
+      });
+      res.status(201).json(reminder);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// DELETE /:id/reminders/:reminderId — cancel a reminder
+router.delete('/:id/reminders/:reminderId', async (req, res, next) => {
+  try {
+    const deleted = await OpportunityReminder.delete(
+      Number(req.params.reminderId), req.user.id
+    );
+    if (!deleted) return res.status(404).json({ error: 'Reminder not found' });
+    res.json({ message: 'Reminder cancelled' });
   } catch (error) {
     next(error);
   }
