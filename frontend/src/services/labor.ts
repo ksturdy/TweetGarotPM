@@ -260,6 +260,7 @@ export const ASSIGNMENT_ROLES = [
   'Apprentice 1',
   'Pre-Apprentice',
   'Youth Apprentice',
+  'Industrial Fabricator',
   'Helper',
 ] as const;
 
