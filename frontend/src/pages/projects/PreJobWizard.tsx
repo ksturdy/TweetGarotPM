@@ -212,6 +212,8 @@ const PreJobWizard: React.FC = () => {
   const wizardKey = `pjc_wizard_step_${projectId}`;
   const completedKey = `pjc_completed_${projectId}`;
   const maxStepKey = `pjc_maxstep_${projectId}`;
+  // Steps the user has explicitly marked incomplete — seeding must not override these
+  const manuallyIncompleteKey = `pjc_manual_incomplete_${projectId}`;
 
   const [completedSteps, setCompletedStepsRaw] = useState<Set<number>>(() => {
     try {
@@ -234,6 +236,13 @@ const PreJobWizard: React.FC = () => {
       localStorage.setItem(completedKey, JSON.stringify([...next]));
       return next;
     });
+    // Clear the manual-incomplete flag so seeding can re-add it if needed later
+    try {
+      const raw = localStorage.getItem(manuallyIncompleteKey);
+      const set = new Set<number>(raw ? JSON.parse(raw) : []);
+      set.delete(stepNum);
+      localStorage.setItem(manuallyIncompleteKey, JSON.stringify([...set]));
+    } catch { /**/ }
   };
 
   const unmarkStepComplete = (stepNum: number) => {
@@ -243,6 +252,13 @@ const PreJobWizard: React.FC = () => {
       localStorage.setItem(completedKey, JSON.stringify([...next]));
       return next;
     });
+    // Record this as an explicit user choice so seeding doesn't restore it
+    try {
+      const raw = localStorage.getItem(manuallyIncompleteKey);
+      const set = new Set<number>(raw ? JSON.parse(raw) : []);
+      set.add(stepNum);
+      localStorage.setItem(manuallyIncompleteKey, JSON.stringify([...set]));
+    } catch { /**/ }
   };
 
   const setStep = (val: number | ((s: number) => number)) => {
@@ -499,10 +515,19 @@ const PreJobWizard: React.FC = () => {
 
     if (dbComplete.size === 0) return;
 
+    // Don't re-add steps the user has explicitly marked incomplete
+    let manuallyIncomplete = new Set<number>();
+    try {
+      const raw = localStorage.getItem(manuallyIncompleteKey);
+      manuallyIncomplete = new Set<number>(raw ? JSON.parse(raw) : []);
+    } catch { /**/ }
+
     setCompletedStepsRaw(prev => {
       const next = new Set(prev);
       let changed = false;
-      dbComplete.forEach(s => { if (!next.has(s)) { next.add(s); changed = true; } });
+      dbComplete.forEach(s => {
+        if (!next.has(s) && !manuallyIncomplete.has(s)) { next.add(s); changed = true; }
+      });
       if (!changed) return prev;
       localStorage.setItem(completedKey, JSON.stringify([...next]));
       return next;
