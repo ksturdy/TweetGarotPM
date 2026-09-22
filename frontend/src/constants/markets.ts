@@ -17,6 +17,7 @@ export const MARKETS: MarketOption[] = [
   { value: 'Highway/Street', icon: '🛣️', label: 'Highway/Street' },
   { value: 'Lodging', icon: '🏨', label: 'Lodging' },
   { value: 'Manufacturing', icon: '🏭', label: 'Manufacturing' },
+  { value: 'Mission Critical', icon: '🖥️', label: 'Mission Critical' },
   { value: 'MFG-Food', icon: '🍔', label: 'MFG-Food' },
   { value: 'MFG-Other', icon: '🏭', label: 'MFG-Other' },
   { value: 'MFG-Paper', icon: '📄', label: 'MFG-Paper' },

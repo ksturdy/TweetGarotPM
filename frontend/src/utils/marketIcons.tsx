@@ -37,6 +37,7 @@ const marketIconMap: { [key: string]: LucideIcon } = {
   'Government': Landmark,
   'Hospitality': BedDouble,
   'Data Center': Server,
+  'Mission Critical': Server,
   'Hotel': BedDouble,
   'Multi-Family': Home,
 };
@@ -80,6 +81,7 @@ const marketGradientMap: { [key: string]: string } = {
   'Government': 'linear-gradient(135deg, #8b5cf6, #ec4899)',
   'Hospitality': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
   'Data Center': 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+  'Mission Critical': 'linear-gradient(135deg, #1e3a5f, #0ea5e9)',
   'Hotel': 'linear-gradient(135deg, #f43f5e, #f59e0b)',
   'Multi-Family': 'linear-gradient(135deg, #10b981, #3b82f6)',
 };
