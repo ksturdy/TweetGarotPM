@@ -42,7 +42,59 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// POST /api/trade-shows/extract-url - Extract trade show info from a URL using Schema.org / OpenGraph
+// ── AI extraction helpers ────────────────────────────────────────────────────
+
+function getPageText($) {
+  $('script, style, nav, header, footer, aside, iframe, noscript').remove();
+  $('[class*="nav"], [class*="menu"], [class*="footer"], [class*="cookie"], [class*="banner"], [id*="cookie"], [id*="banner"]').remove();
+  return $('body').text().replace(/[\s ]+/g, ' ').trim().slice(0, 8000);
+}
+
+async function extractWithAI(text) {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const today = new Date().toISOString().slice(0, 10);
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 512,
+    system: 'You are a precise event data extractor. Return ONLY valid JSON — no markdown fences, no explanation.',
+    messages: [{
+      role: 'user',
+      content: `Today is ${today}. Extract trade show / event details from the text below.
+Return a JSON object with exactly these fields (use null for anything not found):
+{
+  "name": null,
+  "description": null,
+  "event_start_date": null,
+  "event_end_date": null,
+  "event_start_time": null,
+  "event_end_time": null,
+  "registration_deadline": null,
+  "venue": null,
+  "address": null,
+  "city": null,
+  "state": null,
+  "country": null,
+  "registration_cost": null
+}
+Rules:
+- dates → YYYY-MM-DD
+- times → HH:MM (24-hour)
+- state → 2-letter US abbreviation when applicable
+- registration_cost → USD number (0 if free, null if not mentioned)
+- description → 1–3 sentence plain-text summary of what the event is
+
+TEXT:
+${text}`,
+    }],
+  });
+
+  const raw = message.content[0].text.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+  return JSON.parse(raw);
+}
+
+// POST /api/trade-shows/extract-url - Extract event info from a URL (Schema.org + AI enrichment)
 router.post('/extract-url', async (req, res, next) => {
   try {
     const { url } = req.body;
@@ -67,8 +119,9 @@ router.post('/extract-url', async (req, res, next) => {
     try {
       const response = await axios.get(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; TitanPM/1.0)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
         timeout: 10000,
         maxRedirects: 5,
@@ -82,16 +135,10 @@ router.post('/extract-url', async (req, res, next) => {
     const $ = cheerio.load(html);
     const result = {};
 
-    const extractDate = (val) => {
-      if (!val) return null;
-      return String(val).split('T')[0];
-    };
-    const extractTime = (val) => {
-      if (!val || !String(val).includes('T')) return null;
-      return String(val).split('T')[1].substring(0, 5);
-    };
+    const extractDate = (val) => { if (!val) return null; return String(val).split('T')[0]; };
+    const extractTime = (val) => { if (!val || !String(val).includes('T')) return null; return String(val).split('T')[1].substring(0, 5); };
 
-    // Try Schema.org JSON-LD
+    // ── Schema.org JSON-LD ───────────────────────────────────────────────────
     $('script[type="application/ld+json"]').each((_, el) => {
       if (result.name) return;
       try {
@@ -101,41 +148,28 @@ router.post('/extract-url', async (req, res, next) => {
         const items = Array.isArray(json) ? json : (json['@graph'] ? json['@graph'] : [json]);
         for (const item of items) {
           const type = item['@type'];
-          const isEvent = type === 'Event' || (Array.isArray(type) && type.includes('Event'));
-          if (!isEvent) continue;
+          if (!(type === 'Event' || (Array.isArray(type) && type.includes('Event')))) continue;
 
           if (item.name) result.name = String(item.name).trim();
           if (item.description) result.description = String(item.description).trim();
           result.website_url = item.url || url;
-
-          if (item.startDate) {
-            result.event_start_date = extractDate(item.startDate);
-            const t = extractTime(item.startDate);
-            if (t) result.event_start_time = t;
-          }
-          if (item.endDate) {
-            result.event_end_date = extractDate(item.endDate);
-            const t = extractTime(item.endDate);
-            if (t) result.event_end_time = t;
-          }
+          if (item.startDate) { result.event_start_date = extractDate(item.startDate); const t = extractTime(item.startDate); if (t) result.event_start_time = t; }
+          if (item.endDate)   { result.event_end_date   = extractDate(item.endDate);   const t = extractTime(item.endDate);   if (t) result.event_end_time   = t; }
 
           const loc = item.location;
           if (loc && typeof loc === 'object') {
             if (loc.name) result.venue = String(loc.name).trim();
             const addr = loc.address;
             if (addr) {
-              if (typeof addr === 'string') {
-                result.address = addr;
-              } else {
-                if (addr.streetAddress) result.address = String(addr.streetAddress).trim();
-                if (addr.addressLocality) result.city = String(addr.addressLocality).trim();
-                if (addr.addressRegion) result.state = String(addr.addressRegion).trim();
+              if (typeof addr === 'string') { result.address = addr; }
+              else {
+                if (addr.streetAddress)  result.address = String(addr.streetAddress).trim();
+                if (addr.addressLocality) result.city   = String(addr.addressLocality).trim();
+                if (addr.addressRegion)  result.state   = String(addr.addressRegion).trim();
                 if (addr.addressCountry) result.country = String(addr.addressCountry).trim();
               }
             }
-          } else if (loc && typeof loc === 'string') {
-            result.venue = loc;
-          }
+          } else if (loc && typeof loc === 'string') { result.venue = loc; }
 
           const offers = item.offers ? (Array.isArray(item.offers) ? item.offers : [item.offers]) : [];
           for (const offer of offers) {
@@ -143,34 +177,52 @@ router.post('/extract-url', async (req, res, next) => {
             if (!isNaN(price)) { result.registration_cost = price; break; }
             if (offer.validThrough) result.registration_deadline = extractDate(offer.validThrough);
           }
-
           break;
         }
-      } catch {
-        // Malformed JSON-LD — skip
-      }
+      } catch { /* malformed JSON-LD */ }
     });
 
-    // OpenGraph fallbacks
-    if (!result.name) {
-      result.name =
-        $('meta[property="og:title"]').attr('content') ||
-        $('meta[name="twitter:title"]').attr('content') ||
-        $('title').text().trim() ||
-        null;
-    }
-    if (!result.description) {
-      result.description =
-        $('meta[property="og:description"]').attr('content') ||
-        $('meta[name="description"]').attr('content') ||
-        null;
-    }
-    if (!result.website_url) {
-      result.website_url = $('meta[property="og:url"]').attr('content') || url;
+    // ── OpenGraph fallbacks ──────────────────────────────────────────────────
+    if (!result.name)        result.name        = $('meta[property="og:title"]').attr('content')       || $('meta[name="twitter:title"]').attr('content') || $('title').text().trim() || null;
+    if (!result.description) result.description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content')   || null;
+    if (!result.website_url) result.website_url = $('meta[property="og:url"]').attr('content')         || url;
+
+    // ── AI enrichment: fill any fields still missing ─────────────────────────
+    const missingKey = ['event_start_date', 'city', 'venue'].some(k => !result[k]);
+    if (missingKey && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const pageText = getPageText($);
+        const aiData = await extractWithAI(pageText);
+        for (const [k, v] of Object.entries(aiData)) {
+          if (v != null && result[k] == null) result[k] = v;
+        }
+        result._ai_enriched = true;
+      } catch { /* AI failed — return what we have */ }
     }
 
     res.json(result);
   } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/trade-shows/extract-text - Extract event info from pasted text using AI
+router.post('/extract-text', async (req, res, next) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'AI extraction is not configured on this server.' });
+    }
+
+    const aiData = await extractWithAI(text.trim());
+    res.json({ ...aiData, _ai_enriched: true });
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      return res.status(422).json({ error: 'AI returned an unexpected response. Please try again.' });
+    }
     next(err);
   }
 });

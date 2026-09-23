@@ -164,7 +164,10 @@ export const tradeShowsApi = {
     api.post<TradeShow>(`/trade-shows/${id}/recur`, data),
 
   extractFromUrl: (url: string) =>
-    api.post<Record<string, string | number | null>>('/trade-shows/extract-url', { url }),
+    api.post<Record<string, string | number | null | boolean>>('/trade-shows/extract-url', { url }),
+
+  extractFromText: (text: string) =>
+    api.post<Record<string, string | number | null | boolean>>('/trade-shows/extract-text', { text }),
 
   // Attendees
   getAttendees: (id: number) =>
