@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Feedback, FeedbackComment } from '../../services/feedback';
+import { Feedback, FeedbackComment, FeedbackFollower, UserSearchResult, feedbackService } from '../../services/feedback';
 import { attachmentsApi } from '../../services/attachments';
 import { useAuth } from '../../context/AuthContext';
 import './FeedbackDetail.css';
@@ -13,7 +13,15 @@ interface FeedbackDetailProps {
   onDeleteComment?: (commentId: number) => Promise<void>;
   onUpdateStatus?: (status: string) => Promise<void>;
   onClose: () => void;
+  followers?: FeedbackFollower[];
+  isFollowing?: boolean;
+  onToggleFollow?: () => Promise<void>;
+  onAddFollower?: (userId: number) => Promise<void>;
+  onRemoveFollower?: (userId: number) => Promise<void>;
 }
+
+const avatarColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+const colorFor = (id: number) => avatarColors[id % avatarColors.length];
 
 const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   feedback,
@@ -22,7 +30,12 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   onUpdateComment,
   onDeleteComment,
   onUpdateStatus,
-  onClose
+  onClose,
+  followers = [],
+  isFollowing = false,
+  onToggleFollow,
+  onAddFollower,
+  onRemoveFollower,
 }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -32,6 +45,36 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Add-follower typeahead state
+  const [addingFollower, setAddingFollower] = useState(false);
+  const [followerSearch, setFollowerSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (addingFollower) addInputRef.current?.focus();
+  }, [addingFollower]);
+
+  useEffect(() => {
+    if (!followerSearch.trim() || followerSearch.length < 2) { setSearchResults([]); return; }
+    const tid = setTimeout(async () => {
+      setSearchLoading(true);
+      try { setSearchResults(await feedbackService.searchUsers(followerSearch)); }
+      catch { setSearchResults([]); }
+      finally { setSearchLoading(false); }
+    }, 250);
+    return () => clearTimeout(tid);
+  }, [followerSearch]);
+
+  const handlePickFollower = async (result: UserSearchResult) => {
+    if (!onAddFollower) return;
+    await onAddFollower(result.id);
+    setAddingFollower(false);
+    setFollowerSearch('');
+    setSearchResults([]);
+  };
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', 'feedback', feedback.id],
@@ -197,6 +240,104 @@ const FeedbackDetail: React.FC<FeedbackDetailProps> = ({
           <div className="info-row">
             <span className="info-label">Votes:</span>
             <span className="info-value">{feedback.votes_count}</span>
+          </div>
+
+          {/* Watching strip */}
+          <div className="info-row" style={{ alignItems: 'flex-start', gap: 0 }}>
+            <span className="info-label" style={{ paddingTop: 4 }}>Watching:</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem', flex: 1 }}>
+              {followers.map(f => (
+                <div key={f.user_id} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <div
+                    title={`${f.first_name} ${f.last_name}`}
+                    style={{
+                      width: 28, height: 28, borderRadius: '50%',
+                      background: colorFor(f.user_id), color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.65rem', fontWeight: 700, flexShrink: 0,
+                    }}
+                  >
+                    {f.first_name[0]}{f.last_name[0]}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#374151' }}>{f.first_name}</span>
+                  {(onRemoveFollower && (user?.id === f.user_id || user?.role === 'admin' || user?.id === feedback.user_id)) && (
+                    <button
+                      onClick={() => onRemoveFollower(f.user_id)}
+                      title="Remove"
+                      style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '0.65rem', padding: '0 2px', lineHeight: 1 }}
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+
+              {/* Follow / Unfollow toggle */}
+              {onToggleFollow && (
+                <button
+                  onClick={onToggleFollow}
+                  style={{
+                    fontSize: '0.7rem', padding: '2px 8px', borderRadius: 99,
+                    border: `1px solid ${isFollowing ? '#002356' : '#d1d5db'}`,
+                    background: isFollowing ? '#002356' : '#f9fafb',
+                    color: isFollowing ? '#fff' : '#374151',
+                    cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  {isFollowing ? '✓ Following' : '+ Follow'}
+                </button>
+              )}
+
+              {/* Add another user (submitter or admin) */}
+              {onAddFollower && (user?.role === 'admin' || user?.id === feedback.user_id) && (
+                addingFollower ? (
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      ref={addInputRef}
+                      value={followerSearch}
+                      onChange={e => setFollowerSearch(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') { setAddingFollower(false); setFollowerSearch(''); setSearchResults([]); } }}
+                      placeholder="Search name…"
+                      style={{ fontSize: '0.75rem', padding: '3px 7px', borderRadius: 6, border: '1px solid #d1d5db', width: 130, outline: 'none' }}
+                    />
+                    {(searchLoading || searchResults.length > 0) && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 200, marginTop: 2 }}>
+                        {searchLoading && <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#9ca3af' }}>Searching…</div>}
+                        {searchResults.map(r => {
+                          const alreadyFollowing = followers.some(f => f.user_id === r.id);
+                          return (
+                            <div
+                              key={r.id}
+                              onClick={() => !alreadyFollowing && handlePickFollower(r)}
+                              style={{
+                                padding: '6px 10px', fontSize: '0.8rem', cursor: alreadyFollowing ? 'default' : 'pointer',
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                color: alreadyFollowing ? '#9ca3af' : '#111827',
+                                borderBottom: '1px solid #f3f4f6',
+                              }}
+                              onMouseEnter={e => { if (!alreadyFollowing) (e.currentTarget as HTMLDivElement).style.background = '#f9fafb'; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = ''; }}
+                            >
+                              <span>{r.first_name} {r.last_name}</span>
+                              {alreadyFollowing && <span style={{ fontSize: '0.65rem' }}>already watching</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingFollower(true)}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 99, border: '1px dashed #d1d5db', background: 'transparent', color: '#6b7280', cursor: 'pointer' }}
+                  >
+                    + Add
+                  </button>
+                )
+              )}
+
+              {followers.length === 0 && !onToggleFollow && (
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Nobody yet</span>
+              )}
+            </div>
           </div>
         </div>
 

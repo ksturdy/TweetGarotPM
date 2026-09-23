@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const Feedback = require('../models/Feedback');
+const FeedbackFollower = require('../models/FeedbackFollower');
 const Notification = require('../models/Notification');
 const { sendEmail } = require('../utils/emailService');
 const { authenticate } = require('../middleware/auth');
@@ -42,6 +43,27 @@ router.get('/stats', async (req, res) => {
   } catch (error) {
     console.error('Error fetching feedback stats:', error);
     res.status(500).json({ message: 'Error fetching feedback stats', error: error.message });
+  }
+});
+
+// GET /api/feedback/user-search?q= - Search active users (for adding followers)
+router.get('/user-search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || String(q).trim().length < 2) return res.json([]);
+    const { rows } = await db.query(
+      `SELECT id, first_name, last_name, email
+       FROM users
+       WHERE tenant_id=$1 AND is_active=true
+         AND (first_name || ' ' || last_name ILIKE $2 OR email ILIKE $2)
+       ORDER BY first_name, last_name
+       LIMIT 10`,
+      [req.tenantId, `%${q.trim()}%`]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('User search error:', err);
+    res.status(500).json({ message: 'Search failed' });
   }
 });
 
@@ -215,9 +237,8 @@ router.put('/:id', async (req, res) => {
             emailSent: false,
           });
 
-          // Send email to submitter
-          if (feedback.submitter_email) {
-            const comments = await Feedback.getComments(feedback.id);
+          // Shared email builder
+          const buildEmail = (heading, subheading, comments) => {
             const commentsHtml = comments.length > 0
               ? `<div style="margin-top:20px;">
                   <div style="font-weight:600;color:#6b7280;margin-bottom:10px;text-transform:uppercase;font-size:12px;">Comments</div>
@@ -229,52 +250,74 @@ router.put('/:id', async (req, res) => {
                   </div>`).join('')}
                 </div>`
               : '';
-            const commentsText = comments.length > 0
-              ? '\n\nComments:\n' + comments.map(c => `${c.commenter_name}: ${c.comment}`).join('\n\n')
-              : '';
+            return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
+  .header{background:linear-gradient(135deg,#002356,#004080);color:white;padding:20px;border-radius:8px 8px 0 0}
+  .header h1{margin:0;font-size:22px}.header p{margin:5px 0 0;opacity:.9;font-size:14px}
+  .content{background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-top:none}
+  .info-row{display:flex;margin-bottom:10px}
+  .info-label{font-weight:600;color:#6b7280;width:120px;flex-shrink:0}
+  .info-value{color:#1f2937}
+  .btn{display:inline-block;background:#002356;color:white!important;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:600;margin-top:15px}
+  .footer{background:#f3f4f6;padding:15px 20px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;font-size:12px;color:#6b7280}
+</style></head><body>
+<div class="header"><h1>${heading}</h1><p>${feedback.title}</p></div>
+<div class="content">
+  <div class="info-row"><span class="info-label">Status:</span><span class="info-value">${oldLabel} → ${newLabel}</span></div>
+  <div class="info-row"><span class="info-label">Type:</span><span class="info-value">${feedback.type || '-'}</span></div>
+  <div class="info-row"><span class="info-label">Module:</span><span class="info-value">${feedback.module || '-'}</span></div>
+  ${commentsHtml}
+  ${(process.env.APP_URL || process.env.FRONTEND_URL) ? `<p><a href="${process.env.APP_URL || process.env.FRONTEND_URL}/feedback" class="btn">View in TITAN</a></p>` : ''}
+</div>
+<div class="footer"><p>${subheading}</p></div>
+</body></html>`;
+          };
 
-            const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #002356, #004080); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-    .header h1 { margin: 0; font-size: 22px; }
-    .header p { margin: 5px 0 0; opacity: 0.9; font-size: 14px; }
-    .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; }
-    .info-row { display: flex; margin-bottom: 10px; }
-    .info-label { font-weight: 600; color: #6b7280; width: 120px; flex-shrink: 0; }
-    .info-value { color: #1f2937; }
-    .btn { display: inline-block; background: #002356; color: white !important; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 15px; }
-    .footer { background: #f3f4f6; padding: 15px 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; font-size: 12px; color: #6b7280; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Feedback Status Updated</h1>
-    <p>${feedback.title}</p>
-  </div>
-  <div class="content">
-    <div class="info-row"><span class="info-label">Status:</span><span class="info-value">${oldLabel} → ${newLabel}</span></div>
-    <div class="info-row"><span class="info-label">Type:</span><span class="info-value">${feedback.type || '-'}</span></div>
-    <div class="info-row"><span class="info-label">Module:</span><span class="info-value">${feedback.module || '-'}</span></div>
-    ${commentsHtml}
-    ${(process.env.APP_URL || process.env.FRONTEND_URL) ? `<p><a href="${process.env.APP_URL || process.env.FRONTEND_URL}/feedback" class="btn">View in TITAN</a></p>` : ''}
-  </div>
-  <div class="footer">
-    <p>This is an automated notification from TITAN Project Management.</p>
-  </div>
-</body>
-</html>`;
+          const comments = await Feedback.getComments(feedback.id);
+          const commentsText = comments.length > 0
+            ? '\n\nComments:\n' + comments.map(c => `${c.commenter_name}: ${c.comment}`).join('\n\n')
+            : '';
 
+          // Notify submitter
+          if (feedback.submitter_email) {
             await sendEmail({
               to: feedback.submitter_email,
               subject: `[TITAN] Feedback "${feedback.title}" — ${newLabel}`,
-              html,
+              html: buildEmail('Feedback Status Updated', 'Automated notification from TITAN Project Management.', comments),
               text: `Your feedback "${feedback.title}" was updated from ${oldLabel} to ${newLabel}.${commentsText}`,
             });
+          }
+
+          // Notify followers (skip submitter and the updater — they already know)
+          const followers = await FeedbackFollower.getFollowers(feedback.id, req.tenantId);
+          for (const follower of followers) {
+            if (follower.user_id === feedback.user_id) continue;
+            if (follower.user_id === req.user.id) continue;
+            try {
+              await Notification.create({
+                tenantId: req.tenantId,
+                userId: follower.user_id,
+                entityType: 'feedback',
+                entityId: feedback.id,
+                eventType: 'status_changed',
+                title: 'Followed Feedback Updated',
+                message: `Feedback you're watching — "${feedback.title}" — moved from ${oldLabel} to ${newLabel}`,
+                link: '/feedback',
+                createdBy: req.user.id,
+                emailSent: false,
+              });
+              if (follower.email) {
+                await sendEmail({
+                  to: follower.email,
+                  subject: `[TITAN] Feedback "${feedback.title}" — ${newLabel}`,
+                  html: buildEmail("Feedback You're Watching Was Updated", "You're receiving this because you're watching this feedback item. You can unfollow it at any time from the feedback page.", comments),
+                  text: `Feedback you're watching, "${feedback.title}", was updated from ${oldLabel} to ${newLabel}.${commentsText}`,
+                });
+              }
+            } catch (err) {
+              console.error('Follower notification error:', err);
+            }
           }
         } catch (err) {
           console.error('Feedback notification error:', err);
@@ -420,6 +463,74 @@ router.delete('/:id/comments/:commentId', async (req, res) => {
   } catch (error) {
     console.error('Error deleting comment:', error);
     res.status(500).json({ message: 'Error deleting comment', error: error.message });
+  }
+});
+
+// ── Follower routes ──────────────────────────────────────────────────────────
+
+// GET /api/feedback/:id/followers - List followers + current-user follow state
+router.get('/:id/followers', async (req, res) => {
+  try {
+    const followers = await FeedbackFollower.getFollowers(req.params.id, req.tenantId);
+    const isFollowing = await FeedbackFollower.isFollowing(req.params.id, req.user.id);
+    res.json({ followers, isFollowing });
+  } catch (err) {
+    console.error('Error fetching followers:', err);
+    res.status(500).json({ message: 'Error fetching followers' });
+  }
+});
+
+// POST /api/feedback/:id/follow - Toggle follow for current user
+router.post('/:id/follow', async (req, res) => {
+  try {
+    const already = await FeedbackFollower.isFollowing(req.params.id, req.user.id);
+    if (already) {
+      await FeedbackFollower.unfollow(req.params.id, req.user.id);
+    } else {
+      await FeedbackFollower.follow(req.params.id, req.user.id, req.tenantId, req.user.id);
+    }
+    const followers = await FeedbackFollower.getFollowers(req.params.id, req.tenantId);
+    res.json({ following: !already, followers });
+  } catch (err) {
+    console.error('Error toggling follow:', err);
+    res.status(500).json({ message: 'Error toggling follow' });
+  }
+});
+
+// POST /api/feedback/:id/followers - Add a specific user (submitter or admin only)
+router.post('/:id/followers', async (req, res) => {
+  try {
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!feedback) return res.status(404).json({ message: 'Feedback not found' });
+    if (req.user.role !== 'admin' && feedback.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'Only the submitter or an admin can add followers' });
+    }
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+    await FeedbackFollower.follow(req.params.id, userId, req.tenantId, req.user.id);
+    const followers = await FeedbackFollower.getFollowers(req.params.id, req.tenantId);
+    res.json({ followers });
+  } catch (err) {
+    console.error('Error adding follower:', err);
+    res.status(500).json({ message: 'Error adding follower' });
+  }
+});
+
+// DELETE /api/feedback/:id/followers/:userId - Remove a follower
+router.delete('/:id/followers/:userId', async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.userId);
+    const feedback = await Feedback.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!feedback) return res.status(404).json({ message: 'Feedback not found' });
+    if (req.user.id !== targetId && req.user.role !== 'admin' && feedback.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to remove this follower' });
+    }
+    await FeedbackFollower.unfollow(req.params.id, targetId);
+    const followers = await FeedbackFollower.getFollowers(req.params.id, req.tenantId);
+    res.json({ followers });
+  } catch (err) {
+    console.error('Error removing follower:', err);
+    res.status(500).json({ message: 'Error removing follower' });
   }
 });
 

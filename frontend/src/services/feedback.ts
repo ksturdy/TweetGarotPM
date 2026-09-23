@@ -54,6 +54,21 @@ export interface FeedbackStats {
   feature_requests: number;
 }
 
+export interface FeedbackFollower {
+  user_id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  created_at: string;
+}
+
+export interface UserSearchResult {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
 export interface FeedbackFilters {
   status?: string;
   module?: string;
@@ -161,7 +176,32 @@ export const feedbackService = {
   async getStats(): Promise<FeedbackStats> {
     const response = await api.get('/feedback/stats');
     return response.data;
-  }
+  },
+
+  async getFollowers(feedbackId: number): Promise<{ followers: FeedbackFollower[]; isFollowing: boolean }> {
+    const response = await api.get(`/feedback/${feedbackId}/followers`);
+    return response.data;
+  },
+
+  async toggleFollow(feedbackId: number): Promise<{ following: boolean; followers: FeedbackFollower[] }> {
+    const response = await api.post(`/feedback/${feedbackId}/follow`);
+    return response.data;
+  },
+
+  async addFollower(feedbackId: number, userId: number): Promise<{ followers: FeedbackFollower[] }> {
+    const response = await api.post(`/feedback/${feedbackId}/followers`, { userId });
+    return response.data;
+  },
+
+  async removeFollower(feedbackId: number, userId: number): Promise<{ followers: FeedbackFollower[] }> {
+    const response = await api.delete(`/feedback/${feedbackId}/followers/${userId}`);
+    return response.data;
+  },
+
+  async searchUsers(q: string): Promise<UserSearchResult[]> {
+    const response = await api.get(`/feedback/user-search?q=${encodeURIComponent(q)}`);
+    return response.data;
+  },
 };
 
 // Module options for the feedback form — matches sidebar navigation

@@ -147,6 +147,28 @@ const FeedbackPage: React.FC = () => {
     }
   });
 
+  // Follower query
+  const { data: followersData } = useQuery({
+    queryKey: ['feedback-followers', selectedFeedback?.id],
+    queryFn: () => feedbackService.getFollowers(selectedFeedback!.id),
+    enabled: !!selectedFeedback,
+  });
+
+  const toggleFollowMutation = useMutation({
+    mutationFn: () => feedbackService.toggleFollow(selectedFeedback!.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feedback-followers', selectedFeedback?.id] }),
+  });
+
+  const addFollowerMutation = useMutation({
+    mutationFn: (userId: number) => feedbackService.addFollower(selectedFeedback!.id, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feedback-followers', selectedFeedback?.id] }),
+  });
+
+  const removeFollowerMutation = useMutation({
+    mutationFn: (userId: number) => feedbackService.removeFollower(selectedFeedback!.id, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feedback-followers', selectedFeedback?.id] }),
+  });
+
   // Update status mutation (admin only)
   const updateStatusMutation = useMutation({
     mutationFn: ({ feedbackId, status }: { feedbackId: number; status: string }) =>
@@ -469,6 +491,11 @@ const FeedbackPage: React.FC = () => {
               onDeleteComment={handleDeleteComment}
               onUpdateStatus={isAdmin ? handleUpdateStatus : undefined}
               onClose={() => setSelectedFeedback(null)}
+              followers={followersData?.followers}
+              isFollowing={followersData?.isFollowing}
+              onToggleFollow={async () => { await toggleFollowMutation.mutateAsync(); }}
+              onAddFollower={async (userId) => { await addFollowerMutation.mutateAsync(userId); }}
+              onRemoveFollower={async (userId) => { await removeFollowerMutation.mutateAsync(userId); }}
             />
           ) : (
             <div className="feedback-placeholder">
