@@ -9,6 +9,7 @@ import CompanyPicker from '../CompanyPicker';
 import LocationPicker from '../LocationPicker';
 import ActivityTimeline from './ActivityTimeline';
 import CommentThread from './CommentThread';
+import OpportunityHistory from './OpportunityHistory';
 import OpportunityReminders from './OpportunityReminders';
 import OpportunityLinks from './OpportunityLinks';
 import TitanEstimate from './TitanEstimate';
@@ -72,7 +73,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     awarded_status: opportunity?.awarded_status || ''
   });
 
-  const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate' | 'history'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
 
@@ -336,6 +337,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
               {opportunity?.activity_count && opportunity.activity_count > 0 && (
                 <span className="tab-badge">{opportunity.activity_count}</span>
               )}
+            </button>
+          )}
+          {isEditMode && (
+            <button
+              className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+              onClick={() => setActiveTab('history')}
+            >
+              History
             </button>
           )}
         </div>
@@ -892,6 +901,10 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          ) : activeTab === 'history' ? (
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              <OpportunityHistory opportunityId={opportunity!.id} />
             </div>
           ) : null}
         </div>

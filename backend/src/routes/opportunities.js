@@ -10,9 +10,52 @@ const OpportunityEstimate = require('../models/OpportunityEstimate');
 const OpportunityScore = require('../models/OpportunityScore');
 const OpportunityReminder = require('../models/OpportunityReminder');
 const Notification = require('../models/Notification');
+const OpportunityHistory = require('../models/OpportunityHistory');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
 const { body, validationResult } = require('express-validator');
+
+const TRACKED_FIELDS = {
+  title: 'Title',
+  stage_id: 'Stage',
+  assigned_to: 'Assigned To',
+  estimated_value: 'Estimated Value',
+  estimated_start_date: 'Start Date',
+  priority: 'Priority',
+  probability: 'Probability',
+  awarded_status: 'Awarded Status',
+  construction_type: 'Construction Type',
+  market: 'Market',
+  location_group: 'Region',
+  description: 'Description',
+};
+
+function buildChanges(oldOpp, body, newOpp) {
+  const changes = [];
+  for (const [field, label] of Object.entries(TRACKED_FIELDS)) {
+    if (!(field in body)) continue;
+    const oldVal = oldOpp[field] == null ? '' : String(oldOpp[field]);
+    const newVal = body[field] == null ? '' : String(body[field]);
+    if (oldVal === newVal) continue;
+
+    let displayOld, displayNew;
+    if (field === 'stage_id') {
+      displayOld = oldOpp.stage_name || oldVal || '—';
+      displayNew = newOpp.stage_name || newVal || '—';
+    } else if (field === 'assigned_to') {
+      displayOld = oldOpp.assigned_to_name || oldVal || '—';
+      displayNew = newOpp.assigned_to_name || newVal || '—';
+    } else if (field === 'estimated_value') {
+      displayOld = oldVal ? `$${Number(oldVal).toLocaleString()}` : '—';
+      displayNew = newVal ? `$${Number(newVal).toLocaleString()}` : '—';
+    } else {
+      displayOld = oldVal || '—';
+      displayNew = newVal || '—';
+    }
+    changes.push({ field: label, old: displayOld, new: displayNew });
+  }
+  return changes;
+}
 
 // Helper: notify followers of an opportunity event (fire-and-forget)
 async function notifyFollowers(opportunityId, tenantId, excludeUserId, { eventType, title, message, link }) {
@@ -203,6 +246,16 @@ router.get('/with-estimates', async (req, res, next) => {
   }
 });
 
+// Get history for a single opportunity
+router.get('/:id/history', async (req, res, next) => {
+  try {
+    const history = await OpportunityHistory.findByOpportunity(req.params.id, req.tenantId);
+    res.json(history);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get single opportunity
 router.get('/:id', async (req, res, next) => {
   try {
@@ -239,6 +292,16 @@ router.post('/',
 
       console.log('Creating opportunity with data:', req.body);
       const opportunity = await opportunities.create(req.body, req.user.id, req.tenantId);
+
+      OpportunityHistory.log({
+        opportunityId: opportunity.id,
+        tenantId: req.tenantId,
+        userId: req.user.id,
+        eventType: 'created',
+        summary: 'Opportunity created',
+        changes: [],
+      }).catch(() => {});
+
       res.status(201).json(opportunity);
     } catch (error) {
       console.error('Error creating opportunity:', error);
@@ -260,15 +323,25 @@ router.put('/:id',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      // Fetch old opportunity to detect stage change
-      const oldOpportunity = req.body.stage_id
-        ? await opportunities.findByIdAndTenant(req.params.id, req.tenantId)
-        : null;
+      const oldOpportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
 
       const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId, req.user.id);
 
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
+      }
+
+      // Log field-level changes to history
+      const changes = buildChanges(oldOpportunity, req.body, opportunity);
+      if (changes.length > 0) {
+        OpportunityHistory.log({
+          opportunityId: opportunity.id,
+          tenantId: req.tenantId,
+          userId: req.user.id,
+          eventType: 'updated',
+          summary: `Updated: ${changes.map(c => c.field).join(', ')}`,
+          changes,
+        }).catch(() => {});
       }
 
       // Notify followers if stage changed

@@ -176,6 +176,17 @@ export interface OpportunityWithEstimate extends Opportunity {
   pl_labor_rate: number | null;
 }
 
+export interface OpportunityHistoryEntry {
+  id: number;
+  opportunity_id: number;
+  user_id: number | null;
+  user_name: string | null;
+  event_type: 'created' | 'updated';
+  summary: string;
+  changes: Array<{ field: string; old: string; new: string }>;
+  created_at: string;
+}
+
 const opportunitiesService = {
   // Get all opportunities
   async getAll(filters?: OpportunityFilters): Promise<Opportunity[]> {
@@ -454,6 +465,13 @@ const opportunitiesService = {
 
   async deleteReminder(opportunityId: number, reminderId: number): Promise<void> {
     await api.delete(`/opportunities/${opportunityId}/reminders/${reminderId}`);
+  },
+
+  // ===== History =====
+
+  async getHistory(opportunityId: number): Promise<OpportunityHistoryEntry[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/history`);
+    return response.data;
   },
 };
 
