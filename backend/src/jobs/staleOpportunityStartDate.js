@@ -1,7 +1,7 @@
 const db = require('../config/database');
 const { notify } = require('../utils/notificationService');
 
-const TERMINAL_STAGE_NAMES = ['Lost', 'Passed'];
+const EXCLUDED_STAGE_NAMES = ['Awarded', 'Lost', 'Passed'];
 const DEDUP_DAYS = 7; // re-notify weekly until the start date is updated
 
 async function runStaleOpportunityStartDate() {
@@ -19,7 +19,7 @@ async function runStaleOpportunityStartDate() {
      LEFT JOIN employees e ON e.id = o.assigned_to
      LEFT JOIN users u ON u.id = e.user_id AND u.is_active = true
      WHERE o.tenant_id IS NOT NULL
-       AND ps.name NOT IN (${TERMINAL_STAGE_NAMES.map((_, i) => `$${i + 1}`).join(', ')})
+       AND ps.name NOT IN (${EXCLUDED_STAGE_NAMES.map((_, i) => `$${i + 1}`).join(', ')})
        AND COALESCE(o.user_adjusted_start_date, o.estimated_start_date) < CURRENT_DATE
        -- exclude if we already sent this notification within the dedup window
        AND NOT EXISTS (
@@ -27,9 +27,9 @@ async function runStaleOpportunityStartDate() {
          WHERE n.entity_type = 'opportunity'
            AND n.entity_id = o.id
            AND n.event_type = 'stale_start_date'
-           AND n.created_at >= NOW() - ($${TERMINAL_STAGE_NAMES.length + 1} * INTERVAL '1 day')
+           AND n.created_at >= NOW() - ($${EXCLUDED_STAGE_NAMES.length + 1} * INTERVAL '1 day')
        )`,
-    [...TERMINAL_STAGE_NAMES, DEDUP_DAYS]
+    [...EXCLUDED_STAGE_NAMES, DEDUP_DAYS]
   );
 
   if (result.rows.length === 0) return;
