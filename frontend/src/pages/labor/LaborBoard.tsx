@@ -89,9 +89,11 @@ interface HeadcountChartProps {
   data: HeadcountChartRow[];
   horizon: number;
   onHorizonChange: (h: number) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
-const HeadcountChart: React.FC<HeadcountChartProps> = ({ data, horizon, onHorizonChange }) => {
+const HeadcountChart: React.FC<HeadcountChartProps> = ({ data, horizon, onHorizonChange, collapsed, onToggleCollapse }) => {
   const chartH = 220;
   const maxVal = Math.max(...data.map(d => d.total), 1);
   const yMax = Math.ceil(maxVal / 5) * 5 || 10;
@@ -110,99 +112,114 @@ const HeadcountChart: React.FC<HeadcountChartProps> = ({ data, horizon, onHorizo
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.625rem', padding: '1rem 1.25rem', marginBottom: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsed ? 0 : '0.75rem' }}>
         <div>
           <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#002356' }}>Headcount by Trade</span>
-          <span style={{ fontSize: '0.8rem', color: '#6b7280', marginLeft: '0.5rem' }}>active + planned assignments</span>
+          {!collapsed && <span style={{ fontSize: '0.8rem', color: '#6b7280', marginLeft: '0.5rem' }}>active + planned assignments</span>}
         </div>
-        <div style={{ display: 'flex', gap: '0.25rem' }}>
-          {HORIZON_OPTIONS.map(o => (
+        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+          {!collapsed && HORIZON_OPTIONS.map(o => (
             <button key={o.value} onClick={() => onHorizonChange(o.value)} style={{
               padding: '0.25rem 0.625rem', fontSize: '0.75rem', fontWeight: 600, border: '1px solid #e5e7eb',
               borderRadius: '0.375rem', cursor: 'pointer', background: horizon === o.value ? '#002356' : '#f8fafc',
               color: horizon === o.value ? '#fff' : '#374151',
             }}>{o.label}</button>
           ))}
+          <button
+            onClick={onToggleCollapse}
+            title={collapsed ? 'Expand chart' : 'Collapse chart'}
+            style={{
+              padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600,
+              border: '1px solid #e5e7eb', borderRadius: '0.375rem', cursor: 'pointer',
+              background: '#f8fafc', color: '#374151', marginLeft: '0.25rem',
+            }}
+          >
+            {collapsed ? '▼ Show Chart' : '▲ Hide'}
+          </button>
         </div>
       </div>
 
-      <div style={{ height: chartH + 50, position: 'relative' }}>
-        <svg width="100%" height={chartH + 50} style={{ overflow: 'visible' }}>
-          {/* Y-axis labels + grid */}
-          <text x="0" y="10"          fontSize="10" fill="#64748b">{yMax} ppl</text>
-          <text x="0" y={chartH / 2} fontSize="10" fill="#64748b">{Math.round(yMax / 2)}</text>
-          <text x="0" y={chartH}     fontSize="10" fill="#64748b">0</text>
-          <line x1="40" y1="0"          x2="100%" y2="0"          stroke="#e2e8f0" strokeDasharray="2,2" />
-          <line x1="40" y1={chartH / 2} x2="100%" y2={chartH / 2} stroke="#e2e8f0" strokeDasharray="2,2" />
-          <line x1="40" y1={chartH}     x2="100%" y2={chartH}     stroke="#e2e8f0" />
+      {!collapsed && (
+        <>
+          <div style={{ height: chartH + 50, position: 'relative' }}>
+            <svg width="100%" height={chartH + 50} style={{ overflow: 'visible' }}>
+              {/* Y-axis labels + grid */}
+              <text x="0" y="10"          fontSize="10" fill="#64748b">{yMax} ppl</text>
+              <text x="0" y={chartH / 2} fontSize="10" fill="#64748b">{Math.round(yMax / 2)}</text>
+              <text x="0" y={chartH}     fontSize="10" fill="#64748b">0</text>
+              <line x1="40" y1="0"          x2="100%" y2="0"          stroke="#e2e8f0" strokeDasharray="2,2" />
+              <line x1="40" y1={chartH / 2} x2="100%" y2={chartH / 2} stroke="#e2e8f0" strokeDasharray="2,2" />
+              <line x1="40" y1={chartH}     x2="100%" y2={chartH}     stroke="#e2e8f0" />
 
-          <g transform="translate(45, 0)">
-            {/* Year boundary lines */}
-            {yearBoundaries.map(b => (
-              <line key={`yb-${b.index}`}
-                x1={`${(b.index / barCount) * 95}%`} y1="0"
-                x2={`${(b.index / barCount) * 95}%`} y2={chartH + 5}
-                stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
-            ))}
+              <g transform="translate(45, 0)">
+                {/* Year boundary lines */}
+                {yearBoundaries.map(b => (
+                  <line key={`yb-${b.index}`}
+                    x1={`${(b.index / barCount) * 95}%`} y1="0"
+                    x2={`${(b.index / barCount) * 95}%`} y2={chartH + 5}
+                    stroke="#94a3b8" strokeWidth="1" strokeDasharray="4,2" />
+                ))}
 
-            {/* Bars */}
-            {data.map((d, i) => {
-              const xPct = (i / barCount) * 95;
-              const showLabel = i % labelEvery === 0;
-              let stackY = chartH;
+                {/* Bars */}
+                {data.map((d, i) => {
+                  const xPct = (i / barCount) * 95;
+                  const showLabel = i % labelEvery === 0;
+                  let stackY = chartH;
 
-              return (
-                <g key={d.month}>
-                  {CHART_TRADES.slice().reverse().map(t => {
-                    const count = d[t.key];
-                    const h = yMax > 0 ? (count / yMax) * chartH : 0;
-                    if (h < 0.3) return null;
-                    stackY -= h;
-                    return (
-                      <rect key={t.key}
-                        x={`${xPct}%`} y={stackY}
-                        width={`${barWidth * 0.82}%`} height={h}
-                        fill={t.color} rx="1">
-                        <title>{d.month}: {t.label} {count}</title>
-                      </rect>
-                    );
-                  })}
-                  {showLabel && (
-                    <text x={`${xPct + barWidth * 0.41}%`} y={chartH + 14}
-                      fontSize="9" fill="#64748b" textAnchor="middle">
-                      {fmtMonthLabel(d.month)}
+                  return (
+                    <g key={d.month}>
+                      {CHART_TRADES.slice().reverse().map(t => {
+                        const count = d[t.key];
+                        const h = yMax > 0 ? (count / yMax) * chartH : 0;
+                        if (h < 0.3) return null;
+                        stackY -= h;
+                        return (
+                          <rect key={t.key}
+                            x={`${xPct}%`} y={stackY}
+                            width={`${barWidth * 0.82}%`} height={h}
+                            fill={t.color} rx="1">
+                            <title>{d.month}: {t.label} {count}</title>
+                          </rect>
+                        );
+                      })}
+                      {showLabel && (
+                        <text x={`${xPct + barWidth * 0.41}%`} y={chartH + 14}
+                          fontSize="9" fill="#64748b" textAnchor="middle">
+                          {fmtMonthLabel(d.month)}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Year labels */}
+                {yearBoundaries.map((b, idx) => {
+                  const xStart = (b.index / barCount) * 95;
+                  const nextB  = yearBoundaries[idx + 1];
+                  const xEnd   = nextB ? (nextB.index / barCount) * 95 : 95;
+                  return (
+                    <text key={`yl-${b.index}`}
+                      x={`${(xStart + xEnd) / 2}%`} y={chartH + 30}
+                      fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
+                      {b.label}
                     </text>
-                  )}
-                </g>
-              );
-            })}
-
-            {/* Year labels */}
-            {yearBoundaries.map((b, idx) => {
-              const xStart = (b.index / barCount) * 95;
-              const nextB  = yearBoundaries[idx + 1];
-              const xEnd   = nextB ? (nextB.index / barCount) * 95 : 95;
-              return (
-                <text key={`yl-${b.index}`}
-                  x={`${(xStart + xEnd) / 2}%`} y={chartH + 30}
-                  fontSize="11" fontWeight="600" fill="#1e293b" textAnchor="middle">
-                  {b.label}
-                </text>
-              );
-            })}
-          </g>
-        </svg>
-      </div>
-
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-        {CHART_TRADES.filter(t => data.some(d => d[t.key] > 0)).map(t => (
-          <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#374151' }}>
-            <span style={{ width: 12, height: 12, borderRadius: 2, background: t.color, display: 'inline-block' }} />
-            {t.label}
+                  );
+                })}
+              </g>
+            </svg>
           </div>
-        ))}
-      </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+            {CHART_TRADES.filter(t => data.some(d => d[t.key] > 0)).map(t => (
+              <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#374151' }}>
+                <span style={{ width: 12, height: 12, borderRadius: 2, background: t.color, display: 'inline-block' }} />
+                {t.label}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -219,6 +236,9 @@ const LaborBoard: React.FC = () => {
       const raw = localStorage.getItem(SORT_PREFS_KEY);
       return raw ? JSON.parse(raw) : { key: 'name', dir: 'asc' };
     } catch { return { key: 'name', dir: 'asc' }; }
+  });
+  const [chartCollapsed, setChartCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('labor-chart-collapsed') === 'true'; } catch { return false; }
   });
 
   const qc = useQueryClient();
@@ -273,6 +293,10 @@ const LaborBoard: React.FC = () => {
     try { localStorage.setItem(SORT_PREFS_KEY, JSON.stringify(sort)); } catch { /* ignore */ }
   }, [sort]);
 
+  useEffect(() => {
+    try { localStorage.setItem('labor-chart-collapsed', String(chartCollapsed)); } catch { /* ignore */ }
+  }, [chartCollapsed]);
+
   const setF = (k: keyof BoardFilters, v: string | undefined) =>
     setFilters((prev) => ({ ...prev, [k]: v || undefined }));
 
@@ -325,7 +349,7 @@ const LaborBoard: React.FC = () => {
   }, [rows, sort]);
 
   return (
-    <div className="sales-container">
+    <div className="sales-container" style={{ height: 'auto', overflow: 'visible' }}>
       <div className="sales-page-header">
         <div className="sales-page-title">
           <div>
@@ -355,7 +379,13 @@ const LaborBoard: React.FC = () => {
       </div>
 
       {/* Headcount chart */}
-      <HeadcountChart data={chartData} horizon={chartHorizon} onHorizonChange={setChartHorizon} />
+      <HeadcountChart
+        data={chartData}
+        horizon={chartHorizon}
+        onHorizonChange={setChartHorizon}
+        collapsed={chartCollapsed}
+        onToggleCollapse={() => setChartCollapsed(c => !c)}
+      />
 
       {/* Quick navigation */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0 0 0' }}>
@@ -367,7 +397,7 @@ const LaborBoard: React.FC = () => {
         </Link>
       </div>
 
-      <div className="sales-table-section">
+      <div className="sales-table-section" style={{ flex: 'none' }}>
         <div className="sales-table-header">
           <div className="sales-table-title">
             All Employees ({sortedRows.length})

@@ -4,7 +4,6 @@ import {
   laborApi,
   ASSIGNMENT_ROLES,
   ASSIGNMENT_TRADES,
-  ASSIGNMENT_STATUSES,
   SHIFT_PATTERNS,
   AssignmentRecord,
   AssignmentStatus,
@@ -66,7 +65,6 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
   const [shiftPattern, setShiftPattern] = useState(editing?.shift_pattern || 'M-F');
   const [shiftStart, setShiftStart] = useState(editing?.shift_start_time || '07:00');
   const [shiftEnd, setShiftEnd] = useState(editing?.shift_end_time || '15:30');
-  const [status, setStatus] = useState<AssignmentStatus>((editing?.status as AssignmentStatus) || 'planned');
   const [notes, setNotes] = useState(editing?.notes || '');
   const [tagsText, setTagsText] = useState((editing?.tags || []).join(', '));
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +88,6 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setShiftPattern(editing.shift_pattern || 'M-F');
       setShiftStart(editing.shift_start_time || '07:00');
       setShiftEnd(editing.shift_end_time || '15:30');
-      setStatus((editing.status as AssignmentStatus) || 'planned');
       setNotes(editing.notes || '');
       setTagsText((editing.tags || []).join(', '));
       setConflicts(null);
@@ -114,7 +111,6 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
       setShiftPattern('M-F');
       setShiftStart('07:00');
       setShiftEnd('15:30');
-      setStatus('planned');
       setNotes('');
       setTagsText('');
       setError(null);
@@ -204,7 +200,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
           shift_pattern: shiftPattern || null,
           shift_start_time: shiftStart || null,
           shift_end_time: shiftEnd || null,
-          status,
+          status: computeStatus(startDate, endDate),
           notes: notes || null,
           tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : null,
         });
@@ -221,7 +217,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
           shiftPattern: shiftPattern || undefined,
           shiftStartTime: shiftStart || undefined,
           shiftEndTime: shiftEnd || undefined,
-          status,
+          status: computeStatus(startDate, endDate),
           notes: notes || undefined,
           tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
         });
@@ -239,7 +235,7 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
         shiftPattern: shiftPattern || undefined,
         shiftStartTime: shiftStart || undefined,
         shiftEndTime: shiftEnd || undefined,
-        status,
+        status: computeStatus(startDate, endDate),
         notes: notes || undefined,
         tags: tagsText ? tagsText.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
       });
@@ -276,6 +272,13 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
     } finally {
       setCheckingConflicts(false);
     }
+  };
+
+  const computeStatus = (start: string, end: string): AssignmentStatus => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (end && end < today) return 'completed';
+    if (start && start <= today) return 'active';
+    return 'planned';
   };
 
   if (!open) return null;
@@ -553,14 +556,6 @@ const AssignDialog: React.FC<AssignDialogProps> = ({
                 <label style={lblStyle}>Shift End</label>
                 <input type="time" value={shiftEnd} onChange={(e) => setShiftEnd(e.target.value)} style={inputStyle} />
               </div>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label style={lblStyle}>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as AssignmentStatus)} style={inputStyle}>
-                {ASSIGNMENT_STATUSES.map((s) => (<option key={s} value={s}>{s}</option>))}
-              </select>
             </div>
 
             {/* Tags */}
