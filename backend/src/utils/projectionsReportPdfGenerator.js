@@ -136,7 +136,7 @@ function tasksSection(tasks) {
         <div style="font-size:7.5pt; color:#94a3b8; margin-top:2px;">
           ${t.assigned_to_name ? `👤 ${esc(t.assigned_to_name)} · ` : ''}
           ${t.due_date ? `📅 ${fmtDate(t.due_date)} · ` : ''}
-          ${esc(t.created_by_name)}
+          ${esc(t.created_by_name)} · ${fmtDate(t.created_at)}
         </div>
       </div>
     `;
@@ -157,6 +157,7 @@ function gainFadeSection(gf) {
         <div style="font-size:7.5pt; color:#94a3b8; margin-top:2px;">
           ${g.groups_affected && g.groups_affected.length ? `${esc(g.groups_affected.join(', '))} · ` : ''}
           <span style="color:${g.recognized_in_financials ? '#15803d' : '#b45309'};">${g.recognized_in_financials ? 'Recognized' : 'Unrecognized'}</span>
+          · ${esc(g.created_by_name)} · ${fmtDate(g.created_at)}
         </div>
       </div>
     `;
