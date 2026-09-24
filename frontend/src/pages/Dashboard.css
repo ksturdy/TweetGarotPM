@@ -650,10 +650,16 @@
   font-size: 0.6875rem;
 }
 
-/* Activity sidebar — card fills the column height */
+/* Activity sidebar — card fills its wrapper */
 .dashboard-activity .dashboard-card {
   flex: 1;
   min-height: 0;
+}
+
+/* Recent Activity widget: cap at two-card height in any column */
+.dashboard-col > [data-widget-id="recent_activity"] {
+  max-height: calc(100dvh - 326px + 1rem);
+  flex: 0 0 auto;
 }
 
 .activity-feed {

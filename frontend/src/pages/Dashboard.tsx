@@ -93,6 +93,7 @@ const SortableWidget: React.FC<{
         opacity: isDragging ? 0 : 1,
       }}
       className={`sortable-widget-wrapper${isDragging ? ' is-dragging' : ''}`}
+      data-widget-id={id}
     >
       <div className="widget-controls">
         <span
