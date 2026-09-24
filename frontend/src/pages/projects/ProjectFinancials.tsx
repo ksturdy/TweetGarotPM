@@ -817,8 +817,10 @@ const ProjectFinancials: React.FC = () => {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>Labor Forecast</span>
-                  {project?.scheduling_mode === 'cost_type' ? (
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cost Type Scheduling</span>
+                  {project?.scheduling_mode && project.scheduling_mode !== 'summary' ? (
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {project.scheduling_mode === 'cost_type' ? 'Cost Type Scheduling' : 'Phase Scheduling'}
+                    </span>
                   ) : (
                     <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <ContourIcon contour={laborForecastData.contour} />
