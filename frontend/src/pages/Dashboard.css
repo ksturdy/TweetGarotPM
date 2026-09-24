@@ -735,7 +735,7 @@
 }
 
 .activity-feed-text {
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   color: #1f2937;
   line-height: 1.35;
 }
@@ -746,7 +746,7 @@
 }
 
 .activity-feed-project {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: #6b7280;
   margin-top: 0.0625rem;
   white-space: nowrap;
@@ -755,7 +755,7 @@
 }
 
 .activity-feed-time {
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   color: #9ca3af;
   white-space: nowrap;
   flex-shrink: 0;
