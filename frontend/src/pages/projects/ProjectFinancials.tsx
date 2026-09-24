@@ -825,6 +825,7 @@ const ProjectFinancials: React.FC = () => {
                     <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <ContourIcon contour={laborForecastData.contour} />
                       {laborForecastData.contour.charAt(0).toUpperCase() + laborForecastData.contour.slice(1)}
+                      {c.user_selected_contour ? ' 🔒' : ''}
                     </span>
                   )}
                   <span style={{ fontSize: '0.75rem', color: '#3b82f6' }}>

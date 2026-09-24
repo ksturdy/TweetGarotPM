@@ -2435,6 +2435,7 @@ const LaborForecast: React.FC = () => {
                           <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }} title={lockedTitle}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
                               <ContourVisual contour={p.contour} />
+                              {locked && <span style={{ fontSize: '0.65rem' }}>🔒</span>}
                               <select
                                 value={p.contour}
                                 disabled={locked}

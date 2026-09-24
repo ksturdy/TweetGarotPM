@@ -1507,6 +1507,7 @@ const ProjectedRevenue: React.FC = () => {
                         {parseNum(p.contract.backlog) > 0 ? (
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
                             <ContourVisual contour={p.contour} />
+                            {locked && <span style={{ fontSize: '0.65rem' }}>🔒</span>}
                             <select
                               value={p.contour}
                               disabled={locked}
