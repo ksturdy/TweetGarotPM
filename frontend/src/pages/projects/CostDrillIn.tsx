@@ -37,6 +37,13 @@ const fmt = (value: number | string | null | undefined): string => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
 };
 
+const fmtRate = (cost: number | string | null | undefined, hours: number | string | null | undefined): string => {
+  const c = typeof cost === 'string' ? parseFloat(cost) : Number(cost || 0);
+  const h = typeof hours === 'string' ? parseFloat(hours) : Number(hours || 0);
+  if (!h || !c || isNaN(c) || isNaN(h)) return '-';
+  return `$${Math.round(c / h)}/hr`;
+};
+
 const fmtNum = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -52,9 +59,9 @@ const getVarianceColor = (projected: number, estimate: number): string | undefin
   return '#ef4444';
 };
 
-type SortKey = 'phase' | 'phase_description' | 'job' | 'est_hours' | 'jtd_hours' | 'est_cost' |
-  'prior_week_cost' | 'jtd_cost' | 'change_from_last_projection' | 'committed_cost' | 'projected_cost' |
-  'remaining_spend' | 'variance' | 'percent_complete';
+type SortKey = 'phase' | 'phase_description' | 'job' | 'est_hours' | 'est_cost' | 'est_rate' |
+  'jtd_hours' | 'jtd_cost' | 'jtd_rate' | 'prior_week_cost' | 'change_from_last_projection' |
+  'committed_cost' | 'projected_cost' | 'remaining_spend' | 'remaining_hours' | 'variance' | 'percent_complete';
 type SortDir = 'asc' | 'desc';
 
 const CostDrillIn: React.FC = () => {
@@ -126,14 +133,22 @@ const CostDrillIn: React.FC = () => {
       case 'phase_description': return row.phase_description || '';
       case 'job': return row.job || '';
       case 'est_hours': return Number(row.est_hours || 0);
-      case 'jtd_hours': return Number(row.jtd_hours || 0);
       case 'est_cost': return Number(row.est_cost || 0);
-      case 'prior_week_cost': return Number(row.prior_week_cost || 0);
+      case 'est_rate': { const h = Number(row.est_hours || 0); return h > 0 ? Number(row.est_cost || 0) / h : 0; }
+      case 'jtd_hours': return Number(row.jtd_hours || 0);
       case 'jtd_cost': return Number(row.jtd_cost || 0);
+      case 'jtd_rate': { const h = Number(row.jtd_hours || 0); return h > 0 ? Number(row.jtd_cost || 0) / h : 0; }
+      case 'prior_week_cost': return Number(row.prior_week_cost || 0);
       case 'change_from_last_projection': return Number(row.change_from_last_projection || 0);
       case 'committed_cost': return Number(row.committed_cost || 0);
       case 'projected_cost': return Number(row.projected_cost || 0);
       case 'remaining_spend': return Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
+      case 'remaining_hours': {
+        const remSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
+        const h = Number(row.jtd_hours || 0); const c = Number(row.jtd_cost || 0);
+        const rate = h > 0 && c > 0 ? c / h : 0;
+        return rate > 0 ? remSpend / rate : 0;
+      }
       case 'variance': return Number(row.est_cost || 0) - Number(row.projected_cost || 0);
       case 'percent_complete': return Number(row.projected_cost) > 0 ? Number(row.jtd_cost) / Number(row.projected_cost) : 0;
       default: return 0;
@@ -211,6 +226,8 @@ const CostDrillIn: React.FC = () => {
   );
 
   const totalRemainingSpend = totals.projected_cost - totals.committed_cost - totals.jtd_cost;
+  const totalJtdRate = totals.jtd_hours > 0 && totals.jtd_cost > 0 ? totals.jtd_cost / totals.jtd_hours : 0;
+  const totalRemainingHours = totalJtdRate > 0 ? totalRemainingSpend / totalJtdRate : 0;
 
   return (
     <div style={{ padding: '0.5rem 1.5rem 0.5rem', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}>
@@ -336,34 +353,44 @@ const CostDrillIn: React.FC = () => {
                 <SortTh sortKey="phase_description" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Description</SortTh>
                 {!jobs || jobs.length !== 1 && <SortTh sortKey="job" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="left">Job</SortTh>}
                 {isLabor && <SortTh sortKey="est_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Hrs</SortTh>}
-                {isLabor && <SortTh sortKey="jtd_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Hrs</SortTh>}
                 <SortTh sortKey="est_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Cost</SortTh>
-                <SortTh sortKey="prior_week_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Prev Wk</SortTh>
+                {isLabor && <SortTh sortKey="est_rate" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Est Rate</SortTh>}
+                {isLabor && <SortTh sortKey="jtd_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Hrs</SortTh>}
                 <SortTh sortKey="jtd_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Cost</SortTh>
+                {isLabor && <SortTh sortKey="jtd_rate" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Rate</SortTh>}
+                <SortTh sortKey="prior_week_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Prev Wk</SortTh>
                 <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Chg Since Last Proj</SortTh>
                 <SortTh sortKey="committed_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Committed</SortTh>
                 <SortTh sortKey="projected_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Projected</SortTh>
                 <SortTh sortKey="remaining_spend" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Spend</SortTh>
+                {isLabor && <SortTh sortKey="remaining_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Hrs</SortTh>}
                 <SortTh sortKey="variance" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Variance</SortTh>
                 <SortTh sortKey="percent_complete" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>% Comp</SortTh>
               </tr>
             </thead>
             <tbody>
               {processedRows.map((row: PhaseCodeDetailRow) => {
+                const estHrs = Number(row.est_hours || 0);
+                const jtdHrs = Number(row.jtd_hours || 0);
+                const jtdCost = Number(row.jtd_cost || 0);
                 const variance = Number(row.est_cost || 0) - Number(row.projected_cost || 0);
                 const varianceColor = variance > 0 ? '#10b981' : variance < 0 ? '#ef4444' : undefined;
                 const changeSinceLastProj = Number(row.change_from_last_projection || 0);
-                const remainingSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - Number(row.jtd_cost || 0);
+                const remainingSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - jtdCost;
+                const jtdRate = jtdHrs > 0 && jtdCost > 0 ? jtdCost / jtdHrs : 0;
+                const remainingHours = jtdRate > 0 ? remainingSpend / jtdRate : 0;
                 return (
                   <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <Td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#1e293b' }}>{row.phase}</Td>
                     <Td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
                     {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
-                    {isLabor && <Td align="right">{fmtNum(row.est_hours)}</Td>}
-                    {isLabor && <Td align="right">{fmtNum(row.jtd_hours)}</Td>}
+                    {isLabor && <Td align="right">{fmtNum(estHrs)}</Td>}
                     <Td align="right">{fmt(row.est_cost)}</Td>
+                    {isLabor && <Td align="right">{fmtRate(row.est_cost, estHrs)}</Td>}
+                    {isLabor && <Td align="right">{fmtNum(jtdHrs)}</Td>}
+                    <Td align="right">{fmt(jtdCost)}</Td>
+                    {isLabor && <Td align="right">{fmtRate(jtdCost, jtdHrs)}</Td>}
                     <Td align="right">{fmt(row.prior_week_cost)}</Td>
-                    <Td align="right">{fmt(row.jtd_cost)}</Td>
                     <Td align="right" style={{ color: changeSinceLastProj > 0 ? '#ef4444' : changeSinceLastProj < 0 ? '#10b981' : undefined, fontWeight: 500 }}>
                       {fmt(changeSinceLastProj)}
                     </Td>
@@ -374,11 +401,14 @@ const CostDrillIn: React.FC = () => {
                     <Td align="right" style={{ fontWeight: 500, color: remainingSpend > 0 ? '#3b82f6' : remainingSpend < 0 ? '#ef4444' : undefined }}>
                       {fmt(remainingSpend)}
                     </Td>
+                    {isLabor && <Td align="right" style={{ fontWeight: 500, color: remainingHours > 0 ? '#3b82f6' : remainingHours < 0 ? '#ef4444' : undefined }}>
+                      {jtdRate > 0 ? fmtNum(remainingHours) : '-'}
+                    </Td>}
                     <Td align="right" style={{ color: varianceColor, fontWeight: 500 }}>
                       {fmt(variance)}
                     </Td>
                     <Td align="right">
-                      {Number(row.projected_cost) > 0 ? `${(Number(row.jtd_cost) / Number(row.projected_cost) * 100).toFixed(1)}%` : '-'}
+                      {Number(row.projected_cost) > 0 ? `${(jtdCost / Number(row.projected_cost) * 100).toFixed(1)}%` : '-'}
                     </Td>
                   </tr>
                 );
@@ -390,10 +420,12 @@ const CostDrillIn: React.FC = () => {
                 <Td />
                 {!jobs || jobs.length !== 1 && <Td />}
                 {isLabor && <Td align="right">{fmtNum(totals.est_hours)}</Td>}
-                {isLabor && <Td align="right">{fmtNum(totals.jtd_hours)}</Td>}
                 <Td align="right">{fmt(totals.est_cost)}</Td>
-                <Td align="right">{fmt(totals.prior_week_cost)}</Td>
+                {isLabor && <Td align="right">{fmtRate(totals.est_cost, totals.est_hours)}</Td>}
+                {isLabor && <Td align="right">{fmtNum(totals.jtd_hours)}</Td>}
                 <Td align="right">{fmt(totals.jtd_cost)}</Td>
+                {isLabor && <Td align="right">{fmtRate(totals.jtd_cost, totals.jtd_hours)}</Td>}
+                <Td align="right">{fmt(totals.prior_week_cost)}</Td>
                 <Td align="right" style={{ color: totals.change_from_last_projection > 0 ? '#ef4444' : totals.change_from_last_projection < 0 ? '#10b981' : undefined, fontWeight: 700 }}>
                   {fmt(totals.change_from_last_projection)}
                 </Td>
@@ -404,6 +436,9 @@ const CostDrillIn: React.FC = () => {
                 <Td align="right" style={{ fontWeight: 700, color: totalRemainingSpend > 0 ? '#3b82f6' : totalRemainingSpend < 0 ? '#ef4444' : undefined }}>
                   {fmt(totalRemainingSpend)}
                 </Td>
+                {isLabor && <Td align="right" style={{ fontWeight: 700, color: totalRemainingHours > 0 ? '#3b82f6' : totalRemainingHours < 0 ? '#ef4444' : undefined }}>
+                  {totalJtdRate > 0 ? fmtNum(totalRemainingHours) : '-'}
+                </Td>}
                 <Td align="right" style={{ color: (totals.est_cost - totals.projected_cost) >= 0 ? '#10b981' : '#ef4444', fontWeight: 700 }}>
                   {fmt(totals.est_cost - totals.projected_cost)}
                 </Td>
