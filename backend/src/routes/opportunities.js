@@ -35,8 +35,13 @@ function buildChanges(oldOpp, body, newOpp) {
   const changes = [];
   for (const [field, label] of Object.entries(TRACKED_FIELDS)) {
     if (!(field in body)) continue;
-    const oldVal = oldOpp[field] == null ? '' : String(oldOpp[field]);
-    const newVal = body[field] == null ? '' : String(body[field]);
+    // Normalize DECIMAL fields to integers before comparing — DB returns "1500000.00", form sends 1500000
+    let oldVal = oldOpp[field] == null ? '' : String(oldOpp[field]);
+    let newVal = body[field] == null ? '' : String(body[field]);
+    if (field === 'estimated_value') {
+      oldVal = oldOpp[field] != null ? String(Math.round(Number(oldOpp[field]))) : '';
+      newVal = body[field] != null ? String(Math.round(Number(body[field]))) : '';
+    }
     if (oldVal === newVal) continue;
 
     let displayOld, displayNew;

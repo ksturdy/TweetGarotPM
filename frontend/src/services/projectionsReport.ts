@@ -1,10 +1,15 @@
 import api from './api';
 import { ProjectionNote } from './projectionNotes';
 
+export interface SnapshotDateEntry {
+  date: string;
+  label: string | null;
+}
+
 export interface ProjectionsReportFilters {
   pms: { employee_no: string; name: string }[];
   departments: { code: string; name: string }[];
-  snapshot_dates: string[];
+  snapshot_dates: SnapshotDateEntry[];
 }
 
 export interface SnapshotData {
@@ -134,6 +139,15 @@ export const projectionsReportApi = {
     api.post<{ message: string; created: number; skipped: number; errors: number }>(
       '/projects/snapshots/capture-all'
     ),
+
+  getSnapshotLabels: () =>
+    api.get<{ id: number; snapshot_date: string; label: string }[]>('/projects/snapshots/labels'),
+
+  upsertSnapshotLabel: (snapshot_date: string, label: string) =>
+    api.post<{ id: number; snapshot_date: string; label: string }>('/projects/snapshots/labels', { snapshot_date, label }),
+
+  deleteSnapshotLabel: (snapshot_date: string) =>
+    api.delete(`/projects/snapshots/labels/${snapshot_date}`),
 
   downloadPdf: async (query: ProjectionsReportQuery = {}) => {
     const params: any = {};

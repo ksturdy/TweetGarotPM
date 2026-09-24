@@ -8,6 +8,7 @@ import {
   ProjectionProjectSection,
   ProjectionRollupRow,
   ProjectionDeltas,
+  SnapshotDateEntry,
 } from '../../services/projectionsReport';
 import { teamsApi } from '../../services/teams';
 import MultiSearchableSelect from '../../components/MultiSearchableSelect';
@@ -84,12 +85,26 @@ const ProjectionsReport: React.FC = () => {
   const [captureResult, setCaptureResult] = useState<{ created: number; skipped: number; errors: number } | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
 
+  const [labelModalOpen, setLabelModalOpen] = useState(false);
+  const [labelDate, setLabelDate] = useState('');
+  const [labelText, setLabelText] = useState('');
+  const [labelSaving, setLabelSaving] = useState(false);
+  const [labelError, setLabelError] = useState<string | null>(null);
+
   const teamFilterArr = useMemo(() => Array.from(teamFilter), [teamFilter]);
 
   const { data: filters } = useQuery({
     queryKey: ['projectionsReportFilters', teamFilterArr],
     queryFn: () => projectionsReportApi.getFilters(teamFilterArr).then(r => r.data),
   });
+
+  // Normalize snapshot_dates: backend may return string[] (old) or {date,label}[] (new)
+  const snapshotEntries = useMemo<SnapshotDateEntry[]>(
+    () => (filters?.snapshot_dates ?? []).map((d: any) =>
+      typeof d === 'string' ? { date: d, label: null } : d
+    ),
+    [filters?.snapshot_dates]
+  );
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -268,7 +283,24 @@ const ProjectionsReport: React.FC = () => {
             />
           </div>
           <div>
-            <div style={filterLabel}>Compare Snapshots</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+              <div style={filterLabel}>Compare Snapshots</div>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    const firstDate = snapshotEntries[0]?.date ?? new Date().toISOString().split('T')[0];
+                    const existing = snapshotEntries.find(d => d.date === firstDate);
+                    setLabelDate(firstDate);
+                    setLabelText(existing?.label ?? '');
+                    setLabelError(null);
+                    setLabelModalOpen(true);
+                  }}
+                  style={{ fontSize: '0.7rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Label a snapshot
+                </button>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
               <select
                 value={startDate}
@@ -277,8 +309,10 @@ const ProjectionsReport: React.FC = () => {
                 title="Prior snapshot"
               >
                 <option value="">Prior (auto)</option>
-                {(filters?.snapshot_dates ?? []).map(d => (
-                  <option key={d} value={d}>{fmtSnapshotDate(d)}</option>
+                {snapshotEntries.map((d: SnapshotDateEntry) => (
+                  <option key={d.date} value={d.date}>
+                    {d.label ? `${d.label} — ${fmtSnapshotDate(d.date)}` : fmtSnapshotDate(d.date)}
+                  </option>
                 ))}
               </select>
               <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
@@ -289,8 +323,10 @@ const ProjectionsReport: React.FC = () => {
                 title="Current snapshot"
               >
                 <option value="">Current (latest)</option>
-                {(filters?.snapshot_dates ?? []).map(d => (
-                  <option key={d} value={d}>{fmtSnapshotDate(d)}</option>
+                {snapshotEntries.map((d: SnapshotDateEntry) => (
+                  <option key={d.date} value={d.date}>
+                    {d.label ? `${d.label} — ${fmtSnapshotDate(d.date)}` : fmtSnapshotDate(d.date)}
+                  </option>
                 ))}
               </select>
             </div>
@@ -338,6 +374,94 @@ const ProjectionsReport: React.FC = () => {
 
       {report && !isLoading && view === 'department' && (
         <RollupTable rows={report.rollup_by_department} headerLabel="Department" />
+      )}
+
+      {/* LABEL SNAPSHOT MODAL */}
+      {labelModalOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }} onClick={() => setLabelModalOpen(false)}>
+          <div style={{
+            background: '#fff', borderRadius: '8px', padding: '1.5rem', width: '380px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem', color: '#1e293b' }}>Label Snapshot</h3>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>
+              Tag a snapshot date so you can compare the same projection cycle month-over-month.
+            </p>
+
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.3rem' }}>
+                Snapshot Date
+              </label>
+              <select
+                value={labelDate}
+                onChange={e => {
+                  setLabelDate(e.target.value);
+                  const existing = snapshotEntries.find((d: SnapshotDateEntry) => d.date === e.target.value);
+                  setLabelText(existing?.label ?? '');
+                }}
+                style={{ width: '100%', fontSize: '0.85rem', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+              >
+                {snapshotEntries.map((d: SnapshotDateEntry) => (
+                  <option key={d.date} value={d.date}>
+                    {d.label ? `${d.label} — ${fmtSnapshotDate(d.date)}` : fmtSnapshotDate(d.date)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.3rem' }}>
+                Label
+              </label>
+              <input
+                type="text"
+                value={labelText}
+                onChange={e => setLabelText(e.target.value)}
+                placeholder="e.g. Team JB Projections"
+                maxLength={100}
+                style={{ width: '100%', fontSize: '0.85rem', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px', boxSizing: 'border-box' }}
+                onKeyDown={async e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                autoFocus
+              />
+            </div>
+
+            {labelError && <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginBottom: '0.75rem' }}>{labelError}</div>}
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '0.8rem' }}
+                onClick={() => setLabelModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: '0.8rem' }}
+                disabled={labelSaving || !labelText.trim()}
+                onClick={async () => {
+                  if (!labelDate || !labelText.trim()) return;
+                  setLabelSaving(true);
+                  setLabelError(null);
+                  try {
+                    await projectionsReportApi.upsertSnapshotLabel(labelDate, labelText.trim());
+                    queryClient.invalidateQueries({ queryKey: ['projectionsReportFilters'] });
+                    setLabelModalOpen(false);
+                  } catch (e: any) {
+                    setLabelError(e?.response?.data?.error || 'Failed to save label');
+                  } finally {
+                    setLabelSaving(false);
+                  }
+                }}
+              >
+                {labelSaving ? 'Saving…' : 'Save Label'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

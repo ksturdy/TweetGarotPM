@@ -207,6 +207,86 @@ router.post('/snapshots/capture-all', async (req, res) => {
 });
 
 /**
+ * GET /api/projects/snapshots/labels
+ * Get all snapshot labels for this tenant
+ */
+router.get('/snapshots/labels', async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, snapshot_date, label, created_at, updated_at
+       FROM snapshot_labels
+       WHERE tenant_id = $1
+       ORDER BY snapshot_date DESC`,
+      [req.tenantId]
+    );
+    const rows = result.rows.map(r => ({
+      ...r,
+      snapshot_date: r.snapshot_date instanceof Date
+        ? r.snapshot_date.toISOString().split('T')[0]
+        : String(r.snapshot_date).split('T')[0],
+    }));
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching snapshot labels:', error);
+    res.status(500).json({ error: 'Failed to fetch snapshot labels' });
+  }
+});
+
+/**
+ * POST /api/projects/snapshots/labels
+ * Upsert a label for a snapshot date (admin only)
+ */
+router.post('/snapshots/labels', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { snapshot_date, label } = req.body;
+    if (!snapshot_date || !label || !label.trim()) {
+      return res.status(400).json({ error: 'snapshot_date and label are required' });
+    }
+    const result = await db.query(
+      `INSERT INTO snapshot_labels (tenant_id, snapshot_date, label, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, $4)
+       ON CONFLICT (tenant_id, snapshot_date)
+       DO UPDATE SET label = EXCLUDED.label, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+       RETURNING id, snapshot_date, label, created_at, updated_at`,
+      [req.tenantId, snapshot_date, label.trim(), req.user.id]
+    );
+    const row = result.rows[0];
+    res.json({
+      ...row,
+      snapshot_date: row.snapshot_date instanceof Date
+        ? row.snapshot_date.toISOString().split('T')[0]
+        : String(row.snapshot_date).split('T')[0],
+    });
+  } catch (error) {
+    console.error('Error upserting snapshot label:', error);
+    res.status(500).json({ error: 'Failed to save snapshot label' });
+  }
+});
+
+/**
+ * DELETE /api/projects/snapshots/labels/:date
+ * Remove a snapshot label (admin only)
+ */
+router.delete('/snapshots/labels/:date', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    await db.query(
+      `DELETE FROM snapshot_labels WHERE tenant_id = $1 AND snapshot_date = $2`,
+      [req.tenantId, req.params.date]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting snapshot label:', error);
+    res.status(500).json({ error: 'Failed to delete snapshot label' });
+  }
+});
+
+/**
  * PATCH /api/projects/:projectId/snapshots/backfill-margin
  * Retroactively update all existing snapshots with the current margin overrides
  */

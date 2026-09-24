@@ -417,18 +417,23 @@ router.get('/filters', async (req, res) => {
       params
     );
 
-    // Distinct snapshot dates across all projects for this tenant (not team-scoped
-    // so the full timeline is always visible in the dropdowns).
+    // Distinct snapshot dates across all projects for this tenant, joined with
+    // any user-defined labels for semantic comparison.
     const datesRes = await db.query(
-      `SELECT DISTINCT snapshot_date FROM project_snapshots
-       WHERE tenant_id = $1 ORDER BY snapshot_date DESC`,
+      `SELECT DISTINCT ps.snapshot_date, sl.label
+       FROM project_snapshots ps
+       LEFT JOIN snapshot_labels sl
+         ON sl.tenant_id = ps.tenant_id AND sl.snapshot_date = ps.snapshot_date
+       WHERE ps.tenant_id = $1
+       ORDER BY ps.snapshot_date DESC`,
       [tenantId]
     );
-    const snapshotDates = datesRes.rows.map(r =>
-      r.snapshot_date instanceof Date
+    const snapshotDates = datesRes.rows.map(r => ({
+      date: r.snapshot_date instanceof Date
         ? r.snapshot_date.toISOString().split('T')[0]
-        : String(r.snapshot_date).split('T')[0]
-    );
+        : String(r.snapshot_date).split('T')[0],
+      label: r.label || null,
+    }));
 
     const pms = new Map();
     const departments = new Map();
