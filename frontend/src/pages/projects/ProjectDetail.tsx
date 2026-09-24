@@ -9,6 +9,7 @@ import NotifyDialog from '../../components/labor/NotifyDialog';
 import { AssignmentRecord } from '../../services/labor';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
 import { projectGoalsApi, ProjectGoals } from '../../services/projectGoals';
+import { phaseScheduleApi } from '../../services/phaseSchedule';
 import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../../components/SearchableSelect';
 import KpiCard, { getKpiStatus, KpiStatus } from '../../components/projects/KpiCard';
@@ -97,6 +98,12 @@ const ProjectDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['project-assignments', id] });
       queryClient.invalidateQueries({ queryKey: ['labor-board'] });
     },
+  });
+
+  const { data: billingSummary } = useQuery({
+    queryKey: ['phase-billing-summary', id],
+    queryFn: () => phaseScheduleApi.getBillingSummary(Number(id)).then(r => r.data),
+    enabled: !!project && project.scheduling_mode === 'phase',
   });
 
   // Titan-editable fields
@@ -273,7 +280,7 @@ const ProjectDetail: React.FC = () => {
       </div>
 
       {/* ─── KPI Row 1 ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.6rem', marginBottom: '0.6rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${project.scheduling_mode === 'phase' ? 5 : 4}, 1fr)`, gap: '0.6rem', marginBottom: '0.6rem' }}>
         <KpiCard
           icon="💵"
           label="Cash Flow"
@@ -349,6 +356,23 @@ const ProjectDetail: React.FC = () => {
           }
           status={shopFieldStatus}
         />
+        {project.scheduling_mode === 'phase' && (
+          <KpiCard
+            icon="🎯"
+            label="Forecast GM%"
+            value={billingSummary?.forecastGmPct != null ? `${billingSummary.forecastGmPct.toFixed(1)}%` : '-'}
+            subValue={
+              billingSummary && billingSummary.totalProjectBillable > 0
+                ? `$${(billingSummary.totalProjectBillable / 1000).toFixed(0)}K billable · $${(billingSummary.totalProjectCost / 1000).toFixed(0)}K cost`
+                : 'No billing rates set'
+            }
+            status={
+              billingSummary?.forecastGmPct != null
+                ? (billingSummary.forecastGmPct >= 15 ? 'green' : billingSummary.forecastGmPct >= 0 ? 'yellow' : 'red')
+                : 'neutral'
+            }
+          />
+        )}
       </div>
 
       {/* ─── KPI Row 2 ─── */}

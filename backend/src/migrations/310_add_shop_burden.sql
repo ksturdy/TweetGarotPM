@@ -1,0 +1,2 @@
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS shop_burden_billable_rate DECIMAL(10,2) NOT NULL DEFAULT 0;

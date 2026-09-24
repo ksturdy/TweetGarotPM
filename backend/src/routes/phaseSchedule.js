@@ -381,6 +381,72 @@ router.post('/reconciliations/:id/reject',
   }
 );
 
+// Billing summary — totalProjectBillable, totalProjectCost, forecastGmPct
+// Used by the project dashboard to show a forward-looking margin KPI.
+router.get('/project/:projectId/billing-summary', verifyProjectOwnership, async (req, res, next) => {
+  try {
+    const items = await PhaseSchedule.getScheduleItems(req.params.projectId, req.tenantId);
+    if (!items || items.length === 0) return res.json({ forecastGmPct: null, totalProjectBillable: 0, totalProjectCost: 0 });
+
+    const laborRates = await ProjectLaborRate.list(req.params.projectId, req.tenantId);
+    const lrMap = new Map(laborRates.map(r => [r.id, parseFloat(r.billable_rate)]));
+
+    const p = req.project;
+    const shopBurden = parseFloat(p.shop_burden_billable_rate || 0);
+    const markup = {
+      1: parseFloat(p.billing_markup_labor    || 0),
+      2: parseFloat(p.billing_markup_material || 0),
+      3: parseFloat(p.billing_markup_subs     || 0),
+      4: parseFloat(p.billing_markup_rentals  || 0),
+      5: parseFloat(p.billing_markup_equipment || 0),
+      6: parseFloat(p.billing_markup_genconds  || 0),
+    };
+
+    const SHOP_PREFIXES = new Set(['35', '45', '55']);
+    const isShop = item => SHOP_PREFIXES.has((item.phase_code_display || '').split('-')[0]?.trim() ?? '');
+
+    let totalProjectBillable = 0;
+    let totalProjectCost = 0;
+
+    for (const item of items) {
+      const ct = (item.cost_types && item.cost_types[0]) || 0;
+      const jtdHrs  = parseFloat(item.total_jtd_hours)  || 0;
+      const jtdCost = parseFloat(item.total_jtd_cost)   || 0;
+      const estHrs  = parseFloat(item.total_est_hours)  || 0;
+      const estCost = parseFloat(item.total_est_cost)   || 0;
+      const vPC     = parseFloat(item.total_projected_cost) || 0;
+      const projCost = vPC > 0 ? Math.max(vPC, jtdCost) : jtdCost;
+      const remCost  = Math.max(0, projCost - jtdCost);
+      totalProjectCost += projCost;
+
+      const mu = markup[ct] || 0;
+      const hasRate = ct === 1 && item.billable_rate_id;
+      const rate = hasRate ? (lrMap.get(item.billable_rate_id) || 0) : 0;
+      const burden = (shopBurden > 0 && isShop(item)) ? shopBurden : 0;
+
+      if (hasRate && rate > 0) {
+        // JTD billable: hours × (rate + burden)
+        totalProjectBillable += jtdHrs * (rate + burden);
+        // Remaining billable: cost-derived remaining hours × (rate + burden)
+        const effRate = jtdHrs > 0 ? jtdCost / jtdHrs : (estHrs > 0 ? estCost / estHrs : 0);
+        const remHrs = effRate > 0 ? remCost / effRate : 0;
+        totalProjectBillable += remHrs * (rate + burden);
+      } else {
+        // Markup-based: total projected cost × (1 + markup%)
+        totalProjectBillable += projCost * (1 + mu / 100);
+      }
+    }
+
+    const forecastGmPct = totalProjectBillable > 0
+      ? (totalProjectBillable - totalProjectCost) / totalProjectBillable * 100
+      : null;
+
+    res.json({ forecastGmPct, totalProjectBillable, totalProjectCost });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Sync schedule item quantity / quantity_installed with the latest Stratus import
 // for the project (LF -> SUM(length), EA -> COUNT). Hours and costs are not touched.
 router.post('/project/:projectId/sync-stratus-quantities', verifyProjectOwnership, async (req, res, next) => {

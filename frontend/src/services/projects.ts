@@ -47,6 +47,7 @@ export interface Project {
   billing_markup_rentals?: number | null;
   billing_markup_equipment?: number | null;
   billing_markup_genconds?: number | null;
+  shop_burden_billable_rate?: number | null;
   created_at: string;
   scheduling_mode?: 'summary' | 'cost_type' | 'phase';
   // Effective dates resolved from vp_contracts + projects table (server-computed)

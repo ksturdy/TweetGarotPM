@@ -127,6 +127,11 @@ export const phaseScheduleApi = {
     });
   },
 
+  getBillingSummary: (projectId: number) =>
+    api.get<{ forecastGmPct: number | null; totalProjectBillable: number; totalProjectCost: number }>(
+      `/phase-schedule/project/${projectId}/billing-summary`
+    ),
+
   syncStratusQuantities: (projectId: number) =>
     api.post<StratusSyncResult>(`/phase-schedule/project/${projectId}/sync-stratus-quantities`),
 

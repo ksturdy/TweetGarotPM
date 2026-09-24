@@ -11,12 +11,12 @@ import { scheduleSegmentsService, SEGMENT_DEFINITIONS } from '../../services/sch
 import PhaseGCLinkChips, { UnlinkAllButton } from '../../components/phaseSchedule/PhaseGCLinkChips';
 import { ContourType, contourOptions, getContourMultipliers, ContourVisual } from '../../utils/contours';
 import { format, addMonths, addDays, addWeeks, addQuarters, startOfMonth, startOfWeek, startOfQuarter, getQuarter, differenceInMonths, differenceInCalendarDays, startOfDay, eachDayOfInterval, isWeekend } from 'date-fns';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Filler, Tooltip, Legend } from 'chart.js';
+import { Line, Bar, Doughnut, Chart as ReactChart } from 'react-chartjs-2';
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import '../../styles/SalesPipeline.css';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Filler, Tooltip, Legend);
 
 // Cost type constants
 const COST_TYPE_NAMES: Record<number, string> = {
@@ -468,6 +468,14 @@ const generateMonths = (start: Date, end: Date): Date[] => {
 const PERIOD_OPTIONS = ['week', 'month', 'quarter'] as const;
 type Period = typeof PERIOD_OPTIONS[number];
 
+const CT_LABELS: Record<number, string> = { 1: 'Labor', 2: 'Material', 3: 'Subcontracts', 4: 'Rentals', 5: 'MEP Equip.', 6: 'Gen. Cond.' };
+const CT_COLORS: Record<number, string> = { 1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6', 5: '#ef4444', 6: '#64748b' };
+
+// Phase code prefixes that carry shop burden (e.g. 35-xxx, 45-xxx, 55-xxx)
+const SHOP_BURDEN_PREFIXES = new Set(['35', '45', '55']);
+const isShopItem = (item: { phase_code_display?: string | null }): boolean =>
+  SHOP_BURDEN_PREFIXES.has((item.phase_code_display || '').split('-')[0]?.trim() ?? '');
+
 const startOfPeriod = (d: Date, period: Period): Date => {
   if (period === 'week') return startOfWeek(d, { weekStartsOn: 1 });
   if (period === 'quarter') return startOfQuarter(d);
@@ -591,7 +599,8 @@ const computeMonthlyValues = (
   hoursPerWorker: number = SHIFT_HRS_PER_MONTH['5/8'],
   laborRateById?: Map<number, number>,
   markupByCt?: Record<number, number>,
-  period: Period = 'month'
+  period: Period = 'month',
+  shopBurdenBillable: number = 0
 ): Record<string, number> => {
   const values: Record<string, number> = {};
   if (!item.start_date || !item.end_date) return values;
@@ -623,9 +632,23 @@ const computeMonthlyValues = (
     if (ct === 1 && item.billable_rate_id && laborRateById) {
       const rate = laborRateById.get(item.billable_rate_id) || 0;
       if (rate <= 0) return values;
+      // Mirror the Remaining Hrs display formula: back-calculate hours from Vista
+      // remaining cost ÷ effective labor rate. This keeps billing hours consistent
+      // with what the grid shows and avoids wild swings when JTD hours from Vista
+      // diverge from the budget (e.g. over-runs logged as hours but not cost).
       const jtdHrs = parseNum(item.total_jtd_hours);
-      const remHrs = Math.max(0, computeProjHrs(item) - jtdHrs);
-      total = remHrs * rate;
+      const jtdCost = parseNum(item.total_jtd_cost);
+      const estHrs = parseNum(item.total_est_hours);
+      const estCost = parseNum(item.total_est_cost);
+      const vPC = parseNum(item.total_projected_cost);
+      const projCostVista = vPC > 0 ? Math.max(vPC, jtdCost) : 0;
+      const remCostForHrs = Math.max(0, projCostVista - jtdCost);
+      const jtdLaborRate = jtdHrs > 0 ? jtdCost / jtdHrs : 0;
+      const estLaborRate = estHrs > 0 ? estCost / estHrs : 0;
+      const effLaborRate = jtdLaborRate > 0 ? jtdLaborRate : estLaborRate;
+      const remHrs = effLaborRate > 0 ? remCostForHrs / effLaborRate : Math.max(0, computeProjHrs(item) - jtdHrs);
+      const burden = shopBurdenBillable > 0 && isShopItem(item) ? shopBurdenBillable : 0;
+      total = remHrs * (rate + burden);
     } else {
       const markupPct = markupByCt ? markupByCt[ct] || 0 : 0;
       const vPC = parseNum(item.total_projected_cost);
@@ -2464,6 +2487,7 @@ const GridView: React.FC<{
   period: Period;
   laborRates: ProjectLaborRate[];
   markupByCt: Record<number, number>;
+  shopBurdenBillable: number;
   projectId: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
@@ -2485,7 +2509,7 @@ const GridView: React.FC<{
   prefixFilter: Set<string>;
   onPrefixFilterToggle: (prefix: string) => void;
   onPrefixFilterClear: () => void;
-}> = ({ items, allItems, months, mode, shift, period, laborRates, markupByCt, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
+}> = ({ items, allItems, months, mode, shift, period, laborRates, markupByCt, shopBurdenBillable, projectId, onUpdate, onEdit, costTypeGroups, collapsedGroups, onToggleGroup, selectedItems, onToggleItem, onToggleGroupSelection, onToggleAll, filterText, onFilterChange, sortDir, onSortChange, ctFilter, onCtFilterToggle, onCtFilterClear, availablePrefixes, prefixFilter, onPrefixFilterToggle, onPrefixFilterClear }) => {
   // Grid column widths (persisted to localStorage)
   const [colWidths, setColWidths] = useState<typeof GRID_COL_DEFAULTS>(() => {
     try {
@@ -2644,10 +2668,10 @@ const GridView: React.FC<{
   const allMonthlyValues = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     items.forEach(item => {
-      map.set(item.id, computeMonthlyValues(item, months, mode, hpwm, laborRateById, markupByCt, period));
+      map.set(item.id, computeMonthlyValues(item, months, mode, hpwm, laborRateById, markupByCt, period, shopBurdenBillable));
     });
     return map;
-  }, [items, months, mode, hpwm, laborRateById, markupByCt, period]);
+  }, [items, months, mode, hpwm, laborRateById, markupByCt, period, shopBurdenBillable]);
 
   const columnTotals = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -4000,6 +4024,26 @@ const BillingRatesModal: React.FC<{
               + Add Rate
             </button>
           </div>
+
+          {/* Shop Burden */}
+          <h3 style={{ margin: '1.5rem 0 0.35rem 0', fontSize: '0.85rem', color: '#1e293b' }}>Shop Burden</h3>
+          <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.72rem', color: '#64748b' }}>
+            Extra billable amount added per hour on all shop labor lines (phase code prefixes 35, 45, 55).
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '0.4rem 0.75rem', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.82rem', color: '#1e293b' }}>Billable $/hr</label>
+            <input
+              type="number" step="0.01" min="0"
+              defaultValue={Number(project.shop_burden_billable_rate ?? 0).toFixed(2)}
+              onBlur={e => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v >= 0 && v !== Number(project.shop_burden_billable_rate ?? 0))
+                  saveProject.mutate({ shop_burden_billable_rate: v });
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              style={{ ...inputStyle, textAlign: 'right' }}
+            />
+          </div>
         </div>
 
         <div style={{ padding: '0.75rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
@@ -4209,8 +4253,11 @@ const PhaseSchedule: React.FC = () => {
       const e = ymdToDate(item.end_date);
       if (e && (!latest || e > latest)) latest = e;
     });
+    // Fall back to project dates so charts render even before item dates are assigned
+    if (!earliest) earliest = ymdToDate(project?.start_date);
+    if (!latest) latest = ymdToDate(project?.end_date);
     return { earliest, latest };
-  }, [scheduleItems]);
+  }, [scheduleItems, project]);
 
   // Monthly buckets — used by the Gantt view and the dashboard chart, which
   // are not zoom-aware. Always monthly with a 1-month pad on each end.
@@ -4512,21 +4559,84 @@ const PhaseSchedule: React.FC = () => {
     const lrMap = new Map<number, number>();
     laborRates.forEach(r => lrMap.set(r.id, Number(r.billable_rate) || 0));
     const markup = buildMarkupByCt(project);
+    const shopBurden = Number(project?.shop_burden_billable_rate ?? 0);
     const periodBillable: number[] = new Array(periods.length).fill(0);
+    const billableByCt: Record<number, number> = {};
+    const remCostByCt: Record<number, number> = {};
     scheduleItems.forEach(item => {
-      const vals = computeMonthlyValues(item, periods, 'billable', hpwp, lrMap, markup, period);
+      const ct = item.cost_types?.[0] || 0;
+      const vals = computeMonthlyValues(item, periods, 'billable', hpwp, lrMap, markup, period, shopBurden);
+      let itemBillable = 0;
       periods.forEach((p, i) => {
         const key = periodKey(p, period);
-        if (vals[key]) periodBillable[i] += vals[key];
+        if (vals[key]) { periodBillable[i] += vals[key]; itemBillable += vals[key]; }
       });
+      billableByCt[ct] = (billableByCt[ct] || 0) + itemBillable;
+      const vPC = parseNum(item.total_projected_cost);
+      const jtdC = parseNum(item.total_jtd_cost);
+      remCostByCt[ct] = (remCostByCt[ct] || 0) + Math.max(0, (vPC > 0 ? Math.max(vPC, jtdC) : 0) - jtdC);
     });
     const cumulativeBillable: number[] = [];
     let runB = 0;
     periodBillable.forEach(v => { runB += v; cumulativeBillable.push(runB); });
-    const marginData = periodBillable.map((b, i) => b - periodCost[i]);
+
+    // Remaining cost per period (projected − JTD) — same formula as the grid's Cost column.
+    // Used for GM%, margin, and the cumulative cost line in Billable mode.
+    // periodCost (est budget) stays in place for the non-billable cashflow chart.
+    const periodRemCost: number[] = new Array(periods.length).fill(0);
+    scheduleItems.forEach(item => {
+      const vals = computeMonthlyValues(item, periods, 'cost', hpwp, undefined, undefined, period);
+      periods.forEach((p, i) => {
+        const key = periodKey(p, period);
+        if (vals[key]) periodRemCost[i] += vals[key];
+      });
+    });
+    const cumulativeRemCost: number[] = [];
+    let runRC = 0;
+    periodRemCost.forEach(v => { runRC += v; cumulativeRemCost.push(runRC); });
+
+    const marginData = periodBillable.map((b, i) => b - periodRemCost[i]);
     const totalBillable = runB;
-    const totalCostRemaining = periodCost.reduce((a, b) => a + b, 0);
+    const totalCostRemaining = periodRemCost.reduce((a, b) => a + b, 0);
     const gmPct = totalBillable > 0 ? (totalBillable - totalCostRemaining) / totalBillable * 100 : null;
+
+    // Total project billable = JTD portion (billed at same rates) + remaining billable
+    // Also track JTD billable and cost by cost type for the total margin doughnut.
+    let totalJtdBillable = 0;
+    let totalProjectCost = 0;
+    const jtdBillableByCt: Record<number, number> = {};
+    const jtdCostByCt: Record<number, number> = {};
+    scheduleItems.forEach(item => {
+      const ct = item.cost_types?.[0] || 0;
+      const jtdHrs = parseNum(item.total_jtd_hours);
+      const jtdC = parseNum(item.total_jtd_cost);
+      const vPC = parseNum(item.total_projected_cost);
+      totalProjectCost += vPC > 0 ? Math.max(vPC, jtdC) : jtdC;
+      jtdCostByCt[ct] = (jtdCostByCt[ct] || 0) + jtdC;
+      if (ct === 1 && item.billable_rate_id) {
+        const rate = lrMap.get(item.billable_rate_id) || 0;
+        if (rate > 0) {
+          const burden = shopBurden > 0 && isShopItem(item) ? shopBurden : 0;
+          const jb = jtdHrs * (rate + burden);
+          totalJtdBillable += jb;
+          jtdBillableByCt[ct] = (jtdBillableByCt[ct] || 0) + jb;
+        } else {
+          const jb = jtdC * (1 + (markup[ct] || 0) / 100);
+          totalJtdBillable += jb;
+          jtdBillableByCt[ct] = (jtdBillableByCt[ct] || 0) + jb;
+        }
+      } else {
+        const jb = jtdC * (1 + (markup[ct] || 0) / 100);
+        totalJtdBillable += jb;
+        jtdBillableByCt[ct] = (jtdBillableByCt[ct] || 0) + jb;
+      }
+    });
+    const totalProjectBillable = totalJtdBillable + totalBillable;
+    const forecastGmPct = totalProjectBillable > 0 ? (totalProjectBillable - totalProjectCost) / totalProjectBillable * 100 : null;
+
+    // Cumulative chart: offset by JTD so lines start at the already-completed baseline
+    const cumulativeBillableTotal = cumulativeBillable.map(v => v + totalJtdBillable);
+    const cumulativeCostTotal = cumulativeRemCost.map(v => v + totalJtdCost);
 
     const unratedItems = scheduleItems.filter(item => {
       const ct = item.cost_types?.[0] || 0;
@@ -4538,7 +4648,15 @@ const PhaseSchedule: React.FC = () => {
     const unratedCount = unratedItems.length;
     const unratedCost = unratedItems.reduce((s, i) => s + Math.max(0, parseNum(i.total_projected_cost) - parseNum(i.total_jtd_cost)), 0);
 
-    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine, revenueData, periodBillable, cumulativeBillable, marginData, totalBillable, totalCostRemaining, gmPct, unratedCount, unratedCost };
+    // Margin by cost type includes JTD + remaining for the total project picture
+    const marginByCt: Record<number, number> = {};
+    [1, 2, 3, 4, 5, 6].forEach(ct => {
+      const totalBillCt = (billableByCt[ct] || 0) + (jtdBillableByCt[ct] || 0);
+      const totalCostCt = (remCostByCt[ct] || 0) + (jtdCostByCt[ct] || 0);
+      if (totalBillCt || totalCostCt) marginByCt[ct] = totalBillCt - totalCostCt;
+    });
+
+    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine, revenueData, periodBillable, cumulativeBillable, cumulativeRemCost, cumulativeBillableTotal, cumulativeCostTotal, marginData, totalBillable, totalCostRemaining, gmPct, totalProjectBillable, totalProjectCost, forecastGmPct, unratedCount, unratedCost, marginByCt };
   }, [scheduleItems, periods, period, shiftSettings, activeSegmentKeys, totalJtdCost, project?.projected_revenue, project?.projected_cost, laborRates, project]);
 
   const handleAdd = (ids: number[], groupBy: string) => {
@@ -4775,12 +4893,17 @@ const PhaseSchedule: React.FC = () => {
               Billable Summary
             </div>
             <div style={{ padding: '0.75rem' }}>
-              {[
-                { label: 'GM%', value: chartData.gmPct != null ? `${chartData.gmPct.toFixed(1)}%` : '—', color: chartData.gmPct != null ? (chartData.gmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b', big: true },
-                { label: 'Total Billable', value: (() => { const v = chartData.totalBillable; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: '#db2777', big: false },
-                { label: 'Total Cost', value: (() => { const v = chartData.totalCostRemaining; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: '#64748b', big: false },
-                { label: 'Margin', value: (() => { const v = chartData.totalBillable - chartData.totalCostRemaining; if (Math.abs(v) >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })(), color: (chartData.totalBillable - chartData.totalCostRemaining) >= 0 ? '#10b981' : '#ef4444', big: false },
-              ].map(s => (
+              {(() => {
+                const fmtBig = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
+                const margin = chartData.totalBillable - chartData.totalCostRemaining;
+                return [
+                  { label: 'Forecast GM%', value: chartData.forecastGmPct != null ? `${chartData.forecastGmPct.toFixed(1)}%` : '—', color: chartData.forecastGmPct != null ? (chartData.forecastGmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b', big: true },
+                  { label: 'Proj. Billable', value: fmtBig(chartData.totalProjectBillable), color: '#db2777', big: false },
+                  { label: 'Rem. Billable', value: fmtBig(chartData.totalBillable), color: '#9d174d', big: false },
+                  { label: 'Rem. Cost', value: fmtBig(chartData.totalCostRemaining), color: '#64748b', big: false },
+                  { label: 'Rem. Margin', value: fmtBig(margin), color: margin >= 0 ? '#10b981' : '#ef4444', big: false },
+                ];
+              })().map(s => (
                 <div key={s.label} style={{ marginBottom: '0.6rem' }}>
                   <div style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>{s.label}</div>
                   <div style={{ fontSize: s.big ? '1.6rem' : '0.9rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
@@ -4798,18 +4921,22 @@ const PhaseSchedule: React.FC = () => {
               )}
             </div>
           </div>
-          {/* Monthly Billable */}
+          {/* Monthly Billable & Margin (combined) */}
           <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monthly Billable</div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monthly Billable &amp; Margin</div>
             <div style={{ height: 160, position: 'relative' }}>
-              <Bar
-                data={{ labels: chartData.labels, datasets: [{ label: 'Billable', data: chartData.periodBillable, backgroundColor: '#db277750', borderColor: '#db2777', borderWidth: 1, borderRadius: 2 }] }}
+              <ReactChart
+                type="bar"
+                data={{ labels: chartData.labels, datasets: [
+                  { type: 'bar' as const, label: 'Billable', data: chartData.periodBillable, backgroundColor: '#db277740', borderColor: '#db2777', borderWidth: 1, borderRadius: 2, order: 2 },
+                  { type: 'line' as const, label: 'Margin', data: chartData.marginData, borderColor: '#10b981', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.3, order: 1 },
+                ] }}
                 options={{
                   maintainAspectRatio: false, responsive: true,
-                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; } } } },
+                  plugins: { legend: { display: true, position: 'top' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 6, usePointStyle: true } }, tooltip: { mode: 'index' as const, intersect: false, callbacks: { label: (ctx: any) => { const v = ctx.parsed.y ?? 0; const lbl = ctx.dataset.label || ''; if (Math.abs(v) >= 1e6) return `${lbl}: $${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `${lbl}: $${Math.round(v/1000)}K`; return `${lbl}: $${Math.round(v)}`; } } } },
                   scales: {
                     x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (n >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
+                    y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#64748b', callback: (v: any) => { const n = Number(v); if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (Math.abs(n) >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
                   },
                 }}
               />
@@ -4821,8 +4948,8 @@ const PhaseSchedule: React.FC = () => {
             <div style={{ height: 160, position: 'relative' }}>
               <Line
                 data={{ labels: chartData.labels, datasets: [
-                  { label: 'Billable', data: chartData.cumulativeBillable, borderColor: '#db2777', backgroundColor: '#db277718', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 },
-                  { label: 'Cost', data: chartData.cumulativeCost, borderColor: '#64748b', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 1.5, borderDash: [5, 3] },
+                  { label: 'Billable', data: chartData.cumulativeBillableTotal, borderColor: '#db2777', backgroundColor: '#db277718', fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 },
+                  { label: 'Cost', data: chartData.cumulativeCostTotal, borderColor: '#64748b', backgroundColor: 'transparent', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 1.5, borderDash: [5, 3] },
                 ] }}
                 options={{
                   maintainAspectRatio: false, responsive: true,
@@ -4836,21 +4963,32 @@ const PhaseSchedule: React.FC = () => {
               />
             </div>
           </div>
-          {/* Margin by Month */}
-          <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Margin by Month</div>
+          {/* Margin by Cost Type (doughnut) */}
+          <div style={{ flex: 0.6, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Margin by Cost Type</div>
             <div style={{ height: 160, position: 'relative' }}>
-              <Bar
-                data={{ labels: chartData.labels, datasets: [{ label: 'Margin', data: chartData.marginData, backgroundColor: chartData.marginData.map(v => v >= 0 ? '#10b98150' : '#ef444450'), borderColor: chartData.marginData.map(v => v >= 0 ? '#10b981' : '#ef4444'), borderWidth: 1, borderRadius: 2 }] }}
-                options={{
-                  maintainAspectRatio: false, responsive: true,
-                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const v = ctx.parsed.y ?? 0; if (Math.abs(v) >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (Math.abs(v) >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; } } } },
-                  scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, color: '#64748b', callback: v => { const n = Number(v); if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; if (Math.abs(n) >= 1e3) return `$${Math.round(n/1000)}K`; return `$${n}`; } } },
-                  },
-                }}
-              />
+              {(() => {
+                const entries = Object.entries(chartData.marginByCt)
+                  .map(([ct, v]) => ({ ct: Number(ct), v }))
+                  .filter(e => Math.abs(e.v) > 0.5);
+                if (entries.length === 0) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.75rem' }}>No data</div>;
+                const fmtV = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
+                return (
+                  <Doughnut
+                    data={{
+                      labels: entries.map(e => CT_LABELS[e.ct] || `CT${e.ct}`),
+                      datasets: [{ data: entries.map(e => Math.abs(e.v)), backgroundColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') + 'bb' : '#ef444488'), borderColor: entries.map(e => e.v >= 0 ? (CT_COLORS[e.ct] || '#64748b') : '#ef4444'), borderWidth: 1.5 }],
+                    }}
+                    options={{
+                      maintainAspectRatio: false, responsive: true, cutout: '60%',
+                      plugins: {
+                        legend: { display: true, position: 'right' as const, labels: { font: { size: 9 }, boxWidth: 10, padding: 4, usePointStyle: true, generateLabels: chart => chart.data.labels!.map((lbl, i) => ({ text: `${lbl}: ${fmtV(entries[i].v)}`, fillStyle: (chart.data.datasets[0].backgroundColor as string[])[i], strokeStyle: (chart.data.datasets[0].borderColor as string[])[i], lineWidth: 1.5, hidden: false, index: i })) } },
+                        tooltip: { callbacks: { label: ctx => { const e = entries[ctx.dataIndex]; return `${CT_LABELS[e.ct] || `CT${e.ct}`}: ${fmtV(e.v)}${e.v < 0 ? ' (loss)' : ''}`; } } },
+                      },
+                    }}
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -5109,7 +5247,7 @@ const PhaseSchedule: React.FC = () => {
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
               ctFilter={costTypeFilter} onCtFilterToggle={toggleCostTypeFilter} onCtFilterClear={clearCostTypeFilter}
               availablePrefixes={availablePrefixes} prefixFilter={prefixFilter} onPrefixFilterToggle={togglePrefixFilter} onPrefixFilterClear={clearPrefixFilter} />
-          : <GridView items={filteredItems} allItems={scheduleItems} months={periods} mode={gridMode} shift={avgDayShiftFrom(shiftSettings, SEGMENT_DEFINITIONS.filter(d => d.isLabor && (activeSegmentKeys.length > 0 ? activeSegmentKeys.includes(d.key) : true)).map(d => d.key))} period={period} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
+          : <GridView items={filteredItems} allItems={scheduleItems} months={periods} mode={gridMode} shift={avgDayShiftFrom(shiftSettings, SEGMENT_DEFINITIONS.filter(d => d.isLabor && (activeSegmentKeys.length > 0 ? activeSegmentKeys.includes(d.key) : true)).map(d => d.key))} period={period} laborRates={laborRates} markupByCt={buildMarkupByCt(project)} shopBurdenBillable={Number(project?.shop_burden_billable_rate ?? 0)} projectId={Number(projectId)} onUpdate={handleInlineUpdate} onEdit={setEditingItem} costTypeGroups={costTypeGroups} collapsedGroups={collapsedGroups} onToggleGroup={toggleGroup}
               selectedItems={selectedItems} onToggleItem={toggleItemSelection} onToggleGroupSelection={toggleGroupSelection} onToggleAll={toggleAllSelection}
               filterText={filterText} onFilterChange={setFilterText}
               sortDir={sortDir} onSortChange={() => setSortDir(d => d === 'none' ? 'asc' : d === 'asc' ? 'desc' : 'none')}
