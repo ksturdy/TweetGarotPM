@@ -502,6 +502,7 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
 
+        <div className="sales-table-scroll-wrapper">
         {filteredUsers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem' }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>👥</div>
@@ -753,6 +754,7 @@ const UserManagement: React.FC = () => {
             </tbody>
           </table>
         )}
+        </div>
       </div>
     </div>
   );
