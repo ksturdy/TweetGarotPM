@@ -319,7 +319,7 @@ const ProjectFinancials: React.FC = () => {
       // Rate reliability threshold: same rule as calcProjectedHours — don't switch to JTD
       // rate until ≥5% of estimated hours are burned. Before that the early-job sample
       // (mobilization, supervision) skews $/hr low and balloons the remaining-hours forecast.
-      const jtdRateReliable = jtdH >= estH * 0.05;
+      const jtdRateReliable = jtdH > 0 && jtdH >= estH * 0.05;
       const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
       const projH = rate > 0 ? projC / rate : estH;
       const remaining = Math.max(0, projH - jtdH);
@@ -904,9 +904,11 @@ const ProjectFinancials: React.FC = () => {
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
-                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Total Headcount</td>
+                      <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Totals</td>
                       <td style={tfStyle}>{fmtNum(laborForecastData.totalRem)}</td>
-                      <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
+                      <td style={{ ...tfStyle, color: '#64748b', fontWeight: 600 }}>
+                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remaining * t.rate, 0))}
+                      </td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#f4f6f9', color: '#cbd5e1' }}>—</td>;
                         const h = laborForecastData.monthlyHours.get(col.key);
