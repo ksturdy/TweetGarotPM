@@ -359,7 +359,7 @@ const CostDrillIn: React.FC = () => {
                 <SortTh sortKey="jtd_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Cost</SortTh>
                 {isLabor && <SortTh sortKey="jtd_rate" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Rate</SortTh>}
                 <SortTh sortKey="prior_week_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Prev Wk</SortTh>
-                <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} style={{ whiteSpace: 'normal', maxWidth: '70px' }}>Chg Since Last Proj</SortTh>
+                <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} align="center" style={{ whiteSpace: 'normal', maxWidth: '70px' }}>Chg Since Last Proj</SortTh>
                 <SortTh sortKey="committed_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Committed</SortTh>
                 <SortTh sortKey="projected_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Projected</SortTh>
                 <SortTh sortKey="remaining_spend" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Spend</SortTh>
