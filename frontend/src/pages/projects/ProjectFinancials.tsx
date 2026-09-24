@@ -638,7 +638,7 @@ const ProjectFinancials: React.FC = () => {
       {/* ===== HEADER ===== */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
         <div>
-          <Link to={`/projects/${projectId}`} style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>&larr; Back</Link>
+          <button onClick={() => navigate(-1)} style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>&larr; Back</button>
           <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.2rem', color: '#1e293b' }}>Contract Status Drilldown</h2>
           {project && <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{project.number} - {project.name}</div>}
         </div>
