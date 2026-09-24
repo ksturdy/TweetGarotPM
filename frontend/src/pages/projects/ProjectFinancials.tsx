@@ -841,6 +841,7 @@ const ProjectFinancials: React.FC = () => {
                   <colgroup>
                     <col style={{ width: '290px' }} />
                     <col style={{ width: '70px' }} />
+                    <col style={{ width: '70px' }} />
                     {laborForecastData.columns.map(col => (
                       <col key={col.key} style={{ width: col.isYear ? '70px' : '60px' }} />
                     ))}
@@ -848,7 +849,8 @@ const ProjectFinancials: React.FC = () => {
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
                       <th style={{ padding: '0.4rem 0.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc', position: 'sticky', left: 0, zIndex: 1 }}>Trade</th>
-                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. Hrs / $</th>
+                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. Hrs</th>
+                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. $</th>
                       {laborForecastData.columns.map(col => (
                         <th key={col.key} style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: col.isYear ? '#f1f5f9' : '#f8fafc' }}>{col.label}</th>
                       ))}
@@ -868,6 +870,7 @@ const ProjectFinancials: React.FC = () => {
                           >
                             <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600, color, position: 'sticky', left: 0, backgroundColor: 'inherit', zIndex: 1 }}>{label}</td>
                             <td style={tdStyle}>{fmtNum(t.remaining)}</td>
+                            <td style={{ ...tdStyle, color: '#64748b' }}>{t.rate > 0 ? fmtK(t.remaining * t.rate) : '—'}</td>
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, background: '#fafafa', color: '#cbd5e1' }}>—</td>;
                               const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
@@ -884,9 +887,7 @@ const ProjectFinancials: React.FC = () => {
                             <td style={{ ...tdStyle, textAlign: 'left', fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '1.2rem', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>
                               {t.rate > 0 ? `@ $${t.rate.toFixed(0)}/hr` : ''}
                             </td>
-                            <td style={{ ...tdStyle, fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
-                              {t.rate > 0 ? fmtK(t.remaining * t.rate) : '—'}
-                            </td>
+                            <td style={{ ...tdStyle, fontSize: '0.7rem', color: '#94a3b8' }}>—</td>
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, fontSize: '0.7rem', background: '#fafafa', color: '#cbd5e1' }}>—</td>;
                               const cost = laborForecastData.monthlyCosts.get(col.key)?.[key] ?? 0;
@@ -905,6 +906,7 @@ const ProjectFinancials: React.FC = () => {
                     <tr style={{ backgroundColor: '#f8fafc' }}>
                       <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Total Headcount</td>
                       <td style={tfStyle}>{fmtNum(laborForecastData.totalRem)}</td>
+                      <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#f4f6f9', color: '#cbd5e1' }}>—</td>;
                         const h = laborForecastData.monthlyHours.get(col.key);
@@ -919,6 +921,7 @@ const ProjectFinancials: React.FC = () => {
                     </tr>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
                       <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Proj Monthly Cost</td>
+                      <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
                       <td style={{ ...tfStyle, color: '#64748b', fontWeight: 600 }}>
                         {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remaining * t.rate, 0))}
                       </td>
@@ -944,7 +947,8 @@ const ProjectFinancials: React.FC = () => {
                           </span>
                         )}
                       </td>
-                      <td style={{ ...tfStyle, color: '#64748b' }}>—</td>
+                      <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
+                      <td style={{ ...tfStyle, color: '#94a3b8' }}>—</td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#e8f0fe', color: '#cbd5e1' }}>—</td>;
                         const monthlyCost = laborForecastData.monthlyCosts.get(col.key)?.total ?? 0;
