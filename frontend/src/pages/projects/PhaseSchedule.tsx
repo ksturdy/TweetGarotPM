@@ -4888,37 +4888,67 @@ const PhaseSchedule: React.FC = () => {
       ) : gridMode === 'billable' && chartData ? (
         <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
           {/* GM% stats card */}
-          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', minWidth: 140 }}>
+          <div style={{ flexShrink: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             <div style={{ padding: '0.5rem 0.75rem', background: '#eef2f7', borderBottom: '1px solid #e2e8f0', fontSize: '0.68rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Billable Summary
             </div>
-            <div style={{ padding: '0.75rem' }}>
-              {(() => {
+            <div style={{ padding: '0.75rem', display: 'flex', gap: '1.25rem' }}>
+              {/* Left column — billing metrics */}
+              <div style={{ minWidth: 120 }}>
+                {(() => {
+                  const fmtBig = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
+                  const margin = chartData.totalBillable - chartData.totalCostRemaining;
+                  return [
+                    { label: 'Forecast GM%', value: chartData.forecastGmPct != null ? `${chartData.forecastGmPct.toFixed(1)}%` : '—', color: chartData.forecastGmPct != null ? (chartData.forecastGmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b', big: true },
+                    { label: 'Proj. Billable', value: fmtBig(chartData.totalProjectBillable), color: '#db2777', big: false },
+                    { label: 'Rem. Billable', value: fmtBig(chartData.totalBillable), color: '#9d174d', big: false },
+                    { label: 'Rem. Cost', value: fmtBig(chartData.totalCostRemaining), color: '#64748b', big: false },
+                    { label: 'Rem. Margin', value: fmtBig(margin), color: margin >= 0 ? '#10b981' : '#ef4444', big: false },
+                  ];
+                })().map(s => (
+                  <div key={s.label} style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>{s.label}</div>
+                    <div style={{ fontSize: s.big ? '1.6rem' : '0.9rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                  </div>
+                ))}
+                {chartData.unratedCount > 0 && (
+                  <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.5rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4 }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#dc2626', marginBottom: '0.15rem' }}>
+                      {chartData.unratedCount} Unrated Item{chartData.unratedCount !== 1 ? 's' : ''}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: '#7f1d1d' }}>
+                      {(() => { const v = chartData.unratedCost; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })()} labor cost with no billing rate
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Right column — GMP section, only when projected_revenue is set */}
+              {project?.projected_revenue ? (() => {
                 const fmtBig = (v: number) => Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : Math.abs(v) >= 1e3 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
-                const margin = chartData.totalBillable - chartData.totalCostRemaining;
-                return [
-                  { label: 'Forecast GM%', value: chartData.forecastGmPct != null ? `${chartData.forecastGmPct.toFixed(1)}%` : '—', color: chartData.forecastGmPct != null ? (chartData.forecastGmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b', big: true },
-                  { label: 'Proj. Billable', value: fmtBig(chartData.totalProjectBillable), color: '#db2777', big: false },
-                  { label: 'Rem. Billable', value: fmtBig(chartData.totalBillable), color: '#9d174d', big: false },
-                  { label: 'Rem. Cost', value: fmtBig(chartData.totalCostRemaining), color: '#64748b', big: false },
-                  { label: 'Rem. Margin', value: fmtBig(margin), color: margin >= 0 ? '#10b981' : '#ef4444', big: false },
-                ];
-              })().map(s => (
-                <div key={s.label} style={{ marginBottom: '0.6rem' }}>
-                  <div style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>{s.label}</div>
-                  <div style={{ fontSize: s.big ? '1.6rem' : '0.9rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                </div>
-              ))}
-              {chartData.unratedCount > 0 && (
-                <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.5rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4 }}>
-                  <div style={{ fontSize: '0.62rem', fontWeight: 700, color: '#dc2626', marginBottom: '0.15rem' }}>
-                    {chartData.unratedCount} Unrated Item{chartData.unratedCount !== 1 ? 's' : ''}
+                const cap = Number(project.projected_revenue);
+                const forecast = chartData.totalProjectBillable;
+                const vsCap = cap - forecast;
+                const overCap = vsCap < 0;
+                const effectiveBillable = Math.min(forecast, cap);
+                const effGmPct = effectiveBillable > 0
+                  ? (effectiveBillable - chartData.totalProjectCost) / effectiveBillable * 100
+                  : null;
+                return (
+                  <div style={{ minWidth: 110, borderLeft: '1px solid #e2e8f0', paddingLeft: '1.25rem' }}>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6rem' }}>GMP</div>
+                    {[
+                      { label: 'GMP Cap', value: fmtBig(cap), color: '#374151' },
+                      { label: overCap ? 'Over Cap' : 'Under Cap', value: `${overCap ? '-' : '+'}${fmtBig(Math.abs(vsCap))}`, color: overCap ? '#ef4444' : '#10b981' },
+                      { label: 'Eff. GM%', value: effGmPct != null ? `${effGmPct.toFixed(1)}%` : '—', color: effGmPct != null ? (effGmPct >= 0 ? '#10b981' : '#ef4444') : '#64748b' },
+                    ].map(s => (
+                      <div key={s.label} style={{ marginBottom: '0.6rem' }}>
+                        <div style={{ fontSize: '0.58rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>{s.label}</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ fontSize: '0.6rem', color: '#7f1d1d' }}>
-                    {(() => { const v = chartData.unratedCost; if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`; if (v >= 1e3) return `$${Math.round(v/1000)}K`; return `$${Math.round(v)}`; })()} labor cost with no billing rate
-                  </div>
-                </div>
-              )}
+                );
+              })() : null}
             </div>
           </div>
           {/* Monthly Billable & Margin (combined) */}
