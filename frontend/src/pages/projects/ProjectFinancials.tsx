@@ -190,9 +190,10 @@ const HPP = 173;
 const fmtHC = (hrs: number) => hrs < 0.05 ? '-' : hrs.toFixed(1);
 const fmtK = (v: number) => v < 500 ? '-' : v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
 const TRADE_META = [
-  { key: 'pf' as const, label: 'Pipefitter (PF)', color: '#3b82f6' },
-  { key: 'sm' as const, label: 'Sheet Metal (SM)', color: '#10b981' },
-  { key: 'pl' as const, label: 'Plumbing (PL)', color: '#f59e0b' },
+  { key: 'pf'    as const, label: 'Pipefitter (PF)', color: '#3b82f6' },
+  { key: 'sm'    as const, label: 'Sheet Metal (SM)', color: '#10b981' },
+  { key: 'pl'    as const, label: 'Plumbing (PL)', color: '#f59e0b' },
+  { key: 'admin' as const, label: 'Admin (70)', color: '#8b5cf6' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -326,8 +327,10 @@ const ProjectFinancials: React.FC = () => {
       // Field and shop share the same $/hr rate; only their schedule windows differ.
       const estHField = rows.filter((r: LaborTradeSummary) => r.location === 'field').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
       const estHShop  = rows.filter((r: LaborTradeSummary) => r.location === 'shop').reduce((s: number, r: LaborTradeSummary) => s + r.est_hours, 0);
-      const fieldFrac = estH > 0 ? estHField / estH : 1;
-      const shopFrac  = estH > 0 ? estHShop  / estH : 0;
+      // When no field/shop breakdown exists (e.g. admin 70-series), treat all hours as field.
+      const noSplit = estH > 0 && estHField === 0 && estHShop === 0;
+      const fieldFrac = estH > 0 ? (noSplit ? 1 : estHField / estH) : 1;
+      const shopFrac  = estH > 0 ? (noSplit ? 0 : estHShop  / estH) : 0;
       return { key, remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac, rate };
     });
     const totalRem = tradeHours.reduce((s, t) => s + t.remaining, 0);
@@ -352,8 +355,8 @@ const ProjectFinancials: React.FC = () => {
     // If a segment has no dates configured it falls back to the project-level window.
     const schedulingMode = project?.scheduling_mode ?? 'summary';
     const segments = segmentsData?.segments ?? [];
-    const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
-    const TRADE_SHOP_SEG:  Record<string, string> = { pf: '45', sm: '35', pl: '55' };
+    const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50', admin: '70' };
+    const TRADE_SHOP_SEG:  Record<string, string> = { pf: '45', sm: '35', pl: '55', admin: '70' };
 
     const resolveSegmentWindow = (segKey: string): { startOff: number; endOff: number; contour: ContourType } => {
       if (schedulingMode === 'cost_type') {
@@ -371,8 +374,8 @@ const ProjectFinancials: React.FC = () => {
     };
 
     const distributeHours = (tradeKey: string, hours: number, rate: number, segKey: string,
-      monthlyHours: Map<string, { pf: number; sm: number; pl: number; total: number }>,
-      monthlyCosts: Map<string, { pf: number; sm: number; pl: number; total: number }>,
+      monthlyHours: Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>,
+      monthlyCosts: Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>,
       now: Date) => {
       if (hours <= 0) return;
       const { startOff, endOff, contour } = resolveSegmentWindow(segKey);
@@ -382,11 +385,11 @@ const ProjectFinancials: React.FC = () => {
       for (let i = 0; i < remMonths; i++) {
         const mk = format(addMonths(now, startOff + i), 'yyyy-MM');
         const h = (hours / remMonths) * mults[i];
-        const existing  = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
-        const existingC = monthlyCosts.get(mk)  ?? { pf: 0, sm: 0, pl: 0, total: 0 };
-        existing[tradeKey as 'pf' | 'sm' | 'pl'] += h;
+        const existing  = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
+        const existingC = monthlyCosts.get(mk)  ?? { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
+        existing[tradeKey as 'pf' | 'sm' | 'pl' | 'admin'] += h;
         existing.total += h;
-        existingC[tradeKey as 'pf' | 'sm' | 'pl'] += h * rate;
+        existingC[tradeKey as 'pf' | 'sm' | 'pl' | 'admin'] += h * rate;
         existingC.total += h * rate;
         monthlyHours.set(mk, existing);
         monthlyCosts.set(mk, existingC);
@@ -394,8 +397,8 @@ const ProjectFinancials: React.FC = () => {
     };
 
     const now = new Date();
-    const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
-    const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; total: number }>();
+    const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>();
+    const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>();
 
     // Distribute field and shop hours for each trade into their respective segment windows
     TRADE_META.forEach(({ key }, idx) => {
@@ -419,16 +422,16 @@ const ProjectFinancials: React.FC = () => {
       if (lastMonthOfYear > twelveMonthsOut) {
         const yrKey = String(year);
         columns.push({ key: yrKey, label: yrKey, isYear: true });
-        let yrH = { pf: 0, sm: 0, pl: 0, total: 0 };
-        let yrC = { pf: 0, sm: 0, pl: 0, total: 0 };
+        let yrH = { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
+        let yrC = { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
         for (let m = 0; m < 12; m++) {
           const md = new Date(year, m, 1);
           if (md <= twelveMonthsOut) continue;
           const mk = format(md, 'yyyy-MM');
           const h = monthlyHours.get(mk);
-          if (h) yrH = { pf: yrH.pf + h.pf, sm: yrH.sm + h.sm, pl: yrH.pl + h.pl, total: yrH.total + h.total };
+          if (h) yrH = { pf: yrH.pf + h.pf, sm: yrH.sm + h.sm, pl: yrH.pl + h.pl, admin: yrH.admin + h.admin, total: yrH.total + h.total };
           const co = monthlyCosts.get(mk);
-          if (co) yrC = { pf: yrC.pf + co.pf, sm: yrC.sm + co.sm, pl: yrC.pl + co.pl, total: yrC.total + co.total };
+          if (co) yrC = { pf: yrC.pf + co.pf, sm: yrC.sm + co.sm, pl: yrC.pl + co.pl, admin: yrC.admin + co.admin, total: yrC.total + co.total };
         }
         if (yrH.total > 0) { monthlyHours.set(yrKey, yrH); monthlyCosts.set(yrKey, yrC); }
       }
@@ -845,7 +848,7 @@ const ProjectFinancials: React.FC = () => {
                   <thead>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
                       <th style={{ padding: '0.4rem 0.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc', position: 'sticky', left: 0, zIndex: 1 }}>Trade</th>
-                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. Hrs</th>
+                      <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>Rem. Hrs / $</th>
                       {laborForecastData.columns.map(col => (
                         <th key={col.key} style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0', background: col.isYear ? '#f1f5f9' : '#f8fafc' }}>{col.label}</th>
                       ))}
@@ -881,7 +884,9 @@ const ProjectFinancials: React.FC = () => {
                             <td style={{ ...tdStyle, textAlign: 'left', fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '1.2rem', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>
                               {t.rate > 0 ? `@ $${t.rate.toFixed(0)}/hr` : ''}
                             </td>
-                            <td style={{ ...tdStyle, fontSize: '0.7rem', color: '#94a3b8' }}>—</td>
+                            <td style={{ ...tdStyle, fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
+                              {t.rate > 0 ? fmtK(t.remaining * t.rate) : '—'}
+                            </td>
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, fontSize: '0.7rem', background: '#fafafa', color: '#cbd5e1' }}>—</td>;
                               const cost = laborForecastData.monthlyCosts.get(col.key)?.[key] ?? 0;
@@ -914,7 +919,9 @@ const ProjectFinancials: React.FC = () => {
                     </tr>
                     <tr style={{ backgroundColor: '#f8fafc' }}>
                       <td style={{ ...tfStyle, textAlign: 'left', position: 'sticky', left: 0, backgroundColor: '#f8fafc', zIndex: 1 }}>Proj Monthly Cost</td>
-                      <td style={{ ...tfStyle, color: '#64748b' }}>—</td>
+                      <td style={{ ...tfStyle, color: '#64748b', fontWeight: 600 }}>
+                        {fmtK(laborForecastData.tradeHours.reduce((s, t) => s + t.remaining * t.rate, 0))}
+                      </td>
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) {
                           const cost = laborForecastData.monthlyCosts.get(col.key)?.total ?? 0;
