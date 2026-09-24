@@ -28,6 +28,7 @@ const TRACKED_FIELDS = {
   market: 'Market',
   location_group: 'Region',
   description: 'Description',
+  source: 'Lead Source',
 };
 
 function buildChanges(oldOpp, body, newOpp) {

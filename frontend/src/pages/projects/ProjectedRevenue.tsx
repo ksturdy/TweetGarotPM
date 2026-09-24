@@ -1431,132 +1431,115 @@ const ProjectedRevenue: React.FC = () => {
                     return `${pct.toFixed(0)}%`;
                   })()}
                 </td>
-                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
-                  {parseNum(p.contract.backlog) > 0 ? (
-                    <select
-                      value={p.startOffset}
-                      onChange={(e) => {
-                        const newStart = parseInt(e.target.value);
-                        setAdjustedStartMonths(prev => ({
-                          ...prev,
-                          [p.contract.id]: newStart
-                        }));
-                        saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart });
-                        // Auto-bump end if start >= end
-                        const currentEnd = p.startOffset + p.remainingMonths;
-                        if (newStart >= currentEnd) {
-                          const newEnd = newStart + 1;
-                          setAdjustedEndMonths(prev => ({
-                            ...prev,
-                            [p.contract.id]: newEnd
-                          }));
-                          saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
-                        }
-                      }}
-                      style={{
-                        padding: '0.15rem 0.25rem',
-                        fontSize: '0.65rem',
-                        border: adjustedStartMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
-                        borderRadius: '3px',
-                        background: adjustedStartMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
-                        color: adjustedStartMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
-                        cursor: 'pointer',
-                        width: '65px'
-                      }}
-                      title="Click to adjust start date"
-                    >
-                      {Array.from({ length: 36 }, (_, i) => i).map(months => {
-                        const startDate = addMonths(startOfMonth(new Date()), months);
-                        return (
-                          <option key={months} value={months}>
-                            {format(startDate, 'MMM yy')}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  ) : (
-                    '-'
-                  )}
-                </td>
-                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }}>
-                  {parseNum(p.contract.backlog) > 0 ? (
-                    <select
-                      value={p.startOffset + p.remainingMonths}
-                      onChange={(e) => {
-                        const newEndMonths = parseInt(e.target.value);
-                        setAdjustedEndMonths(prev => ({
-                          ...prev,
-                          [p.contract.id]: newEndMonths
-                        }));
-                        saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newEndMonths });
-                      }}
-                      style={{
-                        padding: '0.15rem 0.25rem',
-                        fontSize: '0.65rem',
-                        border: adjustedEndMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
-                        borderRadius: '3px',
-                        background: adjustedEndMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
-                        color: adjustedEndMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
-                        cursor: 'pointer',
-                        width: '65px'
-                      }}
-                      title="Click to adjust end date"
-                    >
-                      {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > p.startOffset).map(months => {
-                        const endDate = addMonths(startOfMonth(new Date()), months);
-                        return (
-                          <option key={months} value={months}>
-                            {format(endDate, 'MMM yy')}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  ) : (
-                    '-'
-                  )}
-                </td>
-                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
-                  {parseNum(p.contract.backlog) > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                      <ContourVisual contour={p.contour} />
-                      <select
-                        value={p.contour}
-                        onChange={(e) => {
-                          const newContour = e.target.value as ContourType;
-                          setSelectedContours(prev => ({
-                            ...prev,
-                            [p.contract.id]: newContour
-                          }));
-                          saveProjectionOverride(p.contract.id, { user_selected_contour: newContour });
-                        }}
-                        style={{
-                          padding: '0.15rem 0.25rem',
-                          fontSize: '0.65rem',
-                          border: p.isAutoContour
-                            ? '1px dashed #94a3b8'  // Dashed border for auto-selected
-                            : '1px solid #16a34a', // Solid green for user-selected
-                          borderRadius: '3px',
-                          background: p.isAutoContour ? '#f8fafc' : '#dcfce7',
-                          cursor: 'pointer',
-                          width: '80px',
-                          color: p.isAutoContour ? '#64748b' : '#15803d',
-                          fontStyle: p.isAutoContour ? 'italic' : 'normal'
-                        }}
-                        title={p.isAutoContour
-                          ? `Auto-selected based on ${p.pctComplete.toFixed(0)}% complete. Click to override.`
-                          : 'User-selected contour. Click to change.'}
-                      >
-                        {contourOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    '-'
-                  )}
-                </td>
+                {(() => {
+                  const schedMode = p.contract.linked_project_scheduling_mode;
+                  const locked = !!schedMode && schedMode !== 'summary';
+                  const lockLabel = schedMode === 'cost_type' ? 'Cost Type' : schedMode === 'phase' ? 'Phase' : '';
+                  const lockedTitle = locked ? `Dates controlled by ${lockLabel} scheduling — edit on the project's Schedule tab` : undefined;
+                  return (
+                    <>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }} title={lockedTitle}>
+                        {parseNum(p.contract.backlog) > 0 ? (
+                          <select
+                            value={p.startOffset}
+                            disabled={locked}
+                            onChange={(e) => {
+                              const newStart = parseInt(e.target.value);
+                              setAdjustedStartMonths(prev => ({ ...prev, [p.contract.id]: newStart }));
+                              saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart });
+                              const currentEnd = p.startOffset + p.remainingMonths;
+                              if (newStart >= currentEnd) {
+                                const newEnd = newStart + 1;
+                                setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: newEnd }));
+                                saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
+                              }
+                            }}
+                            style={{
+                              padding: '0.15rem 0.25rem',
+                              fontSize: '0.65rem',
+                              border: locked ? '1px solid #e5e7eb' : adjustedStartMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                              borderRadius: '3px',
+                              background: locked ? '#f3f4f6' : adjustedStartMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
+                              color: locked ? '#9ca3af' : adjustedStartMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
+                              cursor: locked ? 'not-allowed' : 'pointer',
+                              width: '65px'
+                            }}
+                            title={locked ? undefined : 'Click to adjust start date'}
+                          >
+                            {Array.from({ length: 36 }, (_, i) => i).map(months => {
+                              const startDate = addMonths(startOfMonth(new Date()), months);
+                              return <option key={months} value={months}>{format(startDate, 'MMM yy')}</option>;
+                            })}
+                          </select>
+                        ) : '-'}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center', fontSize: '0.65rem' }} title={lockedTitle}>
+                        {parseNum(p.contract.backlog) > 0 ? (
+                          <select
+                            value={p.startOffset + p.remainingMonths}
+                            disabled={locked}
+                            onChange={(e) => {
+                              const newEndMonths = parseInt(e.target.value);
+                              setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: newEndMonths }));
+                              saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newEndMonths });
+                            }}
+                            style={{
+                              padding: '0.15rem 0.25rem',
+                              fontSize: '0.65rem',
+                              border: locked ? '1px solid #e5e7eb' : adjustedEndMonths[p.contract.id] !== undefined ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                              borderRadius: '3px',
+                              background: locked ? '#f3f4f6' : adjustedEndMonths[p.contract.id] !== undefined ? '#dcfce7' : 'transparent',
+                              color: locked ? '#9ca3af' : adjustedEndMonths[p.contract.id] !== undefined ? '#15803d' : '#64748b',
+                              cursor: locked ? 'not-allowed' : 'pointer',
+                              width: '65px'
+                            }}
+                            title={locked ? undefined : 'Click to adjust end date'}
+                          >
+                            {Array.from({ length: 36 }, (_, i) => i + 1).filter(m => m > p.startOffset).map(months => {
+                              const endDate = addMonths(startOfMonth(new Date()), months);
+                              return <option key={months} value={months}>{format(endDate, 'MMM yy')}</option>;
+                            })}
+                          </select>
+                        ) : '-'}
+                      </td>
+                      <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}
+                          title={locked ? `Contour controlled by ${lockLabel} scheduling — edit on the project's Schedule tab` : undefined}>
+                        {parseNum(p.contract.backlog) > 0 ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                            <ContourVisual contour={p.contour} />
+                            <select
+                              value={p.contour}
+                              disabled={locked}
+                              onChange={(e) => {
+                                const newContour = e.target.value as ContourType;
+                                setSelectedContours(prev => ({ ...prev, [p.contract.id]: newContour }));
+                                saveProjectionOverride(p.contract.id, { user_selected_contour: newContour });
+                              }}
+                              style={{
+                                padding: '0.15rem 0.25rem',
+                                fontSize: '0.65rem',
+                                border: locked ? '1px solid #e5e7eb' : p.isAutoContour ? '1px dashed #94a3b8' : '1px solid #16a34a',
+                                borderRadius: '3px',
+                                background: locked ? '#f3f4f6' : p.isAutoContour ? '#f8fafc' : '#dcfce7',
+                                cursor: locked ? 'not-allowed' : 'pointer',
+                                width: '80px',
+                                color: locked ? '#9ca3af' : p.isAutoContour ? '#64748b' : '#15803d',
+                                fontStyle: !locked && p.isAutoContour ? 'italic' : 'normal'
+                              }}
+                              title={locked ? undefined : p.isAutoContour
+                                ? `Auto-selected based on ${p.pctComplete.toFixed(0)}% complete. Click to override.`
+                                : 'User-selected contour. Click to change.'}
+                            >
+                              {contourOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : '-'}
+                      </td>
+                    </>
+                  );
+                })()}
                 {columns.map(col => {
                   const value = p.monthlyRevenue.get(col.key) || 0;
                   return (

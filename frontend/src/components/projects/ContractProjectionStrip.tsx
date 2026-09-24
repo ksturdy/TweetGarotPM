@@ -311,12 +311,16 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
                 </select>
               ) : '-'}
             </td>
-            <td style={{ ...cellStyle, textAlign: 'center' }}>
+            <td style={{ ...cellStyle, textAlign: 'center' }}
+                title={datesLocked
+                  ? `Contour controlled by ${schedulingMode === 'cost_type' ? 'Cost Type' : 'Phase'} scheduling — edit on the project's Schedule tab`
+                  : undefined}>
               {backlog > 0 ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
                   <ContourVisual contour={projection.contour} />
                   <select
                     value={projection.contour}
+                    disabled={datesLocked}
                     onChange={(e) => {
                       const newContour = e.target.value as ContourType;
                       setContourOverride(newContour);
@@ -325,17 +329,19 @@ const ContractProjectionStrip: React.FC<Props> = ({ contract, scrollRef, onScrol
                     style={{
                       padding: '0.15rem 0.25rem',
                       fontSize: '0.65rem',
-                      border: projection.isAutoContour ? '1px dashed #94a3b8' : '1px solid #16a34a',
+                      border: datesLocked ? '1px solid #e5e7eb' : projection.isAutoContour ? '1px dashed #94a3b8' : '1px solid #16a34a',
                       borderRadius: '3px',
-                      background: projection.isAutoContour ? '#f8fafc' : '#dcfce7',
-                      cursor: 'pointer',
+                      background: datesLocked ? '#f3f4f6' : projection.isAutoContour ? '#f8fafc' : '#dcfce7',
+                      cursor: datesLocked ? 'not-allowed' : 'pointer',
                       width: '80px',
-                      color: projection.isAutoContour ? '#64748b' : '#15803d',
-                      fontStyle: projection.isAutoContour ? 'italic' : 'normal',
+                      color: datesLocked ? '#9ca3af' : projection.isAutoContour ? '#64748b' : '#15803d',
+                      fontStyle: !datesLocked && projection.isAutoContour ? 'italic' : 'normal',
                     }}
-                    title={projection.isAutoContour
-                      ? `Auto-selected based on ${projection.pctComplete.toFixed(0)}% complete. Click to override.`
-                      : 'User-selected contour. Click to change.'}
+                    title={datesLocked
+                      ? undefined
+                      : projection.isAutoContour
+                        ? `Auto-selected based on ${projection.pctComplete.toFixed(0)}% complete. Click to override.`
+                        : 'User-selected contour. Click to change.'}
                   >
                     {contourOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>

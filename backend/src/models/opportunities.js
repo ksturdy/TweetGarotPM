@@ -234,7 +234,7 @@ const opportunities = {
       estimated_end_date,
       construction_type, project_type, location, location_group, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor, architect, engineer, campaign_id, customer_id, gc_customer_id,
-      facility_name, facility_location_id, awarded_status
+      facility_name, facility_location_id, awarded_status, source
     } = opportunityData;
 
     // Use construction_type if provided, otherwise fall back to project_type for backward compatibility
@@ -269,8 +269,10 @@ const opportunities = {
         facility_location_id = $25,
         awarded_status = COALESCE($26, awarded_status),
         updated_by = COALESCE($27, updated_by),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $28 AND tenant_id = $29
+        updated_at = CURRENT_TIMESTAMP,
+        last_activity_at = CURRENT_TIMESTAMP,
+        source = COALESCE($28, source)
+      WHERE id = $29 AND tenant_id = $30
       RETURNING *
     `;
 
@@ -279,7 +281,7 @@ const opportunities = {
       estimated_end_date || null,
       typeValue, typeValue, location, location_group || null, stage_id, priority, assigned_to, probability, lost_reason,
       market, owner, general_contractor || null, architect || null, engineer || null, campaign_id, customer_id, gc_customer_id,
-      facility_name || null, facility_location_id, awarded_status || null, userId, id, tenantId
+      facility_name || null, facility_location_id, awarded_status || null, userId, source || null, id, tenantId
     ]);
 
     return result.rows[0];

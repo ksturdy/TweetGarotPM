@@ -84,6 +84,9 @@ const SalesPipeline: React.FC = () => {
   const [excludedAwardedStatuses, setExcludedAwardedStatuses] = useState<Set<string>>(new Set(['In Progress', 'Completed']));
   const [stageFilterOpen, setStageFilterOpen] = useState(false);
   const stageFilterRef = useRef<HTMLDivElement>(null);
+  const [salespersonOpen, setSalespersonOpen] = useState(false);
+  const [salespersonSearch, setSalespersonSearch] = useState('');
+  const salespersonRef = useRef<HTMLDivElement>(null);
   const tableSectionRef = useRef<HTMLDivElement>(null);
   const [chartMarketFilter, setChartMarketFilter] = useState<string | null>(null);
   const [chartStageFilter, setChartStageFilter] = useState<string | null>(null);
@@ -100,6 +103,19 @@ const SalesPipeline: React.FC = () => {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [stageFilterOpen]);
+
+  // Close salesperson dropdown on outside click
+  useEffect(() => {
+    if (!salespersonOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (salespersonRef.current && !salespersonRef.current.contains(e.target as Node)) {
+        setSalespersonOpen(false);
+        setSalespersonSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [salespersonOpen]);
 
   // Fetch real opportunities from API
   const { data: apiOpportunities = [], isLoading } = useQuery({
@@ -1445,22 +1461,58 @@ const SalesPipeline: React.FC = () => {
                   <option key={t.id} value={String(t.id)}>{t.name}</option>
                 ))}
               </select>
-              <select
-                value={selectedSalesperson}
-                onChange={(e) => setSelectedSalesperson(e.target.value)}
-                style={{
-                  padding: '5px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid #e5e7eb',
-                  fontSize: '12px',
-                  minWidth: '120px'
-                }}
-              >
-                <option value="all">All Salespeople</option>
-                {salespeople.map((person) => (
-                  <option key={person} value={person}>{person}</option>
-                ))}
-              </select>
+              <div className="sales-stage-filter-wrapper" ref={salespersonRef}>
+                <button
+                  className="sales-stage-filter-btn"
+                  onClick={() => { setSalespersonOpen(!salespersonOpen); setSalespersonSearch(''); }}
+                >
+                  {selectedSalesperson === 'all' ? 'All Salespeople' : selectedSalesperson}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                {salespersonOpen && (
+                  <div className="sales-stage-filter-dropdown" style={{ minWidth: '180px' }}>
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search..."
+                      value={salespersonSearch}
+                      onChange={(e) => setSalespersonSearch(e.target.value)}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '5px 8px',
+                        fontSize: '12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '4px',
+                        marginBottom: '4px',
+                        outline: 'none',
+                      }}
+                    />
+                    <div
+                      className="sales-stage-filter-item"
+                      onClick={() => { setSelectedSalesperson('all'); setSalespersonOpen(false); setSalespersonSearch(''); }}
+                      style={{ fontStyle: 'italic', color: '#6b7280' }}
+                    >
+                      All Salespeople
+                    </div>
+                    {salespeople
+                      .filter(p => p.toLowerCase().includes(salespersonSearch.toLowerCase()))
+                      .map((person) => (
+                        <div
+                          key={person}
+                          className="sales-stage-filter-item"
+                          onClick={() => { setSelectedSalesperson(person); setSalespersonOpen(false); setSalespersonSearch(''); }}
+                          style={{ fontWeight: selectedSalesperson === person ? 600 : undefined }}
+                        >
+                          {person}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
               <div className="sales-stage-filter-wrapper" ref={stageFilterRef}>
                 <button
                   className="sales-stage-filter-btn"
