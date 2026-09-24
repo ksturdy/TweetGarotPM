@@ -54,14 +54,14 @@ export const widgetRegistry: Record<string, WidgetDefinition> = {
     id: 'recent_activity',
     title: 'Recent Activity',
     category: 'overview',
-    defaultColumn: 'right',
+    defaultColumn: 'activity',
     component: RecentActivityWidget,
   },
   trade_shows: {
     id: 'trade_shows',
     title: 'Conferences and Trade Shows',
     category: 'marketing',
-    defaultColumn: 'right',
+    defaultColumn: 'activity',
     component: TradeShowsWidget,
   },
   cash_flow_negative: {

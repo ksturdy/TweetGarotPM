@@ -93,7 +93,7 @@ const ActiveOpportunitiesWidget: React.FC<WidgetProps> = ({
                       {opp.stage_name || 'Unknown'}
                     </span>
                   </td>
-                  <td style={{ fontSize: '0.8125rem', color: '#5a5a72', textAlign: 'center' }}>
+                  <td style={{ color: '#5a5a72', textAlign: 'center' }}>
                     {opp.updated_at ? new Date(opp.updated_at).toLocaleDateString() : (opp.created_at ? new Date(opp.created_at).toLocaleDateString() : '-')}
                   </td>
                 </tr>

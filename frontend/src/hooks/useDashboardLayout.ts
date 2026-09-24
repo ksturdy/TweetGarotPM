@@ -6,8 +6,18 @@ import { widgetRegistry } from '../components/dashboard/widgetRegistry';
 
 const QUERY_KEY = ['dashboard-layout'];
 
+const migrateColumns = (layout: DashboardLayout): DashboardLayout =>
+  layout.map(item => {
+    // Move activity widgets out of old 'right' column into the dedicated 'activity' column
+    if ((item.id === 'recent_activity' || item.id === 'trade_shows') && item.column === 'right') {
+      return { ...item, column: 'activity' as const };
+    }
+    return item;
+  });
+
 const reconcileWithRegistry = (layout: DashboardLayout): DashboardLayout => {
-  const known = layout.filter(item => widgetRegistry[item.id]);
+  const migrated = migrateColumns(layout);
+  const known = migrated.filter(item => widgetRegistry[item.id]);
   const knownIds = new Set(known.map(item => item.id));
 
   const missing = defaultLayout.filter(item => !knownIds.has(item.id));

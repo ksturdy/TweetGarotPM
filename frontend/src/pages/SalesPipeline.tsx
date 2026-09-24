@@ -793,18 +793,7 @@ const SalesPipeline: React.FC = () => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        display: true,
-        position: 'top' as const,
-        labels: {
-          boxWidth: 20,
-          boxHeight: 3,
-          font: { size: 11, weight: 600 },
-          padding: 12,
-          usePointStyle: false,
-          color: '#374151',
-        }
-      },
+      legend: { display: false },
       datalabels: { display: false },
       tooltip: {
         callbacks: {
@@ -1244,6 +1233,16 @@ const SalesPipeline: React.FC = () => {
             <div>
               <div className="sales-chart-title">Pipeline Trend</div>
               <div className="sales-chart-subtitle">Monthly pipeline value over time</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, fontWeight: 600, color: '#374151' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ display: 'inline-block', width: 20, height: 3, background: '#3b82f6', borderRadius: 2 }} />
+                Total Value
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ display: 'inline-block', width: 20, borderTop: '3px dashed #10b981' }} />
+                Weighted
+              </span>
             </div>
           </div>
           <div className="sales-chart-container">

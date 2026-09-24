@@ -2,7 +2,7 @@ import { ComponentType } from 'react';
 
 export type ViewScope = 'my' | 'team' | 'company';
 
-export type DashboardColumn = 'kpi' | 'left' | 'center' | 'right';
+export type DashboardColumn = 'kpi' | 'left' | 'center' | 'right' | 'activity';
 
 export type WidgetId = string;
 

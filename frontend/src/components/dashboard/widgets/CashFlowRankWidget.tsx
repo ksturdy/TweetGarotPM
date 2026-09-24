@@ -155,8 +155,6 @@ const CashFlowRankWidget: React.FC<Props> = ({
     },
   }), [ranked, navigate]);
 
-  const chartHeight = Math.max(160, ranked.length * 20 + 30);
-
   const emptyMessage =
     viewScope === 'my' ? config.emptyMessages.my :
     viewScope === 'team' ? config.emptyMessages.team :
@@ -175,7 +173,7 @@ const CashFlowRankWidget: React.FC<Props> = ({
           </Link>
         )}
       </div>
-      <div className="dashboard-scrollable" style={{ padding: '0.5rem 0' }}>
+      <div className="dashboard-scrollable" style={{ padding: '0.5rem 1rem' }}>
         {isLoading ? (
           <div className="empty-table" style={{ padding: '2rem 0', textAlign: 'center', color: '#8888a0' }}>
             Loading…
@@ -185,7 +183,7 @@ const CashFlowRankWidget: React.FC<Props> = ({
             {emptyMessage}
           </div>
         ) : (
-          <div style={{ height: chartHeight, width: '100%' }}>
+          <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
             <Bar data={chartData} options={chartOptions} />
           </div>
         )}

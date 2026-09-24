@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import LockIcon from '@mui/icons-material/Lock';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import BusinessIcon from '@mui/icons-material/Business';
-import { DashboardColumn, DashboardLayout, ViewScope, WidgetLayoutItem } from './types';
+import { DashboardLayout, ViewScope, WidgetLayoutItem } from './types';
 import { widgetRegistry } from './widgetRegistry';
 import './CustomizeDashboardDrawer.css';
 
@@ -20,13 +18,6 @@ interface Props {
   isSaving?: boolean;
 }
 
-const COLUMN_LABELS: Record<DashboardColumn, string> = {
-  kpi: 'KPI Row',
-  left: 'Left Column',
-  center: 'Center Column',
-  right: 'Right Column',
-};
-
 const CATEGORY_LABELS: Record<string, string> = {
   overview: 'Overview',
   sales: 'Sales',
@@ -36,12 +27,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const reorderColumn = (layout: DashboardLayout): DashboardLayout => {
-  const grouped: Record<DashboardColumn, WidgetLayoutItem[]> = {
-    kpi: [], left: [], center: [], right: [],
-  };
-  layout.forEach(item => grouped[item.column].push(item));
+  const grouped: Record<string, WidgetLayoutItem[]> = {};
+  layout.forEach(item => {
+    if (!grouped[item.column]) grouped[item.column] = [];
+    grouped[item.column].push(item);
+  });
   const reindexed: DashboardLayout = [];
-  (Object.keys(grouped) as DashboardColumn[]).forEach(col => {
+  Object.keys(grouped).forEach(col => {
     grouped[col]
       .sort((a, b) => a.order - b.order)
       .forEach((item, idx) => reindexed.push({ ...item, order: idx }));
@@ -74,36 +66,6 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
     ));
   };
 
-  const moveColumn = (id: string, column: DashboardColumn) => {
-    setDraft(prev => {
-      const updated = prev.map(item =>
-        item.id === id ? { ...item, column, order: 999 } : item
-      );
-      return reorderColumn(updated);
-    });
-  };
-
-  const moveOrder = (id: string, direction: -1 | 1) => {
-    setDraft(prev => {
-      const item = prev.find(i => i.id === id);
-      if (!item) return prev;
-      const sameColumn = prev
-        .filter(i => i.column === item.column)
-        .sort((a, b) => a.order - b.order);
-      const idx = sameColumn.findIndex(i => i.id === id);
-      const swapIdx = idx + direction;
-      if (swapIdx < 0 || swapIdx >= sameColumn.length) return prev;
-
-      const swap = sameColumn[swapIdx];
-      const updated = prev.map(i => {
-        if (i.id === item.id) return { ...i, order: swap.order };
-        if (i.id === swap.id) return { ...i, order: item.order };
-        return i;
-      });
-      return reorderColumn(updated);
-    });
-  };
-
   const handleSave = () => {
     onSave(reorderColumn(draft), scopeDraft);
   };
@@ -119,16 +81,6 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
     acc[w.category].push(w);
     return acc;
   }, {});
-
-  const visibleByColumn = (Object.keys(COLUMN_LABELS) as DashboardColumn[]).reduce(
-    (acc, col) => {
-      acc[col] = draft
-        .filter(i => i.column === col && i.visible)
-        .sort((a, b) => a.order - b.order);
-      return acc;
-    },
-    {} as Record<DashboardColumn, WidgetLayoutItem[]>
-  );
 
   return (
     <>
@@ -174,8 +126,8 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
           </section>
 
           <section className="customize-section">
-            <h3>Available Widgets</h3>
-            <p className="customize-section-hint">Toggle widgets on or off.</p>
+            <h3>Widgets</h3>
+            <p className="customize-section-hint">Toggle widgets on or off. Drag to reorder on the dashboard.</p>
             {Object.entries(widgetsByCategory).map(([category, widgets]) => (
               <div key={category} className="customize-category">
                 <h4>{CATEGORY_LABELS[category] || category}</h4>
@@ -199,58 +151,6 @@ const CustomizeDashboardDrawer: React.FC<Props> = ({
                     );
                   })}
                 </ul>
-              </div>
-            ))}
-          </section>
-
-          <section className="customize-section">
-            <h3>Your Layout</h3>
-            <p className="customize-section-hint">Move widgets between columns and reorder.</p>
-            {(Object.keys(COLUMN_LABELS) as DashboardColumn[]).map(col => (
-              <div key={col} className="customize-column">
-                <h4>{COLUMN_LABELS[col]}</h4>
-                {visibleByColumn[col].length === 0 ? (
-                  <p className="customize-column-empty">No widgets</p>
-                ) : (
-                  <ul className="customize-layout-list">
-                    {visibleByColumn[col].map((item, idx) => {
-                      const def = widgetRegistry[item.id];
-                      if (!def) return null;
-                      return (
-                        <li key={item.id} className="customize-layout-row">
-                          <span className="customize-layout-title">{def.title}</span>
-                          <div className="customize-layout-controls">
-                            <button
-                              type="button"
-                              onClick={() => moveOrder(item.id, -1)}
-                              disabled={idx === 0}
-                              aria-label="Move up"
-                            >
-                              <ArrowUpwardIcon fontSize="small" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveOrder(item.id, 1)}
-                              disabled={idx === visibleByColumn[col].length - 1}
-                              aria-label="Move down"
-                            >
-                              <ArrowDownwardIcon fontSize="small" />
-                            </button>
-                            <select
-                              value={item.column}
-                              onChange={(e) => moveColumn(item.id, e.target.value as DashboardColumn)}
-                              disabled={def.locked && def.defaultColumn !== item.column}
-                            >
-                              {(Object.keys(COLUMN_LABELS) as DashboardColumn[]).map(c => (
-                                <option key={c} value={c}>{COLUMN_LABELS[c]}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
               </div>
             ))}
           </section>

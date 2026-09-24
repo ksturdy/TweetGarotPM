@@ -99,10 +99,10 @@ const TradeShowsWidget: React.FC<WidgetProps> = ({
                         )}
                       </div>
                     </td>
-                    <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
+                    <td style={{ color: '#5a5a72' }}>
                       {formatDateRange(show.event_start_date, show.event_end_date)}
                     </td>
-                    <td style={{ fontSize: '0.8125rem', color: '#5a5a72' }}>
+                    <td style={{ color: '#5a5a72' }}>
                       {formatLocation(show)}
                     </td>
                     <td style={{ textAlign: 'center' }}>
