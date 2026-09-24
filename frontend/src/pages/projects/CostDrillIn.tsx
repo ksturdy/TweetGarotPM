@@ -359,7 +359,7 @@ const CostDrillIn: React.FC = () => {
                 <SortTh sortKey="jtd_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Cost</SortTh>
                 {isLabor && <SortTh sortKey="jtd_rate" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>JTD Rate</SortTh>}
                 <SortTh sortKey="prior_week_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Prev Wk</SortTh>
-                <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Chg Since Last Proj</SortTh>
+                <SortTh sortKey="change_from_last_projection" currentSort={sortKey} sortDir={sortDir} onSort={handleSort} wrap>Chg Since Last Proj</SortTh>
                 <SortTh sortKey="committed_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Committed</SortTh>
                 <SortTh sortKey="projected_cost" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Projected</SortTh>
                 <SortTh sortKey="remaining_spend" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Spend</SortTh>
@@ -382,7 +382,7 @@ const CostDrillIn: React.FC = () => {
                 return (
                   <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <Td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#1e293b' }}>{row.phase}</Td>
-                    <Td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
+                    <Td style={{ minWidth: '220px', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
                     {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
                     {isLabor && <Td align="right">{fmtNum(estHrs)}</Td>}
                     <Td align="right">{fmt(row.est_cost)}</Td>
@@ -467,8 +467,9 @@ const SortTh: React.FC<{
   sortDir: SortDir;
   onSort: (key: SortKey) => void;
   align?: 'left' | 'right' | 'center';
+  wrap?: boolean;
   style?: React.CSSProperties;
-}> = ({ children, sortKey, currentSort, sortDir, onSort, align = 'right', style }) => {
+}> = ({ children, sortKey, currentSort, sortDir, onSort, align = 'right', wrap = false, style }) => {
   const isActive = currentSort === sortKey;
   return (
     <th
@@ -480,9 +481,10 @@ const SortTh: React.FC<{
         fontWeight: 600,
         color: isActive ? '#1e293b' : '#64748b',
         textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
+        whiteSpace: wrap ? 'normal' : 'nowrap',
         cursor: 'pointer',
         userSelect: 'none',
+        verticalAlign: 'bottom',
         ...style,
       }}
     >
