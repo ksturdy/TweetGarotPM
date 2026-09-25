@@ -201,6 +201,9 @@ const OpportunitySearch: React.FC = () => {
       setRecurringDialogOpen(false);
       setSuccessMessage('Recurring search updated.');
     },
+    onError: () => {
+      setError('Failed to save criteria. Please try again.');
+    },
   });
 
   const recurringSearchesQuery = useQuery({
@@ -692,6 +695,7 @@ const OpportunitySearch: React.FC = () => {
                 const criteria: SearchCriteria = {};
                 if (formData.market_sector) criteria.market_sector = formData.market_sector;
                 if (formData.location) criteria.location = formData.location;
+                if (formData.radius_miles) criteria.radius_miles = Number(formData.radius_miles);
                 if (formData.construction_type) criteria.construction_type = formData.construction_type;
                 if (formData.min_value) criteria.min_value = Number(formData.min_value);
                 if (formData.max_value) criteria.max_value = Number(formData.max_value);
