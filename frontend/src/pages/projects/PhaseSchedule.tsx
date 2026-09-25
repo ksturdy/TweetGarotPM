@@ -3372,29 +3372,42 @@ const GridRow: React.FC<{
   const itemRemBillable = mode === 'billable' ? Object.values(monthlyVals).reduce((a, b) => a + b, 0) : 0;
   const itemRemCost = mode === 'billable' ? Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost)) : 0;
 
-  // JTD billable: same formula as chartData totalJtdBillable, computed per-row
+  // Billing rate lookup (used for both JTD and est fallback)
+  const _rateObj = mode === 'billable' && item.billable_rate_id
+    ? laborRates.find(r => r.id === item.billable_rate_id) : undefined;
+  const _rateVal = _rateObj ? Number(_rateObj.billable_rate) || 0 : 0;
+  const _burden = shopBurdenBillable > 0 && isShopItem(item) ? shopBurdenBillable : 0;
+
+  // JTD billable: hours × rate for labor, cost × markup for others
   const itemJtdBillable = (() => {
     if (mode !== 'billable') return 0;
     const ct = item.cost_types?.[0] || 0;
     const jtdHrs = parseNum(item.total_jtd_hours);
     const jtdC = parseNum(item.total_jtd_cost);
     const mu = markupByCt[ct] || 0;
-    if (ct === 1 && item.billable_rate_id) {
-      const rate = laborRates.find(r => r.id === item.billable_rate_id);
-      const rateVal = rate ? Number(rate.billable_rate) || 0 : 0;
-      if (rateVal > 0) {
-        const burden = shopBurdenBillable > 0 && isShopItem(item) ? shopBurdenBillable : 0;
-        return jtdHrs * (rateVal + burden);
-      }
-    }
+    if (ct === 1 && _rateVal > 0) return jtdHrs * (_rateVal + _burden);
     return jtdC * (1 + mu / 100);
   })();
 
-  const itemTotalBillable = itemJtdBillable + itemRemBillable;
+  // When both JTD and remaining are zero (no Vista data yet, no dates),
+  // fall back to estimate so pre-start items still show an expected GM%.
+  const _estFallbackBillable = (() => {
+    if (mode !== 'billable' || itemJtdBillable > 0 || itemRemBillable > 0) return 0;
+    const ct = item.cost_types?.[0] || 0;
+    const estHrs = parseNum(item.total_est_hours);
+    const estC = parseNum(item.total_est_cost);
+    const mu = markupByCt[ct] || 0;
+    if (ct === 1 && _rateVal > 0) return estHrs * (_rateVal + _burden);
+    return estC * (1 + mu / 100);
+  })();
+  const _estFallbackCost = _estFallbackBillable > 0 ? parseNum(item.total_est_cost) : 0;
+
+  const itemTotalBillable = itemJtdBillable + itemRemBillable + _estFallbackBillable;
   const itemTotalCost = mode === 'billable' ? (() => {
     const jtdC = parseNum(item.total_jtd_cost);
     const vPC = parseNum(item.total_projected_cost);
-    return vPC > 0 ? Math.max(vPC, jtdC) : jtdC;
+    const vistaBase = vPC > 0 ? Math.max(vPC, jtdC) : jtdC;
+    return vistaBase > 0 ? vistaBase : _estFallbackCost;
   })() : 0;
   const itemBillable = itemRemBillable; // keep alias for existing Rem Cost cell usage
   const itemGmPct = mode === 'billable' && itemTotalBillable > 0
