@@ -133,6 +133,13 @@ const opportunitySearchService = {
     return response.data;
   },
 
+  async aiUpdateOpportunity(
+    id: number,
+    data: { estimated_value?: number; intelligence_text: string; value_changed: boolean }
+  ): Promise<void> {
+    await api.post(`/opportunities/${id}/ai-update`, data);
+  },
+
   async downloadPdf(id: number): Promise<void> {
     const response = await api.get(`/opportunity-search/saved/${id}/pdf`, {
       responseType: 'blob',

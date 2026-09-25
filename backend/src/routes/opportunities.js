@@ -383,6 +383,55 @@ router.post('/',
   }
 );
 
+// Apply AI search update to existing opportunity
+router.post('/:id/ai-update', async (req, res, next) => {
+  try {
+    const { estimated_value, intelligence_text, value_changed } = req.body;
+
+    const opp = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const updateData = {};
+    const changes = [];
+
+    if (value_changed && estimated_value != null) {
+      const oldVal = Number(opp.estimated_value) || 0;
+      const newVal = Number(estimated_value);
+      updateData.estimated_value = newVal;
+      changes.push({
+        field: 'Estimated Value',
+        old: oldVal ? `$${oldVal.toLocaleString()}` : '—',
+        new: `$${newVal.toLocaleString()}`,
+      });
+    }
+
+    if (intelligence_text) {
+      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      updateData.description = `=== AI Search Update (${date}) ===\n${intelligence_text}\n\n--- Previous Info ---\n${opp.description || ''}`;
+      changes.push({ field: 'Intelligence', old: '(previous)', new: 'Updated from AI search' });
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.json({ success: true });
+    }
+
+    await opportunities.update(req.params.id, updateData, req.tenantId, req.user.id);
+
+    OpportunityHistory.log({
+      opportunityId: opp.id,
+      tenantId: req.tenantId,
+      userId: req.user.id,
+      eventType: 'ai_search_update',
+      summary: 'Updated from AI search results',
+      changes,
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Update opportunity
 router.put('/:id',
   [

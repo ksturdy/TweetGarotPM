@@ -142,6 +142,7 @@ const OpportunitySearch: React.FC = () => {
   const [recurringDialogMode, setRecurringDialogMode] = useState<'create' | 'edit'>('create');
   const [recurringDialogData, setRecurringDialogData] = useState<{ id?: number; savedSearchId?: number; name: string; description: string }>({ name: '', description: '' });
   const [shouldAutoSave, setShouldAutoSave] = useState(true);
+  const [expandedUpdate, setExpandedUpdate] = useState<number | null>(null);
 
   const savedSearchesQuery = useQuery({
     queryKey: ['saved-opportunity-searches'],
@@ -154,10 +155,14 @@ const OpportunitySearch: React.FC = () => {
   });
 
   const pipelineMatches = useMemo(() => {
-    const map = new Map<number, { id: number; title: string; stage_name?: string }>();
+    const map = new Map<number, { id: number; title: string; stage_name?: string; hasValueChange: boolean; oldValue: number; newValue: number }>();
     leads.forEach((lead, idx) => {
       const match = existingOpportunities.find(opp => titlesMatch(lead.project_name, opp.title));
-      if (match) map.set(idx, { id: match.id, title: match.title, stage_name: match.stage_name });
+      if (!match) return;
+      const oldValue = Number(match.estimated_value) || 0;
+      const newValue = lead.estimated_value || 0;
+      const hasValueChange = newValue > 0 && oldValue > 0 && Math.abs(newValue - oldValue) / oldValue > 0.05;
+      map.set(idx, { id: match.id, title: match.title, stage_name: match.stage_name, hasValueChange, oldValue, newValue });
     });
     return map;
   }, [leads, existingOpportunities]);
@@ -213,6 +218,32 @@ const OpportunitySearch: React.FC = () => {
     onError: () => {
       setError('Failed to save criteria. Please try again.');
     },
+  });
+
+  const aiUpdateMutation = useMutation({
+    mutationFn: ({ oppId, lead, hasValueChange }: { oppId: number; lead: GeneratedLead; hasValueChange: boolean }) => {
+      const intelligenceLines = [
+        lead.project_description || '',
+        lead.mechanical_scope ? `Mechanical Scope: ${lead.mechanical_scope}` : '',
+        lead.intelligence_source ? `Intelligence Source: ${lead.intelligence_source}` : '',
+        lead.source_url ? `Source URL: ${lead.source_url}` : '',
+        lead.next_steps ? `Next Steps: ${lead.next_steps}` : '',
+        lead.general_contractor ? `General Contractor: ${lead.general_contractor}` : '',
+        lead.timeline ? `Timeline: ${lead.timeline}` : '',
+      ].filter(Boolean).join('\n\n');
+      return opportunitySearchService.aiUpdateOpportunity(oppId, {
+        estimated_value: lead.estimated_value,
+        intelligence_text: intelligenceLines,
+        value_changed: hasValueChange,
+      });
+    },
+    onSuccess: (_, { oppId }) => {
+      queryClient.invalidateQueries({ queryKey: ['opportunities'] });
+      queryClient.invalidateQueries({ queryKey: ['opportunity', oppId] });
+      setExpandedUpdate(null);
+      setSuccessMessage('Opportunity updated with new AI search information.');
+    },
+    onError: () => setError('Failed to update opportunity. Please try again.'),
   });
 
   const recurringSearchesQuery = useQuery({
@@ -1235,15 +1266,6 @@ const OpportunitySearch: React.FC = () => {
                           {lead.verification_status === 'verifiable' ? 'Verifiable' :
                            lead.verification_status === 'suspect' ? 'Suspect' : 'Unverified'}
                         </span>
-                        {pipelineMatches.has(idx) && (
-                          <Link
-                            to="/sales-pipeline"
-                            className="opp-search-pipeline-badge"
-                            title={`Already in pipeline: "${pipelineMatches.get(idx)!.title}"${pipelineMatches.get(idx)!.stage_name ? ` — ${pipelineMatches.get(idx)!.stage_name}` : ''}`}
-                          >
-                            ✓ In Pipeline
-                          </Link>
-                        )}
                       </div>
                       <h3 className="opp-search-lead-project">{lead.project_name}</h3>
                     </div>
@@ -1265,6 +1287,66 @@ const OpportunitySearch: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Pipeline match banner */}
+                  {(() => {
+                    const match = pipelineMatches.get(idx);
+                    if (!match) return null;
+                    const isExpanded = expandedUpdate === idx;
+                    return (
+                      <div className={`opp-pipeline-match-banner ${match.hasValueChange ? 'has-updates' : 'no-updates'}`}>
+                        <div className="opp-pipeline-match-banner-row">
+                          <span className="opp-pipeline-match-banner-icon">{match.hasValueChange ? '⚠' : '✓'}</span>
+                          <span className="opp-pipeline-match-banner-label">
+                            <strong>Opportunity Already Added</strong>
+                            {match.stage_name && <span className="opp-pipeline-match-stage"> — {match.stage_name}</span>}
+                            {match.hasValueChange
+                              ? <span className="opp-pipeline-match-change"> · Value Updated: {formatCurrency(match.oldValue)} → {formatCurrency(match.newValue)}</span>
+                              : <span className="opp-pipeline-match-nochange"> · No Value Change</span>}
+                          </span>
+                          <div className="opp-pipeline-match-banner-actions">
+                            <Link to="/sales-pipeline" className="opp-pipeline-match-view-link">View Opportunity</Link>
+                            <button
+                              className="opp-pipeline-match-toggle"
+                              onClick={() => setExpandedUpdate(isExpanded ? null : idx)}
+                            >
+                              {isExpanded ? '▲ Hide' : '▼ Review & Update'}
+                            </button>
+                          </div>
+                        </div>
+                        {isExpanded && (
+                          <div className="opp-pipeline-match-detail">
+                            {match.hasValueChange && (
+                              <div className="opp-pipeline-match-value-row">
+                                <span>Estimated Value Change:</span>
+                                <span className="opp-pipeline-match-old-val">{formatCurrency(match.oldValue)}</span>
+                                <span>→</span>
+                                <span className="opp-pipeline-match-new-val">{formatCurrency(match.newValue)}</span>
+                              </div>
+                            )}
+                            <div className="opp-pipeline-match-intel-label">New Intelligence from AI Search:</div>
+                            <div className="opp-pipeline-match-intel-text">
+                              {lead.intelligence_source || lead.project_description}
+                              {lead.mechanical_scope && <><br /><br /><strong>Mechanical Scope:</strong> {lead.mechanical_scope}</>}
+                              {lead.next_steps && <><br /><br /><strong>Next Steps:</strong> {lead.next_steps}</>}
+                            </div>
+                            <div className="opp-pipeline-match-detail-footer">
+                              <button
+                                className="opp-pipeline-match-update-btn"
+                                disabled={aiUpdateMutation.isPending}
+                                onClick={() => aiUpdateMutation.mutate({ oppId: match.id, lead, hasValueChange: match.hasValueChange })}
+                              >
+                                {aiUpdateMutation.isPending ? 'Updating…' : 'Update Opportunity'}
+                              </button>
+                              <span className="opp-pipeline-match-update-note">
+                                Appends new intelligence to the opportunity and records changes in history.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="opp-search-lead-description">{lead.project_description}</div>
 
