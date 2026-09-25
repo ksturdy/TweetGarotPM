@@ -25,15 +25,21 @@ const Presence = {
   async getAllPresence(tenantId) {
     const result = await db.query(`
       SELECT u.id as user_id, u.first_name, u.last_name,
-             COALESCE(up.status, 'offline') as status,
-             up.last_seen_at
+             CASE
+               WHEN COALESCE(up.status, 'offline') = 'online' THEN 'online'
+               WHEN u.last_seen_at > NOW() - INTERVAL '5 minutes' THEN 'online'
+               WHEN u.last_seen_at > NOW() - INTERVAL '30 minutes' THEN 'away'
+               ELSE 'offline'
+             END as status,
+             GREATEST(up.last_seen_at, u.last_seen_at) as last_seen_at
       FROM users u
       LEFT JOIN user_presence up ON up.user_id = u.id
       WHERE u.tenant_id = $1 AND u.is_active = true
       ORDER BY
-        CASE WHEN COALESCE(up.status, 'offline') = 'online' THEN 0
-             WHEN COALESCE(up.status, 'offline') = 'away' THEN 1
-             ELSE 2 END,
+        CASE
+          WHEN COALESCE(up.status, 'offline') = 'online' OR u.last_seen_at > NOW() - INTERVAL '5 minutes' THEN 0
+          WHEN u.last_seen_at > NOW() - INTERVAL '30 minutes' THEN 1
+          ELSE 2 END,
         u.first_name, u.last_name
     `, [tenantId]);
     return result.rows;
