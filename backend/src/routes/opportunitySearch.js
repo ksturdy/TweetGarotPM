@@ -29,11 +29,13 @@ CRITICAL RULES:
 
 PROJECT PHASE FILTERING (VERY IMPORTANT):
 - ONLY return projects that are in planning, design, pre-construction, or early bidding phases — these are UPCOMING opportunities where a mechanical contractor can still win work.
-- DO NOT return projects that are already under construction, substantially complete, or finished. If an article says construction is underway, the project has broken ground, or it opened/completed, SKIP IT.
-- Focus on projects announced or updated within the last 12 months. Older announcements are likely already under construction or completed.
+- SKIP a project ONLY if there is clear evidence that physical construction has already started (e.g., ground has been broken, site work is underway, a construction crew is on site) OR the project is substantially complete or already open.
+- Do NOT skip a project just because it received a permit, had a planning commission hearing, got a conditional use permit (CUP) approved, received zoning approval, or passed a city council vote. All of these are STILL planning/pre-construction phase — they are good signs the project is moving forward.
+- Do NOT skip a project because its estimated start date has passed. Timelines slip constantly; if there is no evidence construction has physically begun, keep it.
+- Focus on projects announced or updated within the last 18 months.
 - When searching, add terms like "planned", "proposed", "approved", "design phase", "pre-construction", "seeking bids", "RFP", or the current/next year to your queries.
-- For each project, include the current phase in intelligence_notes (e.g., "Currently in design phase", "Awaiting city council approval", "RFP issued Q1 2026").
-- If you're unsure whether a project is still in planning or already under construction, note that uncertainty in intelligence_notes and set confidence to "low".
+- For each project, include the current phase in intelligence_notes (e.g., "CUP approved Sept 2026, awaiting design phase", "Permit filed, construction not yet started", "RFP issued Q1 2026").
+- If you're unsure whether physical construction has started, include the project with confidence "low" and note the uncertainty — do NOT exclude it.
 
 PROJECT VALUE (IMPORTANT):
 - For estimated_value (total project cost): Try hard to find this. Search the owner's name + project name + "cost" or "budget" or "million" or "investment". Most large projects have a published total cost. Return the value as a string like "$270M" or "$45 million".
@@ -89,7 +91,7 @@ function buildUserMessage(criteria) {
   parts.push(`\nIMPORTANT SEARCH GUIDANCE:`);
   parts.push(`- Include "${currentYear}" or "${currentYear + 1}" in your search queries to get recent results.`);
   parts.push(`- Search for terms like "planned", "proposed", "approved", "design phase", "seeking bids", "RFP" to find pre-construction projects.`);
-  parts.push(`- SKIP any project that has already broken ground, is under construction, or is completed.`);
+  parts.push(`- SKIP a project only if physical construction has clearly already started (ground broken, site work underway) or it is complete/open. Do NOT skip for permit approvals, planning meetings, CUP approvals, or zoning votes — those are still pre-construction.`);
   if (specifiedRadius) {
     parts.push(`- STRICT GEOGRAPHIC CONSTRAINT: The user requires projects within ${specifiedRadius} miles of ${criteria.location || 'the specified location'}. Before including any project, verify its city is within that radius. Exclude any project outside that distance — do not make exceptions even for large or relevant projects.`);
   } else {
