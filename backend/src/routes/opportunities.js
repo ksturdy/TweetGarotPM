@@ -11,6 +11,7 @@ const OpportunityScore = require('../models/OpportunityScore');
 const OpportunityReminder = require('../models/OpportunityReminder');
 const Notification = require('../models/Notification');
 const OpportunityHistory = require('../models/OpportunityHistory');
+const OpportunityCostTypeSchedule = require('../models/OpportunityCostTypeSchedule');
 const { notify } = require('../utils/notificationService');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
@@ -1016,6 +1017,31 @@ router.delete('/:id/estimate', async (req, res, next) => {
       return res.status(404).json({ error: 'Estimate not found' });
     }
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Cost-Type Schedule Routes =====
+
+// Get all 6 cost-type schedule rows for an opportunity
+router.get('/:id/cost-type-schedule', async (req, res, next) => {
+  try {
+    const rows = await OpportunityCostTypeSchedule.findByOpportunityId(req.params.id, req.tenantId);
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Upsert one segment row by segment_key
+const VALID_SEGMENT_KEYS = new Set(['30','35','40','45','50','55','70','material','subcontract','rental','equipment','gc']);
+router.put('/:id/cost-type-schedule/:segmentKey', async (req, res, next) => {
+  try {
+    const segmentKey = req.params.segmentKey;
+    if (!VALID_SEGMENT_KEYS.has(segmentKey)) return res.status(400).json({ error: 'Invalid segment_key' });
+    const row = await OpportunityCostTypeSchedule.upsert(req.params.id, req.tenantId, segmentKey, req.body);
+    res.json(row);
   } catch (error) {
     next(error);
   }

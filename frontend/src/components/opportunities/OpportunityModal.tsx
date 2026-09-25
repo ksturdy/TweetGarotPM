@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity, OpportunityScoreInput } from '../../services/opportunities';
 import { employeesApi } from '../../services/employees';
@@ -13,6 +13,7 @@ import OpportunityHistory from './OpportunityHistory';
 import OpportunityReminders from './OpportunityReminders';
 import OpportunityLinks from './OpportunityLinks';
 import TitanEstimate from './TitanEstimate';
+import OpportunitySchedule from './OpportunitySchedule';
 import OpportunityScore from './OpportunityScore';
 import FollowButton from './FollowButton';
 import { MARKETS } from '../../constants/markets';
@@ -73,7 +74,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     awarded_status: opportunity?.awarded_status || ''
   });
 
-  const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate' | 'schedule' | 'history'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
 
@@ -177,6 +178,24 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       toast.error(error.response?.data?.error || error.response?.data?.errors?.[0]?.msg || 'Failed to update opportunity');
     }
   });
+
+  // Auto-save opportunity dates when Schedule tab reverse-syncs them
+  const dateAutoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScheduleDatesChange = useCallback((start: string | null, end: string | null) => {
+    setFormData(prev => ({
+      ...prev,
+      estimated_start_date: start ?? prev.estimated_start_date,
+      estimated_end_date: end ?? prev.estimated_end_date,
+    }));
+    if (!opportunity?.id) return;
+    if (dateAutoSaveTimer.current) clearTimeout(dateAutoSaveTimer.current);
+    dateAutoSaveTimer.current = setTimeout(() => {
+      opportunitiesService.update(opportunity.id, {
+        estimated_start_date: start ?? undefined,
+        estimated_end_date: end ?? undefined,
+      });
+    }, 800);
+  }, [opportunity?.id]);
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -330,6 +349,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
           </button>
           {isEditMode && (
             <button
+              className={`tab ${activeTab === 'schedule' ? 'active' : ''}`}
+              onClick={() => setActiveTab('schedule')}
+            >
+              Schedule
+            </button>
+          )}
+          {isEditMode && (
+            <button
               className={`tab ${activeTab === 'activity_comments' ? 'active' : ''}`}
               onClick={() => setActiveTab('activity_comments')}
             >
@@ -350,7 +377,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="modal-content">
+        <div className={`modal-content${activeTab === 'schedule' ? ' modal-content--schedule' : ''}`}>
           {activeTab === 'details' ? (
             <form onSubmit={handleSubmit} className="opportunity-form">
               <div className="opportunity-form-columns">
@@ -902,6 +929,14 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
                 </div>
               )}
             </div>
+          ) : activeTab === 'schedule' ? (
+            <OpportunitySchedule
+              opportunityId={opportunity!.id}
+              estimatedValue={Number(formData.estimated_value) || 0}
+              estimatedStartDate={formData.estimated_start_date || undefined}
+              estimatedEndDate={formData.estimated_end_date || undefined}
+              onProjectDatesChange={handleScheduleDatesChange}
+            />
           ) : activeTab === 'history' ? (
             <div style={{ overflowY: 'auto', flex: 1 }}>
               <OpportunityHistory opportunityId={opportunity!.id} />

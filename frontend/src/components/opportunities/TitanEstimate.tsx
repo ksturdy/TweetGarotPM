@@ -26,6 +26,7 @@ const DEFAULT_ESTIMATE: OpportunityEstimateData = {
   pf_labor_rate: 85.00,
   sm_labor_rate: 82.00,
   pl_labor_rate: 78.00,
+  margin_pct: 0,
 };
 
 type Trade = 'pf' | 'sm' | 'pl';
@@ -157,7 +158,9 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
     if (initialized) return;
     if (savedEstimate) {
       const data = {} as any;
-      for (const key of Object.keys(DEFAULT_ESTIMATE)) data[key] = parseFloat(String((savedEstimate as any)[key])) || 0;
+      for (const key of Object.keys(DEFAULT_ESTIMATE)) {
+        data[key] = parseFloat(String((savedEstimate as any)[key])) || 0;
+      }
       setPct(data);
       setInitialized(true);
     } else if (defaults) {
@@ -275,12 +278,16 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
   const calc = useMemo(() => {
     const ev = estimatedValue || 0;
     const p = pct;
-    const laborAmt = ev * p.labor_pct;
-    const materialAmt = ev * p.material_pct;
-    const subAmt = ev * p.subcontracts_pct;
-    const rentAmt = ev * p.rentals_pct;
-    const mepAmt = ev * p.mep_equip_pct;
-    const gcAmt = ev * p.general_conditions_pct;
+    const marginPct = Math.min(p.margin_pct, 0.9999);
+    const costBase = ev * (1 - marginPct);
+    const marginAmt = ev * marginPct;
+
+    const laborAmt = costBase * p.labor_pct;
+    const materialAmt = costBase * p.material_pct;
+    const subAmt = costBase * p.subcontracts_pct;
+    const rentAmt = costBase * p.rentals_pct;
+    const mepAmt = costBase * p.mep_equip_pct;
+    const gcAmt = costBase * p.general_conditions_pct;
     const costTotal = laborAmt + materialAmt + subAmt + rentAmt + mepAmt + gcAmt;
 
     const trades = TRADES.map(({ key }) => {
@@ -302,7 +309,7 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
     const tradePctSum = trades.reduce((s, t) => s + t.tPct, 0);
     const totalHrs = trades.reduce((s, t) => s + t.hrs, 0);
 
-    return { laborAmt, materialAmt, subAmt, rentAmt, mepAmt, gcAmt, costTotal, trades, costPctSum, tradePctSum, totalHrs };
+    return { laborAmt, materialAmt, subAmt, rentAmt, mepAmt, gcAmt, costTotal, marginAmt, marginPct, costBase, ev, trades, costPctSum, tradePctSum, totalHrs };
   }, [estimatedValue, pct]);
 
   if (!estimatedValue) {
@@ -334,9 +341,19 @@ const TitanEstimate: React.FC<TitanEstimateProps> = ({ opportunityId, estimatedV
         </tbody>
         <tfoot>
           <tr className="te-tbl-total">
-            <td>Total</td>
+            <td>Cost</td>
             <td><span className={Math.abs(calc.costPctSum - 1) > 0.001 ? 'te-warn' : ''}>{(calc.costPctSum * 100).toFixed(1)}%</span></td>
             <td className="r">{fmtCur(calc.costTotal)}</td>
+          </tr>
+          <tr className="te-margin-row">
+            <td>Margin</td>
+            <td><PercentInput value={pct.margin_pct} onChange={(v) => updateField('margin_pct', v)} /></td>
+            <td className="r te-margin-amt">{calc.marginPct > 0 ? fmtCur(calc.marginAmt) : '—'}</td>
+          </tr>
+          <tr className="te-revenue-row">
+            <td>Revenue</td>
+            <td></td>
+            <td className="r">{fmtCur(calc.ev)}</td>
           </tr>
         </tfoot>
       </table>

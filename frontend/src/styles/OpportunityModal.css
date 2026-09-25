@@ -2075,3 +2075,604 @@
   padding: 0 3px;
   border-radius: 3px;
 }
+
+/* ===== Estimate: Margin & Revenue rows ===== */
+
+.te-margin-row td {
+  border-top: 1px solid #f3f4f6;
+  padding-top: 2px;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.te-margin-amt {
+  color: #667eea;
+}
+
+.te-revenue-row td {
+  font-weight: 700;
+  color: #374151;
+  font-size: 12px;
+}
+
+/* ===== Cost-Type Schedule Tab ===== */
+
+/* Strip padding + become flex column when schedule tab is active */
+.opportunity-modal .modal-content.modal-content--schedule {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Summary bar ───────────────────────────────────────── */
+.octs-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.octs-summary-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.octs-summary-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.octs-summary-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+  font-variant-numeric: tabular-nums;
+}
+
+.octs-fill-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.octs-fill-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+  background: #f5f3ff;
+}
+
+/* ── Top Row: Shift Panel + Charts ─────────────────── */
+.octs-top-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  align-items: stretch;
+  min-height: 190px;
+}
+
+/* Shift schedule panel */
+.octs-shift-panel {
+  flex: 0 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+}
+
+.octs-panel-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.octs-shift-tbl {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.octs-shift-tbl th {
+  font-size: 9px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  padding: 0 3px 3px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.octs-shift-th-group { text-align: left; min-width: 66px; }
+.octs-shift-th-type  { text-align: left; min-width: 52px; }
+.octs-shift-th-day   { width: 28px; }
+.octs-shift-th-total { text-align: center; min-width: 40px; }
+
+.octs-shift-row {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.octs-shift-group-start {
+  border-top: 2px solid #e5e7eb;
+}
+
+.octs-shift-group-start:first-child {
+  border-top: none;
+}
+
+.octs-shift-group-label {
+  font-weight: 700;
+  color: #374151;
+  font-size: 10px;
+  padding: 2px 6px 2px 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.octs-shift-type-label {
+  font-size: 10px;
+  color: #6b7280;
+  padding: 2px 6px 2px 0;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.octs-shift-swatch {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.octs-shift-day-cell {
+  padding: 1px 2px;
+}
+
+.octs-shift-trade {
+  font-weight: 600;
+  color: #374151;
+  padding: 2px 8px 2px 0;
+  white-space: nowrap;
+}
+
+.octs-shift-input {
+  width: 30px;
+  padding: 2px 2px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  background: #fff;
+  -moz-appearance: textfield;
+}
+
+.octs-shift-input::-webkit-inner-spin-button,
+.octs-shift-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.octs-shift-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.15);
+}
+
+.octs-shift-total {
+  font-weight: 700;
+  color: #374151;
+  text-align: center;
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chart panels */
+.octs-chart-panel {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.octs-chart-body {
+  flex: 1;
+  min-height: 120px;
+  position: relative;
+}
+
+.octs-chart-empty {
+  font-size: 11px;
+  color: #d1d5db;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.octs-loading {
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 2rem;
+  text-align: center;
+}
+
+/* The scroll container — horizontal scroll for the whole table */
+.octs-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.octs-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 0 16px 12px;
+}
+
+/* Main table */
+.octs-tbl {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Sticky left-panel columns */
+.octs-left-sticky {
+  position: sticky;
+  z-index: 2;
+  background: #fff;
+}
+
+/* Shared th */
+.octs-th {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  border-bottom: 2px solid #e5e7eb;
+  text-align: left;
+  background: #fff;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.octs-th.octs-left-sticky {
+  z-index: 4; /* above both row sticky and column sticky */
+}
+
+.octs-th-r { text-align: right; }
+.octs-th-dur { text-align: center; }
+
+/* Month header cells */
+.octs-th-month {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 6px 0;
+  text-align: center;
+  background: #fff;
+  border-bottom: 2px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.octs-month-alt {
+  background: #f9fafb;
+}
+
+/* Data rows */
+.octs-row:hover .octs-left-sticky {
+  background: #f9fafb;
+}
+
+.octs-row:hover .octs-gantt-td .octs-gantt-inner {
+  filter: brightness(0.97);
+}
+
+/* LABOR / NON-LABOR group header rows */
+.octs-group-row {
+  background: #f8fafc;
+}
+
+.octs-group-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  border-top: 2px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.octs-group-gantt {
+  border-bottom: 1px solid #e5e7eb;
+  border-top: 2px solid #e5e7eb;
+  background: #f8fafc;
+  padding: 0;
+}
+
+/* Left-panel data cells */
+.octs-td {
+  padding: 5px 8px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+  background: inherit;
+}
+
+.octs-td-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+}
+
+.octs-ct-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.octs-td-cost {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #374151;
+}
+
+.octs-td-dur {
+  text-align: center;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+/* Contour column */
+.octs-td-contour {
+  padding: 3px 6px;
+}
+
+.octs-contour-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.octs-contour-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.octs-contour-select {
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #374151;
+  background: #fff;
+  padding: 1px 14px 1px 3px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%239ca3af' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 3px center;
+  min-width: 52px;
+  transition: border-color 0.15s;
+}
+
+.octs-contour-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.12);
+}
+
+.octs-contour-select:hover {
+  border-color: #9ca3af;
+}
+
+/* Date inputs */
+.octs-date-input {
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #374151;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 108px;
+  background: #fff;
+}
+
+.octs-date-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+/* Inherited (from project, not custom-set) — show muted */
+.octs-date-inherited {
+  color: #9ca3af;
+  background: #fafafa;
+  border-style: dashed;
+}
+
+/* Divider between sticky left and Gantt */
+.octs-left-sticky:last-of-type {
+  border-right: 2px solid #e5e7eb;
+}
+
+/* ── Gantt cell ───────────────────────────────────────────── */
+
+.octs-gantt-td {
+  padding: 0;
+  vertical-align: middle;
+  border-bottom: 1px solid #f3f4f6;
+  height: 34px;
+}
+
+.octs-gantt-inner {
+  position: relative;
+  height: 34px;
+  width: 100%;
+}
+
+/* Bar */
+.octs-bar {
+  position: absolute;
+  top: 7px;
+  height: 20px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  min-width: 4px;
+  overflow: visible;
+  opacity: 0.88;
+  transition: opacity 0.15s;
+  cursor: grab;
+  user-select: none;
+}
+
+.octs-bar:hover {
+  opacity: 1;
+}
+
+.octs-bar-dragging {
+  opacity: 0.75;
+  cursor: grabbing;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Left/right resize handles */
+.octs-bar-handle-l,
+.octs-bar-handle-r {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: rgba(255,255,255,0.3);
+  border-radius: 3px 0 0 3px;
+  cursor: w-resize;
+  flex-shrink: 0;
+}
+
+.octs-bar-handle-l {
+  left: 0;
+  border-radius: 3px 0 0 3px;
+  cursor: w-resize;
+}
+
+.octs-bar-handle-r {
+  right: 0;
+  border-radius: 0 3px 3px 0;
+  cursor: e-resize;
+}
+
+.octs-bar-handle-l:hover,
+.octs-bar-handle-r:hover {
+  background: rgba(255,255,255,0.55);
+}
+
+.octs-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.18);
+  pointer-events: none;
+  flex: 1;
+  min-width: 0;
+}
+
+/* "No dates" hint when gantt is empty */
+.octs-no-dates-hint {
+  font-size: 11px;
+  color: #d1d5db;
+  padding-left: 12px;
+  font-style: italic;
+}
+
+/* Duration cell — clickable display + edit input */
+.octs-dur-display {
+  display: block;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 2px 4px;
+  min-width: 32px;
+  transition: background 0.12s;
+}
+
+.octs-dur-display:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.octs-dur-placeholder {
+  color: #d1d5db;
+}
+
+.octs-dur-input {
+  width: 44px;
+  padding: 2px 4px;
+  text-align: center;
+  border: 1px solid #667eea;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+  -moz-appearance: textfield;
+}
+
+.octs-dur-input::-webkit-inner-spin-button,
+.octs-dur-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

@@ -3,7 +3,8 @@ const db = require('../config/database');
 const PERCENTAGE_FIELDS = [
   'labor_pct', 'material_pct', 'subcontracts_pct', 'rentals_pct', 'mep_equip_pct', 'general_conditions_pct',
   'pf_labor_pct', 'sm_labor_pct', 'pl_labor_pct',
-  'pf_shop_pct', 'pf_field_pct', 'sm_shop_pct', 'sm_field_pct', 'pl_shop_pct', 'pl_field_pct'
+  'pf_shop_pct', 'pf_field_pct', 'sm_shop_pct', 'sm_field_pct', 'pl_shop_pct', 'pl_field_pct',
+  'margin_pct'
 ];
 
 const RATE_FIELDS = ['pf_labor_rate', 'sm_labor_rate', 'pl_labor_rate'];
@@ -56,8 +57,9 @@ const OpportunityEstimate = {
         labor_pct, material_pct, subcontracts_pct, rentals_pct, mep_equip_pct, general_conditions_pct,
         pf_labor_pct, sm_labor_pct, pl_labor_pct,
         pf_shop_pct, pf_field_pct, sm_shop_pct, sm_field_pct, pl_shop_pct, pl_field_pct,
-        pf_labor_rate, sm_labor_rate, pl_labor_rate
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        pf_labor_rate, sm_labor_rate, pl_labor_rate,
+        margin_pct
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       ON CONFLICT (opportunity_id) DO UPDATE SET
         labor_pct = EXCLUDED.labor_pct,
         material_pct = EXCLUDED.material_pct,
@@ -77,6 +79,7 @@ const OpportunityEstimate = {
         pf_labor_rate = EXCLUDED.pf_labor_rate,
         sm_labor_rate = EXCLUDED.sm_labor_rate,
         pl_labor_rate = EXCLUDED.pl_labor_rate,
+        margin_pct = EXCLUDED.margin_pct,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *`,
       [
@@ -87,7 +90,8 @@ const OpportunityEstimate = {
         fields.pf_shop_pct || 0, fields.pf_field_pct || 0,
         fields.sm_shop_pct || 0, fields.sm_field_pct || 0,
         fields.pl_shop_pct || 0, fields.pl_field_pct || 0,
-        fields.pf_labor_rate || 0, fields.sm_labor_rate || 0, fields.pl_labor_rate || 0
+        fields.pf_labor_rate || 0, fields.sm_labor_rate || 0, fields.pl_labor_rate || 0,
+        fields.margin_pct || 0
       ]
     );
     return result.rows[0];

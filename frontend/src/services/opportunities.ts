@@ -149,6 +149,17 @@ export interface OpportunityEstimateData {
   pf_labor_rate: number;
   sm_labor_rate: number;
   pl_labor_rate: number;
+  margin_pct: number;
+}
+
+export interface OpportunityCostTypeScheduleRow {
+  segment_key: string;
+  label: string;
+  is_labor: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  notes: string;
+  contour_type: string;
 }
 
 export interface OpportunityEstimate extends OpportunityEstimateData {
@@ -471,6 +482,22 @@ const opportunitiesService = {
 
   async getHistory(opportunityId: number): Promise<OpportunityHistoryEntry[]> {
     const response = await api.get(`/opportunities/${opportunityId}/history`);
+    return response.data;
+  },
+
+  // ===== Cost-Type Schedule =====
+
+  async getCostTypeSchedule(opportunityId: number): Promise<OpportunityCostTypeScheduleRow[]> {
+    const response = await api.get(`/opportunities/${opportunityId}/cost-type-schedule`);
+    return response.data;
+  },
+
+  async saveCostTypeScheduleRow(
+    opportunityId: number,
+    segmentKey: string,
+    data: Pick<OpportunityCostTypeScheduleRow, 'start_date' | 'end_date' | 'notes' | 'contour_type'>
+  ): Promise<OpportunityCostTypeScheduleRow> {
+    const response = await api.put(`/opportunities/${opportunityId}/cost-type-schedule/${segmentKey}`, data);
     return response.data;
   },
 };
