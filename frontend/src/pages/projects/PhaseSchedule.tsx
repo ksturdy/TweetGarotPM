@@ -53,12 +53,14 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
   { key: 'uom', label: 'UOM', group: 'Estimated', hideable: true },
   { key: 'estHrs', label: 'Hrs', group: 'Estimated', hideable: true },
   { key: 'estCost', label: 'Cost', group: 'Estimated', hideable: true },
+  { key: 'estRate', label: 'Rate', group: 'Estimated', hideable: true },
   { key: 'estPi', label: 'PI', group: 'Estimated', hideable: true },
   { key: 'pctComp', label: '%Comp', group: 'JTD', hideable: true },
   { key: 'jtdQty', label: 'Qty', group: 'JTD', hideable: true },
   { key: 'jtdLf', label: 'LF', group: 'JTD', hideable: true },
   { key: 'jtdHrs', label: 'Hrs', group: 'JTD', hideable: true },
   { key: 'jtdCost', label: 'Cost', group: 'JTD', hideable: true },
+  { key: 'jtdRate', label: 'Rate', group: 'JTD', hideable: true },
   { key: 'jtdPi', label: 'PI', group: 'JTD', hideable: true },
   { key: 'projQty', label: 'Qty', group: 'Projected', hideable: true },
   { key: 'projLf', label: 'LF', group: 'Projected', hideable: true },
@@ -70,6 +72,7 @@ const GRID_COLUMN_DEFS: ColumnDef[] = [
   { key: 'remLf', label: 'LF', group: 'Remaining', hideable: true },
   { key: 'remHrs', label: 'Hrs', group: 'Remaining', hideable: true },
   { key: 'remCost', label: 'Cost', group: 'Remaining', hideable: true },
+  { key: 'remRate', label: 'Rate', group: 'Remaining', hideable: true },
   { key: 'rate', label: 'Rate', group: 'Billing', hideable: true },
   { key: 'start', label: 'Start', group: 'Schedule', hideable: true },
   { key: 'end', label: 'End', group: 'Schedule', hideable: true },
@@ -2469,13 +2472,13 @@ const COL_GROUP = {
 const GRID_COL_DEFAULTS = {
   sel: 28, rowNum: 32, gcLink: 120, phase: 286, ct: 36,
   // Estimated group
-  estQty: 62, estLf: 62, uom: 44, estHrs: 62, estCost: 78, estPi: 50,
+  estQty: 62, estLf: 62, uom: 44, estHrs: 62, estCost: 78, estRate: 68, estPi: 50,
   // JTD group
-  pctComp: 54, jtdQty: 62, jtdLf: 62, jtdHrs: 62, jtdCost: 78, jtdPi: 50,
+  pctComp: 54, jtdQty: 62, jtdLf: 62, jtdHrs: 62, jtdCost: 78, jtdRate: 68, jtdPi: 50,
   // Projected group
   projQty: 62, projLf: 62, projHrs: 62, projCostField: 78, projCostVista: 78, projPi: 50,
   // Remaining group
-  remQty: 62, remLf: 62, remHrs: 62, remCost: 78,
+  remQty: 62, remLf: 62, remHrs: 62, remCost: 78, remRate: 68,
   // Billing
   rate: 130, gm: 58,
   // Schedule
@@ -2715,10 +2718,10 @@ const GridView: React.FC<{
   const distributionLabel = period === 'week' ? 'Weekly Distribution' : period === 'quarter' ? 'Quarterly Distribution' : 'Monthly Distribution';
   // Compute group widths for spanning headers (skip hidden columns)
   const vw = (col: string) => gv(col) ? (colWidths as any)[col] : 0;
-  const estCols = ['estQty', 'estLf', 'uom', 'estHrs', 'estCost', 'estPi'];
-  const jtdCols = ['pctComp', 'jtdQty', 'jtdLf', 'jtdHrs', 'jtdCost', 'jtdPi'];
+  const estCols = ['estQty', 'estLf', 'uom', 'estHrs', 'estCost', 'estRate', 'estPi'];
+  const jtdCols = ['pctComp', 'jtdQty', 'jtdLf', 'jtdHrs', 'jtdCost', 'jtdRate', 'jtdPi'];
   const projCols = ['projQty', 'projLf', 'projHrs', 'projCostField', 'projCostVista', 'projPi'];
-  const remCols = ['remQty', 'remLf', 'remHrs', 'remCost'];
+  const remCols = ['remQty', 'remLf', 'remHrs', 'remCost', 'remRate'];
   const billCols = mode === 'billable' ? ['rate', 'gm'] : ['rate'];
   const schedCols = ['start', 'end', 'dur', 'pred', 'contour'];
   const estGroupW = estCols.reduce((s, c) => s + vw(c), 0);
@@ -2795,12 +2798,14 @@ const GridView: React.FC<{
           {gv('uom') && <col style={{ width: colWidths.uom }} />}
           {gv('estHrs') && <col style={{ width: colWidths.estHrs }} />}
           {gv('estCost') && <col style={{ width: colWidths.estCost }} />}
+          {gv('estRate') && <col style={{ width: colWidths.estRate }} />}
           {gv('estPi') && <col style={{ width: colWidths.estPi }} />}
           {gv('pctComp') && <col style={{ width: colWidths.pctComp }} />}
           {gv('jtdQty') && <col style={{ width: colWidths.jtdQty }} />}
           {gv('jtdLf') && <col style={{ width: colWidths.jtdLf }} />}
           {gv('jtdHrs') && <col style={{ width: colWidths.jtdHrs }} />}
           {gv('jtdCost') && <col style={{ width: colWidths.jtdCost }} />}
+          {gv('jtdRate') && <col style={{ width: colWidths.jtdRate }} />}
           {gv('jtdPi') && <col style={{ width: colWidths.jtdPi }} />}
           {gv('projQty') && <col style={{ width: colWidths.projQty }} />}
           {gv('projLf') && <col style={{ width: colWidths.projLf }} />}
@@ -2812,6 +2817,7 @@ const GridView: React.FC<{
           {gv('remLf') && <col style={{ width: colWidths.remLf }} />}
           {gv('remHrs') && <col style={{ width: colWidths.remHrs }} />}
           {gv('remCost') && <col style={{ width: colWidths.remCost }} />}
+          {gv('remRate') && <col style={{ width: colWidths.remRate }} />}
           {gv('rate') && <col style={{ width: colWidths.rate }} />}
           {mode === 'billable' && <col style={{ width: colWidths.gm }} />}
           {gv('start') && <col style={{ width: colWidths.start }} />}
@@ -2886,6 +2892,7 @@ const GridView: React.FC<{
             {gv('uom') && <th data-col="uom" onContextMenu={e => gridHeaderContextMenu(e, 'uom', 'UOM')} style={thStyle(colWidths.uom, { background: COL_GROUP.est.hdr })}>UOM{resizeHandle('uom')}</th>}
             {gv('estHrs') && <th data-col="estHrs" onContextMenu={e => gridHeaderContextMenu(e, 'estHrs', 'Est Hrs')} style={thStyle(colWidths.estHrs, { background: COL_GROUP.est.hdr })}>Hrs{resizeHandle('estHrs')}</th>}
             {gv('estCost') && <th data-col="estCost" onContextMenu={e => gridHeaderContextMenu(e, 'estCost', 'Est Cost')} style={thStyle(colWidths.estCost, { background: COL_GROUP.est.hdr })}>Cost{resizeHandle('estCost')}</th>}
+            {gv('estRate') && <th data-col="estRate" onContextMenu={e => gridHeaderContextMenu(e, 'estRate', 'Est Rate')} style={thStyle(colWidths.estRate, { background: COL_GROUP.est.hdr })}>Rate{resizeHandle('estRate')}</th>}
             {gv('estPi') && <th data-col="estPi" onContextMenu={e => gridHeaderContextMenu(e, 'estPi', 'Est PI')} style={thStyle(colWidths.estPi, { background: COL_GROUP.est.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('estPi')}</th>}
             {/* JTD group */}
             {gv('pctComp') && <th data-col="pctComp" onContextMenu={e => gridHeaderContextMenu(e, 'pctComp', '%Comp')} style={thStyle(colWidths.pctComp, { background: COL_GROUP.jtd.hdr })}>%Comp{resizeHandle('pctComp')}</th>}
@@ -2893,6 +2900,7 @@ const GridView: React.FC<{
             {gv('jtdLf') && <th data-col="jtdLf" onContextMenu={e => gridHeaderContextMenu(e, 'jtdLf', 'JTD LF')} style={thStyle(colWidths.jtdLf, { background: COL_GROUP.jtd.hdr })}>LF{resizeHandle('jtdLf')}</th>}
             {gv('jtdHrs') && <th data-col="jtdHrs" onContextMenu={e => gridHeaderContextMenu(e, 'jtdHrs', 'JTD Hrs')} style={thStyle(colWidths.jtdHrs, { background: COL_GROUP.jtd.hdr })}>Hrs{resizeHandle('jtdHrs')}</th>}
             {gv('jtdCost') && <th data-col="jtdCost" onContextMenu={e => gridHeaderContextMenu(e, 'jtdCost', 'JTD Cost')} style={thStyle(colWidths.jtdCost, { background: COL_GROUP.jtd.hdr })}>Cost{resizeHandle('jtdCost')}</th>}
+            {gv('jtdRate') && <th data-col="jtdRate" onContextMenu={e => gridHeaderContextMenu(e, 'jtdRate', 'JTD Rate')} style={thStyle(colWidths.jtdRate, { background: COL_GROUP.jtd.hdr })}>Rate{resizeHandle('jtdRate')}</th>}
             {gv('jtdPi') && <th data-col="jtdPi" onContextMenu={e => gridHeaderContextMenu(e, 'jtdPi', 'JTD PI')} style={thStyle(colWidths.jtdPi, { background: COL_GROUP.jtd.hdr, borderRight: '2px solid #94a3b8' })}>PI{resizeHandle('jtdPi')}</th>}
             {/* Projected group */}
             {gv('projQty') && <th data-col="projQty" onContextMenu={e => gridHeaderContextMenu(e, 'projQty', 'Proj Qty')} style={thStyle(colWidths.projQty, { background: COL_GROUP.proj.hdr })}>Qty{resizeHandle('projQty')}</th>}
@@ -2905,7 +2913,8 @@ const GridView: React.FC<{
             {gv('remQty') && <th data-col="remQty" onContextMenu={e => gridHeaderContextMenu(e, 'remQty', 'Rem Qty')} style={thStyle(colWidths.remQty, { background: COL_GROUP.rem.hdr })}>Qty{resizeHandle('remQty')}</th>}
             {gv('remLf') && <th data-col="remLf" onContextMenu={e => gridHeaderContextMenu(e, 'remLf', 'Rem LF')} style={thStyle(colWidths.remLf, { background: COL_GROUP.rem.hdr })}>LF{resizeHandle('remLf')}</th>}
             {gv('remHrs') && <th data-col="remHrs" onContextMenu={e => gridHeaderContextMenu(e, 'remHrs', 'Rem Hrs')} style={thStyle(colWidths.remHrs, { background: COL_GROUP.rem.hdr })}>Hrs{resizeHandle('remHrs')}</th>}
-            {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
+            {gv('remCost') && <th data-col="remCost" onContextMenu={e => gridHeaderContextMenu(e, 'remCost', 'Rem Cost')} style={thStyle(colWidths.remCost, { background: COL_GROUP.rem.hdr, borderRight: gv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8' })}>Cost{resizeHandle('remCost')}</th>}
+            {gv('remRate') && <th data-col="remRate" onContextMenu={e => gridHeaderContextMenu(e, 'remRate', 'Rem Rate')} style={thStyle(colWidths.remRate, { background: COL_GROUP.rem.hdr, borderRight: '2px solid #94a3b8' })}>Rate{resizeHandle('remRate')}</th>}
             {/* Billing group */}
             {gv('rate') && <th data-col="rate" onContextMenu={e => gridHeaderContextMenu(e, 'rate', 'Rate')} style={thStyle(colWidths.rate, { background: COL_GROUP.bill.hdr, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8' })}>Rate{resizeHandle('rate')}</th>}
             {mode === 'billable' && <th style={thStyle(colWidths.gm, { background: COL_GROUP.bill.hdr, borderRight: '2px solid #94a3b8', textAlign: 'center' })}>GM%</th>}
@@ -3034,6 +3043,7 @@ const GridView: React.FC<{
                 {gv('uom') && <td style={{ ...tdTot, width: colWidths.uom, background: COL_GROUP.est.cell }}></td>}
                 {gv('estHrs') && <td style={{ ...tdTot, width: colWidths.estHrs, background: COL_GROUP.est.cell }}>{fmtHrs(totEstHrs)}</td>}
                 {gv('estCost') && <td style={{ ...tdTot, width: colWidths.estCost, background: COL_GROUP.est.cell }}>{fmtCompact(totEstCost)}</td>}
+                {gv('estRate') && <td style={{ ...tdTot, width: colWidths.estRate, background: COL_GROUP.est.cell }}>{totEstHrs > 0 ? `$${Math.round(totEstCost / totEstHrs)}/hr` : ''}</td>}
                 {gv('estPi') && <td style={{ ...tdTot, width: colWidths.estPi, borderRight: '2px solid #94a3b8', background: COL_GROUP.est.cell }}>{fmtPi(totEstQty, totEstHrs)}</td>}
                 {/* JTD totals */}
                 {gv('pctComp') && <td style={{ ...tdTot, width: colWidths.pctComp, background: COL_GROUP.jtd.cell }}>{totPctComp > 0 ? `${Math.round(totPctComp)}%` : ''}</td>}
@@ -3041,6 +3051,7 @@ const GridView: React.FC<{
                 {gv('jtdLf') && <td style={{ ...tdTot, width: colWidths.jtdLf, background: COL_GROUP.jtd.cell }}>{(() => { const v = items.reduce((s, i) => s + parseNum(i.stratus_installed_lf), 0); return v > 0 ? Math.round(v).toLocaleString() : ''; })()}</td>}
                 {gv('jtdHrs') && <td style={{ ...tdTot, width: colWidths.jtdHrs, background: COL_GROUP.jtd.cell }}>{fmtHrs(totJtdHrs)}</td>}
                 {gv('jtdCost') && <td style={{ ...tdTot, width: colWidths.jtdCost, background: COL_GROUP.jtd.cell }}>{fmtCompact(totJtdCost)}</td>}
+                {gv('jtdRate') && <td style={{ ...tdTot, width: colWidths.jtdRate, background: COL_GROUP.jtd.cell }}>{totJtdHrs > 0 ? `$${Math.round(totJtdCost / totJtdHrs)}/hr` : ''}</td>}
                 {gv('jtdPi') && (() => { const tEstPi = totEstHrs > 0 ? totEstQty / totEstHrs : 0; const tJtdPi = totJtdHrs > 0 ? totJtdQty / totJtdHrs : 0; const bg = (tEstPi > 0 && tJtdPi > 0) ? (tJtdPi >= tEstPi * 1.02 ? '#C6EFCE' : tJtdPi <= tEstPi * 0.98 ? '#FFC7CE' : COL_GROUP.jtd.cell) : COL_GROUP.jtd.cell; const fg = (tEstPi > 0 && tJtdPi > 0) ? (tJtdPi >= tEstPi * 1.02 ? '#006100' : tJtdPi <= tEstPi * 0.98 ? '#9C0006' : '#1e293b') : '#1e293b'; return <td style={{ ...tdTot, width: colWidths.jtdPi, borderRight: '2px solid #94a3b8', background: bg, color: fg }}>{fmtPi(totJtdQty, totJtdHrs)}</td>; })()}
                 {/* Projected totals */}
                 {gv('projQty') && <td style={{ ...tdTot, width: colWidths.projQty, background: COL_GROUP.proj.cell }}>{totProjQty > 0 ? Math.round(totProjQty).toLocaleString() : ''}</td>}
@@ -3053,7 +3064,8 @@ const GridView: React.FC<{
                 {gv('remQty') && <td style={{ ...tdTot, width: colWidths.remQty, background: COL_GROUP.rem.cell }}>{totRemQty > 0 ? Math.round(totRemQty).toLocaleString() : ''}</td>}
                 {gv('remLf') && <td style={{ ...tdTot, width: colWidths.remLf, background: COL_GROUP.rem.cell }}>{(() => { const v = items.reduce((s, i) => s + Math.max(0, parseNum(i.stratus_qty_lf) - parseNum(i.stratus_installed_lf)), 0); return v > 0 ? Math.round(v).toLocaleString() : ''; })()}</td>}
                 {gv('remHrs') && <td style={{ ...tdTot, width: colWidths.remHrs, background: COL_GROUP.rem.cell }}>{fmtHrs(totRemHrs)}</td>}
-                {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
+                {gv('remCost') && <td style={{ ...tdTot, width: colWidths.remCost, borderRight: gv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{fmtCompact(totRemCost)}</td>}
+                {gv('remRate') && <td style={{ ...tdTot, width: colWidths.remRate, borderRight: '2px solid #94a3b8', background: COL_GROUP.rem.cell }}>{totRemHrs > 0 ? `$${Math.round(totRemCost / totRemHrs)}/hr` : ''}</td>}
                 {/* Billing totals */}
                 {gv('rate') && <td style={{ ...tdTot, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', background: COL_GROUP.bill.cell }}></td>}
                 {mode === 'billable' && (() => {
@@ -3191,6 +3203,7 @@ const CostTypeSummaryRow: React.FC<{
       {sv('uom') && <td style={{ ...tdS, width: colWidths.uom, backgroundColor: COL_GROUP.est.cell }}></td>}
       {sv('estHrs') && <td style={{ ...tdS, width: colWidths.estHrs, backgroundColor: COL_GROUP.est.cell }}>{fmtHrs(group.estHrs)}</td>}
       {sv('estCost') && <td style={{ ...tdS, width: colWidths.estCost, backgroundColor: COL_GROUP.est.cell }}>{fmtCompact(group.estCost)}</td>}
+      {sv('estRate') && <td style={{ ...tdS, width: colWidths.estRate, backgroundColor: COL_GROUP.est.cell }}>{group.estHrs > 0 ? `$${Math.round(group.estCost / group.estHrs)}/hr` : ''}</td>}
       {sv('estPi') && <td style={{ ...tdS, width: colWidths.estPi, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.est.cell }}>{fmtPi(group.estQty, group.estHrs)}</td>}
       {/* JTD */}
       {sv('pctComp') && <td style={{ ...tdS, width: colWidths.pctComp, backgroundColor: COL_GROUP.jtd.cell }}>{group.pctComp > 0 ? `${Math.round(group.pctComp)}%` : ''}</td>}
@@ -3198,6 +3211,7 @@ const CostTypeSummaryRow: React.FC<{
       {sv('jtdLf') && <td style={{ ...tdS, width: colWidths.jtdLf, backgroundColor: COL_GROUP.jtd.cell }}>{group.jtdLf > 0 ? Math.round(group.jtdLf).toLocaleString() : ''}</td>}
       {sv('jtdHrs') && <td style={{ ...tdS, width: colWidths.jtdHrs, backgroundColor: COL_GROUP.jtd.cell }}>{fmtHrs(group.jtdHrs)}</td>}
       {sv('jtdCost') && <td style={{ ...tdS, width: colWidths.jtdCost, backgroundColor: COL_GROUP.jtd.cell }}>{fmtCompact(group.jtdCost)}</td>}
+      {sv('jtdRate') && <td style={{ ...tdS, width: colWidths.jtdRate, backgroundColor: COL_GROUP.jtd.cell }}>{group.jtdHrs > 0 ? `$${Math.round(group.jtdCost / group.jtdHrs)}/hr` : ''}</td>}
       {sv('jtdPi') && (() => { const gEstPi = group.estHrs > 0 ? group.estQty / group.estHrs : 0; const gJtdPi = group.jtdHrs > 0 ? group.jtdQty / group.jtdHrs : 0; const bg = (gEstPi > 0 && gJtdPi > 0) ? (gJtdPi >= gEstPi * 1.02 ? '#C6EFCE' : gJtdPi <= gEstPi * 0.98 ? '#FFC7CE' : COL_GROUP.jtd.cell) : COL_GROUP.jtd.cell; const fg = (gEstPi > 0 && gJtdPi > 0) ? (gJtdPi >= gEstPi * 1.02 ? '#006100' : gJtdPi <= gEstPi * 0.98 ? '#9C0006' : '#1e293b') : '#1e293b'; return <td style={{ ...tdS, width: colWidths.jtdPi, borderRight: '2px solid #94a3b8', backgroundColor: bg, color: fg }}>{fmtPi(group.jtdQty, group.jtdHrs)}</td>; })()}
       {/* Projected (color coded vs estimate) */}
       {sv('projQty') && <td style={{ ...tdS, width: colWidths.projQty, backgroundColor: COL_GROUP.proj.cell }}>{group.projQty > 0 ? Math.round(group.projQty).toLocaleString() : ''}</td>}
@@ -3210,7 +3224,8 @@ const CostTypeSummaryRow: React.FC<{
       {sv('remQty') && <td style={{ ...tdS, width: colWidths.remQty, backgroundColor: COL_GROUP.rem.cell }}>{group.remQty > 0 ? Math.round(group.remQty).toLocaleString() : ''}</td>}
       {sv('remLf') && <td style={{ ...tdS, width: colWidths.remLf, backgroundColor: COL_GROUP.rem.cell }}>{group.remLf > 0 ? Math.round(group.remLf).toLocaleString() : ''}</td>}
       {sv('remHrs') && <td style={{ ...tdS, width: colWidths.remHrs, backgroundColor: COL_GROUP.rem.cell }}>{fmtHrs(group.remHrs)}</td>}
-      {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
+      {sv('remCost') && <td style={{ ...tdS, width: colWidths.remCost, borderRight: sv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{fmtCompact(group.remCost)}</td>}
+      {sv('remRate') && <td style={{ ...tdS, width: colWidths.remRate, borderRight: '2px solid #94a3b8', backgroundColor: COL_GROUP.rem.cell }}>{group.remHrs > 0 ? `$${Math.round(group.remCost / group.remHrs)}/hr` : ''}</td>}
       {/* Billing */}
       {sv('rate') && <td style={{ ...tdS, width: colWidths.rate, borderRight: mode === 'billable' ? '1px solid #e2e8f0' : '2px solid #94a3b8', backgroundColor: COL_GROUP.bill.cell }}></td>}
       {mode === 'billable' && (() => {
@@ -3475,6 +3490,9 @@ const GridRow: React.FC<{
       </td>}
       {rv('estHrs') && <td style={{ ...tdData, width: colWidths.estHrs, background: bg(COL_GROUP.est.cell) }}>{fmtHrs(estHrs)}</td>}
       {rv('estCost') && <td style={{ ...tdData, fontWeight: 500, width: colWidths.estCost, background: bg(COL_GROUP.est.cell) }}>{fmtCompact(estCost)}</td>}
+      {rv('estRate') && <td style={{ ...tdMuted, width: colWidths.estRate, background: bg(COL_GROUP.est.cell) }}>
+        {(item.cost_types?.[0] || 0) === 1 && estLaborRate > 0 ? `$${Math.round(estLaborRate)}/hr` : '—'}
+      </td>}
       {rv('estPi') && <td style={{ ...tdMuted, width: colWidths.estPi, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.est.cell) }}>{fmtPi(piEstQty, estHrs)}</td>}
 
       {/* === JTD GROUP === */}
@@ -3520,6 +3538,9 @@ const GridRow: React.FC<{
       {rv('jtdLf') && <td style={{ ...tdData, width: colWidths.jtdLf, background: bg(COL_GROUP.jtd.cell) }}>{item.stratus_installed_lf != null ? Math.round(parseNum(item.stratus_installed_lf)).toLocaleString() : '-'}</td>}
       {rv('jtdHrs') && <td style={{ ...tdData, width: colWidths.jtdHrs, background: bg(COL_GROUP.jtd.cell) }}>{fmtHrs(jtdHrs)}</td>}
       {rv('jtdCost') && <td style={{ ...tdData, width: colWidths.jtdCost, background: bg(COL_GROUP.jtd.cell) }}>{fmtCompact(jtdCost)}</td>}
+      {rv('jtdRate') && <td style={{ ...tdMuted, width: colWidths.jtdRate, background: bg(COL_GROUP.jtd.cell) }}>
+        {(item.cost_types?.[0] || 0) === 1 && jtdLaborRate > 0 ? `$${Math.round(jtdLaborRate)}/hr` : '—'}
+      </td>}
       {rv('jtdPi') && (() => {
         const piBg = (estPi > 0 && jtdPi > 0)
           ? (jtdPi >= estPi * 1.02 ? '#C6EFCE' : jtdPi <= estPi * 0.98 ? '#FFC7CE' : bg(COL_GROUP.jtd.cell))
@@ -3556,8 +3577,11 @@ const GridRow: React.FC<{
       {rv('remHrs') && <td style={{ ...tdMuted, width: colWidths.remHrs, background: bg(COL_GROUP.rem.cell) }}>
         {fmtHrs(remHrs)}
       </td>}
-      {rv('remCost') && <td style={{ ...tdData, width: colWidths.remCost, borderRight: '2px solid #94a3b8', fontWeight: 500, background: bg(COL_GROUP.rem.cell) }}>
+      {rv('remCost') && <td style={{ ...tdData, width: colWidths.remCost, borderRight: rv('remRate') ? '1px solid #cbd5e1' : '2px solid #94a3b8', fontWeight: 500, background: bg(COL_GROUP.rem.cell) }}>
         {fmtCompact(remCost)}
+      </td>}
+      {rv('remRate') && <td style={{ ...tdMuted, width: colWidths.remRate, borderRight: '2px solid #94a3b8', background: bg(COL_GROUP.rem.cell) }}>
+        {(item.cost_types?.[0] || 0) === 1 && effLaborRate > 0 ? `$${Math.round(effLaborRate)}/hr` : '—'}
       </td>}
 
       {/* === BILLING GROUP (Rate dropdown — labor lines only) === */}
