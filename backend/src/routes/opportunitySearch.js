@@ -522,24 +522,6 @@ router.delete('/saved/:id', async (req, res, next) => {
   }
 });
 
-// PATCH /api/opportunity-search/saved/:id - Rename a saved search
-router.patch('/saved/:id', async (req, res, next) => {
-  try {
-    const { name } = req.body;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Name is required' });
-    }
-    const updated = await SavedSearches.rename(Number(req.params.id), req.tenantId, name);
-    if (!updated) {
-      return res.status(404).json({ error: 'Saved search not found' });
-    }
-    res.json(updated);
-  } catch (error) {
-    console.error('[Opportunity Search] Error renaming saved search:', error);
-    next(error);
-  }
-});
-
 // POST /api/opportunity-search/saved/:id/duplicate - Duplicate a saved search
 router.post('/saved/:id/duplicate', async (req, res, next) => {
   try {

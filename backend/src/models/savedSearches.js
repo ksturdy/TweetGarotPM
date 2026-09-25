@@ -50,16 +50,6 @@ const SavedSearches = {
     return result.rows[0];
   },
 
-  async rename(id, tenantId, name) {
-    const result = await pool.query(
-      `UPDATE opportunity_saved_searches SET name = $1
-       WHERE id = $2 AND tenant_id = $3
-       RETURNING id, name`,
-      [name.trim(), id, tenantId]
-    );
-    return result.rows[0];
-  },
-
   async delete(id, tenantId) {
     const result = await pool.query(
       `DELETE FROM opportunity_saved_searches

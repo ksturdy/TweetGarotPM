@@ -133,8 +133,6 @@ const OpportunitySearch: React.FC = () => {
   const [recurringDialogMode, setRecurringDialogMode] = useState<'create' | 'edit'>('create');
   const [recurringDialogData, setRecurringDialogData] = useState<{ id?: number; savedSearchId?: number; name: string; description: string }>({ name: '', description: '' });
   const [shouldAutoSave, setShouldAutoSave] = useState(true);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameValue, setRenameValue] = useState('');
 
   const savedSearchesQuery = useQuery({
     queryKey: ['saved-opportunity-searches'],
@@ -154,15 +152,6 @@ const OpportunitySearch: React.FC = () => {
     });
     return map;
   }, [leads, existingOpportunities]);
-
-  const renameSavedMutation = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) =>
-      opportunitySearchService.renameSavedSearch(id, name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-opportunity-searches'] });
-      setRenamingId(null);
-    },
-  });
 
   const deleteSavedMutation = useMutation({
     mutationFn: (id: number) => opportunitySearchService.deleteSavedSearch(id),
@@ -870,50 +859,7 @@ const OpportunitySearch: React.FC = () => {
                           }}
                         />
                       </td>
-                      <td className="opp-saved-name" onClick={(e) => e.stopPropagation()}>
-                        {renamingId === item.id ? (
-                          <div className="opp-saved-rename-row">
-                            <input
-                              className="opp-saved-rename-input"
-                              value={renameValue}
-                              autoFocus
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && renameValue.trim()) renameSavedMutation.mutate({ id: item.id, name: renameValue });
-                                if (e.key === 'Escape') setRenamingId(null);
-                              }}
-                            />
-                            <button
-                              className="opp-action-icon-btn"
-                              disabled={!renameValue.trim() || renameSavedMutation.isPending}
-                              onClick={() => renameSavedMutation.mutate({ id: item.id, name: renameValue })}
-                              title="Save name"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                            </button>
-                            <button className="opp-action-icon-btn danger" onClick={() => setRenamingId(null)} title="Cancel">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="opp-saved-name-group">
-                            <span className="opp-saved-name-text">{item.name}</span>
-                            <button
-                              className="opp-action-icon-btn opp-saved-rename-btn"
-                              onClick={() => { setRenamingId(item.id); setRenameValue(item.name); }}
-                              title="Rename"
-                            >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                            </button>
-                            {(item.criteria?.location || item.criteria?.radius_miles) && (
-                              <div className="opp-saved-criteria-hint">
-                                {item.criteria.location && <span>{item.criteria.location}</span>}
-                                {item.criteria.radius_miles && <span>within {item.criteria.radius_miles} mi</span>}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </td>
+                      <td className="opp-saved-name">{item.name}</td>
                       <td>{new Date(item.created_at).toLocaleDateString('en-US', {
                         month: 'short', day: 'numeric', year: 'numeric'
                       })}</td>
