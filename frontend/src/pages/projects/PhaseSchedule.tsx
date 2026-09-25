@@ -612,9 +612,17 @@ const computeMonthlyValues = (
     if (useManual && manualValues) return manualValues;
   }
 
+  // Field projection: always has a value — falls back to estimate when Vista has no data.
+  const _pctComp = parseNum(item.percent_complete);
+  const _jtdC = parseNum(item.total_jtd_cost);
+  const _estC = parseNum(item.total_est_cost);
+  const _projCostField = _pctComp > 0
+    ? Math.max(_jtdC / (_pctComp / 100), _jtdC)
+    : _jtdC > _estC ? _jtdC : _estC;
+
   let total: number;
   if (mode === 'cost') {
-    total = parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost);
+    total = Math.max(0, _projCostField - _jtdC);
   } else if (mode === 'qty') {
     total = parseNum(item.quantity) - parseNum(item.quantity_installed);
   } else if (mode === 'manpower') {
@@ -640,9 +648,7 @@ const computeMonthlyValues = (
       const jtdCost = parseNum(item.total_jtd_cost);
       const estHrs = parseNum(item.total_est_hours);
       const estCost = parseNum(item.total_est_cost);
-      const vPC = parseNum(item.total_projected_cost);
-      const projCostVista = vPC > 0 ? Math.max(vPC, jtdCost) : 0;
-      const remCostForHrs = Math.max(0, projCostVista - jtdCost);
+      const remCostForHrs = Math.max(0, _projCostField - jtdCost);
       const jtdLaborRate = jtdHrs > 0 ? jtdCost / jtdHrs : 0;
       const estLaborRate = estHrs > 0 ? estCost / estHrs : 0;
       const effLaborRate = jtdLaborRate > 0 ? jtdLaborRate : estLaborRate;
@@ -651,9 +657,7 @@ const computeMonthlyValues = (
       total = remHrs * (rate + burden);
     } else {
       const markupPct = markupByCt ? markupByCt[ct] || 0 : 0;
-      const vPC = parseNum(item.total_projected_cost);
-      if (vPC <= 0) return values;
-      const remCost = Math.max(0, vPC - parseNum(item.total_jtd_cost));
+      const remCost = Math.max(0, _projCostField - _jtdC);
       total = remCost * (1 + markupPct / 100);
     }
   }
@@ -3291,10 +3295,9 @@ const GridRow: React.FC<{
     : estCost;
   // Vista projection: ERP value (0 if not available)
   const projCostVista = vistaProjCost > 0 ? Math.max(vistaProjCost, jtdCost) : 0;
-  // Remaining (only meaningful when Vista projection exists): cost = ProjVista − JTD;
-  // hours = Remaining cost ÷ labor rate (JTD $ / JTD hrs, falling back to Est $ / Est hrs
-  // when no JTD hours have posted yet); qty = ProjQty − JTD qty.
-  const remCost = projCostVista > 0 ? Math.max(0, projCostVista - jtdCost) : 0;
+  // Remaining: projected cost (field) − JTD. projCostField always has a value —
+  // it falls back to the estimate when Vista has no projection yet.
+  const remCost = Math.max(0, projCostField - jtdCost);
   const jtdLaborRate = jtdHrs > 0 ? jtdCost / jtdHrs : 0;
   const estLaborRate = estHrs > 0 ? estCost / estHrs : 0;
   const effLaborRate = jtdLaborRate > 0 ? jtdLaborRate : estLaborRate;
@@ -3389,26 +3392,9 @@ const GridRow: React.FC<{
     return jtdC * (1 + mu / 100);
   })();
 
-  // When both JTD and remaining are zero (no Vista data yet, no dates),
-  // fall back to estimate so pre-start items still show an expected GM%.
-  const _estFallbackBillable = (() => {
-    if (mode !== 'billable' || itemJtdBillable > 0 || itemRemBillable > 0) return 0;
-    const ct = item.cost_types?.[0] || 0;
-    const estHrs = parseNum(item.total_est_hours);
-    const estC = parseNum(item.total_est_cost);
-    const mu = markupByCt[ct] || 0;
-    if (ct === 1 && _rateVal > 0) return estHrs * (_rateVal + _burden);
-    return estC * (1 + mu / 100);
-  })();
-  const _estFallbackCost = _estFallbackBillable > 0 ? parseNum(item.total_est_cost) : 0;
-
-  const itemTotalBillable = itemJtdBillable + itemRemBillable + _estFallbackBillable;
-  const itemTotalCost = mode === 'billable' ? (() => {
-    const jtdC = parseNum(item.total_jtd_cost);
-    const vPC = parseNum(item.total_projected_cost);
-    const vistaBase = vPC > 0 ? Math.max(vPC, jtdC) : jtdC;
-    return vistaBase > 0 ? vistaBase : _estFallbackCost;
-  })() : 0;
+  const itemTotalBillable = itemJtdBillable + itemRemBillable;
+  // Total cost uses projCostField (same as remCost above) — always has a value
+  const itemTotalCost = mode === 'billable' ? projCostField : 0;
   const itemBillable = itemRemBillable; // keep alias for existing Rem Cost cell usage
   const itemGmPct = mode === 'billable' && itemTotalBillable > 0
     ? (itemTotalBillable - itemTotalCost) / itemTotalBillable * 100
