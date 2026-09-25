@@ -11,6 +11,7 @@ const OpportunityScore = require('../models/OpportunityScore');
 const OpportunityReminder = require('../models/OpportunityReminder');
 const Notification = require('../models/Notification');
 const OpportunityHistory = require('../models/OpportunityHistory');
+const { notify } = require('../utils/notificationService');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext, checkLimit } = require('../middleware/tenant');
 const { body, validationResult } = require('express-validator');
@@ -31,6 +32,23 @@ const TRACKED_FIELDS = {
   source: 'Lead Source',
 };
 
+const DATE_FIELDS = new Set(['estimated_start_date']);
+
+// Normalize a date value (Date object or string) to YYYY-MM-DD for comparison
+function normalizeDate(val) {
+  if (!val) return '';
+  if (val instanceof Date) return val.toISOString().substring(0, 10);
+  return String(val).substring(0, 10);
+}
+
+// Format a date value for human-readable history display
+function formatDateDisplay(val) {
+  if (!val) return '—';
+  const d = val instanceof Date ? val : new Date(String(val));
+  if (isNaN(d.getTime())) return String(val).substring(0, 10) || '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
 function buildChanges(oldOpp, body, newOpp) {
   const changes = [];
   for (const [field, label] of Object.entries(TRACKED_FIELDS)) {
@@ -41,6 +59,9 @@ function buildChanges(oldOpp, body, newOpp) {
     if (field === 'estimated_value') {
       oldVal = oldOpp[field] != null ? String(Math.round(Number(oldOpp[field]))) : '';
       newVal = body[field] != null ? String(Math.round(Number(body[field]))) : '';
+    } else if (DATE_FIELDS.has(field)) {
+      oldVal = normalizeDate(oldOpp[field]);
+      newVal = normalizeDate(body[field]);
     }
     if (oldVal === newVal) continue;
 
@@ -54,6 +75,9 @@ function buildChanges(oldOpp, body, newOpp) {
     } else if (field === 'estimated_value') {
       displayOld = oldVal ? `$${Number(oldVal).toLocaleString()}` : '—';
       displayNew = newVal ? `$${Number(newVal).toLocaleString()}` : '—';
+    } else if (DATE_FIELDS.has(field)) {
+      displayOld = oldVal ? formatDateDisplay(oldOpp[field]) : '—';
+      displayNew = newVal ? formatDateDisplay(body[field]) : '—';
     } else {
       displayOld = oldVal || '—';
       displayNew = newVal || '—';
@@ -308,6 +332,49 @@ router.post('/',
         changes: [],
       }).catch(() => {});
 
+      // Notify assigned user (if any and different from creator)
+      if (req.body.assigned_to) {
+        const assignedResult = await db.query(
+          `SELECT u.id AS user_id, ps.name AS stage_name
+           FROM employees e
+           JOIN users u ON e.user_id = u.id
+           LEFT JOIN pipeline_stages ps ON ps.id = $2 AND ps.tenant_id = $3
+           WHERE e.id = $1 AND u.is_active = true`,
+          [req.body.assigned_to, req.body.stage_id || null, req.tenantId]
+        );
+        const assigned = assignedResult.rows[0];
+        if (assigned && assigned.user_id !== req.user.id) {
+          const value = opportunity.estimated_value
+            ? `$${Math.round(Number(opportunity.estimated_value)).toLocaleString()}`
+            : '—';
+          const startDate = opportunity.estimated_start_date
+            ? new Date(opportunity.estimated_start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+            : '—';
+          notify({
+            tenantId: req.tenantId,
+            entityType: 'opportunity',
+            entityId: opportunity.id,
+            eventType: 'assigned',
+            title: `New Opportunity Assigned: ${opportunity.title}`,
+            message: `assigned you to a new opportunity: ${opportunity.title}`,
+            link: '/sales-pipeline',
+            createdBy: req.user.id,
+            targetUserId: assigned.user_id,
+            contextName: 'Sales Pipeline',
+            emailSubject: `New Opportunity Assigned: ${opportunity.title}`,
+            emailDetails: [
+              { label: 'Opportunity', value: opportunity.title },
+              { label: 'Company', value: opportunity.owner || '—' },
+              { label: 'Est. Value', value: value },
+              { label: 'Stage', value: assigned.stage_name || '—' },
+              { label: 'Priority', value: opportunity.priority || '—' },
+              { label: 'Market', value: opportunity.market || '—' },
+              { label: 'Start Date', value: startDate },
+            ],
+          }).catch(() => {});
+        }
+      }
+
       res.status(201).json(opportunity);
     } catch (error) {
       console.error('Error creating opportunity:', error);
@@ -331,11 +398,14 @@ router.put('/:id',
 
       const oldOpportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
 
-      const opportunity = await opportunities.update(req.params.id, req.body, req.tenantId, req.user.id);
+      const updatedRaw = await opportunities.update(req.params.id, req.body, req.tenantId, req.user.id);
 
-      if (!opportunity) {
+      if (!updatedRaw) {
         return res.status(404).json({ error: 'Opportunity not found' });
       }
+
+      // Re-fetch with JOINs so stage_name/assigned_to_name are populated for history and response
+      const opportunity = await opportunities.findByIdAndTenant(req.params.id, req.tenantId);
 
       // Log field-level changes to history
       const changes = buildChanges(oldOpportunity, req.body, opportunity);
