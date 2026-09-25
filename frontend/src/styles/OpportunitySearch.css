@@ -599,6 +599,28 @@
   color: #dc2626;
 }
 
+/* In Pipeline badge */
+.opp-search-pipeline-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+  vertical-align: middle;
+  background: #dbeafe;
+  color: #1d4ed8;
+  text-decoration: none;
+  border: 1px solid #bfdbfe;
+  cursor: pointer;
+}
+.opp-search-pipeline-badge:hover {
+  background: #bfdbfe;
+  color: #1e3a8a;
+}
+
 /* Estimated value marker */
 .opp-search-est-marker {
   font-size: 14px;

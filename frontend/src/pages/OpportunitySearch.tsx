@@ -1,5 +1,5 @@
 // @refresh reset
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import opportunitySearchService, { SearchCriteria, GeneratedLead, SearchSummary, SavedSearchListItem } from '../services/opportunitySearch';
@@ -80,6 +80,17 @@ function mapLeadToOpportunity(lead: GeneratedLead, stageId?: number) {
   };
 }
 
+function normTitle(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function titlesMatch(leadTitle: string, oppTitle: string): boolean {
+  const a = normTitle(leadTitle);
+  const b = normTitle(oppTitle);
+  if (a.length < 6 || b.length < 6) return false;
+  return a.includes(b) || b.includes(a);
+}
+
 function generateSearchName(criteria: SearchCriteria): string {
   const parts: string[] = [];
   if (criteria.market_sector) parts.push(criteria.market_sector);
@@ -127,6 +138,20 @@ const OpportunitySearch: React.FC = () => {
     queryKey: ['saved-opportunity-searches'],
     queryFn: () => opportunitySearchService.getSavedSearches(),
   });
+
+  const { data: existingOpportunities = [] } = useQuery({
+    queryKey: ['opportunities'],
+    queryFn: () => opportunitiesService.getAll(),
+  });
+
+  const pipelineMatches = useMemo(() => {
+    const map = new Map<number, { id: number; title: string; stage_name?: string }>();
+    leads.forEach((lead, idx) => {
+      const match = existingOpportunities.find(opp => titlesMatch(lead.project_name, opp.title));
+      if (match) map.set(idx, { id: match.id, title: match.title, stage_name: match.stage_name });
+    });
+    return map;
+  }, [leads, existingOpportunities]);
 
   const deleteSavedMutation = useMutation({
     mutationFn: (id: number) => opportunitySearchService.deleteSavedSearch(id),
@@ -1197,6 +1222,15 @@ const OpportunitySearch: React.FC = () => {
                           {lead.verification_status === 'verifiable' ? 'Verifiable' :
                            lead.verification_status === 'suspect' ? 'Suspect' : 'Unverified'}
                         </span>
+                        {pipelineMatches.has(idx) && (
+                          <Link
+                            to="/sales-pipeline"
+                            className="opp-search-pipeline-badge"
+                            title={`Already in pipeline: "${pipelineMatches.get(idx)!.title}"${pipelineMatches.get(idx)!.stage_name ? ` — ${pipelineMatches.get(idx)!.stage_name}` : ''}`}
+                          >
+                            ✓ In Pipeline
+                          </Link>
+                        )}
                       </div>
                       <h3 className="opp-search-lead-project">{lead.project_name}</h3>
                     </div>
