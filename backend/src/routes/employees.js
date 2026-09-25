@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Employee = require('../models/Employee');
 const User = require('../models/User');
+const db = require('../config/database');
 const { authenticate, authorize, authorizeHR } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 
@@ -9,19 +10,20 @@ const { tenantContext } = require('../middleware/tenant');
 router.use(authenticate);
 router.use(tenantContext);
 
-// Lightweight employee list for assignment dropdowns - any authenticated user
+// Lightweight employee list for assignment dropdowns — active employees with active user accounts
 router.get('/assignable', async (req, res) => {
   try {
-    const employees = await Employee.getAll({ employment_status: 'active' }, req.tenantId);
-    const assignable = employees.map(e => ({
-      id: e.id,
-      user_id: e.user_id,
-      first_name: e.first_name,
-      last_name: e.last_name,
-      job_title: e.job_title,
-      office_location_id: e.office_location_id,
-    }));
-    res.json({ data: assignable });
+    const result = await db.query(
+      `SELECT e.id, e.user_id, e.first_name, e.last_name, e.job_title, e.office_location_id
+       FROM employees e
+       INNER JOIN users u ON u.id = e.user_id
+       WHERE e.tenant_id = $1
+         AND e.employment_status = 'active'
+         AND u.is_active = true
+       ORDER BY e.first_name, e.last_name`,
+      [req.tenantId]
+    );
+    res.json({ data: result.rows });
   } catch (error) {
     console.error('Error fetching assignable employees:', error);
     res.status(500).json({ error: 'Failed to fetch employees' });
@@ -231,7 +233,6 @@ router.patch('/:id/labor-fields', authorize('admin', 'manager'), async (req, res
       sets.push(`${k} = $${params.length}`);
     }
     params.push(req.params.id, req.tenantId);
-    const db = require('../config/database');
     const result = await db.query(
       `UPDATE employees SET ${sets.join(', ')}
        WHERE id = $${params.length - 1} AND tenant_id = $${params.length}

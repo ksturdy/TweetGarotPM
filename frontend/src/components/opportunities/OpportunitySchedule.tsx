@@ -154,7 +154,30 @@ const OpportunitySchedule: React.FC<Props> = ({
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<RowState[]>([]);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const rowsRef = useRef<RowState[]>([]);
   const initialized = useRef(false);
+
+  // Keep rowsRef in sync so the unmount cleanup can read latest state
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+
+  // Flush any pending debounced saves when the tab unmounts (tab switches kill timers)
+  useEffect(() => {
+    return () => {
+      Object.entries(saveTimers.current).forEach(([key, timer]) => {
+        if (!timer) return;
+        clearTimeout(timer);
+        const row = rowsRef.current.find(r => r.key === key);
+        if (row) {
+          opportunitiesService.saveCostTypeScheduleRow(opportunityId, key, {
+            start_date: row.start || null,
+            end_date: row.end || null,
+            contour_type: row.contour,
+            notes: row.notes,
+          });
+        }
+      });
+    };
+  }, [opportunityId]);
 
   // Shift
   const [shifts, setShifts] = useState<ShiftSettings>(() => loadShifts(opportunityId));

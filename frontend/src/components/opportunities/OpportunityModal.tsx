@@ -218,6 +218,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['opportunities'] });
       queryClient.invalidateQueries({ queryKey: ['campaign-opportunities'] });
+      // Bust the single-opportunity cache so reopening the modal fetches fresh data
+      queryClient.invalidateQueries({ queryKey: ['opportunity', opportunity!.id] });
       onSave();
     },
     onError: (error: any) => {
