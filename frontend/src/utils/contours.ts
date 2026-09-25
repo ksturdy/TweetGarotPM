@@ -4,66 +4,75 @@ import React from 'react';
 export type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown' | 'gradual';
 
 export const contourOptions: { value: ContourType; label: string; icon: string }[] = [
-  { value: 'flat', label: 'Flat', icon: '▬' },
-  { value: 'front', label: 'Front', icon: '▼' },
-  { value: 'back', label: 'Back', icon: '▲' },
-  { value: 'bell', label: 'Bell', icon: '◆' },
-  { value: 'turtle', label: 'Turtle', icon: '◈' },
-  { value: 'double', label: 'Double', icon: '⋈' },
-  { value: 'early', label: 'Early Pk', icon: '◣' },
-  { value: 'late', label: 'Late Pk', icon: '◢' },
-  { value: 'scurve', label: 'S-Curve', icon: '∫' },
-  { value: 'rampup', label: 'Ramp Up', icon: '⟋' },
-  { value: 'rampdown', label: 'Ramp Dn', icon: '⟍' },
-  { value: 'gradual', label: 'Gradual', icon: '◠' },
+  { value: 'flat',     label: 'Flat',     icon: '▬' },
+  { value: 'front',    label: 'Front',    icon: '▼' },
+  { value: 'back',     label: 'Back',     icon: '▲' },
+  { value: 'bell',     label: 'Bell',     icon: '◆' },
+  { value: 'turtle',   label: 'Turtle',   icon: '◈' },
+  { value: 'double',   label: 'Double',   icon: '⋈' },
+  { value: 'early',    label: 'Early Pk', icon: '◣' },
+  { value: 'late',     label: 'Late Pk',  icon: '◢' },
+  { value: 'scurve',   label: 'S-Curve',  icon: '∫' },
+  { value: 'rampup',   label: 'Ramp Up',  icon: '⟋' },
+  { value: 'rampdown', label: 'Ramp Dn',  icon: '⟍' },
+  { value: 'gradual',  label: 'Gradual',  icon: '◠' },
 ];
 
-// Generate contour multipliers for distributing work over N months
+// Generate contour multipliers for distributing work over N months.
+// All non-flat contours use sin(π·position) as an envelope so they reach 0
+// at the first and last month (position = 0 and position = 1).
 export const getContourMultipliers = (months: number, contour: ContourType): number[] => {
   const multipliers: number[] = [];
 
   for (let i = 0; i < months; i++) {
-    const position = months > 1 ? i / (months - 1) : 0.5; // 0 to 1
+    const x = months > 1 ? i / (months - 1) : 0.5; // 0 → 1
+    const env = Math.sin(x * Math.PI); // base envelope: 0 at both ends, 1 at center
     let weight: number;
 
     switch (contour) {
       case 'front':
-        weight = 2 - position * 1.5;
+        // Peaks at ~30%, tapers to 0 at both ends
+        weight = env * Math.exp(-x * 2);
         break;
       case 'back':
-        weight = 0.5 + position * 1.5;
+        // Peaks at ~70%, 0 at both ends
+        weight = env * Math.exp(-(1 - x) * 2);
         break;
       case 'bell':
-        weight = Math.exp(-Math.pow((position - 0.5) * 3, 2)) * 1.5 + 0.5;
+        // Symmetric bell, 0 at both ends
+        weight = env;
         break;
       case 'turtle':
-        weight = Math.exp(-Math.pow((position - 0.5) * 2, 2)) * 0.8 + 0.6;
+        // Very broad/flat top, 0 at both ends
+        weight = Math.pow(env, 0.3);
         break;
-      case 'double': {
-        const peak1 = Math.exp(-Math.pow((position - 0.25) * 5, 2));
-        const peak2 = Math.exp(-Math.pow((position - 0.75) * 5, 2));
-        weight = (peak1 + peak2) * 0.8 + 0.4;
+      case 'double':
+        // Two equal humps, 0 at start/center/end
+        weight = 0.5 - 0.5 * Math.cos(x * 4 * Math.PI);
         break;
-      }
       case 'early':
-        weight = Math.exp(-Math.pow((position - 0.2) * 4, 2)) * 1.8 + 0.2;
+        // Sharp peak at ~20%, long tail to 0
+        weight = env * Math.exp(-x * 4);
         break;
       case 'late':
-        weight = Math.exp(-Math.pow((position - 0.8) * 4, 2)) * 1.8 + 0.2;
+        // Long lead-in, sharp peak at ~80%
+        weight = env * Math.exp(-(1 - x) * 4);
         break;
       case 'scurve':
-        weight = Math.exp(-Math.pow((position - 0.5) * 2.5, 2)) * 1.2 + 0.4;
+        // Steeper bell — represents S-curve spending rate
+        weight = Math.pow(env, 1.5);
         break;
       case 'rampup':
-        weight = 0.1 + position * 1.9;
+        // Slow start, peaks at ~60%, ends at 0
+        weight = x * env;
         break;
       case 'rampdown':
-        weight = 2 - position * 1.9;
+        // Peaks at ~40%, long slow wind-down to 0
+        weight = (1 - x) * env;
         break;
       case 'gradual':
-        // sin²(πx) — starts near zero, slow ramp up, peaks mid-project, slow ramp down
-        // Mimics real construction staffing: mobilize → build up → peak → wind down → demobilize
-        weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2;
+        // Gentle sin² bell — softer than bell
+        weight = env * env;
         break;
       case 'flat':
       default:
@@ -73,8 +82,8 @@ export const getContourMultipliers = (months: number, contour: ContourType): num
     multipliers.push(weight);
   }
 
-  // Normalize so weights sum to months (so total equals backlog)
   const sum = multipliers.reduce((a, b) => a + b, 0);
+  if (sum === 0) return multipliers.map(() => 1); // edge case: fallback to flat
   return multipliers.map(w => (w / sum) * months);
 };
 
@@ -94,32 +103,33 @@ export const getDefaultContour = (pctComplete: number): ContourType => {
 };
 
 // SVG polyline points for contour visualization
+// y=16 = zero activity (bottom), y=2 = peak (top), y=8 = flat/average
 export const getContourPoints = (contour: ContourType): string => {
   switch (contour) {
     case 'flat':
       return '0,8 24,8';
     case 'front':
-      return '0,2 24,14';
+      return '0,16 6,3 24,16';
     case 'back':
-      return '0,14 24,2';
+      return '0,16 18,3 24,16';
     case 'bell':
-      return '0,14 6,10 12,2 18,10 24,14';
+      return '0,16 12,2 24,16';
     case 'turtle':
-      return '0,12 4,10 8,6 12,5 16,6 20,10 24,12';
+      return '0,16 3,7 8,3 16,3 21,7 24,16';
     case 'double':
-      return '0,12 4,6 8,10 12,14 16,10 20,6 24,12';
+      return '0,16 6,3 12,16 18,3 24,16';
     case 'early':
-      return '0,10 4,2 8,6 12,10 18,12 24,14';
+      return '0,16 5,2 14,11 24,16';
     case 'late':
-      return '0,14 6,12 12,10 16,6 20,2 24,10';
+      return '0,16 10,11 19,2 24,16';
     case 'scurve':
-      return '0,13 4,12 8,8 12,4 16,4 20,8 24,13';
+      return '0,16 8,10 12,2 16,10 24,16';
     case 'rampup':
-      return '0,14 24,2';
+      return '0,16 14,3 24,16';
     case 'rampdown':
-      return '0,2 24,14';
+      return '0,16 10,3 24,16';
     case 'gradual':
-      return '0,15 3,14 6,12 10,6 14,3 18,6 21,12 24,15';
+      return '0,16 6,12 12,4 18,12 24,16';
     default:
       return '0,8 24,8';
   }

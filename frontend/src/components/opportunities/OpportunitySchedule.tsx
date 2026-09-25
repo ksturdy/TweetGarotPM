@@ -99,6 +99,12 @@ const addMonths = (dateStr: string, months: number): string => {
   return msToIso(d.getTime());
 };
 
+const fmtHrs = (v: number): string => {
+  if (!v) return '—';
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}Kh`;
+  return `${Math.round(v)}h`;
+};
+
 const fmtCompact = (v: number): string => {
   if (!v) return '—';
   if (v >= 1_000_000) return `$${(v/1_000_000).toFixed(1)}M`;
@@ -391,21 +397,38 @@ const OpportunitySchedule: React.FC<Props> = ({
     m.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
   );
 
+  // Actual labor rate per segment from estimate
+  const getSegmentRate = useCallback((key: string): number => {
+    const e = estimate as any;
+    if (!e) return 0;
+    const f = (field: string) => parseFloat(String(e[field])) || 0;
+    if (key === '30' || key === '35') return f('sm_labor_rate');
+    if (key === '40' || key === '45') return f('pf_labor_rate');
+    if (key === '50' || key === '55') return f('pl_labor_rate');
+    return 0; // Overhead (70) excluded from chart
+  }, [estimate]);
+
+  const getSegmentHours = useCallback((key: string): number => {
+    const cost = getCostAmt(key);
+    const rate = getSegmentRate(key);
+    if (!cost || !rate) return 0;
+    return cost / rate;
+  }, [getCostAmt, getSegmentRate]);
+
   const laborDatasets = useMemo(() => {
-    return SEGMENT_DEFS.filter(d => d.isLabor).map(def => {
-      const row  = rows.find(r => r.key === def.key);
-      const amt  = getCostAmt(def.key);
+    return SEGMENT_DEFS.filter(d => d.isLabor && d.key !== '70').map(def => {
+      const row   = rows.find(r => r.key === def.key);
+      const amt   = getCostAmt(def.key);
       const shift = getShift(def.key);
-      const cap  = hrsPerPersonPerMonth(shift);
-      if (!amt || !cap || !row?.start || !row?.end) return null;
+      const cap   = hrsPerPersonPerMonth(shift);
+      const rate  = getSegmentRate(def.key);
+      if (!amt || !cap || !rate || !row?.start || !row?.end) return null;
       const monthly = distributeMonthly(amt, row.start, row.end, row.contour);
-      // workers = (monthly cost) / (hourly rate × hrs/person/month)
-      // use $55/hr as rough blended rate
-      const data = monthly.map(v => cap > 0 ? Math.round((v / 55 / cap) * 10) / 10 : 0);
+      const data = monthly.map(v => Math.round((v / rate / cap) * 10) / 10);
       if (!data.some(v => v > 0)) return null;
       return { label: def.label, data, color: def.color };
     }).filter(Boolean) as { label: string; data: number[]; color: string }[];
-  }, [rows, getCostAmt, shifts, allMonths]);
+  }, [rows, getCostAmt, getSegmentRate, shifts, allMonths]);
 
   const monthlyRevenue = useMemo(() => {
     if (!allMonths.length) return [];
@@ -573,6 +596,7 @@ const OpportunitySchedule: React.FC<Props> = ({
           <div style={{ display: 'flex', height: 28, background: '#f8fafc', borderBottom: '2px solid #e2e8f0', flexShrink: 0 }}>
             {[
               { label: 'Cost Type', w: 180, extra: { textAlign: 'left' as const, paddingLeft: '0.5rem' } },
+              { label: 'Hrs',       w: 60,  extra: { textAlign: 'right' as const } },
               { label: 'Est $',     w: 74,  extra: { textAlign: 'right' as const } },
               { label: 'Start',     w: 100, extra: {} },
               { label: 'End',       w: 100, extra: {} },
@@ -614,6 +638,10 @@ const OpportunitySchedule: React.FC<Props> = ({
                   <div style={{ ...cellSt, width: 180, gap: 6, padding: '0 0.4rem' }}>
                     <span style={{ width: 8, height: 8, borderRadius: 2, background: row.color, flexShrink: 0 }} />
                     <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{row.label}</span>
+                  </div>
+                  {/* Hrs */}
+                  <div style={{ ...cellSt, width: 60, justifyContent: 'flex-end', padding: '0 0.4rem', color: '#64748b' }}>
+                    {row.isLabor ? fmtHrs(getSegmentHours(row.key)) : ''}
                   </div>
                   {/* Est $ */}
                   <div style={{ ...cellSt, width: 74, justifyContent: 'flex-end', padding: '0 0.4rem', color: '#374151' }}>

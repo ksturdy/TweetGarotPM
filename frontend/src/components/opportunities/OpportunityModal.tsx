@@ -78,6 +78,54 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
 
+  // Declared early so it can be referenced by the hydration effect below
+  const prevCustomerId = useRef(formData.customer_id);
+
+  // Fetch full opportunity when editing — kanban/list views pass partial objects that
+  // omit owner, location_group, customer_id, and many other fields.
+  const { data: fullOpportunity } = useQuery({
+    queryKey: ['opportunity', opportunity?.id],
+    queryFn: () => opportunitiesService.getById(opportunity!.id),
+    enabled: isEditMode,
+    staleTime: 30_000,
+  });
+
+  const formHydrated = useRef(false);
+  useEffect(() => {
+    if (!fullOpportunity || formHydrated.current) return;
+    formHydrated.current = true;
+    // Sync the prevCustomerId ref BEFORE setFormData so the customer-change
+    // effect doesn't wipe the facility fields we're about to restore.
+    prevCustomerId.current = fullOpportunity.customer_id || '';
+    setFormData({
+      title: fullOpportunity.title || '',
+      description: fullOpportunity.description || '',
+      estimated_value: fullOpportunity.estimated_value ? Math.round(Number(fullOpportunity.estimated_value)).toString() : '',
+      estimated_start_date: fullOpportunity.estimated_start_date ? String(fullOpportunity.estimated_start_date).substring(0, 10) : '',
+      estimated_duration_months: fullOpportunity.estimated_duration_days ? Math.round(Number(fullOpportunity.estimated_duration_days) / 30).toString() : '',
+      estimated_end_date: fullOpportunity.estimated_end_date ? String(fullOpportunity.estimated_end_date).substring(0, 10) : '',
+      construction_type: fullOpportunity.construction_type || fullOpportunity.project_type || '',
+      location: fullOpportunity.location || '',
+      location_group: fullOpportunity.location_group || '',
+      stage_id: fullOpportunity.stage_id || '',
+      priority: fullOpportunity.priority || '',
+      probability: fullOpportunity.probability || fullOpportunity.stage_probability || '',
+      assigned_to: fullOpportunity.assigned_to || '',
+      source: fullOpportunity.source || '',
+      market: fullOpportunity.market || '',
+      owner: fullOpportunity.owner || '',
+      general_contractor: fullOpportunity.general_contractor || '',
+      architect: fullOpportunity.architect || '',
+      engineer: fullOpportunity.engineer || '',
+      campaign_id: fullOpportunity.campaign_id || defaultCampaignId || '',
+      customer_id: fullOpportunity.customer_id || '',
+      gc_customer_id: fullOpportunity.gc_customer_id || '',
+      facility_name: fullOpportunity.facility_name || '',
+      facility_location_id: fullOpportunity.facility_location_id || '',
+      awarded_status: fullOpportunity.awarded_status || '',
+    });
+  }, [fullOpportunity]);
+
   // Fetch active employees for assignment (lightweight endpoint, no HR access needed)
   const { data: assignableResponse } = useQuery({
     queryKey: ['employees', 'assignable'],
@@ -122,7 +170,6 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   }, [customers]);
 
   // Clear facility/location when company changes (locations are scoped to company)
-  const prevCustomerId = useRef(formData.customer_id);
   useEffect(() => {
     if (prevCustomerId.current !== formData.customer_id) {
       prevCustomerId.current = formData.customer_id;
