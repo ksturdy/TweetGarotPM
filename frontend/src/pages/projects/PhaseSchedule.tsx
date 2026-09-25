@@ -2940,6 +2940,8 @@ const GridView: React.FC<{
                     colWidths={colWidths} monthColWidth={monthColWidth}
                     projectId={projectId}
                     laborRates={laborRates}
+                    markupByCt={markupByCt}
+                    shopBurdenBillable={shopBurdenBillable}
                     onUpdate={onUpdate} onEdit={onEdit}
                     isSelected={selectedItems.has(item.id)}
                     onToggleSelection={onToggleItem}
@@ -3252,12 +3254,14 @@ const GridRow: React.FC<{
   monthColWidth: number;
   projectId: number;
   laborRates: ProjectLaborRate[];
+  markupByCt: Record<number, number>;
+  shopBurdenBillable: number;
   onUpdate: (id: number, data: Partial<PhaseScheduleItem>) => void;
   onEdit: (item: PhaseScheduleItem) => void;
   isSelected: boolean;
   onToggleSelection: (id: number) => void;
   hiddenCols: Set<string>;
-}> = React.memo(({ item, allItems, months, period, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
+}> = React.memo(({ item, allItems, months, period, mode, monthlyVals, maxVal, colWidths, monthColWidth, projectId, laborRates, markupByCt, shopBurdenBillable, onUpdate, onEdit, isSelected, onToggleSelection, hiddenCols }) => {
   const rv = (col: string) => !hiddenCols.has(col);
   const dur = getDuration(item.start_date, item.end_date);
   const dateLocked = (item.linked_resolved_count || 0) > 0;
@@ -3365,11 +3369,39 @@ const GridRow: React.FC<{
   };
 
   // Selection-aware background: selected row overrides group tints
-  const itemBillable = mode === 'billable' ? Object.values(monthlyVals).reduce((a, b) => a + b, 0) : 0;
+  const itemRemBillable = mode === 'billable' ? Object.values(monthlyVals).reduce((a, b) => a + b, 0) : 0;
   const itemRemCost = mode === 'billable' ? Math.max(0, parseNum(item.total_projected_cost) - parseNum(item.total_jtd_cost)) : 0;
-  const itemGmPct = mode === 'billable' && itemBillable > 0 ? (itemBillable - itemRemCost) / itemBillable * 100 : null;
-  const isUnrated = mode === 'billable' && (item.cost_types?.[0] || 0) === 1 && itemRemCost > 0 && !item.billable_rate_id;
-  const billableRowBg = !isSelected && mode === 'billable' && itemRemCost > 0
+
+  // JTD billable: same formula as chartData totalJtdBillable, computed per-row
+  const itemJtdBillable = (() => {
+    if (mode !== 'billable') return 0;
+    const ct = item.cost_types?.[0] || 0;
+    const jtdHrs = parseNum(item.total_jtd_hours);
+    const jtdC = parseNum(item.total_jtd_cost);
+    const mu = markupByCt[ct] || 0;
+    if (ct === 1 && item.billable_rate_id) {
+      const rate = laborRates.find(r => r.id === item.billable_rate_id);
+      const rateVal = rate ? Number(rate.billable_rate) || 0 : 0;
+      if (rateVal > 0) {
+        const burden = shopBurdenBillable > 0 && isShopItem(item) ? shopBurdenBillable : 0;
+        return jtdHrs * (rateVal + burden);
+      }
+    }
+    return jtdC * (1 + mu / 100);
+  })();
+
+  const itemTotalBillable = itemJtdBillable + itemRemBillable;
+  const itemTotalCost = mode === 'billable' ? (() => {
+    const jtdC = parseNum(item.total_jtd_cost);
+    const vPC = parseNum(item.total_projected_cost);
+    return vPC > 0 ? Math.max(vPC, jtdC) : jtdC;
+  })() : 0;
+  const itemBillable = itemRemBillable; // keep alias for existing Rem Cost cell usage
+  const itemGmPct = mode === 'billable' && itemTotalBillable > 0
+    ? (itemTotalBillable - itemTotalCost) / itemTotalBillable * 100
+    : null;
+  const isUnrated = mode === 'billable' && (item.cost_types?.[0] || 0) === 1 && itemTotalCost > 0 && !item.billable_rate_id;
+  const billableRowBg = !isSelected && mode === 'billable' && itemTotalCost > 0
     ? isUnrated || (itemGmPct !== null && itemGmPct < 0) ? '#fef2f2'
     : itemGmPct !== null && itemGmPct < 10 ? '#fffbeb'
     : '#f0fdf4'
@@ -3563,7 +3595,7 @@ const GridRow: React.FC<{
         if (isUnrated) {
           return <td style={{ ...tdMuted, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: cellBg, textAlign: 'center', fontSize: '0.62rem', fontWeight: 600, color: '#dc2626' }}>Unrated</td>;
         }
-        if (itemRemCost <= 0) {
+        if (itemTotalCost <= 0) {
           return <td style={{ ...tdMuted, width: colWidths.gm, borderRight: '2px solid #94a3b8', background: cellBg, color: '#cbd5e1', textAlign: 'center' }}>—</td>;
         }
         const color = itemGmPct === null ? '#94a3b8' : itemGmPct >= 10 ? '#059669' : itemGmPct >= 0 ? '#d97706' : '#dc2626';
