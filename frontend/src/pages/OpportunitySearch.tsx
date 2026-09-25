@@ -85,7 +85,12 @@ function normTitle(s: string): string {
 }
 
 function sigWords(normalized: string): string[] {
-  const stop = new Set(['the', 'and', 'for', 'new', 'at', 'in', 'on', 'of', 'a', 'an', 'to', 'by', 'with', 'from', 'former', 'site', 'proposed']);
+  const stop = new Set([
+    'the', 'and', 'for', 'new', 'at', 'in', 'on', 'of', 'a', 'an', 'to', 'by', 'with', 'from',
+    'former', 'site', 'proposed',
+    // Business entity suffixes — ubiquitous across opportunities, not distinctive
+    'llc', 'inc', 'corp', 'ltd', 'lp', 'llp', 'dba', 'co',
+  ]);
   return normalized.split(' ').filter(w => w.length >= 3 && !stop.has(w));
 }
 
@@ -93,11 +98,20 @@ function titlesMatch(leadTitle: string, oppTitle: string): boolean {
   const a = normTitle(leadTitle);
   const b = normTitle(oppTitle);
   if (a.length < 6 || b.length < 6) return false;
-  if (a.includes(b) || b.includes(a)) return true;
-  // Word-overlap fallback: 3+ significant words in common
-  const wordsA = sigWords(a);
-  const wordsB = new Set(sigWords(b));
-  return wordsA.filter(w => wordsB.has(w)).length >= 3;
+
+  // Substring match only when the contained string is long enough to be distinctive
+  if (b.length >= 20 && a.includes(b)) return true;
+  if (a.length >= 20 && b.includes(a)) return true;
+
+  // Jaccard similarity on significant words — require ≥50% of the combined word set to overlap.
+  // This prevents a few generic shared words (e.g. "data", "center") from triggering a match
+  // unless the titles are genuinely similar as a whole.
+  const setA = new Set(sigWords(a));
+  const setB = new Set(sigWords(b));
+  if (setA.size === 0 || setB.size === 0) return false;
+  const intersection = [...setA].filter(w => setB.has(w)).length;
+  const union = setA.size + setB.size - intersection;
+  return intersection / union >= 0.5;
 }
 
 function generateSearchName(criteria: SearchCriteria): string {
@@ -1303,9 +1317,10 @@ const OpportunitySearch: React.FC = () => {
                             {match.hasValueChange
                               ? <span className="opp-pipeline-match-change"> · Value Updated: {formatCurrency(match.oldValue)} → {formatCurrency(match.newValue)}</span>
                               : <span className="opp-pipeline-match-nochange"> · No Value Change</span>}
+                            <span className="opp-pipeline-match-matched-title" style={{ display: 'block', fontSize: '0.78em', color: '#6b7280', marginTop: '2px' }}>Matched: "{match.title}"</span>
                           </span>
                           <div className="opp-pipeline-match-banner-actions">
-                            <Link to="/sales-pipeline" className="opp-pipeline-match-view-link">View Opportunity</Link>
+                            <Link to={`/sales?opportunityId=${match.id}`} className="opp-pipeline-match-view-link">View Opportunity</Link>
                             <button
                               className="opp-pipeline-match-toggle"
                               onClick={() => setExpandedUpdate(isExpanded ? null : idx)}

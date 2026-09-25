@@ -66,7 +66,7 @@ const LeadInboxDetailPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['lead-inbox'] });
       queryClient.invalidateQueries({ queryKey: ['lead-inbox-stats'] });
       alert('Lead approved and opportunity created!');
-      navigate('/sales-pipeline');
+      navigate('/sales');
     },
     onError: (error: any) => {
       alert(error.response?.data?.error || 'Failed to approve lead');

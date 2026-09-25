@@ -130,6 +130,17 @@ const SalesPipeline: React.FC = () => {
     queryFn: () => opportunitiesService.getStages()
   });
 
+  // Once stages load, remove any default-excluded stage names that aren't active
+  // (e.g. if 'Passed' is inactive it has no checkbox, so it would be permanently hidden)
+  useEffect(() => {
+    if (pipelineStages.length === 0) return;
+    const activeNames = new Set(pipelineStages.map((s: { name: string }) => s.name));
+    setExcludedStages(prev => {
+      const next = new Set([...prev].filter(name => activeNames.has(name)));
+      return next.size !== prev.size ? next : prev;
+    });
+  }, [pipelineStages]);
+
   // Fetch employees for salesperson assignment
   const { data: employeesResponse } = useQuery({
     queryKey: ['employees', 'assignable'],

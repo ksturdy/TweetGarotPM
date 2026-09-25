@@ -181,7 +181,7 @@ const EmployeeDetail: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="sales-chart-card">
+      <div className="sales-chart-card" style={{ flex: 1, overflowY: 'auto' }}>
         {isEditing ? (
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
