@@ -84,11 +84,20 @@ function normTitle(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+function sigWords(normalized: string): string[] {
+  const stop = new Set(['the', 'and', 'for', 'new', 'at', 'in', 'on', 'of', 'a', 'an', 'to', 'by', 'with', 'from', 'former', 'site', 'proposed']);
+  return normalized.split(' ').filter(w => w.length >= 3 && !stop.has(w));
+}
+
 function titlesMatch(leadTitle: string, oppTitle: string): boolean {
   const a = normTitle(leadTitle);
   const b = normTitle(oppTitle);
   if (a.length < 6 || b.length < 6) return false;
-  return a.includes(b) || b.includes(a);
+  if (a.includes(b) || b.includes(a)) return true;
+  // Word-overlap fallback: 3+ significant words in common
+  const wordsA = sigWords(a);
+  const wordsB = new Set(sigWords(b));
+  return wordsA.filter(w => wordsB.has(w)).length >= 3;
 }
 
 function generateSearchName(criteria: SearchCriteria): string {
