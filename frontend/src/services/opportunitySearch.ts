@@ -117,6 +117,11 @@ const opportunitySearchService = {
     return response.data;
   },
 
+  async renameSavedSearch(id: number, name: string): Promise<{ id: number; name: string }> {
+    const response = await api.patch(`/opportunity-search/saved/${id}`, { name });
+    return response.data;
+  },
+
   async deleteSavedSearch(id: number): Promise<void> {
     await api.delete(`/opportunity-search/saved/${id}`);
   },

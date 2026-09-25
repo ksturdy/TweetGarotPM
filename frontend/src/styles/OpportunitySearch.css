@@ -795,6 +795,61 @@
   color: var(--text-primary);
 }
 
+.opp-saved-name-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.opp-saved-name-text {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.opp-saved-rename-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+tr:hover .opp-saved-rename-btn {
+  opacity: 1;
+}
+
+.opp-saved-criteria-hint {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.opp-saved-criteria-hint span {
+  font-size: 11px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.opp-saved-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opp-saved-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
 /* Actions cell — keeps icon buttons on one line */
 .opp-search-actions-cell {
   text-align: right;
