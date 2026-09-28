@@ -9,8 +9,14 @@
 
 const VistaData = require('../models/VistaData');
 const Team = require('../models/Team');
+const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
 const { getContourMultipliers } = require('./phaseScheduleContours');
 const { LOCATION_GROUPS } = require('../constants/locationGroups');
+
+const WEEKS_PER_MONTH = 52 / 12;
+const DEFAULT_HPM = 40 * WEEKS_PER_MONTH; // ~173.3 — flat 40h/wk fallback
+const TRADE_FIELD_SEG = { pf: '40', sm: '30', pl: '50' };
+const TRADE_SHOP_SEG  = { pf: '45', sm: '35', pl: '55' };
 
 const TRADES = [
   { key: 'pf', label: 'PF', color: '#3b82f6' },
@@ -213,11 +219,49 @@ function buildRevenueColumns() {
  * Build the labor forecast projection set (one row per contract with remaining hours).
  * Mirrors the `projections` useMemo in LaborForecast.tsx.
  */
+/**
+ * Distribute `hours` for a trade into monthly hour and headcount maps using the
+ * given schedule segment's dates/contour/weekly_hours. Falls back to the
+ * project-level summary window when the segment has no dates configured.
+ * Mirrors distributeSegHours() in LaborForecast.tsx and pmReport.js.
+ */
+function distributeSegHoursIntoMaps(monthlyHours, monthlyHC, tradeKey, hours, seg, fallbackSOff, fallbackEOff, fallbackContour, now) {
+  let sOff, eOff, segContour, segWeeklyHrs;
+  if (seg && seg.start_date) {
+    sOff = dateToMonthOffset(seg.start_date, now) ?? 0;
+    const eUserOff = dateToMonthOffset(seg.end_date, now);
+    eOff = eUserOff != null
+      ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
+      : sOff + 3;
+    segContour  = seg.contour_type || fallbackContour;
+    segWeeklyHrs = (seg.weekly_hours != null && seg.weekly_hours > 0) ? seg.weekly_hours : 40;
+  } else {
+    sOff = fallbackSOff; eOff = fallbackEOff; segContour = fallbackContour; segWeeklyHrs = 40;
+  }
+  const remMonths = eOff - sOff;
+  if (remMonths <= 0) return;
+  const mults = getContourMultipliers(remMonths, segContour);
+  const segHPM = segWeeklyHrs * WEEKS_PER_MONTH;
+  for (let i = 0; i < remMonths; i++) {
+    const monthIdx = sOff + i;
+    if (monthIdx < 0) continue; // past months — skip but preserve contour shape
+    const monthKey = formatYYYYMM(addMonths(now, monthIdx));
+    const h = (hours / remMonths) * mults[i];
+    const existing = monthlyHours.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
+    existing[tradeKey] += h; existing.total += h;
+    monthlyHours.set(monthKey, existing);
+    const existingHC = monthlyHC.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
+    existingHC[tradeKey] += h / segHPM; existingHC.total += h / segHPM;
+    monthlyHC.set(monthKey, existingHC);
+  }
+}
+
 function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
   const locationFilter = opts.locationFilter || 'both'; // 'both' | 'shop' | 'field'
   const tradeFilter = new Set(opts.tradeFilter || ['pf', 'sm', 'pl']);
   const durationRules = opts.durationRules || DEFAULT_DURATION_RULES;
   const timeHorizon = opts.timeHorizon || 12;
+  const segmentsByProject = opts.segmentsByProject || {};
   const now = startOfMonth(new Date());
 
   // Build shop/field map: contract_number -> trade -> { shop: {...}, field: {...} }
@@ -306,7 +350,34 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
     const contour = contract.user_selected_contour || getDefaultContour(pctComplete);
 
     const monthlyHours = new Map();
-    if (remainingMonths > 0) {
+    const monthlyHC    = new Map();
+
+    // Cost-type projects: use per-segment dates/contour/HPM matching LaborForecast.tsx
+    const projectSegs = contract.linked_project_id &&
+      contract.linked_project_scheduling_mode === 'cost_type'
+      ? (segmentsByProject[contract.linked_project_id] || null)
+      : null;
+
+    if (projectSegs) {
+      for (const trade of TRADES) {
+        if (!tradeFilter.has(trade.key)) continue;
+        const td = sfData ? sfData[trade.key] : null;
+        if (!td) continue;
+        const estField = td.field?.est || 0;
+        const estShop  = td.shop?.est  || 0;
+        const fieldHours = locationFilter !== 'shop'  ? estField : 0;
+        const shopHours  = locationFilter !== 'field' ? estShop  : 0;
+        if (fieldHours > 0) {
+          const seg = projectSegs.find(s => s.segment_key === TRADE_FIELD_SEG[trade.key]);
+          distributeSegHoursIntoMaps(monthlyHours, monthlyHC, trade.key, fieldHours, seg, startOffset, endOffset, contour, now);
+        }
+        if (shopHours > 0) {
+          const seg = projectSegs.find(s => s.segment_key === TRADE_SHOP_SEG[trade.key]);
+          distributeSegHoursIntoMaps(monthlyHours, monthlyHC, trade.key, shopHours, seg, startOffset, endOffset, contour, now);
+        }
+      }
+    } else if (remainingMonths > 0) {
+      // Summary/phase mode: distribute remaining hours using project-level window
       const multipliers = getContourMultipliers(remainingMonths, contour);
       for (let i = 0; i < remainingMonths; i++) {
         const monthDate = addMonths(now, startOffset + i);
@@ -316,10 +387,13 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
         const plHrs = (tradeHours[2].remaining / remainingMonths) * multipliers[i];
         const existing = monthlyHours.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
         monthlyHours.set(monthKey, {
-          pf: existing.pf + pfHrs,
-          sm: existing.sm + smHrs,
-          pl: existing.pl + plHrs,
+          pf: existing.pf + pfHrs, sm: existing.sm + smHrs, pl: existing.pl + plHrs,
           total: existing.total + pfHrs + smHrs + plHrs,
+        });
+        const existingHC = monthlyHC.get(monthKey) || { pf: 0, sm: 0, pl: 0, total: 0 };
+        monthlyHC.set(monthKey, {
+          pf: existingHC.pf + pfHrs / DEFAULT_HPM, sm: existingHC.sm + smHrs / DEFAULT_HPM,
+          pl: existingHC.pl + plHrs / DEFAULT_HPM, total: existingHC.total + (pfHrs + smHrs + plHrs) / DEFAULT_HPM,
         });
       }
     }
@@ -333,6 +407,7 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
       tradeHours,
       totalRemainingHours,
       monthlyHours,
+      monthlyHC,
     });
   }
 
@@ -342,16 +417,24 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
   // Build column totals (apply trade filter)
   const columns = buildMonthColumns(timeHorizon);
   const columnTotals = new Map();
+  const headcountTotals = new Map();
   for (const col of columns) {
     const agg = { pf: 0, sm: 0, pl: 0, total: 0 };
+    const hcAgg = { pf: 0, sm: 0, pl: 0, total: 0 };
     for (const p of projections) {
       const h = p.monthlyHours.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+      const hc = p.monthlyHC.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
       const pf = tradeFilter.has('pf') ? h.pf : 0;
       const sm = tradeFilter.has('sm') ? h.sm : 0;
       const pl = tradeFilter.has('pl') ? h.pl : 0;
       agg.pf += pf; agg.sm += sm; agg.pl += pl; agg.total += pf + sm + pl;
+      const hcPf = tradeFilter.has('pf') ? hc.pf : 0;
+      const hcSm = tradeFilter.has('sm') ? hc.sm : 0;
+      const hcPl = tradeFilter.has('pl') ? hc.pl : 0;
+      hcAgg.pf += hcPf; hcAgg.sm += hcSm; hcAgg.pl += hcPl; hcAgg.total += hcPf + hcSm + hcPl;
     }
     columnTotals.set(col.key, agg);
+    headcountTotals.set(col.key, hcAgg);
   }
 
   const grandTotalsByTrade = { pf: 0, sm: 0, pl: 0 };
@@ -362,7 +445,7 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
   }
   const grandTotalHours = grandTotalsByTrade.pf + grandTotalsByTrade.sm + grandTotalsByTrade.pl;
 
-  return { projections, columns, columnTotals, grandTotalsByTrade, grandTotalHours, tradeFilter: Array.from(tradeFilter) };
+  return { projections, columns, columnTotals, headcountTotals, grandTotalsByTrade, grandTotalHours, tradeFilter: Array.from(tradeFilter) };
 }
 
 /**
@@ -459,10 +542,19 @@ async function buildLaborForecastData(tenantId, rawFilters) {
     VistaData.getAllContracts({}, tenantId),
     VistaData.getShopFieldHoursByContract(tenantId),
   ]);
+
+  const costTypeProjectIds = contracts
+    .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type')
+    .map(c => c.linked_project_id);
+  const segmentsByProject = costTypeProjectIds.length > 0
+    ? await ProjectScheduleSegment.getBulkByProjects(costTypeProjectIds, tenantId)
+    : {};
+
   const opts = {
     locationFilter: rawFilters.locationFilter || 'both',
     tradeFilter: rawFilters.tradeFilter || ['pf', 'sm', 'pl'],
     timeHorizon: rawFilters.timeHorizon || 12,
+    segmentsByProject,
   };
   return buildLaborProjections(contracts, shopFieldRows, filters, opts);
 }

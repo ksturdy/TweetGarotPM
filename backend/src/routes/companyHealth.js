@@ -293,27 +293,25 @@ async function buildData(tenantId) {
   const oppsWeightedValue = oppsByStageResult.rows.reduce((s, r) => s + num(r.weighted_value), 0);
   const oppsTotalCount = oppsByStageResult.rows.reduce((s, r) => s + (r.count || 0), 0);
 
-  // Convert Vista-based labor forecast (hours) into headcount using 173 hrs/person/month
-  const HRS_PER_PERSON = 173;
-  const { columns: laborColumns, columnTotals } = laborForecastRaw;
+  const { columns: laborColumns, columnTotals, headcountTotals } = laborForecastRaw;
 
   const byMonth = laborColumns.map((col, i) => {
-    const ct = columnTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+    const hc = headcountTotals.get(col.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
     return {
       month_key: col.key,
       month_label: col.label,
       month_offset: i,
-      total_headcount: Math.round(ct.total / HRS_PER_PERSON),
-      pf: Math.round(ct.pf / HRS_PER_PERSON),
-      sm: Math.round(ct.sm / HRS_PER_PERSON),
-      pl: Math.round(ct.pl / HRS_PER_PERSON),
+      total_headcount: Math.round(hc.total),
+      pf: Math.round(hc.pf),
+      sm: Math.round(hc.sm),
+      pl: Math.round(hc.pl),
     };
   });
 
   const TRADE_LABELS = { pf: 'Pipefitter', sm: 'Sheet Metal', pl: 'Plumber' };
   const byTrade = ['sm', 'pf', 'pl'].map(key => {
     const slice = (from, to) => laborColumns.slice(from, to)
-      .map(col => Math.round((columnTotals.get(col.key)?.[key] || 0) / HRS_PER_PERSON));
+      .map(col => Math.round(headcountTotals.get(col.key)?.[key] || 0));
     const h6 = Math.max(0, ...slice(0, 6));
     const h12 = Math.max(0, ...slice(6, 12));
     const h18 = Math.max(0, ...slice(12, 18));
