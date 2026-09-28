@@ -113,10 +113,10 @@ function computeLaborProjection(contract, sfRows, segments, schedulingMode, now)
 
     const fieldH = rows.filter(r => r.location === 'field').reduce((s, r) => s + num(r.est_hours), 0);
     const shopH  = rows.filter(r => r.location === 'shop').reduce((s, r) => s + num(r.est_hours), 0);
-    const fieldFrac = estH > 0 ? fieldH / estH : 1;
-    const shopFrac  = estH > 0 ? shopH / estH : 0;
 
-    tradeData[trade] = { remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac };
+    // Use est_hours per location for headcount distribution in cost_type mode —
+    // matches CostTypeSchedule which also uses est_hours for the monthly profile.
+    tradeData[trade] = { remaining, estHoursField: fieldH, estHoursShop: shopH };
   }
 
   const totalRemaining = TRADES.reduce((s, t) => s + tradeData[t].remaining, 0);
@@ -172,8 +172,10 @@ function computeLaborProjection(contract, sfRows, segments, schedulingMode, now)
 
   for (const trade of TRADES) {
     const t = tradeData[trade];
-    distribute(trade, t.remainingField, TRADE_FIELD_SEG[trade]);
-    distribute(trade, t.remainingShop,  TRADE_SHOP_SEG[trade]);
+    const fieldH = schedulingMode === 'cost_type' ? t.estHoursField : t.remaining * (t.estHoursField / (t.estHoursField + t.estHoursShop || 1));
+    const shopH  = schedulingMode === 'cost_type' ? t.estHoursShop  : t.remaining * (t.estHoursShop  / (t.estHoursField + t.estHoursShop || 1));
+    distribute(trade, fieldH, TRADE_FIELD_SEG[trade]);
+    distribute(trade, shopH,  TRADE_SHOP_SEG[trade]);
   }
 
   const getSegHC = (idx) => {
