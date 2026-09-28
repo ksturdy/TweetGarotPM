@@ -32,17 +32,17 @@ async function upsertSegment(projectId, tenantId, segmentKey, label, startDate, 
   const { rows } = await db.query(
     `INSERT INTO project_schedule_segments
        (project_id, tenant_id, segment_key, label, start_date, end_date, contour_type, weekly_hours, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'flat'), $8, NOW())
      ON CONFLICT (project_id, segment_key)
      DO UPDATE SET
        label        = EXCLUDED.label,
        start_date   = EXCLUDED.start_date,
        end_date     = EXCLUDED.end_date,
-       contour_type = EXCLUDED.contour_type,
+       contour_type = COALESCE(EXCLUDED.contour_type, project_schedule_segments.contour_type, 'flat'),
        weekly_hours = COALESCE(EXCLUDED.weekly_hours, project_schedule_segments.weekly_hours),
        updated_at   = NOW()
      RETURNING segment_key, label, start_date, end_date, contour_type, weekly_hours`,
-    [projectId, tenantId, segmentKey, label, startDate || null, endDate || null, contourType || 'flat', weeklyHours ?? null]
+    [projectId, tenantId, segmentKey, label, startDate || null, endDate || null, contourType ?? null, weeklyHours ?? null]
   );
   return rows[0];
 }
