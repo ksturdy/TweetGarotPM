@@ -4937,14 +4937,18 @@ const PhaseSchedule: React.FC = () => {
               Labor Resources by Month
             </div>
             <div style={{ height: 160, position: 'relative' }}>
-              <Bar
-                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], backgroundColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', stack: 'stack', borderRadius: 2 })) }}
+              <Line
+                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2, fill: false })) }}
                 options={{
                   maintainAspectRatio: false, responsive: true,
-                  plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10, padding: 6 } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: {
+                    legend: { display: true, position: 'top', labels: { boxWidth: 12, boxHeight: 2, font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 12 } },
+                    tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } },
+                  },
                   scales: {
-                    x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { stacked: true, grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b' } },
+                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b' } },
                   },
                 }}
               />
@@ -5115,14 +5119,15 @@ const PhaseSchedule: React.FC = () => {
           <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
             <div style={{ height: '110px' }}>
-              <Bar
-                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], backgroundColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', stack: 'stack', borderRadius: 1 })) }}
+              <Line
+                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], borderColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', backgroundColor: (LABOR_CHART_COLORS[def.key] ?? '#6b7280') + '18', tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5, fill: false })) }}
                 options={{
                   responsive: true, maintainAspectRatio: false,
-                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 3 } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 3, usePointStyle: true } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
                   scales: {
-                    x: { stacked: true, ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
-                    y: { stacked: true, ticks: { font: { size: 7 } }, grid: { color: '#f1f5f9' }, beginAtZero: true }
+                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                    y: { ticks: { font: { size: 7 } }, grid: { color: '#f1f5f9' }, beginAtZero: true }
                   }
                 }}
               />
