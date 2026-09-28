@@ -140,14 +140,15 @@ export const ContourVisual: React.FC<{ contour: ContourType }> = ({ contour }) =
   const points = getContourPoints(contour);
 
   return React.createElement('svg', {
-    width: 24,
-    height: 16,
-    style: { verticalAlign: 'middle', marginRight: '4px' }
+    width: 36,
+    height: 22,
+    viewBox: '0 0 24 16',
+    style: { verticalAlign: 'middle', flexShrink: 0 }
   },
     React.createElement('polyline', {
       points,
       fill: 'none',
-      stroke: '#3b82f6',
+      stroke: '#2563eb',
       strokeWidth: 2,
       strokeLinecap: 'round',
       strokeLinejoin: 'round'
