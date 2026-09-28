@@ -4508,7 +4508,6 @@ const PhaseSchedule: React.FC = () => {
   const chartData = useMemo(() => {
     if (periods.length === 0) return null;
 
-    const headcount: number[] = new Array(periods.length).fill(0);
     const periodCost: number[] = new Array(periods.length).fill(0);
     const periodEstQty: number[] = new Array(periods.length).fill(0);
     const periodEstHrs: number[] = new Array(periods.length).fill(0);
@@ -4521,6 +4520,19 @@ const PhaseSchedule: React.FC = () => {
     const activeLaborKeys = SEGMENT_DEFINITIONS.filter(d => d.isLabor && activeSegmentKeys.includes(d.key)).map(d => d.key);
     const avgShift = avgDayShiftFrom(shiftSettings, activeLaborKeys.length > 0 ? activeLaborKeys : SEGMENT_DEFINITIONS.filter(d => d.isLabor).map(d => d.key));
     const hpwp = hpwpFromDay(avgShift, period);
+
+    // Per-segment headcount — builds a lookup by segment prefix so we can render
+    // a stacked chart that mirrors the CostTypeSchedule breakdown.
+    const laborSegKeys = SEGMENT_DEFINITIONS.filter(d => d.isLabor).map(d => d.key);
+    const headcountBySegment: Record<string, number[]> = {};
+    laborSegKeys.forEach(k => { headcountBySegment[k] = new Array(periods.length).fill(0); });
+
+    // Phase code map (also covers expanded all_ids stored in phase_code_ids)
+    const pcMap = new Map<number, PhaseCode>();
+    phaseCodes.forEach(pc => {
+      pcMap.set(pc.id, pc);
+      pc.all_ids?.forEach(aid => { if (!pcMap.has(aid)) pcMap.set(aid, pc); });
+    });
 
     scheduleItems.forEach(item => {
       if (!item.start_date || !item.end_date) return;
@@ -4551,12 +4563,31 @@ const PhaseSchedule: React.FC = () => {
         const jtdHrsItem = parseNum(item.total_jtd_hours);
         const remHrsItem = Math.max(0, computeProjHrs(item) - jtdHrsItem);
         if (remHrsItem > 0) {
-          const perPeriodRemHrs = remHrsItem / itemPeriods.length;
-          itemPeriods.forEach((p, i) => {
-            const idx = periods.findIndex(pp => pp.getTime() === p.getTime());
-            if (idx >= 0) {
-              headcount[idx] += (perPeriodRemHrs * multipliers[i]) / hpwp;
-            }
+          // Split rem hours across segments by the est_hours of linked phase codes
+          const segEstH: Record<string, number> = {};
+          let totalSegEstH = 0;
+          item.phase_code_ids?.forEach(pcId => {
+            const pc = pcMap.get(pcId);
+            if (!pc) return;
+            const prefix = pc.phase.split('-')[0] ?? '';
+            const segKey = laborSegKeys.includes(prefix) ? prefix : '70';
+            const h = Number(pc.est_hours) || 0;
+            segEstH[segKey] = (segEstH[segKey] ?? 0) + h;
+            totalSegEstH += h;
+          });
+          // No phase code mapping → default to PF Field (40)
+          if (totalSegEstH === 0) { segEstH['40'] = 1; totalSegEstH = 1; }
+
+          Object.entries(segEstH).forEach(([segKey, segH]) => {
+            const segFrac = segH / totalSegEstH;
+            const segRemHrs = remHrsItem * segFrac;
+            const segShift = shiftSettings[segKey] ?? DEFAULT_DAY_SHIFT;
+            const segHpwp = hpwpFromDay(segShift, period);
+            const perPeriodRemHrs = segRemHrs / itemPeriods.length;
+            itemPeriods.forEach((p, i) => {
+              const idx = periods.findIndex(pp => pp.getTime() === p.getTime());
+              if (idx >= 0) headcountBySegment[segKey][idx] += (perPeriodRemHrs * multipliers[i]) / segHpwp;
+            });
           });
         }
         // PI baseline still uses the FULL estimate (estPi is a planning baseline,
@@ -4711,8 +4742,11 @@ const PhaseSchedule: React.FC = () => {
       if (totalBillCt || totalCostCt) marginByCt[ct] = totalBillCt - totalCostCt;
     });
 
-    return { labels, headcount, cumulativeCost, jtdLine, estPiLine, actualPiLine, revenueData, periodBillable, cumulativeBillable, cumulativeRemCost, cumulativeBillableTotal, cumulativeCostTotal, marginData, totalBillable, totalCostRemaining, gmPct, totalProjectBillable, totalProjectCost, forecastGmPct, unratedCount, unratedCost, marginByCt };
-  }, [scheduleItems, periods, period, shiftSettings, activeSegmentKeys, totalJtdCost, project?.projected_revenue, project?.projected_cost, laborRates, project]);
+    // Total headcount is the sum across all segments
+    const headcount = periods.map((_, i) => laborSegKeys.reduce((sum, k) => sum + headcountBySegment[k][i], 0));
+
+    return { labels, headcount, headcountBySegment, cumulativeCost, jtdLine, estPiLine, actualPiLine, revenueData, periodBillable, cumulativeBillable, cumulativeRemCost, cumulativeBillableTotal, cumulativeCostTotal, marginData, totalBillable, totalCostRemaining, gmPct, totalProjectBillable, totalProjectCost, forecastGmPct, unratedCount, unratedCost, marginByCt };
+  }, [scheduleItems, periods, period, shiftSettings, activeSegmentKeys, totalJtdCost, project?.projected_revenue, project?.projected_cost, laborRates, project, phaseCodes]);
 
   const handleAdd = (ids: number[], groupBy: string) => {
     createMutation.mutate({ projectId: Number(projectId), phaseCodeIds: ids, groupBy });
@@ -4903,15 +4937,14 @@ const PhaseSchedule: React.FC = () => {
               Labor Resources by Month
             </div>
             <div style={{ height: 160, position: 'relative' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: [{ label: 'Workers', data: chartData.headcount, borderColor: '#3b82f6', backgroundColor: '#3b82f618', fill: false, tension: 0.4, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2 }] }}
+              <Bar
+                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], backgroundColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', stack: 'stack', borderRadius: 2 })) }}
                 options={{
                   maintainAspectRatio: false, responsive: true,
-                  interaction: { mode: 'index', intersect: false },
-                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                  plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10, padding: 6 } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
                   scales: {
-                    x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
-                    y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b', stepSize: 1 } },
+                    x: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 9 }, maxRotation: 45, color: '#64748b' } },
+                    y: { stacked: true, grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 9 }, color: '#64748b' } },
                   },
                 }}
               />
@@ -5082,14 +5115,14 @@ const PhaseSchedule: React.FC = () => {
           <div style={{ flex: 1, minWidth: 0, background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.4rem 0.5rem 0.2rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Manpower (Workers)</div>
             <div style={{ height: '110px' }}>
-              <Line
-                data={{ labels: chartData.labels, datasets: [{ label: 'Workers', data: chartData.headcount, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.15)', fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 8, borderWidth: 1.5 }] }}
+              <Bar
+                data={{ labels: chartData.labels, datasets: SEGMENT_DEFINITIONS.filter(d => d.isLabor && chartData.headcountBySegment[d.key]?.some(v => v > 0)).map(def => ({ label: def.label, data: chartData.headcountBySegment[def.key] ?? [], backgroundColor: LABOR_CHART_COLORS[def.key] ?? '#6b7280', stack: 'stack', borderRadius: 1 })) }}
                 options={{
                   responsive: true, maintainAspectRatio: false,
-                  plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
+                  plugins: { legend: { display: true, position: 'top', labels: { font: { size: 7 }, boxWidth: 8, padding: 3 } }, tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y ?? 0).toFixed(1)} workers` } } },
                   scales: {
-                    x: { ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
-                    y: { ticks: { font: { size: 7 }, stepSize: undefined }, grid: { color: '#f1f5f9' }, beginAtZero: true }
+                    x: { stacked: true, ticks: { font: { size: 7 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false } },
+                    y: { stacked: true, ticks: { font: { size: 7 } }, grid: { color: '#f1f5f9' }, beginAtZero: true }
                   }
                 }}
               />

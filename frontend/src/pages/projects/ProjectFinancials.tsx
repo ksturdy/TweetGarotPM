@@ -428,6 +428,22 @@ const ProjectFinancials: React.FC = () => {
     const monthlyHours = new Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>();
     const monthlyCosts = new Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>();
 
+    // In cost_type mode, read shift hours from localStorage — CostTypeSchedule writes there
+    // on every change and on mount, so it's always current even if the TanStack cache for
+    // scheduleSegments was populated before the sync ran.
+    const getLocalShiftWeeklyHours = (segKey: string): number => {
+      if (schedulingMode !== 'cost_type') return 0;
+      try {
+        const raw = localStorage.getItem(`costTypeSchedule_shifts_${projectId}`);
+        if (!raw) return 0;
+        const settings = JSON.parse(raw);
+        const s = settings[segKey];
+        if (!s) return 0;
+        const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+        return days.reduce((sum, d) => sum + (s[d] ?? 0), 0);
+      } catch { return 0; }
+    };
+
     // Distribute field and shop hours for each trade into their respective segment windows.
     // In cost_type mode use est_hours per location (same source as CostTypeSchedule) so
     // headcount profiles align. Summary mode uses remaining × fraction (no location split).
@@ -435,8 +451,11 @@ const ProjectFinancials: React.FC = () => {
       const t = tradeHours[idx];
       const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
       const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
-      const fWH = typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40;
-      const sWH = typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40;
+      // Prefer localStorage shift hours (cost_type mode) → DB weekly_hours → fallback 40h/wk
+      const fWH = getLocalShiftWeeklyHours(TRADE_FIELD_SEG[key])
+               || (typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40);
+      const sWH = getLocalShiftWeeklyHours(TRADE_SHOP_SEG[key])
+               || (typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40);
       const fieldH = schedulingMode === 'cost_type' ? (t.estHoursField ?? t.remainingField) : t.remainingField;
       const shopH  = schedulingMode === 'cost_type' ? (t.estHoursShop  ?? t.remainingShop)  : t.remainingShop;
       distributeHours(key, fieldH, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
