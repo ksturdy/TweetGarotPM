@@ -51,6 +51,7 @@ router.get('/', async (req, res, next) => {
       status: req.query.status,
       estimator_id: req.query.estimator_id,
       customer_id: req.query.customer_id,
+      opportunity_id: req.query.opportunity_id,
       search: req.query.search,
     };
     const estimates = await Estimate.findAll(filters, req.tenantId);

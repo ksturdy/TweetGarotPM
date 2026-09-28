@@ -1202,4 +1202,20 @@ router.delete('/:id/reminders/:reminderId', async (req, res, next) => {
   }
 });
 
+// Get formal estimates linked to an opportunity
+router.get('/:id/estimates', async (req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, estimate_number, project_name, status, total_cost, bid_date, created_at
+       FROM estimates
+       WHERE opportunity_id = $1 AND tenant_id = $2
+       ORDER BY created_at DESC`,
+      [req.params.id, req.tenantId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

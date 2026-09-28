@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import opportunitiesService, { Opportunity, OpportunityScoreInput } from '../../services/opportunities';
+import { estimatesApi } from '../../services/estimates';
 import { employeesApi } from '../../services/employees';
 import { getCampaigns } from '../../services/campaigns';
 import { customersApi, Customer } from '../../services/customers';
@@ -35,6 +37,7 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   defaultCampaignId
 }) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { toast, confirm } = useTitanFeedback();
   const isEditMode = !!opportunity;
 
@@ -77,6 +80,8 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
   const [activeTab, setActiveTab] = useState<'details' | 'activity_comments' | 'estimate' | 'schedule' | 'history'>('details');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingScoreData, setPendingScoreData] = useState<OpportunityScoreInput | null>(null);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [linkSearchTerm, setLinkSearchTerm] = useState('');
 
   // Declared early so it can be referenced by the hydration effect below
   const prevCustomerId = useRef(formData.customer_id);
@@ -125,6 +130,30 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
       awarded_status: fullOpportunity.awarded_status || '',
     });
   }, [fullOpportunity]);
+
+  // Linked formal estimates
+  const { data: linkedEstimates = [] } = useQuery({
+    queryKey: ['opportunity-estimates', opportunity?.id],
+    queryFn: () => estimatesApi.getForOpportunity(opportunity!.id!).then(r => r.data),
+    enabled: isEditMode && !!opportunity?.id,
+  });
+
+  const { data: allEstimatesResponse } = useQuery({
+    queryKey: ['estimates-all'],
+    queryFn: () => estimatesApi.getAll(),
+    enabled: showLinkPicker,
+    staleTime: 30_000,
+  });
+  const allEstimatesData: any[] = (allEstimatesResponse?.data as any) || [];
+
+  const linkEstimateMutation = useMutation({
+    mutationFn: (estimateId: number) =>
+      estimatesApi.update(estimateId, { opportunity_id: opportunity!.id } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['opportunity-estimates', opportunity?.id] });
+      toast.success('Estimate linked');
+    },
+  });
 
   // Fetch active employees for assignment (lightweight endpoint, no HR access needed)
   const { data: assignableResponse } = useQuery({
@@ -895,6 +924,123 @@ const OpportunityModal: React.FC<OpportunityModalProps> = ({
             </div>
           ) : activeTab === 'estimate' ? (
             <div className="estimate-tab-wrapper">
+              {!isEditMode && (
+                <div className="estimate-save-notice">
+                  Save this opportunity first — the <strong>Create Estimate</strong> and <strong>Link Existing</strong> buttons will appear here once the opportunity is saved.
+                </div>
+              )}
+              {isEditMode && (
+                <div className="linked-estimates-section">
+                  <div className="linked-estimates-header">
+                    <span className="linked-estimates-title">Formal Estimates</span>
+                    <div className="linked-estimates-actions">
+                      <button
+                        type="button"
+                        className="le-action-btn"
+                        onClick={() => {
+                          onClose();
+                          navigate(`/estimating/estimates/new?opportunity_id=${opportunity!.id}`);
+                        }}
+                      >
+                        + Create Estimate
+                      </button>
+                      <button
+                        type="button"
+                        className="le-action-btn le-action-btn-secondary"
+                        onClick={() => setShowLinkPicker(v => !v)}
+                      >
+                        Link Existing
+                      </button>
+                    </div>
+                  </div>
+
+                  {linkedEstimates.length > 0 ? (
+                    <table className="linked-estimates-table">
+                      <tbody>
+                        {linkedEstimates.map((est: any) => (
+                          <tr key={est.id} className="linked-estimates-row">
+                            <td className="le-number">{est.estimate_number}</td>
+                            <td className="le-name">{est.project_name}</td>
+                            <td className="le-status">
+                              <span className={`le-status-badge le-status-${(est.status || '').replace(/\s+/g, '-')}`}>
+                                {est.status}
+                              </span>
+                            </td>
+                            <td className="le-value">
+                              {est.total_cost ? `$${Number(est.total_cost).toLocaleString()}` : '—'}
+                            </td>
+                            <td className="le-bid-date">
+                              {est.bid_date ? new Date(est.bid_date + 'T00:00:00').toLocaleDateString() : '—'}
+                            </td>
+                            <td className="le-open">
+                              <button
+                                type="button"
+                                className="le-open-btn"
+                                onClick={() => { onClose(); navigate(`/estimating/estimates/${est.id}`); }}
+                              >
+                                Open →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="linked-estimates-empty">No formal estimates linked yet.</div>
+                  )}
+
+                  {showLinkPicker && (
+                    <div className="le-link-picker">
+                      <input
+                        type="text"
+                        className="le-link-search"
+                        placeholder="Search estimates…"
+                        value={linkSearchTerm}
+                        onChange={e => setLinkSearchTerm(e.target.value)}
+                        autoFocus
+                      />
+                      <div className="le-link-results">
+                        {allEstimatesData
+                          .filter((e: any) =>
+                            !linkSearchTerm ||
+                            (e.project_name || '').toLowerCase().includes(linkSearchTerm.toLowerCase()) ||
+                            (e.estimate_number || '').toLowerCase().includes(linkSearchTerm.toLowerCase())
+                          )
+                          .slice(0, 10)
+                          .map((est: any) => (
+                            <div
+                              key={est.id}
+                              className="le-link-result-row"
+                              onClick={() => {
+                                linkEstimateMutation.mutate(est.id);
+                                setShowLinkPicker(false);
+                                setLinkSearchTerm('');
+                              }}
+                            >
+                              <span className="le-link-num">{est.estimate_number}</span>
+                              <span className="le-link-name">{est.project_name}</span>
+                              <span className={`le-status-badge le-status-${(est.status || '').replace(/\s+/g, '-')}`}>
+                                {est.status}
+                              </span>
+                            </div>
+                          ))
+                        }
+                        {allEstimatesData.length === 0 && (
+                          <div className="le-link-empty">No estimates found.</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="le-link-cancel"
+                        onClick={() => { setShowLinkPicker(false); setLinkSearchTerm(''); }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="estimate-tab-content">
                 <div className="estimate-main">
                   <TitanEstimate

@@ -14,8 +14,9 @@ const Estimate = {
         owner, general_contractor, gc_customer_id, facility_name, facility_location_id, send_estimate_to,
         campaign_id,
         customer_ids, gc_customer_ids, proposal_recipient_customer_id,
-        proposal_recipient_name, proposal_recipient_contact_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+        proposal_recipient_name, proposal_recipient_contact_name,
+        opportunity_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
       RETURNING *`,
       [
         data.estimate_number, data.project_name, data.customer_id, data.customer_name, data.customer_contact_id || null,
@@ -33,6 +34,7 @@ const Estimate = {
         data.proposal_recipient_customer_id || null,
         data.proposal_recipient_name || null,
         data.proposal_recipient_contact_name || null,
+        data.opportunity_id || null,
       ]
     );
     return result.rows[0];
@@ -64,12 +66,14 @@ const Estimate = {
               u2.first_name || ' ' || u2.last_name as created_by_name,
               u3.first_name || ' ' || u3.last_name as approved_by_name,
               COALESCE(c.name, c.customer_facility) as customer_facility,
-              COALESCE(c.name, c.customer_owner) as customer_owner
+              COALESCE(c.name, c.customer_owner) as customer_owner,
+              o.title as opportunity_title
        FROM estimates e
        LEFT JOIN employees emp ON e.estimator_id = emp.id
        LEFT JOIN users u2 ON e.created_by = u2.id
        LEFT JOIN users u3 ON e.approved_by = u3.id
        LEFT JOIN customers c ON e.customer_id = c.id
+       LEFT JOIN opportunities o ON e.opportunity_id = o.id
        WHERE e.id = $1 AND e.tenant_id = $2`,
       [id, tenantId]
     );
@@ -81,10 +85,12 @@ const Estimate = {
       SELECT e.*,
              emp.first_name || ' ' || emp.last_name as estimator_full_name,
              COALESCE(c.name, c.customer_facility) as customer_facility,
-             COALESCE(c.name, c.customer_owner) as customer_owner
+             COALESCE(c.name, c.customer_owner) as customer_owner,
+             o.title as opportunity_title
       FROM estimates e
       LEFT JOIN employees emp ON e.estimator_id = emp.id
       LEFT JOIN customers c ON e.customer_id = c.id
+      LEFT JOIN opportunities o ON e.opportunity_id = o.id
       WHERE e.tenant_id = $1
     `;
     const params = [tenantId];
@@ -103,6 +109,11 @@ const Estimate = {
     if (filters.customer_id) {
       params.push(filters.customer_id);
       query += ` AND e.customer_id = $${paramCount++}`;
+    }
+
+    if (filters.opportunity_id) {
+      params.push(filters.opportunity_id);
+      query += ` AND e.opportunity_id = $${paramCount++}`;
     }
 
     if (filters.search) {
@@ -142,7 +153,8 @@ const Estimate = {
       // Multi-party fields
       'customer_ids', 'gc_customer_ids', 'proposal_recipient_customer_id',
       // Manual-entry overrides when recipient/contact aren't on file
-      'proposal_recipient_name', 'proposal_recipient_contact_name'
+      'proposal_recipient_name', 'proposal_recipient_contact_name',
+      'opportunity_id'
     ];
 
     Object.keys(data).forEach((key) => {

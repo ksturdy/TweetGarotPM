@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimatesApi, Estimate, EstimateSection, EstimateLineItem } from '../../services/estimates';
+import opportunitiesService from '../../services/opportunities';
 import { customersApi, Customer } from '../../services/customers';
 import { contactsApi } from '../../services/contacts';
 import { employeesApi } from '../../services/employees';
@@ -46,6 +47,39 @@ const EstimateNew: React.FC = () => {
     queryKey: ['employees', 'assignable'],
     queryFn: () => employeesApi.getAssignable(),
   });
+
+  // Opportunity pre-fill from URL query param
+  const opportunityIdFromUrl = (() => {
+    const v = new URLSearchParams(location.search).get('opportunity_id');
+    return v ? parseInt(v, 10) : null;
+  })();
+
+  const { data: linkedOpportunity } = useQuery({
+    queryKey: ['opportunity', opportunityIdFromUrl],
+    queryFn: () => opportunitiesService.getById(opportunityIdFromUrl!),
+    enabled: !!opportunityIdFromUrl,
+    staleTime: 60_000,
+  });
+
+  const opportunityPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (!linkedOpportunity || opportunityPrefilledRef.current) return;
+    opportunityPrefilledRef.current = true;
+    setFormData(prev => ({
+      ...prev,
+      project_name: prev.project_name || linkedOpportunity.title || '',
+      customer_id: prev.customer_id || linkedOpportunity.customer_id || null,
+      gc_customer_id: prev.gc_customer_id || linkedOpportunity.gc_customer_id || null,
+      location: prev.location || linkedOpportunity.location || '',
+      bid_date: prev.bid_date || (linkedOpportunity.estimated_start_date
+        ? String(linkedOpportunity.estimated_start_date).substring(0, 10) : ''),
+      project_start_date: prev.project_start_date || (linkedOpportunity.estimated_start_date
+        ? String(linkedOpportunity.estimated_start_date).substring(0, 10) : ''),
+      owner: prev.owner || linkedOpportunity.owner || '',
+      general_contractor: prev.general_contractor || linkedOpportunity.general_contractor || '',
+      opportunity_id: opportunityIdFromUrl,
+    }));
+  }, [linkedOpportunity, opportunityIdFromUrl]);
 
   // Load from localStorage on mount
   const loadFromStorage = () => {
@@ -98,6 +132,7 @@ const EstimateNew: React.FC = () => {
     proposal_recipient_customer_id: null,
     proposal_recipient_name: '',
     proposal_recipient_contact_name: '',
+    opportunity_id: opportunityIdFromUrl ?? undefined,
   });
 
   const [customerSearch, setCustomerSearch] = useState('');
@@ -740,6 +775,11 @@ const EstimateNew: React.FC = () => {
 
       <div className="section-header" style={{ marginBottom: '1.5rem' }}>
         <div>
+          {opportunityIdFromUrl && linkedOpportunity && (
+            <p style={{ fontSize: '0.875rem', color: '#1e40af', marginTop: '0.5rem', background: '#dbeafe', padding: '0.4rem 0.75rem', borderRadius: '6px', display: 'inline-block' }}>
+              Linked to opportunity: <strong>{linkedOpportunity.title}</strong>
+            </p>
+          )}
           {savedData && (
             <p style={{ fontSize: '0.875rem', color: 'var(--success)', marginTop: '0.5rem' }}>
               📝 Draft restored from {new Date(savedData.lastSaved).toLocaleString()}

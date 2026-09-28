@@ -619,6 +619,15 @@ const EstimateDetail: React.FC = () => {
               <span className={getStatusBadge(estimate.status || 'in progress')} style={{ fontSize: '0.875rem', textTransform: 'capitalize' }}>
                 {estimate.status}
               </span>
+              {estimate.opportunity_id && estimate.opportunity_title && (
+                <Link
+                  to="/sales-pipeline"
+                  state={{ highlightOpportunityId: estimate.opportunity_id }}
+                  style={{ marginLeft: '1rem', fontSize: '0.82rem', fontWeight: 600, color: '#f97316', textDecoration: 'none', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '5px', padding: '0.2rem 0.5rem' }}
+                >
+                  Opportunity: {estimate.opportunity_title} →
+                </Link>
+              )}
               <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--primary)', marginLeft: '1rem' }}>
                 ${Math.round(totals.total || 0).toLocaleString('en-US')}
               </span>

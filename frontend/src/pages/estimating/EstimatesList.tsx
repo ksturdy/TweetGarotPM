@@ -408,6 +408,11 @@ const EstimatesList: React.FC = () => {
       <div className="est-page-header">
         <div className="est-page-title">
           <h1>Estimates</h1>
+          <p className="est-page-subtitle">
+            Estimates track detailed bid costs. To link an estimate to a pursuit, open the opportunity in the{' '}
+            <Link to="/sales-pipeline" style={{ color: '#f97316', fontWeight: 600 }}>Sales Pipeline</Link>
+            {' '}and use the Estimate tab.
+          </p>
         </div>
         <div className="est-header-actions">
           <Link to="/estimating/budgets" className="est-btn est-btn-secondary">
@@ -579,6 +584,7 @@ const EstimatesList: React.FC = () => {
               <th className="est-sortable" onClick={() => handleSort('estimator_name')}>
                 Estimator <span className="est-sort-icon">{sortColumn === 'estimator_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
               </th>
+              <th>Opportunity</th>
             </tr>
           </thead>
           <tbody>
@@ -643,11 +649,25 @@ const EstimatesList: React.FC = () => {
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>Unassigned</span>
                     )}
                   </td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {estimate.opportunity_title ? (
+                      <Link
+                        to="/sales-pipeline"
+                        state={{ highlightOpportunityId: estimate.opportunity_id }}
+                        className="est-opp-link"
+                        title={estimate.opportunity_title}
+                      >
+                        {estimate.opportunity_title}
+                      </Link>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>—</span>
+                    )}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={10}>
                   <div className="est-empty-state">
                     <h3>No estimates found</h3>
                     <p>{searchQuery || statusFilter ? 'Try adjusting your filters' : 'Get started by creating your first estimate'}</p>

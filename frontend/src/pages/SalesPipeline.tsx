@@ -1154,6 +1154,9 @@ const SalesPipeline: React.FC = () => {
       <div className="sales-page-header">
         <div className="sales-page-title">
           <h1>Sales Opportunities</h1>
+          <p className="sales-page-subtitle">
+            Open any opportunity and go to the <strong>Estimate tab</strong> to create or link a formal estimate for that pursuit.
+          </p>
         </div>
         <div className="sales-header-actions">
           <div className="sales-view-toggle">

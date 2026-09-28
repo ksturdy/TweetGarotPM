@@ -1,5 +1,22 @@
 /* Estimates List - Compact Layout (mirrors SalesPipeline) */
 
+.est-opp-link {
+  color: #f97316;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  max-width: 160px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.est-opp-link:hover {
+  text-decoration: underline;
+}
+
 :root {
   --bg-dark: #f0f1f3;
   --bg-card: #ffffff;
@@ -41,8 +58,16 @@
 
 .est-page-title {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.est-page-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
 }
 
 .est-page-title h1 {

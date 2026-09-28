@@ -117,6 +117,9 @@ export interface Estimate {
   // Gross margin from Excel bid form (AF211/AH211)
   gross_margin_dollars?: number;
   gross_margin_percentage?: number;
+  // Linked opportunity
+  opportunity_id?: number | null;
+  opportunity_title?: string;
 }
 
 export interface BidFormInfo {
@@ -212,9 +215,22 @@ export interface BidFormPreview {
   warnings: string[];
 }
 
+export interface LinkedEstimateSummary {
+  id: number;
+  estimate_number: string;
+  project_name: string;
+  status: string;
+  total_cost: number;
+  bid_date: string | null;
+  created_at: string;
+}
+
 export const estimatesApi = {
-  getAll: (params?: { status?: string; estimator_id?: number; customer_id?: number; search?: string }) =>
+  getAll: (params?: { status?: string; estimator_id?: number; customer_id?: number; opportunity_id?: number; search?: string }) =>
     api.get('/estimates', { params }),
+
+  getForOpportunity: (opportunityId: number) =>
+    api.get<LinkedEstimateSummary[]>(`/opportunities/${opportunityId}/estimates`),
 
   getById: (id: number) => api.get(`/estimates/${id}`),
 
