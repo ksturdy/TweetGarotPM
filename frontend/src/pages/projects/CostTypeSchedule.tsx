@@ -6,7 +6,7 @@ import {
   type ScheduleSegment,
   type SegmentCosts,
 } from '../../services/scheduleSegments';
-import { getContourMultipliers, getDefaultContour, contourOptions, ContourVisual, type ContourType } from '../../utils/contours';
+import { getContourMultipliers, contourOptions, ContourVisual, type ContourType } from '../../utils/contours';
 import type { Project } from '../../services/projects';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
@@ -545,17 +545,11 @@ const CostTypeSchedule: React.FC<Props> = ({
 
   const projRev = project?.projected_revenue ?? 0;
 
-  // Remaining revenue: use cost-based % complete from segment data to avoid
-  // the markup-multiplier distortion of the old approach (cost × projRev/projCost).
+  // Revenue chart: same shape as the TOTAL row, scaled by revenue/cost ratio.
+  // Use segment-derived projected cost so the ratio aligns with the grid numbers.
   const projCostFromSegs = totalJtd + totalRem; // sum of all segment projected_cost values
-  const pctCompleteDecimal = projCostFromSegs > 0 ? totalJtd / projCostFromSegs : 0;
-  const revBacklog = projRev > 0 ? Math.max(0, projRev * (1 - pctCompleteDecimal)) : 0;
-  const revContour = getDefaultContour(pctCompleteDecimal * 100) as ContourType;
-  const revStartIso = allMonths.length > 0 ? toIso(allMonths[0]) : null;
-  const revEndIso   = allMonths.length > 0 ? toIso(allMonths[allMonths.length - 1]) : null;
-  const monthlyRevenue = revBacklog > 0 && revStartIso && revEndIso
-    ? distributeMonthly(revBacklog, revStartIso, revEndIso, revContour, allMonths)
-    : allMonths.map(() => 0);
+  const revMultiplier = projRev > 0 && projCostFromSegs > 0 ? projRev / projCostFromSegs : 0;
+  const monthlyRevenue = monthlyTotalCost.map(c => c * revMultiplier);
   const hasCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
 
   // Shared chart options helpers
