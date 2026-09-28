@@ -878,9 +878,9 @@ const LaborForecast: React.FC = () => {
           // which also uses est_hours (not remaining) for the monthly profile.
           const estField = tradeData?.field?.est || 0;
           const estShop  = tradeData?.shop?.est  || 0;
-          // locationFilter: respect user's shop/field view filter
-          const fieldHours = locationFilter === 'shop'  ? 0 : locationFilter === 'field' ? estField + estShop : estField;
-          const shopHours  = locationFilter === 'field' ? 0 : locationFilter === 'shop'  ? estField + estShop : estShop;
+          // locationFilter: show only the hours for the selected location
+          const fieldHours = locationFilter !== 'shop'  ? estField : 0;
+          const shopHours  = locationFilter !== 'field' ? estShop  : 0;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, TRADE_FIELD_SEG[trade.key]);
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  TRADE_SHOP_SEG[trade.key]);
         });
