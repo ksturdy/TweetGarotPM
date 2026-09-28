@@ -320,7 +320,7 @@ const CompanyPicker: React.FC<CompanyPickerProps> = ({
         marginTop: '4px',
         flexWrap: 'wrap'
       }}>
-        {textValue.trim() && (
+        {textValue.trim() && matches.length === 0 && (
           <button
             type="button"
             onClick={handleSaveAsProspect}

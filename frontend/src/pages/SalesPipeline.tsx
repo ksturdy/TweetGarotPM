@@ -942,9 +942,10 @@ const SalesPipeline: React.FC = () => {
   const COLUMN_STORAGE_KEY = 'salesPipeline_columnWidths';
   const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
     activity: 80,
-    name: 0,         // flex
-    company: 0,      // flex
-    gc: 0,           // flex
+    name: 300,
+    company: 200,
+    gc: 180,
+    location: 130,
     locationGroup: 90,
     value: 100,
     weightedValue: 110,
@@ -1621,6 +1622,10 @@ const SalesPipeline: React.FC = () => {
                   General Contractor <span className="sales-sort-icon">{sortColumn === 'gc' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('gc', e)} />
                 </th>
+                <th>
+                  Location
+                  <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('location', e)} />
+                </th>
                 <th className="sales-sortable" onClick={() => handleSort('locationGroup')}>
                   Location <span className="sales-sort-icon">{sortColumn === 'locationGroup' ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}</span>
                   <div className="col-resize-handle" onMouseDown={(e) => handleResizeStart('locationGroup', e)} />
@@ -1674,6 +1679,7 @@ const SalesPipeline: React.FC = () => {
                     </td>
                     <td>{opp.company || '-'}</td>
                     <td style={{ fontSize: '12px', color: '#64748b' }}>{apiOpp?.general_contractor || '-'}</td>
+                    <td style={{ fontSize: '12px', color: '#64748b' }}>{apiOpp?.location || '-'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select
                         value={apiOpp?.location_group || ''}
