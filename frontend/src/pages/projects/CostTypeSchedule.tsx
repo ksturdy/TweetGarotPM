@@ -78,7 +78,12 @@ const fmtCompact = (v: number | null | undefined) => {
 };
 
 const fmt$ = (v: number | null | undefined) => v ? `$${Math.round(v).toLocaleString()}` : '—';
-const fmtK = (v: number | null | undefined) => v ? `$${Math.round(v / 1000).toLocaleString()}k` : '—';
+const fmtK = (v: number | null | undefined) => {
+  if (!v) return '—';
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  return `$${Math.round(v / 1000).toLocaleString()}k`;
+};
 const fmtHrs = (v: number | null | undefined) => v ? Math.round(v).toLocaleString() : '—';
 
 const calcDur = (start: string | null, end: string | null): string => {
@@ -952,6 +957,43 @@ const CostTypeSchedule: React.FC<Props> = ({
                     </React.Fragment>
                   );
                 })}
+                {/* ── Total row ── */}
+                {(() => {
+                  const totEstCost  = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) ? s + safeN(costsMap.get(d.key)?.est_cost)  : s, 0);
+                  const totEstHrs   = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) && d.isLabor ? s + safeN(costsMap.get(d.key)?.est_hours)  : s, 0);
+                  const totJtdCost  = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) ? s + safeN(costsMap.get(d.key)?.jtd_cost)  : s, 0);
+                  const totJtdHrs   = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) && d.isLabor ? s + safeN(costsMap.get(d.key)?.jtd_hours)  : s, 0);
+                  const totProjCost = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) ? s + safeN(costsMap.get(d.key)?.projected_cost) : s, 0);
+                  const totRem      = totProjCost - totJtdCost;
+                  const tTd = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+                    height: 30, padding: '0 0.3rem', borderTop: '2px solid #475569', borderBottom: '2px solid #475569',
+                    borderRight: '1px solid #94a3b8', verticalAlign: 'middle', fontSize: '0.75rem',
+                    fontWeight: 700, color: '#1e293b', background: '#e2e8f0', ...extra,
+                  });
+                  return (
+                    <tr>
+                      <td style={tTd({ padding: '0 0.6rem', position: 'sticky', left: 0, zIndex: 2, background: '#cbd5e1', borderLeft: '3px solid #475569', borderRight: '2px solid #475569' })}>
+                        TOTAL
+                      </td>
+                      <td colSpan={4} style={tTd({ borderRight: '2px solid #475569' })} />
+                      <td style={tTd({ textAlign: 'right', background: '#dbeafe' })}>{fmt$(totEstCost || null)}</td>
+                      <td style={tTd({ textAlign: 'right', background: '#dbeafe', borderRight: '2px solid #475569' })}>{fmtHrs(totEstHrs || null)}</td>
+                      <td style={tTd({ textAlign: 'right', background: '#fef3c7' })}>{fmt$(totJtdCost || null)}</td>
+                      <td style={tTd({ textAlign: 'right', background: '#fef3c7', borderRight: '2px solid #475569' })}>{fmtHrs(totJtdHrs || null)}</td>
+                      <td style={tTd({ textAlign: 'right', background: '#dcfce7', borderRight: '2px solid #475569' })}>{fmt$(totProjCost || null)}</td>
+                      <td style={tTd({ textAlign: 'right', background: '#ede9fe', borderRight: '2px solid #475569', color: totRem < 0 ? '#dc2626' : '#1e293b' })}>{fmt$(totRem || null)}</td>
+                      {allMonths.map((_, i) => {
+                        const val = SEGMENT_DEFINITIONS.reduce((s, d) => activeKeys.includes(d.key) ? s + (segMonthlyRem.get(d.key)?.[i] ?? 0) : s, 0);
+                        const bg = i % 2 === 0 ? '#e2e8f0' : '#d9dfe8';
+                        return (
+                          <td key={i} style={tTd({ textAlign: 'right', padding: '0 0.25rem', background: bg, color: val > 0 ? '#1e293b' : '#94a3b8' })}>
+                            {val > 500 ? fmtK(val) : val > 0 ? `$${Math.round(val).toLocaleString()}` : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
