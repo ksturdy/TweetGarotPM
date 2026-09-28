@@ -381,6 +381,20 @@ const PhaseSchedule = {
     return created;
   },
 
+  async getBulkDateRanges(projectIds, tenantId) {
+    if (!projectIds || !projectIds.length) return {};
+    const { rows } = await db.query(
+      `SELECT project_id, MIN(start_date) AS start_date, MAX(end_date) AS end_date
+         FROM phase_schedule_items
+        WHERE project_id = ANY($1::int[]) AND tenant_id = $2 AND start_date IS NOT NULL
+        GROUP BY project_id`,
+      [projectIds, tenantId]
+    );
+    const result = {};
+    for (const r of rows) result[r.project_id] = { start_date: r.start_date, end_date: r.end_date };
+    return result;
+  },
+
   async reorder(projectId, itemIds, tenantId) {
     for (let i = 0; i < itemIds.length; i++) {
       await db.query(

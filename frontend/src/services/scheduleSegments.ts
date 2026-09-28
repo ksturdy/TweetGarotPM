@@ -42,11 +42,23 @@ export const SEGMENT_DEFINITIONS: { key: string; label: string; isLabor: boolean
   { key: 'gc',          label: 'General Conditions',isLabor: false },
 ];
 
+export interface PhaseDateRange {
+  start_date: string;
+  end_date: string | null;
+}
+
 export const scheduleSegmentsService = {
   getBulk: (projectIds: number[]): Promise<Record<number, ScheduleSegment[]>> => {
     if (!projectIds.length) return Promise.resolve({});
     return api.get<Record<number, ScheduleSegment[]>>(
       `/schedule-segments/bulk?project_ids=${projectIds.join(',')}`
+    ).then((r) => r.data);
+  },
+
+  getBulkPhaseDateRanges: (projectIds: number[]): Promise<Record<number, PhaseDateRange>> => {
+    if (!projectIds.length) return Promise.resolve({});
+    return api.get<Record<number, PhaseDateRange>>(
+      `/phase-schedule/bulk-date-ranges?project_ids=${projectIds.join(',')}`
     ).then((r) => r.data);
   },
 

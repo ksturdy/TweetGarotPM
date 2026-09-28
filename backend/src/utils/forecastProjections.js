@@ -10,6 +10,7 @@
 const VistaData = require('../models/VistaData');
 const Team = require('../models/Team');
 const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
+const PhaseSchedule = require('../models/PhaseSchedule');
 const { getContourMultipliers } = require('./phaseScheduleContours');
 const { LOCATION_GROUPS } = require('../constants/locationGroups');
 
@@ -454,6 +455,8 @@ function buildLaborProjections(contracts, shopFieldRows, filters, opts) {
  */
 function buildRevenueProjections(contracts, filters, opts) {
   const durationRules = opts.durationRules || DEFAULT_DURATION_RULES;
+  const segmentsByProject = opts.segmentsByProject || {};
+  const phaseDatesByProject = opts.phaseDatesByProject || {};
   const now = startOfMonth(new Date());
   const filtered = filterContracts(contracts, filters);
   const projections = [];
@@ -463,31 +466,60 @@ function buildRevenueProjections(contracts, filters, opts) {
     const projectedRevenue = parseNum(contract.projected_revenue);
     const backlog = parseNum(contract.backlog);
     const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
+    const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
 
-    const rawStart = dateToMonthOffset(contract.user_adjusted_start_date, now);
-    const startOffset = Math.max(0, rawStart ?? 0);
-    const userEnd = dateToMonthOffset(contract.user_adjusted_end_date, now);
+    const schedMode = contract.linked_project_scheduling_mode;
+    const linkedProjId = contract.linked_project_id;
+    const projectSegs = linkedProjId && schedMode === 'cost_type' ? (segmentsByProject[linkedProjId] || []) : null;
+    const phaseRange = linkedProjId && schedMode === 'phase' ? (phaseDatesByProject[linkedProjId] || null) : null;
 
-    let remainingMonths = 0;
-    let monthlyBurnRate = 0;
-    let projectedEndDate = null;
+    let startOffset, remainingMonths;
 
-    if (backlog > 0) {
+    if (projectSegs) {
+      const datedSegs = projectSegs.filter(s => s.start_date);
+      if (datedSegs.length > 0) {
+        const starts = datedSegs.map(s => Math.max(0, dateToMonthOffset(s.start_date, now) ?? 0));
+        const ends = datedSegs.map(s => {
+          const eOff = s.end_date ? dateToMonthOffset(s.end_date, now) : null;
+          return eOff != null ? eOff + 1 : Math.max(...starts) + 3;
+        });
+        startOffset = Math.min(...starts);
+        const endOffset = Math.max(startOffset + 1, Math.min(36, Math.max(...ends)));
+        remainingMonths = endOffset - startOffset;
+      } else {
+        startOffset = 0;
+        const pct = pctComplete / 100;
+        remainingMonths = Math.max(1, Math.min(36, Math.ceil(getDurationForValue(contractValue, durationRules) * (1 - pct))));
+      }
+    } else if (phaseRange && phaseRange.start_date) {
+      const sOff = dateToMonthOffset(phaseRange.start_date, now) ?? 0;
+      startOffset = Math.max(0, sOff);
+      const eOff = phaseRange.end_date ? dateToMonthOffset(phaseRange.end_date, now) : null;
+      const endOffset = eOff != null ? Math.max(startOffset + 1, Math.min(36, eOff + 1)) : startOffset + 3;
+      remainingMonths = endOffset - startOffset;
+    } else {
+      const rawStart = dateToMonthOffset(contract.user_adjusted_start_date, now);
+      startOffset = Math.max(0, rawStart ?? 0);
+      const userEnd = dateToMonthOffset(contract.user_adjusted_end_date, now);
       if (userEnd != null) {
         const endMonths = Math.max(1, Math.min(36, userEnd));
         remainingMonths = Math.max(1, endMonths - startOffset);
       } else {
-        const totalDuration = getDurationForValue(contractValue, durationRules);
-        const pct = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
-        const monthsRemaining = Math.ceil(totalDuration * (1 - pct));
-        remainingMonths = Math.max(1, Math.min(36, monthsRemaining));
+        const pct = pctComplete / 100;
+        remainingMonths = Math.max(1, Math.min(36, Math.ceil(getDurationForValue(contractValue, durationRules) * (1 - pct))));
       }
+    }
+
+    let monthlyBurnRate = 0;
+    let projectedEndDate = null;
+
+    if (backlog > 0 && remainingMonths > 0) {
       monthlyBurnRate = backlog / remainingMonths;
       projectedEndDate = addMonths(now, startOffset + remainingMonths);
     }
 
-    const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
-    const contour = contract.user_selected_contour || getDefaultContour(pctComplete);
+    const isLocked = schedMode === 'cost_type' || schedMode === 'phase';
+    const contour = (!isLocked && contract.user_selected_contour) || getDefaultContour(pctComplete);
     const monthlyRevenue = new Map();
     const twelveOut = addMonths(now, 11);
 
@@ -562,7 +594,20 @@ async function buildLaborForecastData(tenantId, rawFilters) {
 async function buildProjectedRevenueData(tenantId, rawFilters) {
   const filters = await prepareFilters(rawFilters, tenantId);
   const contracts = await VistaData.getAllContracts({}, tenantId);
-  return buildRevenueProjections(contracts, filters, {});
+
+  const costTypeIds = contracts
+    .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type')
+    .map(c => c.linked_project_id);
+  const phaseIds = contracts
+    .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'phase')
+    .map(c => c.linked_project_id);
+
+  const [segmentsByProject, phaseDatesByProject] = await Promise.all([
+    costTypeIds.length > 0 ? ProjectScheduleSegment.getBulkByProjects(costTypeIds, tenantId) : {},
+    phaseIds.length > 0 ? PhaseSchedule.getBulkDateRanges(phaseIds, tenantId) : {},
+  ]);
+
+  return buildRevenueProjections(contracts, filters, { segmentsByProject, phaseDatesByProject });
 }
 
 /**

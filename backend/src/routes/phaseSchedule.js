@@ -40,6 +40,17 @@ const verifyProjectOwnership = async (req, res, next) => {
   }
 };
 
+// Get min/max date ranges for multiple projects (used by revenue forecast)
+router.get('/bulk-date-ranges', async (req, res, next) => {
+  try {
+    const projectIds = (req.query.project_ids || '').split(',').map(Number).filter(Boolean);
+    const result = await PhaseSchedule.getBulkDateRanges(projectIds, req.tenantId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get available phase codes for a project (from Vista import)
 router.get('/project/:projectId/phase-codes', verifyProjectOwnership, async (req, res, next) => {
   try {

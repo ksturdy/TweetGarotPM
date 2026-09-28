@@ -58,6 +58,7 @@ const parseNum = (value: number | string | null | undefined): number => {
 };
 
 import { ContourType, contourOptions, getContourMultipliers, getDefaultContour, ContourVisual } from '../../utils/contours';
+import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
 
 interface ProjectProjection {
   contract: VPContract;
@@ -309,6 +310,35 @@ const ProjectedRevenue: React.FC = () => {
   const { data: contracts, isLoading } = useQuery({
     queryKey: ['vpContracts', 'projectedRevenue'],
     queryFn: () => vistaDataService.getAllContracts({ status: '' }), // Get all, filter client-side
+  });
+
+  // Project IDs by scheduling mode (derived from contracts)
+  const costTypeProjectIds = useMemo(() => {
+    if (!contracts) return [] as number[];
+    return contracts
+      .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type')
+      .map(c => c.linked_project_id as number);
+  }, [contracts]);
+
+  const phaseProjectIds = useMemo(() => {
+    if (!contracts) return [] as number[];
+    return contracts
+      .filter(c => c.linked_project_id && c.linked_project_scheduling_mode === 'phase')
+      .map(c => c.linked_project_id as number);
+  }, [contracts]);
+
+  const { data: segmentsByProject } = useQuery({
+    queryKey: ['scheduleSegments', 'bulkRevenue', costTypeProjectIds.join(',')],
+    queryFn: () => scheduleSegmentsService.getBulk(costTypeProjectIds),
+    enabled: costTypeProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: phaseDatesByProject } = useQuery({
+    queryKey: ['phaseDateRanges', 'bulk', phaseProjectIds.join(',')],
+    queryFn: () => scheduleSegmentsService.getBulkPhaseDateRanges(phaseProjectIds),
+    enabled: phaseProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Initialize overrides from DB data once contracts load
@@ -564,35 +594,59 @@ const ProjectedRevenue: React.FC = () => {
       const backlog = parseNum(contract.backlog);
       const contractValue = parseNum(contract.contract_amount) || projectedRevenue;
 
-      // Get user-adjusted start/end months for this contract
-      const userAdjustedStartMonths = adjustedStartMonths[contract.id];
-      const userAdjustedEndMonths = adjustedEndMonths[contract.id];
+      const schedMode = contract.linked_project_scheduling_mode;
+      const linkedProjId = contract.linked_project_id as number | undefined;
+      const isLocked = schedMode === 'cost_type' || schedMode === 'phase';
 
-      // Start offset (defaults to 0 = start now)
-      const startOffset = userAdjustedStartMonths ?? 0;
-
-      // Calculate remaining months based on contract value rules (or user override)
+      // Determine revenue window from scheduling mode
+      let startOffset: number;
       let remainingMonths = 0;
+
+      const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
+      const pct = pctComplete / 100;
+
+      if (schedMode === 'cost_type' && linkedProjId && segmentsByProject) {
+        const segs: ScheduleSegment[] = segmentsByProject[linkedProjId] ?? [];
+        const datedSegs = segs.filter(s => s.start_date);
+        if (datedSegs.length > 0) {
+          const starts = datedSegs.map(s => Math.max(0, dateToMonthOffset(s.start_date) ?? 0));
+          const ends = datedSegs.map(s => {
+            const eOff = s.end_date ? dateToMonthOffset(s.end_date) : null;
+            return eOff != null ? eOff + 1 : Math.max(...starts) + 3;
+          });
+          startOffset = Math.min(...starts);
+          const endOffset = Math.max(startOffset + 1, Math.min(36, Math.max(...ends)));
+          remainingMonths = endOffset - startOffset;
+        } else {
+          startOffset = 0;
+          remainingMonths = Math.max(1, Math.min(36, Math.ceil(getDurationForValue(contractValue) * (1 - pct))));
+        }
+      } else if (schedMode === 'phase' && linkedProjId && phaseDatesByProject) {
+        const pd = phaseDatesByProject[linkedProjId];
+        if (pd?.start_date) {
+          startOffset = Math.max(0, dateToMonthOffset(pd.start_date) ?? 0);
+          const eOff = pd.end_date ? dateToMonthOffset(pd.end_date) : null;
+          const endOffset = eOff != null ? Math.max(startOffset + 1, Math.min(36, eOff + 1)) : startOffset + 3;
+          remainingMonths = endOffset - startOffset;
+        } else {
+          startOffset = 0;
+          remainingMonths = Math.max(1, Math.min(36, Math.ceil(getDurationForValue(contractValue) * (1 - pct))));
+        }
+      } else {
+        // Summary mode: use user overrides or duration rules
+        const userAdjustedStartMonths = adjustedStartMonths[contract.id];
+        const userAdjustedEndMonths = adjustedEndMonths[contract.id];
+        startOffset = userAdjustedStartMonths ?? 0;
+        if (userAdjustedEndMonths !== undefined) {
+          remainingMonths = Math.max(1, Math.max(1, Math.min(36, userAdjustedEndMonths)) - startOffset);
+        } else {
+          remainingMonths = Math.max(1, Math.min(36, Math.ceil(getDurationForValue(contractValue) * (1 - pct))));
+        }
+      }
+
       let monthlyBurnRate = 0;
       let projectedEndDate: Date | null = null;
-
-      if (backlog > 0) {
-        if (userAdjustedEndMonths !== undefined) {
-          // User has manually set the end date - spread backlog over their specified months
-          const endMonthsFromNow = Math.max(1, Math.min(36, userAdjustedEndMonths));
-          remainingMonths = Math.max(1, endMonthsFromNow - startOffset);
-        } else {
-          // Use contract value-based duration rules to project end date
-          const totalDuration = getDurationForValue(contractValue);
-
-          // Calculate % complete and estimate remaining months
-          const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
-          const monthsRemaining = Math.ceil(totalDuration * (1 - pctComplete));
-
-          // Ensure at least 1 month remaining if there's backlog, cap at 36
-          remainingMonths = Math.max(1, Math.min(36, monthsRemaining));
-        }
-
+      if (backlog > 0 && remainingMonths > 0) {
         monthlyBurnRate = backlog / remainingMonths;
         projectedEndDate = addMonths(now, startOffset + remainingMonths);
       }
@@ -601,11 +655,8 @@ const ProjectedRevenue: React.FC = () => {
       const monthlyRevenue = new Map<string, number>();
       const twelveMonthsOut = addMonths(now, 11); // Last month shown individually
 
-      // Calculate % complete for auto-contour selection
-      const pctComplete = projectedRevenue > 0 ? (earnedRevenue / projectedRevenue) * 100 : 0;
-
-      // Get contour: use user selection if set, otherwise auto-select based on % complete
-      const userSelectedContour = selectedContours[contract.id];
+      // Contour: locked projects always use auto-contour; summary respects user override
+      const userSelectedContour = !isLocked ? selectedContours[contract.id] : undefined;
       const autoContour = getDefaultContour(pctComplete);
       const contour = userSelectedContour || autoContour;
       const isAutoContour = !userSelectedContour;
@@ -670,7 +721,7 @@ const ProjectedRevenue: React.FC = () => {
     });
 
     return results;
-  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, myProjectsOnly, myTeamOnly, user, teamMemberNames, teamFilter, selectedTeamMemberNames, pmMatchesTeamNames]);
+  }, [contracts, departmentFilter, marketFilter, pmFilter, statusFilter, searchFilter, projectFilter, adjustedStartMonths, adjustedEndMonths, selectedContours, durationRules, sortColumn, sortDirection, myProjectsOnly, myTeamOnly, user, teamMemberNames, teamFilter, selectedTeamMemberNames, pmMatchesTeamNames, segmentsByProject, phaseDatesByProject]);
 
   // Calculate column totals
   const columnTotals = useMemo(() => {
