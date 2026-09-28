@@ -6,7 +6,7 @@ import {
   type ScheduleSegment,
   type SegmentCosts,
 } from '../../services/scheduleSegments';
-import { getContourMultipliers, contourOptions, ContourVisual, type ContourType } from '../../utils/contours';
+import { getContourMultipliers, getDefaultContour, contourOptions, ContourVisual, type ContourType } from '../../utils/contours';
 import type { Project } from '../../services/projects';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler, Tooltip, Legend } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
@@ -544,9 +544,18 @@ const CostTypeSchedule: React.FC<Props> = ({
   );
 
   const projRev = project?.projected_revenue ?? 0;
-  const projCost = project?.projected_cost ?? 0;
-  const revMultiplier = projRev > 0 && projCost > 0 ? projRev / projCost : 1;
-  const monthlyRevenue = monthlyTotalCost.map(c => c * revMultiplier);
+
+  // Remaining revenue: use cost-based % complete from segment data to avoid
+  // the markup-multiplier distortion of the old approach (cost × projRev/projCost).
+  const projCostFromSegs = totalJtd + totalRem; // sum of all segment projected_cost values
+  const pctCompleteDecimal = projCostFromSegs > 0 ? totalJtd / projCostFromSegs : 0;
+  const revBacklog = projRev > 0 ? Math.max(0, projRev * (1 - pctCompleteDecimal)) : 0;
+  const revContour = getDefaultContour(pctCompleteDecimal * 100) as ContourType;
+  const revStartIso = allMonths.length > 0 ? toIso(allMonths[0]) : null;
+  const revEndIso   = allMonths.length > 0 ? toIso(allMonths[allMonths.length - 1]) : null;
+  const monthlyRevenue = revBacklog > 0 && revStartIso && revEndIso
+    ? distributeMonthly(revBacklog, revStartIso, revEndIso, revContour, allMonths)
+    : allMonths.map(() => 0);
   const hasCharts = allMonths.length > 0 && (laborDatasets.length > 0 || monthlyRevenue.some(v => v > 0));
 
   // Shared chart options helpers
@@ -702,9 +711,9 @@ const CostTypeSchedule: React.FC<Props> = ({
             <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 Revenue by Month
-                {revMultiplier === 1 && projRev === 0 && (
+                {projRev === 0 && (
                   <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-                    (projected cost — add revenue to project to scale)
+                    (set Project Revenue to enable)
                   </span>
                 )}
               </div>
@@ -713,7 +722,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                   data={{
                     labels: chartLabels,
                     datasets: [{
-                      label: revMultiplier !== 1 ? 'Revenue' : 'Projected Cost',
+                      label: projRev > 0 ? 'Revenue' : 'Projected Cost',
                       data: monthlyRevenue,
                       backgroundColor: '#10b981' + '70',
                       borderColor: '#10b981',
