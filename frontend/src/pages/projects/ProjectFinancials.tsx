@@ -358,6 +358,26 @@ const ProjectFinancials: React.FC = () => {
     const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50', admin: '70' };
     const TRADE_SHOP_SEG:  Record<string, string> = { pf: '45', sm: '35', pl: '55', admin: '70' };
 
+    // In cost_type mode, derive HPM per trade from segment weekly_hours so headcount
+    // matches the Labor Forecast page (which uses the same blended HPM calculation).
+    const tradeHpm: Record<string, number> = {};
+    TRADE_META.forEach(({ key }) => {
+      if (schedulingMode === 'cost_type') {
+        const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
+        const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
+        const fWH  = typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40;
+        const sWH  = typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40;
+        const t = tradeHours.find(h => h.key === key);
+        const rem = t?.remaining ?? 0;
+        const fieldFrac = rem > 0 && t ? t.remainingField / rem : 1;
+        const shopFrac  = rem > 0 && t ? t.remainingShop  / rem : 0;
+        const blended = (fieldFrac * fWH + shopFrac * sWH) * 4.33;
+        tradeHpm[key] = blended > 0 ? blended : HPP;
+      } else {
+        tradeHpm[key] = HPP;
+      }
+    });
+
     const resolveSegmentWindow = (segKey: string): { startOff: number; endOff: number; contour: ContourType } => {
       if (schedulingMode === 'cost_type') {
         const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
@@ -436,7 +456,7 @@ const ProjectFinancials: React.FC = () => {
         if (yrH.total > 0) { monthlyHours.set(yrKey, yrH); monthlyCosts.set(yrKey, yrC); }
       }
     }
-    return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost };
+    return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost, tradeHpm };
   }, [costSummary, c, project, segmentsData]);
 
   const captureSnapshotMutation = useMutation({
@@ -881,7 +901,7 @@ const ProjectFinancials: React.FC = () => {
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, background: '#fafafa', color: '#cbd5e1' }}>—</td>;
                               const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
-                              const hc = hrs / HPP;
+                              const hc = hrs / (laborForecastData.tradeHpm[key] ?? HPP);
                               return (
                                 <td key={col.key} title={hc >= 0.05 ? `${fmtNum(hrs)} hrs` : undefined}
                                   style={{ ...tdStyle, color: hc >= 0.05 ? color : '#cbd5e1', fontWeight: hc >= 0.05 ? 600 : 400 }}>
@@ -919,7 +939,10 @@ const ProjectFinancials: React.FC = () => {
                       {laborForecastData.columns.map(col => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#f4f6f9', color: '#cbd5e1' }}>—</td>;
                         const h = laborForecastData.monthlyHours.get(col.key);
-                        const hc = (h?.total ?? 0) / HPP;
+                        const hc = TRADE_META.reduce((sum, { key: tk }) => {
+                          const tHrs = h?.[tk as 'pf' | 'sm' | 'pl' | 'admin'] ?? 0;
+                          return sum + tHrs / (laborForecastData.tradeHpm[tk] ?? HPP);
+                        }, 0);
                         return (
                           <td key={col.key} title={hc >= 0.05 ? `${fmtNum(h?.total ?? 0)} hrs` : undefined}
                             style={{ ...tfStyle, color: hc >= 0.05 ? '#1e293b' : '#cbd5e1' }}>
