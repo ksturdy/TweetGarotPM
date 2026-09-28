@@ -230,7 +230,7 @@ interface ProjectLaborProjection {
   tradeHours: TradeHours[];
   totalRemainingHours: number;
   monthlyHours: Map<string, TradeMonthlyHours>;
-  tradeHPM?: { pf: number; sm: number; pl: number };
+  monthlySegHC?: Map<string, Record<string, number>>;
 }
 
 interface OpportunityLaborProjection {
@@ -832,31 +832,41 @@ const LaborForecast: React.FC = () => {
       if (projectSegs) {
         const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
         const TRADE_SHOP_SEG:  Record<string, string>  = { pf: '45', sm: '35', pl: '55' };
+        const monthlySegHC = new Map<string, Record<string, number>>();
 
         const distributeSegHours = (tradeKey: 'pf' | 'sm' | 'pl', hours: number, segKey: string) => {
           if (hours <= 0) return;
           const seg = projectSegs.find((s: ScheduleSegment) => s.segment_key === segKey);
           let sOff: number, eOff: number, segContour: ContourType;
+          let segWeeklyHrs = 40;
           if (seg?.start_date) {
-            sOff = Math.max(0, dateToMonthOffset(seg.start_date) ?? 0);
+            // Do NOT clamp to 0 — a past start keeps the correct contour position
+            sOff = dateToMonthOffset(seg.start_date) ?? 0;
             const eUserOff = dateToMonthOffset(seg.end_date);
             eOff = eUserOff != null
               ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
               : sOff + Math.max(1, Math.min(36, remainingMonths > 0 ? remainingMonths : 3));
             segContour = (seg.contour_type as ContourType) || getDefaultContour(pctComplete);
+            segWeeklyHrs = (seg.weekly_hours != null && seg.weekly_hours > 0) ? seg.weekly_hours : 40;
           } else {
             sOff = startOffset; eOff = endOffset; segContour = contour;
           }
           const remMonths = eOff - sOff;
           if (remMonths <= 0) return;
           const mults = getContourMultipliers(remMonths, segContour);
+          const segHPM = segWeeklyHrs * 4.33;
           for (let i = 0; i < remMonths; i++) {
-            const mk = format(addMonths(now, sOff + i), 'yyyy-MM');
+            const monthIdx = sOff + i;
+            if (monthIdx < 0) continue;  // segment started in past — skip but keep contour shape
+            const mk = format(addMonths(now, monthIdx), 'yyyy-MM');
             const h = (hours / remMonths) * mults[i];
             const existing = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
             existing[tradeKey] += h;
             existing.total += h;
             monthlyHours.set(mk, existing);
+            const segMap = monthlySegHC.get(mk) ?? {};
+            segMap[segKey] = (segMap[segKey] ?? 0) + h / segHPM;
+            monthlySegHC.set(mk, segMap);
           }
         };
 
@@ -874,6 +884,11 @@ const LaborForecast: React.FC = () => {
           const shopHours  = locationFilter === 'field' ? 0 : locationFilter === 'shop'  ? rem : rem * shopFrac;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, TRADE_FIELD_SEG[trade.key]);
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  TRADE_SHOP_SEG[trade.key]);
+        });
+
+        results.push({
+          contract, startOffset, remainingMonths, contour, isAutoContour, pctComplete,
+          tradeHours, totalRemainingHours, monthlyHours, monthlySegHC,
         });
       } else if (remainingMonths > 0) {
         const multipliers = getContourMultipliers(remainingMonths, contour);
@@ -897,37 +912,12 @@ const LaborForecast: React.FC = () => {
         }
       }
 
-      // Compute per-trade HPM from segment shift schedules (cost_type mode only)
-      let tradeHPM: { pf: number; sm: number; pl: number } | undefined;
-      if (projectSegs) {
-        const segHPM = (segKey: string): number | null => {
-          const seg = projectSegs.find((s: ScheduleSegment) => s.segment_key === segKey);
-          return seg?.weekly_hours ? seg.weekly_hours * (52 / 12) : null;
-        };
-        const computeWeightedHPM = (tradeKey: string, fFrac: number, sFrac: number): number => {
-          const fHPM = segHPM(({ pf: '40', sm: '30', pl: '50' } as Record<string, string>)[tradeKey] ?? '');
-          const sHPM = segHPM(({ pf: '45', sm: '35', pl: '55' } as Record<string, string>)[tradeKey] ?? '');
-          if (!fHPM && !sHPM) return 0; // no data — caller falls back to global
-          return fFrac * (fHPM ?? sHPM ?? 0) + sFrac * (sHPM ?? fHPM ?? 0);
-        };
-        const hpmValues = TRADES.map((trade, idx) => {
-          const tradeData = sfData?.[trade.key];
-          const estField = tradeData?.field?.est || 0;
-          const estShop  = tradeData?.shop?.est  || 0;
-          const estTotal = estField + estShop;
-          const fFrac = estTotal > 0 ? estField / estTotal : 1;
-          const sFrac = estTotal > 0 ? estShop  / estTotal : 0;
-          return computeWeightedHPM(trade.key, fFrac, sFrac);
+      if (!projectSegs) {
+        results.push({
+          contract, startOffset, remainingMonths, contour, isAutoContour, pctComplete,
+          tradeHours, totalRemainingHours, monthlyHours,
         });
-        if (hpmValues.some(v => v > 0)) {
-          tradeHPM = { pf: hpmValues[0] || 0, sm: hpmValues[1] || 0, pl: hpmValues[2] || 0 };
-        }
       }
-
-      results.push({
-        contract, startOffset, remainingMonths, contour, isAutoContour, pctComplete,
-        tradeHours, totalRemainingHours, monthlyHours, tradeHPM,
-      });
     }
 
     // Sort based on selected column and direction
@@ -1644,10 +1634,12 @@ const LaborForecast: React.FC = () => {
       const periodCols = pdfTableColumns.map(pc => {
         const h = applyTradeFilter(aggHours(p.monthlyHours, pc.keys));
         if (useQuarterly) return fmtHours(h.total);
-        const pfHPP = p.tradeHPM?.pf || hpp;
-        const smHPP = p.tradeHPM?.sm || hpp;
-        const plHPP = p.tradeHPM?.pl || hpp;
-        const totalHC = (h.pf / pfHPP) + (h.sm / smHPP) + (h.pl / plHPP);
+        const totalHC = p.monthlySegHC
+          ? pc.keys.reduce((sum, mk) => {
+              const seg = p.monthlySegHC!.get(mk) ?? {};
+              return sum + Object.values(seg).reduce((s2, v) => s2 + v, 0);
+            }, 0)
+          : (h.pf + h.sm + h.pl) / hpp;
         return totalHC < 0.1 ? '-' : totalHC.toFixed(1);
       });
       const filteredRemaining = p.tradeHours.filter(t => tradeFilter.includes(t.key)).reduce((s, t) => s + t.remaining, 0);
@@ -3022,22 +3014,23 @@ const LaborForecast: React.FC = () => {
                           {p.contract.project_manager_name || '-'}
                         </td>
                         {(() => {
-                          const pfHPP = p.tradeHPM?.pf || hpp;
-                          const smHPP = p.tradeHPM?.sm || hpp;
-                          const plHPP = p.tradeHPM?.pl || hpp;
-                          const totalHC = (h.pf / pfHPP) + (h.sm / smHPP) + (h.pl / plHPP);
+                          const seg = p.monthlySegHC?.get(drillDownCol.key) ?? {};
+                          const pfHC = p.monthlySegHC ? (seg['40'] ?? 0) + (seg['45'] ?? 0) : h.pf / hpp;
+                          const smHC = p.monthlySegHC ? (seg['30'] ?? 0) + (seg['35'] ?? 0) : h.sm / hpp;
+                          const plHC = p.monthlySegHC ? (seg['50'] ?? 0) + (seg['55'] ?? 0) : h.pl / hpp;
+                          const totalHC = pfHC + smHC + plHC;
                           return (<>
-                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pf > 0 ? TRADES[0].color : '#cbd5e1' }}>
-                              {h.pf > 0 ? (h.pf / pfHPP).toFixed(1) : '-'}
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: pfHC > 0 ? TRADES[0].color : '#cbd5e1' }}>
+                              {pfHC > 0.05 ? pfHC.toFixed(1) : '-'}
                             </td>
-                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.sm > 0 ? TRADES[1].color : '#cbd5e1' }}>
-                              {h.sm > 0 ? (h.sm / smHPP).toFixed(1) : '-'}
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: smHC > 0 ? TRADES[1].color : '#cbd5e1' }}>
+                              {smHC > 0.05 ? smHC.toFixed(1) : '-'}
                             </td>
-                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: h.pl > 0 ? TRADES[2].color : '#cbd5e1' }}>
-                              {h.pl > 0 ? (h.pl / plHPP).toFixed(1) : '-'}
+                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: plHC > 0 ? TRADES[2].color : '#cbd5e1' }}>
+                              {plHC > 0.05 ? plHC.toFixed(1) : '-'}
                             </td>
                             <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 600 }}>
-                              {totalHC.toFixed(1)}
+                              {totalHC > 0.05 ? totalHC.toFixed(1) : '-'}
                             </td>
                           </>);
                         })()}

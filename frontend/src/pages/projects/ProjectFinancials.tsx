@@ -196,6 +196,11 @@ const TRADE_META = [
   { key: 'admin' as const, label: 'Admin (70)', color: '#8b5cf6' },
 ];
 
+// Segment keys for each trade: [field, shop] (admin has only one segment)
+const TRADE_SEGS: Record<string, string[]> = {
+  pf: ['40', '45'], sm: ['30', '35'], pl: ['50', '55'], admin: ['70'],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ProjectFinancials: React.FC = () => {
@@ -358,31 +363,16 @@ const ProjectFinancials: React.FC = () => {
     const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50', admin: '70' };
     const TRADE_SHOP_SEG:  Record<string, string> = { pf: '45', sm: '35', pl: '55', admin: '70' };
 
-    // In cost_type mode, derive HPM per trade from segment weekly_hours so headcount
-    // matches the Labor Forecast page (which uses the same blended HPM calculation).
-    const tradeHpm: Record<string, number> = {};
-    TRADE_META.forEach(({ key }) => {
-      if (schedulingMode === 'cost_type') {
-        const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
-        const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
-        const fWH  = typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40;
-        const sWH  = typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40;
-        const t = tradeHours.find(h => h.key === key);
-        const rem = t?.remaining ?? 0;
-        const fieldFrac = rem > 0 && t ? t.remainingField / rem : 1;
-        const shopFrac  = rem > 0 && t ? t.remainingShop  / rem : 0;
-        const blended = (fieldFrac * fWH + shopFrac * sWH) * 4.33;
-        tradeHpm[key] = blended > 0 ? blended : HPP;
-      } else {
-        tradeHpm[key] = HPP;
-      }
-    });
+    // Per-segment headcount: tracks workers/month by segment key so each segment's
+    // weekly_hours (and thus HPM) is applied correctly rather than blending field+shop.
+    const monthlySegHC = new Map<string, Record<string, number>>();
 
     const resolveSegmentWindow = (segKey: string): { startOff: number; endOff: number; contour: ContourType } => {
       if (schedulingMode === 'cost_type') {
         const seg = segments.find((s: ScheduleSegment) => s.segment_key === segKey);
         if (seg?.start_date) {
-          const sOff = Math.max(0, dateToMonthOff(seg.start_date) ?? 0);
+          // Do NOT clamp to 0 — a past start keeps the correct contour position
+          const sOff = dateToMonthOff(seg.start_date) ?? 0;
           const eUserOff = dateToMonthOff(seg.end_date);
           const eOff = eUserOff != null
             ? Math.max(sOff + 1, Math.min(37, eUserOff + 1))
@@ -393,17 +383,23 @@ const ProjectFinancials: React.FC = () => {
       return { startOff: projectStartOff, endOff: projectEndOff, contour: projectContour };
     };
 
-    const distributeHours = (tradeKey: string, hours: number, rate: number, segKey: string,
+    const distributeHours = (
+      tradeKey: string, hours: number, rate: number,
+      segKey: string, segWeeklyHrs: number,
       monthlyHours: Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>,
       monthlyCosts: Map<string, { pf: number; sm: number; pl: number; admin: number; total: number }>,
-      now: Date) => {
+      now: Date
+    ) => {
       if (hours <= 0) return;
       const { startOff, endOff, contour } = resolveSegmentWindow(segKey);
       const remMonths = endOff - startOff;
       if (remMonths <= 0) return;
       const mults = laborContourMultipliers(remMonths, contour);
+      const segHPM = (segWeeklyHrs > 0 ? segWeeklyHrs : 40) * 4.33;
       for (let i = 0; i < remMonths; i++) {
-        const mk = format(addMonths(now, startOff + i), 'yyyy-MM');
+        const monthIdx = startOff + i;
+        if (monthIdx < 0) continue;  // segment started in the past — skip but keep contour shape
+        const mk = format(addMonths(now, monthIdx), 'yyyy-MM');
         const h = (hours / remMonths) * mults[i];
         const existing  = monthlyHours.get(mk) ?? { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
         const existingC = monthlyCosts.get(mk)  ?? { pf: 0, sm: 0, pl: 0, admin: 0, total: 0 };
@@ -413,6 +409,9 @@ const ProjectFinancials: React.FC = () => {
         existingC.total += h * rate;
         monthlyHours.set(mk, existing);
         monthlyCosts.set(mk, existingC);
+        const segMap = monthlySegHC.get(mk) ?? {};
+        segMap[segKey] = (segMap[segKey] ?? 0) + h / segHPM;
+        monthlySegHC.set(mk, segMap);
       }
     };
 
@@ -423,8 +422,12 @@ const ProjectFinancials: React.FC = () => {
     // Distribute field and shop hours for each trade into their respective segment windows
     TRADE_META.forEach(({ key }, idx) => {
       const t = tradeHours[idx];
-      distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], monthlyHours, monthlyCosts, now);
-      distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  monthlyHours, monthlyCosts, now);
+      const fSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_FIELD_SEG[key]);
+      const sSeg = segments.find((s: ScheduleSegment) => s.segment_key === TRADE_SHOP_SEG[key]);
+      const fWH = typeof fSeg?.weekly_hours === 'number' && fSeg.weekly_hours > 0 ? fSeg.weekly_hours : 40;
+      const sWH = typeof sSeg?.weekly_hours === 'number' && sSeg.weekly_hours > 0 ? sSeg.weekly_hours : 40;
+      distributeHours(key, t.remainingField, t.rate, TRADE_FIELD_SEG[key], fWH, monthlyHours, monthlyCosts, now);
+      distributeHours(key, t.remainingShop,  t.rate, TRADE_SHOP_SEG[key],  sWH, monthlyHours, monthlyCosts, now);
     });
 
     const prevWeekCost = costSummary.labor_totals?.prior_week_cost ?? 0;
@@ -456,7 +459,7 @@ const ProjectFinancials: React.FC = () => {
         if (yrH.total > 0) { monthlyHours.set(yrKey, yrH); monthlyCosts.set(yrKey, yrC); }
       }
     }
-    return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost, tradeHpm };
+    return { monthlyHours, monthlyCosts, columns, contour: projectContour, tradeHours, totalRem, pctComplete, prevWeekCost, monthlySegHC };
   }, [costSummary, c, project, segmentsData]);
 
   const captureSnapshotMutation = useMutation({
@@ -900,8 +903,9 @@ const ProjectFinancials: React.FC = () => {
                             <td style={{ ...tdStyle, color: '#64748b' }}>{t.rate > 0 ? fmtK(t.remaining * t.rate) : '—'}</td>
                             {laborForecastData.columns.map(col => {
                               if (col.isYear) return <td key={col.key} style={{ ...tdStyle, background: '#fafafa', color: '#cbd5e1' }}>—</td>;
+                              const segKeys = TRADE_SEGS[key] ?? [];
+                              const hc = segKeys.reduce((sum, sk) => sum + (laborForecastData.monthlySegHC.get(col.key)?.[sk] ?? 0), 0);
                               const hrs = laborForecastData.monthlyHours.get(col.key)?.[key] ?? 0;
-                              const hc = hrs / (laborForecastData.tradeHpm[key] ?? HPP);
                               return (
                                 <td key={col.key} title={hc >= 0.05 ? `${fmtNum(hrs)} hrs` : undefined}
                                   style={{ ...tdStyle, color: hc >= 0.05 ? color : '#cbd5e1', fontWeight: hc >= 0.05 ? 600 : 400 }}>
@@ -940,8 +944,8 @@ const ProjectFinancials: React.FC = () => {
                         if (col.isYear) return <td key={col.key} style={{ ...tfStyle, background: '#f4f6f9', color: '#cbd5e1' }}>—</td>;
                         const h = laborForecastData.monthlyHours.get(col.key);
                         const hc = TRADE_META.reduce((sum, { key: tk }) => {
-                          const tHrs = h?.[tk as 'pf' | 'sm' | 'pl' | 'admin'] ?? 0;
-                          return sum + tHrs / (laborForecastData.tradeHpm[tk] ?? HPP);
+                          return sum + (TRADE_SEGS[tk] ?? []).reduce((s2, sk) =>
+                            s2 + (laborForecastData.monthlySegHC.get(col.key)?.[sk] ?? 0), 0);
                         }, 0);
                         return (
                           <td key={col.key} title={hc >= 0.05 ? `${fmtNum(h?.total ?? 0)} hrs` : undefined}

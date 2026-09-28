@@ -116,18 +116,7 @@ function computeLaborProjection(contract, sfRows, segments, schedulingMode, now)
     const fieldFrac = estH > 0 ? fieldH / estH : 1;
     const shopFrac  = estH > 0 ? shopH / estH : 0;
 
-    // Blended HPM from segment weekly_hours in cost_type mode
-    let hpp = DEFAULT_HPP;
-    if (schedulingMode === 'cost_type' && segments.length > 0) {
-      const fSeg = segments.find(s => s.segment_key === TRADE_FIELD_SEG[trade]);
-      const sSeg = segments.find(s => s.segment_key === TRADE_SHOP_SEG[trade]);
-      const fWH  = (fSeg?.weekly_hours > 0) ? fSeg.weekly_hours : 40;
-      const sWH  = (sSeg?.weekly_hours > 0) ? sSeg.weekly_hours : 40;
-      const blended = (fieldFrac * fWH + shopFrac * sWH) * WEEKS_PER_MONTH;
-      if (blended > 0) hpp = blended;
-    }
-
-    tradeData[trade] = { remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac, hpp };
+    tradeData[trade] = { remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac };
   }
 
   const totalRemaining = TRADES.reduce((s, t) => s + tradeData[t].remaining, 0);
@@ -142,31 +131,42 @@ function computeLaborProjection(contract, sfRows, segments, schedulingMode, now)
   const pEndRaw = monthOffset(contract.user_adjusted_end_date, now);
   const pEnd = pEndRaw != null ? Math.max(pStart + 1, Math.min(37, pEndRaw + 1)) : pStart + 18;
 
+  // Per-segment headcount: segment key → month index → workers
+  const segHC = new Map(); // Map<segKey, Map<monthIdx, workers>>
+
   const monthlyHours = new Map();
   const distribute = (trade, hours, segKey) => {
     if (hours <= 0) return;
     let startOff = pStart, endOff = pEnd, contour = projectContour;
+    let segWeeklyHrs = 40;
     if (schedulingMode === 'cost_type') {
       const seg = segments.find(s => s.segment_key === segKey);
       if (seg?.start_date) {
-        const sOff = Math.max(0, monthOffset(seg.start_date, now) ?? 0);
+        // Do NOT clamp to 0 — a past start keeps the correct contour position
+        const sOff = monthOffset(seg.start_date, now) ?? 0;
         const eRaw = monthOffset(seg.end_date, now);
         const eOff = eRaw != null ? Math.max(sOff + 1, Math.min(37, eRaw + 1)) : sOff + 18;
         startOff = sOff; endOff = eOff;
         contour = seg.contour_type || projectContour;
+        if (seg.weekly_hours > 0) segWeeklyHrs = seg.weekly_hours;
       }
     }
     const remMonths = endOff - startOff;
     if (remMonths <= 0) return;
     const mults = getContourMultipliers(remMonths, contour);
+    const segHPM = segWeeklyHrs * WEEKS_PER_MONTH;
+    if (!segHC.has(segKey)) segHC.set(segKey, new Map());
+    const segMonthMap = segHC.get(segKey);
     for (let i = 0; i < remMonths; i++) {
       const idx = startOff + i;
+      if (idx < 0) continue;  // segment started in past — skip but keep contour shape
       if (idx > 23) break;
       const h = (hours / remMonths) * mults[i];
       const existing = monthlyHours.get(idx) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
       existing[trade] = (existing[trade] ?? 0) + h;
       existing.total += h;
       monthlyHours.set(idx, existing);
+      segMonthMap.set(idx, (segMonthMap.get(idx) ?? 0) + h / segHPM);
     }
   };
 
@@ -176,19 +176,27 @@ function computeLaborProjection(contract, sfRows, segments, schedulingMode, now)
     distribute(trade, t.remainingShop,  TRADE_SHOP_SEG[trade]);
   }
 
+  const getSegHC = (idx) => {
+    let total = 0;
+    for (const [, monthMap] of segHC) total += monthMap.get(idx) ?? 0;
+    return total;
+  };
+  const getTradeSegHC = (trade, idx) => {
+    const fKey = TRADE_FIELD_SEG[trade];
+    const sKey = TRADE_SHOP_SEG[trade];
+    return (segHC.get(fKey)?.get(idx) ?? 0) + (segHC.get(sKey)?.get(idx) ?? 0);
+  };
+
   const monthly = [];
   for (let i = 0; i < 6; i++) {
-    const h = monthlyHours.get(i) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     monthly.push({
       label,
-      pf:    h.pf  / (tradeData.pf?.hpp  ?? DEFAULT_HPP),
-      sm:    h.sm  / (tradeData.sm?.hpp  ?? DEFAULT_HPP),
-      pl:    h.pl  / (tradeData.pl?.hpp  ?? DEFAULT_HPP),
-      total: h.pf  / (tradeData.pf?.hpp  ?? DEFAULT_HPP)
-           + h.sm  / (tradeData.sm?.hpp  ?? DEFAULT_HPP)
-           + h.pl  / (tradeData.pl?.hpp  ?? DEFAULT_HPP),
+      pf:    getTradeSegHC('pf', i),
+      sm:    getTradeSegHC('sm', i),
+      pl:    getTradeSegHC('pl', i),
+      total: getSegHC(i),
     });
   }
 
