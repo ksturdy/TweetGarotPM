@@ -38,7 +38,7 @@ async function upsertSegment(projectId, tenantId, segmentKey, label, startDate, 
        label        = EXCLUDED.label,
        start_date   = EXCLUDED.start_date,
        end_date     = EXCLUDED.end_date,
-       contour_type = COALESCE(EXCLUDED.contour_type, project_schedule_segments.contour_type, 'flat'),
+       contour_type = COALESCE($7, project_schedule_segments.contour_type, 'flat'),
        weekly_hours = COALESCE(EXCLUDED.weekly_hours, project_schedule_segments.weekly_hours),
        updated_at   = NOW()
      RETURNING segment_key, label, start_date, end_date, contour_type, weekly_hours`,
