@@ -248,6 +248,65 @@ function generatePMSection(pm, index) {
        </div>`
     : '';
 
+  // Labor forecast section — only jobs with remaining hours
+  const laborJobs = pm.jobs.filter(j => j.remainingLaborHrs > 0).slice(0, 12);
+  const fmtHC = (n) => n < 0.05 ? '—' : n.toFixed(1);
+  const fmtHrs = (n) => n < 500 ? '—' : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1_000)}K`;
+  const MODE_BADGE = {
+    cost_type: '<span style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:3px;font-size:6pt;padding:1px 4px;font-weight:600;">C</span>',
+    phase:     '<span style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:3px;font-size:6pt;padding:1px 4px;font-weight:600;">P</span>',
+    summary:   '<span style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;border-radius:3px;font-size:6pt;padding:1px 4px;font-weight:600;">S</span>',
+  };
+
+  // Collect month labels from first job that has monthly data
+  const monthLabels = laborJobs.find(j => j.laborMonthly?.length)?.laborMonthly?.map(m => m.label) ?? [];
+
+  const laborSection = laborJobs.length > 0 ? `
+    <div style="margin-top:8px; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden;">
+      <div style="background:#f1f5f9; padding:5px 10px; font-size:7.5pt; font-weight:700; color:#1e293b; text-transform:uppercase; letter-spacing:0.03em;">
+        Labor Forecast &nbsp;<span style="font-weight:400;color:#64748b;font-size:6.5pt;text-transform:none;">(C = Cost Type &nbsp;·&nbsp; P = Phase &nbsp;·&nbsp; S = Summary)</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:7pt;">
+        <thead>
+          <tr style="background:#f8fafc;">
+            <th style="padding:3px 6px;text-align:left;color:#475569;font-weight:600;border-bottom:1px solid #e2e8f0;white-space:nowrap;">Contract</th>
+            <th style="padding:3px 4px;text-align:center;color:#475569;font-weight:600;border-bottom:1px solid #e2e8f0;">Mode</th>
+            <th style="padding:3px 6px;text-align:right;color:#475569;font-weight:600;border-bottom:1px solid #e2e8f0;white-space:nowrap;">Rem Hrs</th>
+            ${monthLabels.map(l => `<th style="padding:3px 6px;text-align:right;color:#475569;font-weight:600;border-bottom:1px solid #e2e8f0;white-space:nowrap;">${esc(l)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${laborJobs.map((j, i) => {
+            const bg = i % 2 === 0 ? '#fff' : '#f8fafc';
+            const badge = MODE_BADGE[j.schedulingMode] ?? MODE_BADGE.summary;
+            const monthCells = (j.laborMonthly ?? []).map(m =>
+              `<td style="padding:3px 6px;text-align:right;color:${m.total >= 0.05 ? '#1e293b' : '#cbd5e1'};font-weight:${m.total >= 0.05 ? 600 : 400};">${fmtHC(m.total)}</td>`
+            ).join('');
+            return `
+              <tr style="background:${bg};">
+                <td style="padding:3px 6px;white-space:nowrap;">
+                  <span style="font-weight:600;color:#0f172a;">${esc(j.contractNumber)}</span>
+                  <span style="color:#64748b;margin-left:4px;font-size:6.5pt;">${esc((j.description || '').slice(0, 40))}${(j.description || '').length > 40 ? '…' : ''}</span>
+                </td>
+                <td style="padding:3px 4px;text-align:center;">${badge}</td>
+                <td style="padding:3px 6px;text-align:right;color:#3b82f6;font-weight:600;">${fmtHrs(j.remainingLaborHrs)}</td>
+                ${monthCells}
+              </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f1f5f9;border-top:1px solid #e2e8f0;">
+            <td style="padding:3px 6px;font-weight:700;color:#1e293b;" colspan="2">Total</td>
+            <td style="padding:3px 6px;text-align:right;font-weight:700;color:#3b82f6;">${fmtHrs(laborJobs.reduce((s, j) => s + j.remainingLaborHrs, 0))}</td>
+            ${monthLabels.map((_, mi) => {
+              const tot = laborJobs.reduce((s, j) => s + (j.laborMonthly?.[mi]?.total ?? 0), 0);
+              return `<td style="padding:3px 6px;text-align:right;font-weight:700;color:${tot >= 0.05 ? '#1e293b' : '#cbd5e1'};">${fmtHC(tot)}</td>`;
+            }).join('')}
+          </tr>
+        </tfoot>
+      </table>
+    </div>` : '';
+
   return `
     <div style="${index > 0 ? 'page-break-before: always;' : ''} margin-bottom:12px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid ${m.border}; padding-bottom:6px; margin-bottom:10px;">
@@ -315,6 +374,7 @@ function generatePMSection(pm, index) {
       </table>
 
       ${issuesList}
+      ${laborSection}
     </div>
   `;
 }

@@ -5,7 +5,9 @@ const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { tenantContext } = require('../middleware/tenant');
 const VistaData = require('../models/VistaData');
+const ProjectScheduleSegment = require('../models/ProjectScheduleSegment');
 const { generatePMReportPdfBuffer } = require('../utils/pmReportPdfBuffer');
+const { getContourMultipliers, autoContour } = require('../utils/contourMultipliers');
 
 router.use(authenticate);
 router.use(tenantContext);
@@ -79,6 +81,120 @@ function classifyJobHealth(c) {
   };
 }
 
+const TRADE_FIELD_SEG = { pf: '40', sm: '30', pl: '50' };
+const TRADE_SHOP_SEG  = { pf: '45', sm: '35', pl: '55' };
+const TRADES = ['pf', 'sm', 'pl'];
+const WEEKS_PER_MONTH = 4.33;
+const DEFAULT_HPP = 173;
+
+function monthOffset(dateStr, now) {
+  if (!dateStr) return null;
+  const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const nowStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const dStart   = new Date(d.getFullYear(), d.getMonth(), 1);
+  return Math.round((dStart - nowStart) / (1000 * 60 * 60 * 24 * 30.44));
+}
+
+function computeLaborProjection(contract, sfRows, segments, schedulingMode, now) {
+  const tradeData = {};
+  for (const trade of TRADES) {
+    const rows = sfRows.filter(r => r.trade === trade);
+    const estH  = rows.reduce((s, r) => s + num(r.est_hours), 0);
+    const jtdH  = rows.reduce((s, r) => s + num(r.jtd_hours), 0);
+    const estC  = rows.reduce((s, r) => s + num(r.est_cost), 0);
+    const jtdC  = rows.reduce((s, r) => s + num(r.jtd_cost), 0);
+    const projC = rows.reduce((s, r) => s + num(r.projected_cost), 0);
+
+    const jtdRateReliable = jtdH > 0 && jtdH >= estH * 0.05;
+    const rate = jtdRateReliable ? jtdC / jtdH : estH > 0 ? estC / estH : 0;
+    const projH = rate > 0 ? projC / rate : estH;
+    const remaining = Math.max(0, projH - jtdH);
+
+    const fieldH = rows.filter(r => r.location === 'field').reduce((s, r) => s + num(r.est_hours), 0);
+    const shopH  = rows.filter(r => r.location === 'shop').reduce((s, r) => s + num(r.est_hours), 0);
+    const fieldFrac = estH > 0 ? fieldH / estH : 1;
+    const shopFrac  = estH > 0 ? shopH / estH : 0;
+
+    // Blended HPM from segment weekly_hours in cost_type mode
+    let hpp = DEFAULT_HPP;
+    if (schedulingMode === 'cost_type' && segments.length > 0) {
+      const fSeg = segments.find(s => s.segment_key === TRADE_FIELD_SEG[trade]);
+      const sSeg = segments.find(s => s.segment_key === TRADE_SHOP_SEG[trade]);
+      const fWH  = (fSeg?.weekly_hours > 0) ? fSeg.weekly_hours : 40;
+      const sWH  = (sSeg?.weekly_hours > 0) ? sSeg.weekly_hours : 40;
+      const blended = (fieldFrac * fWH + shopFrac * sWH) * WEEKS_PER_MONTH;
+      if (blended > 0) hpp = blended;
+    }
+
+    tradeData[trade] = { remaining, remainingField: remaining * fieldFrac, remainingShop: remaining * shopFrac, hpp };
+  }
+
+  const totalRemaining = TRADES.reduce((s, t) => s + tradeData[t].remaining, 0);
+  if (totalRemaining <= 0) return { remainingHrs: 0, monthly: [] };
+
+  const earned = num(contract.earned_revenue);
+  const proj   = num(contract.projected_revenue);
+  const pctComplete = proj > 0 ? (earned / proj) * 100 : 0;
+  const projectContour = contract.user_selected_contour || autoContour(pctComplete);
+
+  const pStart = Math.max(0, monthOffset(contract.user_adjusted_start_date, now) ?? 0);
+  const pEndRaw = monthOffset(contract.user_adjusted_end_date, now);
+  const pEnd = pEndRaw != null ? Math.max(pStart + 1, Math.min(37, pEndRaw + 1)) : pStart + 18;
+
+  const monthlyHours = new Map();
+  const distribute = (trade, hours, segKey) => {
+    if (hours <= 0) return;
+    let startOff = pStart, endOff = pEnd, contour = projectContour;
+    if (schedulingMode === 'cost_type') {
+      const seg = segments.find(s => s.segment_key === segKey);
+      if (seg?.start_date) {
+        const sOff = Math.max(0, monthOffset(seg.start_date, now) ?? 0);
+        const eRaw = monthOffset(seg.end_date, now);
+        const eOff = eRaw != null ? Math.max(sOff + 1, Math.min(37, eRaw + 1)) : sOff + 18;
+        startOff = sOff; endOff = eOff;
+        contour = seg.contour_type || projectContour;
+      }
+    }
+    const remMonths = endOff - startOff;
+    if (remMonths <= 0) return;
+    const mults = getContourMultipliers(remMonths, contour);
+    for (let i = 0; i < remMonths; i++) {
+      const idx = startOff + i;
+      if (idx > 23) break;
+      const h = (hours / remMonths) * mults[i];
+      const existing = monthlyHours.get(idx) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+      existing[trade] = (existing[trade] ?? 0) + h;
+      existing.total += h;
+      monthlyHours.set(idx, existing);
+    }
+  };
+
+  for (const trade of TRADES) {
+    const t = tradeData[trade];
+    distribute(trade, t.remainingField, TRADE_FIELD_SEG[trade]);
+    distribute(trade, t.remainingShop,  TRADE_SHOP_SEG[trade]);
+  }
+
+  const monthly = [];
+  for (let i = 0; i < 6; i++) {
+    const h = monthlyHours.get(i) ?? { pf: 0, sm: 0, pl: 0, total: 0 };
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    monthly.push({
+      label,
+      pf:    h.pf  / (tradeData.pf?.hpp  ?? DEFAULT_HPP),
+      sm:    h.sm  / (tradeData.sm?.hpp  ?? DEFAULT_HPP),
+      pl:    h.pl  / (tradeData.pl?.hpp  ?? DEFAULT_HPP),
+      total: h.pf  / (tradeData.pf?.hpp  ?? DEFAULT_HPP)
+           + h.sm  / (tradeData.sm?.hpp  ?? DEFAULT_HPP)
+           + h.pl  / (tradeData.pl?.hpp  ?? DEFAULT_HPP),
+    });
+  }
+
+  return { remainingHrs: totalRemaining, monthly };
+}
+
 async function loadSnapshotTrends(projectIds, tenantId) {
   if (!projectIds.length) return new Map();
   const result = await db.query(
@@ -136,7 +252,7 @@ function buildTrend(snapshots) {
   };
 }
 
-function buildPMGroups(contracts, snapshotTrends) {
+function buildPMGroups(contracts, snapshotTrends, laborByContract) {
   const byPM = new Map();
 
   for (const c of contracts) {
@@ -208,6 +324,10 @@ function buildPMGroups(contracts, snapshotTrends) {
 
       totalHoursEstimate: num(c.total_hours_estimate),
       totalHoursJtd: num(c.total_hours_jtd),
+
+      schedulingMode: laborByContract?.get(c.contract_number)?.schedulingMode ?? 'summary',
+      remainingLaborHrs: laborByContract?.get(c.contract_number)?.remainingHrs ?? 0,
+      laborMonthly: laborByContract?.get(c.contract_number)?.monthly ?? [],
 
       health: health.health,
       healthScore: health.score,
@@ -288,9 +408,62 @@ async function buildPMReportData(tenantId, filters = {}) {
     .filter(c => isActive(c) && c.linked_project_id)
     .map(c => c.linked_project_id);
   const uniqueIds = Array.from(new Set(linkedProjectIds));
-  const snapshotTrends = await loadSnapshotTrends(uniqueIds, tenantId);
 
-  let pms = buildPMGroups(contracts, snapshotTrends);
+  // Load snapshot trends, shop-field hours, and project scheduling modes in parallel
+  const [snapshotTrends, sfRows, projectModesResult] = await Promise.all([
+    loadSnapshotTrends(uniqueIds, tenantId),
+    VistaData.getShopFieldHoursByContract(tenantId),
+    uniqueIds.length > 0
+      ? db.query(
+          `SELECT id, scheduling_mode, user_adjusted_start_date, user_adjusted_end_date, user_selected_contour
+             FROM projects WHERE id = ANY($1::int[]) AND tenant_id = $2`,
+          [uniqueIds, tenantId]
+        )
+      : Promise.resolve({ rows: [] }),
+  ]);
+
+  const projectInfo = new Map(projectModesResult.rows.map(r => [r.id, r]));
+
+  // Index shop-field rows by contract_number
+  const sfByContract = new Map();
+  for (const row of sfRows) {
+    if (!sfByContract.has(row.contract_number)) sfByContract.set(row.contract_number, []);
+    sfByContract.get(row.contract_number).push(row);
+  }
+
+  // Load segments for cost_type projects only
+  const costTypeProjectIds = [...new Set(
+    contracts
+      .filter(c => isActive(c) && c.linked_project_id &&
+        (projectInfo.get(c.linked_project_id)?.scheduling_mode ?? 'summary') === 'cost_type')
+      .map(c => c.linked_project_id)
+  )];
+  const segmentsByProject = costTypeProjectIds.length > 0
+    ? await ProjectScheduleSegment.getBulkByProjects(costTypeProjectIds, tenantId)
+    : {};
+
+  // Compute labor projections per contract
+  const now = new Date();
+  const laborByContract = new Map();
+  for (const c of contracts) {
+    if (!isActive(c)) continue;
+    const info = projectInfo.get(c.linked_project_id) ?? {};
+    const schedulingMode = info.scheduling_mode ?? 'summary';
+    const enrichedContract = {
+      ...c,
+      user_adjusted_start_date: info.user_adjusted_start_date ?? c.start_date ?? null,
+      user_adjusted_end_date:   info.user_adjusted_end_date   ?? c.end_date   ?? null,
+      user_selected_contour:    info.user_selected_contour    ?? null,
+    };
+    const contractSfRows = sfByContract.get(c.contract_number) ?? [];
+    const segments = schedulingMode === 'cost_type' && c.linked_project_id
+      ? (segmentsByProject[c.linked_project_id] ?? [])
+      : [];
+    const labor = computeLaborProjection(enrichedContract, contractSfRows, segments, schedulingMode, now);
+    laborByContract.set(c.contract_number, { ...labor, schedulingMode });
+  }
+
+  let pms = buildPMGroups(contracts, snapshotTrends, laborByContract);
 
   if (Array.isArray(filters.pm_keys) && filters.pm_keys.length > 0) {
     const allowed = new Set(filters.pm_keys);
