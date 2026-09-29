@@ -879,7 +879,13 @@
 
 @media (max-width: 480px) {
   .kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kpi-card {
+    padding: 0.5rem 0.625rem;
+  }
+  .kpi-value {
+    font-size: 0.875rem;
   }
 }
 

@@ -951,11 +951,15 @@
 
   .modal-tabs {
     padding: 0 1rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .tab {
     padding: 0.75rem 1rem;
     font-size: 0.9375rem;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .modal-content {
@@ -975,7 +979,8 @@
 
   .opportunity-modal .form-row,
   .opportunity-modal .form-row-3,
-  .opportunity-modal .form-row-4 {
+  .opportunity-modal .form-row-4,
+  .opportunity-modal .form-row-5 {
     grid-template-columns: 1fr;
   }
 

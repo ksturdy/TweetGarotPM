@@ -992,7 +992,9 @@
 
   .sales-header-actions {
     width: 100%;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .sales-view-toggle {
@@ -1004,11 +1006,44 @@
   }
 
   .sales-kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sales-charts-grid {
+    display: none;
   }
 
   .sales-pipeline-board {
     grid-template-columns: 1fr;
+  }
+
+  .sales-table-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .sales-table-title {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .sales-search-box {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sales-search-box input {
+    width: auto;
+    flex: 1;
+    min-width: 60px;
+  }
+
+  .sales-table-controls {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .sales-table-scroll-wrapper {
