@@ -393,7 +393,7 @@ const TeamDetailPage: React.FC = () => {
           const colors: Record<string, { bg: string; text: string; border: string }> = {
             'Open':        { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
             'Soft-Closed': { bg: '#fef9c3', text: '#a16207', border: '#fde047' },
-            'Hard-Closed': { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },
+            'Hard-Closed': { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd' },
           };
           const col = colors[s];
           return (
