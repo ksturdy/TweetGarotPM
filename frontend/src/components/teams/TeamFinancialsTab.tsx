@@ -161,7 +161,7 @@ const TeamFinancialsTab: React.FC<Props> = ({ teamId, teamColor, selectedStatuse
   const lineOpts = (yLabel: string, yFmt: (v: any) => string) => ({
     responsive: true,
     maintainAspectRatio: false,
-    interaction: { mode: 'index' as const, intersect: false },
+    interaction: { mode: 'nearest' as const, intersect: true },
     plugins: {
       legend: { position: 'bottom' as const, labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } },
       tooltip: { callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${ctx.raw != null ? yFmt(ctx.raw) : '—'}` } },
@@ -202,7 +202,7 @@ const TeamFinancialsTab: React.FC<Props> = ({ teamId, teamColor, selectedStatuse
 
   const yearlyChartOptions = {
     responsive: true,
-    interaction: { mode: 'index' as const, intersect: false },
+    interaction: { mode: 'nearest' as const, intersect: true },
     plugins: {
       legend: { position: 'top' as const, labels: { font: { size: 11 } } },
       tooltip: {
