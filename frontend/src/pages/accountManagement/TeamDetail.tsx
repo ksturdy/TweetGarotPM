@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams';
+import { projectsApi, BacklogSnapshot } from '../../services/projects';
 import { employeesApi, AssignableEmployee } from '../../services/employees';
 import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
@@ -103,6 +104,14 @@ const TeamDetailPage: React.FC = () => {
       return response.data.data;
     },
     enabled: !!teamId,
+  });
+
+  // Fetch backlog 6-month snapshot scoped to team members' projects
+  const memberEmployeeIds = members.map(m => m.employee_id);
+  const { data: backlogSnapshot } = useQuery<BacklogSnapshot>({
+    queryKey: ['teams', teamId, 'backlog-snapshot', memberEmployeeIds],
+    queryFn: () => projectsApi.getBacklogSnapshot({ managerIds: memberEmployeeIds }),
+    enabled: !!teamId && memberEmployeeIds.length > 0,
   });
 
   // Fetch team opportunities (filtered)
@@ -393,10 +402,23 @@ const TeamDetailPage: React.FC = () => {
             label: 'Opportunities',
             value: String(dashboard?.opportunities.total || 0),
             color: '#3b82f6',
-            sub: `${formatCurrencyShort(dashboard?.opportunities.total_value || 0)} pipeline · ${formatCurrencyShort(dashboard?.opportunities.weighted_value || 0)} weighted`,
-            subColor: '#10b981',
+            sub: 'active',
+            subColor: '#6b7280',
             onClick: undefined as (() => void) | undefined,
             valueFontSize: '1.4rem',
+          },
+          {
+            label: 'Opp Value',
+            value: formatCurrencyShort(dashboard?.opportunities.total_value || 0),
+            color: '#10b981',
+            sub: '',
+            subColor: '#10b981',
+            subLines: [
+              { text: `${formatCurrencyShort(dashboard?.opportunities.weighted_value || 0)} weighted`, color: '#6b7280' },
+            ],
+            subLineSize: '1.1rem',
+            subLineDivider: true,
+            onClick: undefined as (() => void) | undefined,
           },
           {
             label: 'Projects',
@@ -418,14 +440,26 @@ const TeamDetailPage: React.FC = () => {
             label: 'Backlog',
             value: formatCurrencyShort(dashboard?.projects.total_backlog || 0),
             color: '#002356',
-            sub: `${dashboard?.projects.active || 0} active projects`,
-            subColor: '#f59e0b',
+            sub: backlogSnapshot?.weighted_gm_pct != null
+              ? `${Number(backlogSnapshot.weighted_gm_pct).toFixed(1)}% GM`
+              : '-',
+            subColor: '#10b981',
+            onClick: undefined as (() => void) | undefined,
+          },
+          {
+            label: 'Backlog 6 Mo Out',
+            value: backlogSnapshot ? formatCurrencyShort(backlogSnapshot.backlog_6mo) : '-',
+            color: '#002356',
+            sub: backlogSnapshot?.backlog_6mo_gm_pct != null
+              ? `${Number(backlogSnapshot.backlog_6mo_gm_pct).toFixed(1)}% GM`
+              : 'projected',
+            subColor: '#10b981',
             onClick: undefined as (() => void) | undefined,
           },
           {
             label: 'Gross Margin',
-            value: dashboard?.projects.avg_gross_margin != null
-              ? `${Number(dashboard.projects.avg_gross_margin).toFixed(1)}%`
+            value: backlogSnapshot?.weighted_gm_pct != null
+              ? `${Number(backlogSnapshot.weighted_gm_pct).toFixed(1)}%`
               : '-',
             color: '#8b5cf6',
             sub: 'weighted avg',
@@ -448,13 +482,15 @@ const TeamDetailPage: React.FC = () => {
             label: 'Buyout Remaining',
             value: formatCurrencyShort(dashboard?.buyout?.total_buyout_remaining || 0, 2),
             color: (dashboard?.buyout?.total_buyout_remaining || 0) >= 0 ? '#d97706' : '#e11d48',
-            sub: `${dashboard?.buyout?.total_est_cost
-              ? Math.round(((dashboard?.buyout?.total_committed || 0) / dashboard.buyout.total_est_cost) * 100)
-              : 0}% bought out · ${dashboard?.buyout?.project_count || 0} jobs · ≥10%`,
+            sub: '',
             subColor: '#8b5cf6',
+            subLines: [
+              { text: `${dashboard?.buyout?.total_est_cost ? Math.round(((dashboard?.buyout?.total_committed || 0) / dashboard.buyout.total_est_cost) * 100) : 0}% bought out · ${dashboard?.buyout?.project_count || 0} jobs`, color: '#8b5cf6' },
+              { text: '≥10% complete', color: '#6b7280' },
+            ],
             onClick: () => navigate(`/reports/buyout-metric?team=${teamId}`),
           },
-        ] as { label: string; value: string; color: string; sub: string; subColor: string; onClick: (() => void) | undefined; valueFontSize?: string }[]).map((kpi, i) => (
+        ] as { label: string; value: string; color: string; sub: string; subColor: string; subLines?: { text: string; color: string }[]; subLineSize?: string; subLineDivider?: boolean; onClick: (() => void) | undefined; valueFontSize?: string }[]).map((kpi, i) => (
           <React.Fragment key={i}>
             {i > 0 && <div style={{ width: '1px', background: '#e2e8f0', flexShrink: 0, alignSelf: 'stretch' }} />}
             <div
@@ -477,9 +513,20 @@ const TeamDetailPage: React.FC = () => {
               <div style={{ fontSize: kpi.valueFontSize || '1.1rem', fontWeight: 700, color: kpi.color, lineHeight: 1.2 }}>
                 {kpi.value}
               </div>
-              <div style={{ fontSize: '0.65rem', color: kpi.subColor, lineHeight: 1.3 }}>
-                {kpi.sub}
-              </div>
+              {kpi.subLines ? (
+                <>
+                  {kpi.subLineDivider && <div style={{ borderTop: '1px solid #e2e8f0', margin: '0.2rem 0.75rem' }} />}
+                  {kpi.subLines.map((line, li) => (
+                    <div key={li} style={{ fontSize: kpi.subLineSize || '0.8rem', fontWeight: 600, color: line.color, lineHeight: 1.4 }}>
+                      {line.text}
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div style={{ fontSize: '0.65rem', color: kpi.subColor, lineHeight: 1.3 }}>
+                  {kpi.sub}
+                </div>
+              )}
             </div>
           </React.Fragment>
         ))}

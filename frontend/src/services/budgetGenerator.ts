@@ -126,12 +126,18 @@ export const budgetGeneratorService = {
     return response.data;
   },
 
+  async getProjectDetail(id: number, source: 'historical' | 'project'): Promise<any> {
+    const response = await api.get(`/budget-generator/project-detail/${id}?source=${source}`);
+    return response.data;
+  },
+
   async findSimilar(criteria: {
     market?: string;
     buildingType?: string;
     projectType?: string[];
     bidType?: string;
     sqft?: number;
+    projectStatuses?: string[];
   }): Promise<SimilarProjectsResponse> {
     const response = await api.post<SimilarProjectsResponse>('/budget-generator/similar', criteria);
     return response.data;
@@ -147,6 +153,7 @@ export const budgetGeneratorService = {
     scope?: string;
     location?: string;
     selectedProjectIds?: number[];
+    projectStatuses?: string[];
   }): Promise<BudgetGeneratorResponse> {
     const response = await api.post<BudgetGeneratorResponse>('/budget-generator/generate', params);
     return response.data;
@@ -162,9 +169,10 @@ export const budgetGeneratorService = {
     scope?: string;
     location?: string;
     selectedProjectIds?: number[];
+    projectStatuses?: string[];
     narrativeFile: File;
   }): Promise<BudgetGeneratorResponse> {
-    const { narrativeFile, projectType, selectedProjectIds, ...rest } = params;
+    const { narrativeFile, projectType, selectedProjectIds, projectStatuses, ...rest } = params;
     const formData = new FormData();
     formData.append('narrative', narrativeFile);
     Object.entries(rest).forEach(([k, v]) => {
@@ -172,6 +180,7 @@ export const budgetGeneratorService = {
     });
     if (projectType) projectType.forEach((t) => formData.append('projectType', t));
     if (selectedProjectIds) selectedProjectIds.forEach((id) => formData.append('selectedProjectIds', String(id)));
+    if (projectStatuses) projectStatuses.forEach((s) => formData.append('projectStatuses', s));
 
     const response = await api.post<BudgetGeneratorResponse>(
       '/budget-generator/generate',

@@ -50,6 +50,7 @@ const BudgetGenerator: React.FC = () => {
   const [buildingType, setBuildingType] = useState('');
   const [projectTypes, setProjectTypes] = useState<string[]>([]);
   const [bidType, setBidType] = useState('');
+  const [projectStatuses, setProjectStatuses] = useState<string[]>(['Open', 'Soft-Closed', 'Hard-Closed']);
   const [location, setLocation] = useState('');
   const [sqft, setSqft] = useState('');
   const [scope, setScope] = useState('');
@@ -71,6 +72,10 @@ const BudgetGenerator: React.FC = () => {
   const [previewAverages, setPreviewAverages] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
+
+  // Project detail modal state
+  const [detailProject, setDetailProject] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Results state
   const [budget, setBudget] = useState<GeneratedBudget | null>(null);
@@ -227,7 +232,7 @@ const BudgetGenerator: React.FC = () => {
       setPreviewProjects([]);
       setPreviewAverages(null);
     }
-  }, [market, buildingType, projectTypes, bidType, sqft]);
+  }, [market, buildingType, projectTypes, bidType, sqft, projectStatuses]);
 
   const loadPreview = async () => {
     try {
@@ -237,7 +242,8 @@ const BudgetGenerator: React.FC = () => {
         buildingType: buildingType || undefined,
         projectType: projectTypes.length > 0 ? projectTypes : undefined,
         bidType: bidType || undefined,
-        sqft: sqft ? parseFloat(sqft) : undefined
+        sqft: sqft ? parseFloat(sqft) : undefined,
+        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined
       });
       setPreviewProjects(result.similarProjects);
       setPreviewAverages(result.averages);
@@ -250,6 +256,20 @@ const BudgetGenerator: React.FC = () => {
       console.error('Error loading preview:', err);
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const handleOpenDetail = async (e: React.MouseEvent, id: number, source: 'historical' | 'project') => {
+    e.stopPropagation();
+    setDetailLoading(true);
+    setDetailProject(null);
+    try {
+      const data = await budgetGeneratorService.getProjectDetail(id, source);
+      setDetailProject({ ...data, source });
+    } catch (err) {
+      console.error('Error fetching project detail:', err);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -422,7 +442,8 @@ const BudgetGenerator: React.FC = () => {
         sqft: parseFloat(sqft),
         scope: scope || undefined,
         location: location || undefined,
-        selectedProjectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined
+        selectedProjectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
+        projectStatuses: projectStatuses.length > 0 ? projectStatuses : undefined
       };
 
       const result = narrativeFile
@@ -1045,6 +1066,44 @@ const BudgetGenerator: React.FC = () => {
               </div>
 
               <div className="form-group">
+                <label className="form-label">
+                  Live Project Status
+                  {projectStatuses.length < 3 && (
+                    <span style={{ fontWeight: 400, marginLeft: '8px', color: '#6b7280', fontSize: '13px' }}>
+                      ({projectStatuses.length} selected)
+                    </span>
+                  )}
+                </label>
+                <div style={{
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  padding: '6px 8px',
+                  backgroundColor: '#fff'
+                }}>
+                  {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(status => (
+                    <label key={status} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '3px 0',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={projectStatuses.includes(status)}
+                        onChange={() => setProjectStatuses(prev =>
+                          prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+                        )}
+                      />
+                      {status}
+                    </label>
+                  ))}
+                </div>
+                <p style={{ fontSize: '12px', color: '#9ca3af', margin: '4px 0 0' }}>Filters live projects included in comparison</p>
+              </div>
+
+              <div className="form-group">
                 <label className="form-label">Location</label>
                 <input
                   type="text"
@@ -1058,12 +1117,15 @@ const BudgetGenerator: React.FC = () => {
               <div className="form-group">
                 <label className="form-label">Square Footage *</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   className="form-input"
-                  value={sqft}
-                  onChange={(e) => setSqft(e.target.value)}
+                  value={sqft ? Number(sqft.replace(/,/g, '')).toLocaleString() : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/,/g, '');
+                    if (raw === '' || /^\d+$/.test(raw)) setSqft(raw);
+                  }}
                   placeholder="Enter square footage"
-                  min="1"
                   required
                 />
               </div>
@@ -1811,29 +1873,48 @@ const BudgetGenerator: React.FC = () => {
                           </div>
                           <div className="preview-project-name" title={project.name}>{project.name}</div>
 
-                          {/* Match Criteria Indicators */}
+                          {/* Match Criteria Indicators — only shown when user entered that criterion */}
                           <div className="match-criteria">
-                            <span className={`criteria-tag ${project.match_details?.building_type ? 'match' : 'no-match'}`}>
-                              {project.match_details?.building_type ? '✓' : '✗'} Building
-                            </span>
-                            <span className={`criteria-tag ${project.match_details?.project_type ? 'match' : 'no-match'}`}>
-                              {project.match_details?.project_type ? '✓' : '✗'} Project
-                            </span>
-                            <span className={`criteria-tag ${project.match_details?.bid_type ? 'match' : 'no-match'}`}>
-                              {project.match_details?.bid_type ? '✓' : '✗'} Bid
-                            </span>
-                            <span className={`criteria-tag ${project.match_details?.sqft_within_25 ? 'match' : project.match_details?.sqft_within_50 ? 'partial' : 'no-match'}`}>
-                              {project.match_details?.sqft_diff_percent !== null
-                                ? `${project.match_details.sqft_diff_percent > 0 ? '+' : ''}${project.match_details.sqft_diff_percent}% SF`
-                                : '— SF'}
-                            </span>
+                            {project.status && (
+                              <span className="criteria-tag" style={{
+                                background: project.status === 'Open' ? '#dcfce7' : project.status === 'Soft-Closed' ? '#fef3c7' : '#f3f4f6',
+                                color: project.status === 'Open' ? '#166534' : project.status === 'Soft-Closed' ? '#92400e' : '#374151'
+                              }}>
+                                {project.status}
+                              </span>
+                            )}
+                            {project.match_details?.market !== null && project.match_details?.market !== undefined && (
+                              <span className={`criteria-tag ${project.match_details.market ? 'match' : 'no-match'}`}>
+                                {project.match_details.market ? '✓' : '✗'} Market
+                              </span>
+                            )}
+                            {project.match_details?.building_type !== null && project.match_details?.building_type !== undefined && (
+                              <span className={`criteria-tag ${project.match_details.building_type ? 'match' : 'no-match'}`}>
+                                {project.match_details.building_type ? '✓' : '✗'} Building
+                              </span>
+                            )}
+                            {project.match_details?.project_type !== null && project.match_details?.project_type !== undefined && (
+                              <span className={`criteria-tag ${project.match_details.project_type ? 'match' : 'no-match'}`}>
+                                {project.match_details.project_type ? '✓' : '✗'} Project
+                              </span>
+                            )}
+                            {project.match_details?.bid_type !== null && project.match_details?.bid_type !== undefined && (
+                              <span className={`criteria-tag ${project.match_details.bid_type ? 'match' : 'no-match'}`}>
+                                {project.match_details.bid_type ? '✓' : '✗'} Bid Type
+                              </span>
+                            )}
+                            {project.match_details?.sqft_diff_percent !== null && (
+                              <span className={`criteria-tag ${project.match_details?.sqft_within_25 ? 'match' : project.match_details?.sqft_within_50 ? 'partial' : 'no-match'}`}>
+                                {project.match_details.sqft_diff_percent > 0 ? '+' : ''}{project.match_details.sqft_diff_percent}% SF
+                              </span>
+                            )}
                           </div>
 
                           {/* Row 1: Original/Historical Data */}
-                          <div className="preview-project-details" style={{ borderBottom: '1px solid #eee', paddingBottom: '6px', marginBottom: '6px' }}>
+                          <div className="preview-project-details" style={{ borderBottom: '1px solid #eee', paddingBottom: '3px', marginBottom: '3px' }}>
                             <div className="detail-item">
-                              <span className="detail-label">Bid Year</span>
-                              <span className="detail-value">{project.bid_date ? new Date(project.bid_date + 'T00:00:00').getFullYear() : 'N/A'}</span>
+                              <span className="detail-label">{project.source === 'project' ? 'Project Year' : 'Bid Year'}</span>
+                              <span className="detail-value">{project.bid_date ? new Date(String(project.bid_date).slice(0, 10) + 'T00:00:00').getFullYear() : 'N/A'}</span>
                             </div>
                             <div className="detail-item">
                               <span className="detail-label">Original Cost</span>
@@ -1858,6 +1939,26 @@ const BudgetGenerator: React.FC = () => {
                               <span className="detail-label">Today's $/SF</span>
                               <span className="detail-value" style={{ fontWeight: 600 }}>${(parseFloat(project.total_cost_per_sqft) || 0).toFixed(2)}</span>
                             </div>
+                          </div>
+
+                          {/* Detail button — lower right */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                            <button
+                              onClick={(e) => handleOpenDetail(e, project.id, project.source === 'project' ? 'project' : 'historical')}
+                              title="View cost model details"
+                              style={{
+                                background: 'none',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '10px',
+                                color: '#6b7280',
+                                cursor: 'pointer',
+                                lineHeight: 1.4
+                              }}
+                            >
+                              Details ↗
+                            </button>
                           </div>
                         </div>
                         );
@@ -1885,6 +1986,162 @@ const BudgetGenerator: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {/* Project Detail Modal */}
+    {(detailProject || detailLoading) && (
+      <div
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+        onClick={() => setDetailProject(null)}
+      >
+        <div
+          style={{ background: '#fff', borderRadius: '10px', width: '100%', maxWidth: '720px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: '#002356', borderRadius: '10px 10px 0 0' }}>
+            <div>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: '#fff' }}>{detailProject?.name || 'Loading…'}</div>
+              {detailProject && (
+                <div style={{ fontSize: '12px', color: '#93c5fd', marginTop: '2px' }}>
+                  {[detailProject.market, detailProject.project_type, detailProject.building_type, detailProject.bid_type].filter(Boolean).join(' · ')}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {detailProject?.source === 'project' && detailProject?.id && (
+                <a href={`/projects/${detailProject.id}/cost-model`} target="_blank" rel="noreferrer"
+                  style={{ fontSize: '12px', color: '#93c5fd', textDecoration: 'underline' }}>
+                  Open Project ↗
+                </a>
+              )}
+              <button onClick={() => setDetailProject(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div style={{ overflowY: 'auto', padding: '16px 20px' }}>
+            {detailLoading && !detailProject ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>Loading…</div>
+            ) : detailProject ? (
+              <>
+                {/* Summary row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                  {[
+                    { label: 'Bid Year', value: detailProject.bid_date ? new Date(String(detailProject.bid_date).slice(0,10) + 'T00:00:00').getFullYear() : 'N/A' },
+                    { label: 'Total Cost', value: formatCurrency(parseFloat(detailProject.total_cost || detailProject.contract_value) || 0) },
+                    { label: 'Size', value: detailProject.total_sqft || detailProject.square_footage ? `${formatNumber(detailProject.total_sqft || detailProject.square_footage)} SF` : 'N/A' },
+                    { label: 'Cost / SF', value: detailProject.total_cost_per_sqft || detailProject.cost_per_sqft ? `$${parseFloat(detailProject.total_cost_per_sqft || detailProject.cost_per_sqft).toFixed(2)}` : 'N/A' },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: '#f8fafc', borderRadius: '6px', padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#6b7280', marginBottom: '4px' }}>{label}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#002356' }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Status / notes for live projects */}
+                {detailProject.source === 'project' && (
+                  <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {detailProject.status && <span style={{ fontSize: '12px', padding: '2px 10px', borderRadius: '12px', background: detailProject.status === 'Open' ? '#dcfce7' : detailProject.status === 'Soft-Closed' ? '#fef3c7' : '#f3f4f6', color: detailProject.status === 'Open' ? '#166534' : detailProject.status === 'Soft-Closed' ? '#92400e' : '#374151', fontWeight: 600 }}>{detailProject.status}</span>}
+                    {detailProject.owner && <span style={{ fontSize: '12px', color: '#374151' }}>Owner: <strong>{detailProject.owner}</strong></span>}
+                    {detailProject.general_contractor && <span style={{ fontSize: '12px', color: '#374151' }}>GC: <strong>{detailProject.general_contractor}</strong></span>}
+                    {detailProject.architect && <span style={{ fontSize: '12px', color: '#374151' }}>Arch: <strong>{detailProject.architect}</strong></span>}
+                    {detailProject.notes && <p style={{ width: '100%', fontSize: '13px', color: '#374151', margin: 0 }}>{detailProject.notes}</p>}
+                  </div>
+                )}
+
+                {/* Cost breakdown — historical only */}
+                {detailProject.source !== 'project' && (() => {
+                  const fmt = (v: any) => v != null && v !== '' && parseFloat(v) !== 0 ? formatCurrency(parseFloat(v)) : null;
+                  const num = (v: any) => v != null && v !== '' && parseFloat(v) !== 0 ? parseFloat(v) : null;
+                  const sections = [
+                    {
+                      title: 'Project Management',
+                      rows: [
+                        { label: 'PM Hours', value: num(detailProject.pm_hours) != null ? `${parseFloat(detailProject.pm_hours).toFixed(0)} hrs` : null },
+                        { label: 'PM Cost', value: fmt(detailProject.pm_cost) },
+                      ]
+                    },
+                    {
+                      title: 'Ductwork',
+                      rows: [
+                        { label: 'Supply — Labor', value: fmt(detailProject.s_field_cost) },
+                        { label: 'Supply — Material', value: fmt(detailProject.s_materials_with_escalation) },
+                        { label: 'Supply — Weight', value: num(detailProject.s_lbs) != null ? `${parseFloat(detailProject.s_lbs).toFixed(0)} lbs` : null },
+                        { label: 'Return — Labor', value: fmt(detailProject.r_field_cost) },
+                        { label: 'Return — Material', value: fmt(detailProject.r_materials_with_escalation) },
+                        { label: 'Exhaust — Labor', value: fmt(detailProject.e_field_cost) },
+                        { label: 'Exhaust — Material', value: fmt(detailProject.e_material_with_escalation) },
+                        { label: 'OA — Labor', value: fmt(detailProject.o_field_cost) },
+                        { label: 'OA — Material', value: fmt(detailProject.o_materials_with_escalation) },
+                      ]
+                    },
+                    {
+                      title: 'Piping',
+                      rows: [
+                        { label: 'Hot Water — Labor', value: fmt(detailProject.hw_field_cost) },
+                        { label: 'Hot Water — Material', value: fmt(detailProject.hw_material_with_esc) },
+                        { label: 'Hot Water — Footage', value: num(detailProject.hw_footage) != null ? `${parseFloat(detailProject.hw_footage).toFixed(0)} ft` : null },
+                        { label: 'Chilled Water — Labor', value: fmt(detailProject.chw_field_cost) },
+                        { label: 'Chilled Water — Material', value: fmt(detailProject.chw_material_with_esc) },
+                        { label: 'Chilled Water — Footage', value: num(detailProject.chw_footage) != null ? `${parseFloat(detailProject.chw_footage).toFixed(0)} ft` : null },
+                      ]
+                    },
+                    {
+                      title: 'Equipment',
+                      rows: [
+                        { label: 'Sheet Metal Equip', value: fmt(detailProject.sm_equip_cost) },
+                        { label: 'Plumbing/Fitting Equip', value: fmt(detailProject.pf_equip_cost) },
+                        { label: 'AHU', value: num(detailProject.ahu) != null ? String(detailProject.ahu) : null },
+                        { label: 'RTU', value: num(detailProject.rtu) != null ? String(detailProject.rtu) : null },
+                        { label: 'VAV', value: num(detailProject.vav) != null ? String(detailProject.vav) : null },
+                        { label: 'Boilers', value: num(detailProject.boilers) != null ? String(detailProject.boilers) : null },
+                        { label: 'Pumps', value: num(detailProject.pumps) != null ? String(detailProject.pumps) : null },
+                        { label: 'Chiller', value: num(detailProject.chiller) != null ? String(detailProject.chiller) : null },
+                      ]
+                    },
+                    {
+                      title: 'Other Costs',
+                      rows: [
+                        { label: 'Controls', value: fmt(detailProject.controls) },
+                        { label: 'Insulation', value: fmt(detailProject.insulation) },
+                        { label: 'Balancing', value: fmt(detailProject.balancing) },
+                        { label: 'Electrical', value: fmt(detailProject.electrical) },
+                        { label: 'General', value: fmt(detailProject.general) },
+                        { label: 'Allowance', value: fmt(detailProject.allowance) },
+                      ]
+                    },
+                  ];
+                  return sections.map(section => {
+                    const activeRows = section.rows.filter(r => r.value != null);
+                    if (activeRows.length === 0) return null;
+                    return (
+                      <div key={section.title} style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#002356', borderBottom: '1px solid #e5e7eb', paddingBottom: '4px', marginBottom: '6px' }}>{section.title}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px 16px' }}>
+                          {activeRows.map(({ label, value }) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '2px 0' }}>
+                              <span style={{ color: '#6b7280' }}>{label}</span>
+                              <span style={{ fontWeight: 600, color: '#111827' }}>{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {detailProject.notes && detailProject.source !== 'project' && (
+                  <div style={{ marginTop: '8px', padding: '10px 12px', background: '#fafafa', borderRadius: '6px', fontSize: '13px', color: '#374151' }}>
+                    <strong>Notes:</strong> {detailProject.notes}
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Budget Report Modal */}
     {currentBudget && (

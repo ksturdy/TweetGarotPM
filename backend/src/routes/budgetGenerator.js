@@ -179,6 +179,41 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// Get full detail for a single project card (historical or live)
+router.get('/project-detail/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { source } = req.query;
+
+    let project;
+    if (source === 'project') {
+      const result = await pool.query(
+        `SELECT
+          p.id, p.name, p.status, p.market, p.description,
+          p.contract_value, p.square_footage,
+          p.start_date, p.end_date,
+          pcm.project_type, pcm.bid_type, pcm.total_sqft,
+          pcm.notes, pcm.scopes, pcm.owner, pcm.architect, pcm.general_contractor,
+          CASE WHEN COALESCE(pcm.total_sqft, p.square_footage::DECIMAL) > 0
+            THEN p.contract_value / COALESCE(pcm.total_sqft, p.square_footage::DECIMAL)
+            ELSE NULL END AS cost_per_sqft
+        FROM projects p
+        LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
+        WHERE p.id = $1 AND p.tenant_id = $2`,
+        [id, req.tenantId]
+      );
+      project = result.rows[0];
+    } else {
+      project = await HistoricalProject.findById(id);
+    }
+
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json(project);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get dropdown options (building types, project types, bid types)
 router.get('/options', async (req, res, next) => {
   try {
@@ -221,6 +256,9 @@ router.post('/similar', async (req, res, next) => {
     const projectTypes = Array.isArray(req.body.projectType)
       ? req.body.projectType.filter(Boolean)
       : (req.body.projectType ? [req.body.projectType] : []);
+    const projectStatuses = Array.isArray(req.body.projectStatuses)
+      ? req.body.projectStatuses.filter(Boolean)
+      : (req.body.projectStatuses ? [req.body.projectStatuses] : []);
 
     if (!market && projectTypes.length === 0) {
       return res.status(400).json({
@@ -229,6 +267,7 @@ router.post('/similar', async (req, res, next) => {
     }
 
     const projectTypeParam = projectTypes.length > 0 ? projectTypes : null;
+    const projectStatusParam = projectStatuses.length > 0 ? projectStatuses : null;
 
     const [similarProjects, averages] = await Promise.all([
       HistoricalProject.findSimilar({
@@ -238,7 +277,8 @@ router.post('/similar', async (req, res, next) => {
         bidType: bidType || null,
         sqft: sqft || null,
         limit: 20,
-        tenantId: req.tenantId
+        tenantId: req.tenantId,
+        projectStatuses: projectStatusParam
       }),
       HistoricalProject.getCategoryAverages(market || null, projectTypeParam, req.tenantId)
     ]);
@@ -272,10 +312,10 @@ router.post('/similar', async (req, res, next) => {
         years_since_bid: yearsSinceBid,
         inflation_adjusted: true,
         match_details: {
-          market: !!market && p.market === market,
-          building_type: !!buildingType && p.building_type === buildingType,
-          project_type: projectTypes.length > 0 && projectTypes.includes(p.project_type),
-          bid_type: !bidType || p.bid_type === bidType,
+          market: !market ? null : (p.market === market),
+          building_type: !buildingType ? null : (p.building_type === buildingType),
+          project_type: projectTypes.length === 0 ? null : projectTypes.includes(p.project_type),
+          bid_type: !bidType ? null : (p.bid_type === bidType),
           sqft_within_25: sqftDiff !== null && sqftDiff <= 0.25,
           sqft_within_50: sqftDiff !== null && sqftDiff <= 0.5,
           sqft_diff_percent: sqftDiff !== null ? Math.round(sqftDiff * 100) : null
@@ -334,6 +374,10 @@ async function generateHandler(req, res, next) {
       : (req.body.projectType ? [req.body.projectType] : []);
     const projectType = projectTypes.length > 0 ? projectTypes.join(', ') : null;
     const projectTypeParam = projectTypes.length > 0 ? projectTypes : null;
+    const projectStatuses = Array.isArray(req.body.projectStatuses)
+      ? req.body.projectStatuses.filter(Boolean)
+      : (req.body.projectStatuses ? [req.body.projectStatuses] : []);
+    const projectStatusParam = projectStatuses.length > 0 ? projectStatuses : null;
 
     // Validation
     if (!projectName || !sqft || (!market && projectTypes.length === 0)) {
@@ -363,7 +407,8 @@ async function generateHandler(req, res, next) {
       bidType: bidType || null,
       sqft,
       limit: 20,
-      tenantId: req.tenantId
+      tenantId: req.tenantId,
+      projectStatuses: projectStatusParam
     });
 
     let topProjects, projectDetailsRaw;

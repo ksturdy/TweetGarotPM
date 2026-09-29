@@ -697,7 +697,7 @@ class Team {
     }
 
     // Get projects metrics (manager_id references employees)
-    let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0, total_backlog: 0, avg_gross_margin: null }] };
+    let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0, total_backlog: 0, total_gross_margin: 0 }] };
     if (employeeIds.length > 0) {
       const projFilter = activeOnly ? " AND p.status = 'Open'" : '';
       projectsResult = await db.query(`
@@ -706,10 +706,7 @@ class Team {
           COUNT(CASE WHEN p.status = 'Open' THEN 1 END) as active,
           COALESCE(SUM(COALESCE(vc.contract_amount, p.contract_value)), 0) as total_value,
           COALESCE(SUM(CASE WHEN vc.id IS NOT NULL THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0) ELSE p.backlog END), 0) as total_backlog,
-          CASE WHEN SUM(COALESCE(vc.contract_amount, p.contract_value)) > 0
-            THEN SUM(COALESCE(vc.gross_profit_dollars, 0)) / SUM(COALESCE(vc.contract_amount, p.contract_value)) * 100
-            ELSE NULL
-          END as avg_gross_margin
+          COALESCE(SUM(COALESCE(vc.gross_profit_dollars, 0)), 0) as total_gross_margin
         FROM projects p
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
         WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${projFilter}

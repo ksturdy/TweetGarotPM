@@ -52,7 +52,7 @@ export interface TeamDashboard {
     active: number;
     total_value: number;
     total_backlog: number;
-    avg_gross_margin: number | null;
+    total_gross_margin: number;
   };
   cashFlow: {
     net_cash_position: number;

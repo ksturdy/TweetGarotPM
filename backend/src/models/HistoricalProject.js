@@ -134,9 +134,9 @@ const HistoricalProject = {
   // Find similar projects from both historical_projects and live projects
   // Scoring: market(30) + projectType(30) + buildingType/scope(15) + bidType(10) + sqft(15) = 100
   async findSimilar(criteria) {
-    const { market, buildingType, projectType, bidType, sqft, limit = 5, tenantId = null } = criteria;
+    const { market, buildingType, projectType, bidType, sqft, limit = 5, tenantId = null, projectStatuses = null } = criteria;
 
-    // $1=market $2=projectType[] $3=buildingType(scope) $4=bidType $5=sqft $6=limit $7=tenantId
+    // $1=market $2=projectType[] $3=buildingType(scope) $4=bidType $5=sqft $6=limit $7=tenantId $8=projectStatuses[]
     const query = `
       SELECT
         id, name, market, building_type, project_type, bid_type,
@@ -147,7 +147,7 @@ const HistoricalProject = {
         e_material_with_escalation, o_materials_with_escalation,
         hw_material_with_esc, chw_material_with_esc,
         ahu, rtu, vav, boilers, pumps, chiller,
-        source,
+        source, status,
         (
           CASE WHEN $1::text IS NULL THEN 30 WHEN market = $1::text THEN 30 ELSE 0 END +
           CASE WHEN $2::text[] IS NULL THEN 30 WHEN project_type = ANY($2::text[]) THEN 30 ELSE 0 END +
@@ -171,7 +171,8 @@ const HistoricalProject = {
           e_material_with_escalation, o_materials_with_escalation,
           hw_material_with_esc, chw_material_with_esc,
           ahu, rtu, vav, boilers, pumps, chiller,
-          'historical' AS source
+          'historical' AS source,
+          NULL::VARCHAR AS status
         FROM historical_projects
         WHERE total_cost IS NOT NULL AND total_cost > 0
 
@@ -202,18 +203,20 @@ const HistoricalProject = {
           NULL::DECIMAL AS hw_material_with_esc, NULL::DECIMAL AS chw_material_with_esc,
           NULL::INTEGER AS ahu, NULL::INTEGER AS rtu, NULL::INTEGER AS vav,
           NULL::INTEGER AS boilers, NULL::INTEGER AS pumps, NULL::INTEGER AS chiller,
-          'project' AS source
+          'project' AS source,
+          p.status
         FROM projects p
         LEFT JOIN project_cost_models pcm ON pcm.project_id = p.id
         WHERE p.tenant_id = $7::integer
           AND p.contract_value IS NOT NULL AND p.contract_value > 0
           AND p.market IS NOT NULL
+          AND ($8::text[] IS NULL OR p.status = ANY($8::text[]))
       ) combined
       ORDER BY similarity_score DESC, bid_date DESC NULLS LAST
       LIMIT $6::integer
     `;
 
-    const params = [market, projectType, buildingType, bidType, sqft, limit, tenantId];
+    const params = [market, projectType, buildingType, bidType, sqft, limit, tenantId, projectStatuses];
     const result = await db.query(query, params);
     return result.rows;
   },
@@ -355,7 +358,7 @@ const HistoricalProject = {
 
     let query;
     if (column === 'market') {
-      // market: historical_projects.market + projects.market (from Viewpoint)
+      // market: historical_projects.market + projects.market (from Viewpoint) + canonical list
       query = `
         SELECT DISTINCT val AS value FROM (
           SELECT market AS val FROM historical_projects WHERE market IS NOT NULL AND market != ''
