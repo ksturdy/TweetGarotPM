@@ -992,21 +992,37 @@
 
   .sales-header-actions {
     width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sales-header-actions .sales-btn {
+    justify-content: center;
+  }
+
+  .sales-header-actions .sales-btn-primary {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 
   .sales-view-toggle {
-    width: 100%;
-  }
-
-  .sales-view-toggle button {
-    flex: 1;
+    display: none;
   }
 
   .sales-kpi-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .sales-kpi-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px 10px 16px;
+  }
+
+  .sales-kpi-value {
+    font-size: 16px;
   }
 
   .sales-charts-grid {
