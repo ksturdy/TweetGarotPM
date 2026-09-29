@@ -125,6 +125,7 @@ export interface TeamProject {
   actual_cost: number;
   percent_complete: number;
   client: string;
+  start_date: string | null;
   created_at: string;
 }
 
