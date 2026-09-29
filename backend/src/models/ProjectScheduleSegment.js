@@ -143,9 +143,33 @@ async function patchWeeklyHours(projectId, tenantId, segmentKey, weeklyHours) {
 async function getBulkByProjects(projectIds, tenantId) {
   if (!projectIds || projectIds.length === 0) return {};
   const { rows } = await db.query(
-    `SELECT project_id, segment_key, label, start_date, end_date, contour_type, weekly_hours
-       FROM project_schedule_segments
-      WHERE project_id = ANY($1::int[]) AND tenant_id = $2`,
+    `SELECT pss.project_id, pss.segment_key, pss.label, pss.start_date, pss.end_date,
+            pss.contour_type, pss.weekly_hours, costs.est_hours
+       FROM project_schedule_segments pss
+       LEFT JOIN (
+         SELECT linked_project_id,
+                CASE
+                  WHEN UPPER(phase) LIKE 'BAS%'             THEN 'bas'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='30' THEN '30'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='35' THEN '35'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='40' THEN '40'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='45' THEN '45'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='50' THEN '50'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='55' THEN '55'
+                  WHEN cost_type = 1 AND LEFT(phase,2)='70' THEN '70'
+                  WHEN cost_type = 2 THEN 'material'
+                  WHEN cost_type = 3 THEN 'subcontract'
+                  WHEN cost_type = 4 THEN 'rental'
+                  WHEN cost_type = 5 THEN 'equipment'
+                  WHEN cost_type = 6 THEN 'gc'
+                  ELSE NULL
+                END AS segment_key,
+                SUM(NULLIF(est_hours, 'NaN'::numeric)) AS est_hours
+           FROM vp_phase_codes
+          WHERE linked_project_id = ANY($1::int[]) AND tenant_id = $2
+          GROUP BY linked_project_id, segment_key
+       ) costs ON costs.linked_project_id = pss.project_id AND costs.segment_key = pss.segment_key
+      WHERE pss.project_id = ANY($1::int[]) AND pss.tenant_id = $2`,
     [projectIds, tenantId]
   );
   const result = {};
@@ -158,6 +182,7 @@ async function getBulkByProjects(projectIds, tenantId) {
       end_date: row.end_date,
       contour_type: row.contour_type,
       weekly_hours: row.weekly_hours,
+      est_hours: row.est_hours != null ? Number(row.est_hours) : null,
     });
   }
   return result;

@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, VPContract, ShopFieldHours } from '../../services/vistaData';
 import { scheduleSegmentsService, ScheduleSegment } from '../../services/scheduleSegments';
+import { getContourMultipliers, contourOptions, ContourVisual, getDefaultContour, type ContourType } from '../../utils/contours';
 import opportunitiesService, { OpportunityWithEstimate } from '../../services/opportunities';
 import { getForecastRules, ForecastDurationRule } from '../../services/tenant';
 import { useAuth } from '../../context/AuthContext';
@@ -75,88 +76,6 @@ const fmtHeadcount = (hours: number, hrsPerPerson: number): string => {
   const hc = hours / hrsPerPerson;
   if (hc < 0.1) return '-';
   return hc.toFixed(1);
-};
-
-// ─── Contour types ─────────────────────────────────────────
-
-type ContourType = 'flat' | 'front' | 'back' | 'bell' | 'turtle' | 'double' | 'early' | 'late' | 'scurve' | 'rampup' | 'rampdown' | 'gradual';
-
-const contourOptions: { value: ContourType; label: string; icon: string }[] = [
-  { value: 'flat', label: 'Flat', icon: '▬' },
-  { value: 'front', label: 'Front', icon: '▼' },
-  { value: 'back', label: 'Back', icon: '▲' },
-  { value: 'bell', label: 'Bell', icon: '◆' },
-  { value: 'turtle', label: 'Turtle', icon: '◈' },
-  { value: 'double', label: 'Double', icon: '⋈' },
-  { value: 'early', label: 'Early Pk', icon: '◣' },
-  { value: 'late', label: 'Late Pk', icon: '◢' },
-  { value: 'scurve', label: 'S-Curve', icon: '∫' },
-  { value: 'rampup', label: 'Ramp Up', icon: '⟋' },
-  { value: 'rampdown', label: 'Ramp Dn', icon: '⟍' },
-  { value: 'gradual', label: 'Gradual', icon: '◠' },
-];
-
-const getContourMultipliers = (months: number, contour: ContourType): number[] => {
-  const multipliers: number[] = [];
-  for (let i = 0; i < months; i++) {
-    const position = months > 1 ? i / (months - 1) : 0.5;
-    let weight: number;
-    switch (contour) {
-      case 'front': weight = 2 - position * 1.5; break;
-      case 'back': weight = 0.5 + position * 1.5; break;
-      case 'bell': weight = Math.exp(-Math.pow((position - 0.5) * 3, 2)) * 1.5 + 0.5; break;
-      case 'turtle': weight = Math.exp(-Math.pow((position - 0.5) * 2, 2)) * 0.8 + 0.6; break;
-      case 'double': {
-        const p1 = Math.exp(-Math.pow((position - 0.25) * 5, 2));
-        const p2 = Math.exp(-Math.pow((position - 0.75) * 5, 2));
-        weight = (p1 + p2) * 0.8 + 0.4;
-        break;
-      }
-      case 'early': weight = Math.exp(-Math.pow((position - 0.2) * 4, 2)) * 1.8 + 0.2; break;
-      case 'late': weight = Math.exp(-Math.pow((position - 0.8) * 4, 2)) * 1.8 + 0.2; break;
-      case 'scurve': weight = Math.exp(-Math.pow((position - 0.5) * 2.5, 2)) * 1.2 + 0.4; break;
-      case 'rampup': weight = 0.1 + position * 1.9; break;
-      case 'rampdown': weight = 2 - position * 1.9; break;
-      case 'gradual': weight = Math.pow(Math.sin(position * Math.PI), 2) * 1.5 + 0.2; break;
-      case 'flat': default: weight = 1; break;
-    }
-    multipliers.push(weight);
-  }
-  const sum = multipliers.reduce((a, b) => a + b, 0);
-  return multipliers.map(w => (w / sum) * months);
-};
-
-const getDefaultContour = (pctComplete: number): ContourType => {
-  if (pctComplete < 15) return 'scurve';
-  if (pctComplete < 40) return 'bell';
-  if (pctComplete < 70) return 'back';
-  if (pctComplete < 90) return 'rampdown';
-  return 'flat';
-};
-
-const ContourVisual: React.FC<{ contour: ContourType }> = ({ contour }) => {
-  const points: string = (() => {
-    switch (contour) {
-      case 'flat': return '0,8 24,8';
-      case 'front': return '0,2 24,14';
-      case 'back': return '0,14 24,2';
-      case 'bell': return '0,14 6,10 12,2 18,10 24,14';
-      case 'turtle': return '0,12 4,10 8,6 12,5 16,6 20,10 24,12';
-      case 'double': return '0,12 4,6 8,10 12,14 16,10 20,6 24,12';
-      case 'early': return '0,10 4,2 8,6 12,10 18,12 24,14';
-      case 'late': return '0,14 6,12 12,10 16,6 20,2 24,10';
-      case 'scurve': return '0,13 4,12 8,8 12,4 16,4 20,8 24,13';
-      case 'rampup': return '0,14 24,2';
-      case 'rampdown': return '0,2 24,14';
-      case 'gradual': return '0,15 3,14 6,12 10,6 14,3 18,6 21,12 24,15';
-      default: return '0,8 24,8';
-    }
-  })();
-  return (
-    <svg width="24" height="16" style={{ verticalAlign: 'middle', marginRight: '4px' }}>
-      <polyline points={points} fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 };
 
 // ─── Duration rules ────────────────────────────────────────
@@ -871,18 +790,17 @@ const LaborForecast: React.FC = () => {
         };
 
         TRADES.forEach((trade, idx) => {
-          const tradeData = sfData?.[trade.key];
           const rem = tradeHours[idx].remaining;
           if (rem <= 0) return;
-          // Use est_hours per location for headcount distribution — matches CostTypeSchedule
-          // which also uses est_hours (not remaining) for the monthly profile.
-          const estField = tradeData?.field?.est || 0;
-          const estShop  = tradeData?.shop?.est  || 0;
-          // locationFilter: show only the hours for the selected location
+          const fieldSegKey = TRADE_FIELD_SEG[trade.key];
+          const shopSegKey  = TRADE_SHOP_SEG[trade.key];
+          // Read est_hours from the schedule segment — same source as CostTypeSchedule
+          const estField = projectSegs.find(s => s.segment_key === fieldSegKey)?.est_hours ?? 0;
+          const estShop  = projectSegs.find(s => s.segment_key === shopSegKey)?.est_hours  ?? 0;
           const fieldHours = locationFilter !== 'shop'  ? estField : 0;
           const shopHours  = locationFilter !== 'field' ? estShop  : 0;
-          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, TRADE_FIELD_SEG[trade.key]);
-          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  TRADE_SHOP_SEG[trade.key]);
+          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, fieldSegKey);
+          distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  shopSegKey);
         });
 
         results.push({
@@ -2962,15 +2880,23 @@ const LaborForecast: React.FC = () => {
                 const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
                 const ot = oppMode !== 'off' ? (oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
                 const hpp = hoursPerPersonPerMonth;
+                let pfHC = 0, smHC = 0, plHC = 0;
+                drillDownProjects.forEach(({ projection: p, hours: h }) => {
+                  const seg = p.monthlySegHC?.get(drillDownCol.key) ?? {};
+                  pfHC += p.monthlySegHC ? (seg['40'] ?? 0) + (seg['45'] ?? 0) : h.pf / hpp;
+                  smHC += p.monthlySegHC ? (seg['30'] ?? 0) + (seg['35'] ?? 0) : h.sm / hpp;
+                  plHC += p.monthlySegHC ? (seg['50'] ?? 0) + (seg['55'] ?? 0) : h.pl / hpp;
+                });
+                const totalHC = pfHC + smHC + plHC;
                 return (
                   <>
-                    <strong>{(ct.total / hpp).toFixed(1)}</strong> committed headcount ({fmtHours(ct.total)} hrs)
+                    <strong>{totalHC.toFixed(1)}</strong> committed headcount ({fmtHours(ct.total)} hrs)
                     {' — '}
-                    <span style={{ color: TRADES[0].color }}>PF {(ct.pf / hpp).toFixed(1)}</span>
+                    <span style={{ color: TRADES[0].color }}>PF {pfHC.toFixed(1)}</span>
                     {' / '}
-                    <span style={{ color: TRADES[1].color }}>SM {(ct.sm / hpp).toFixed(1)}</span>
+                    <span style={{ color: TRADES[1].color }}>SM {smHC.toFixed(1)}</span>
                     {' / '}
-                    <span style={{ color: TRADES[2].color }}>PL {(ct.pl / hpp).toFixed(1)}</span>
+                    <span style={{ color: TRADES[2].color }}>PL {plHC.toFixed(1)}</span>
                     <span style={{ color: '#64748b' }}> — {drillDownProjects.length} projects</span>
                     {drillDownOpps.length > 0 && (
                       <span style={{ color: '#f59e0b' }}> + {(ot.total / hpp).toFixed(1)} from {drillDownOpps.length} opportunities</span>
@@ -3036,19 +2962,26 @@ const LaborForecast: React.FC = () => {
                       </tr>
                     );
                   })}
-                  {/* Secured work subtotal */}
-                  {(() => {
-                    const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
+                  {/* Secured work subtotal — hidden when only 1 project is shown */}
+                  {drillDownProjects.length > 1 && (() => {
                     const hpp = hoursPerPersonPerMonth;
+                    let pfHC = 0, smHC = 0, plHC = 0;
+                    drillDownProjects.forEach(({ projection: p, hours: h }) => {
+                      const seg = p.monthlySegHC?.get(drillDownCol.key) ?? {};
+                      pfHC += p.monthlySegHC ? (seg['40'] ?? 0) + (seg['45'] ?? 0) : h.pf / hpp;
+                      smHC += p.monthlySegHC ? (seg['30'] ?? 0) + (seg['35'] ?? 0) : h.sm / hpp;
+                      plHC += p.monthlySegHC ? (seg['50'] ?? 0) + (seg['55'] ?? 0) : h.pl / hpp;
+                    });
+                    const totalHC = pfHC + smHC + plHC;
                     return (
                       <tr style={{ background: '#e2e8f0', fontWeight: 600, borderTop: '2px solid #94a3b8' }}>
                         <td colSpan={3} style={{ padding: '0.4rem 0.5rem', fontSize: '0.75rem' }}>
                           Secured Work ({drillDownProjects.length} projects)
                         </td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[0].color }}>{ct.pf > 0 ? (ct.pf / hpp).toFixed(1) : '-'}</td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[1].color }}>{ct.sm > 0 ? (ct.sm / hpp).toFixed(1) : '-'}</td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[2].color }}>{ct.pl > 0 ? (ct.pl / hpp).toFixed(1) : '-'}</td>
-                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>{(ct.total / hpp).toFixed(1)}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[0].color }}>{pfHC > 0.05 ? pfHC.toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[1].color }}>{smHC > 0.05 ? smHC.toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: TRADES[2].color }}>{plHC > 0.05 ? plHC.toFixed(1) : '-'}</td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right' }}>{totalHC > 0.05 ? totalHC.toFixed(1) : '-'}</td>
                       </tr>
                     );
                   })()}
@@ -3113,16 +3046,23 @@ const LaborForecast: React.FC = () => {
                       GRAND TOTAL ({drillDownProjects.length} projects{drillDownOpps.length > 0 ? ` + ${drillDownOpps.length} opps` : ''})
                     </td>
                     {(() => {
-                      const ct = columnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 };
-                      const ot = drillDownOpps.length > 0 ? (oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
                       const hpp = hoursPerPersonPerMonth;
-                      const gPf = ct.pf + ot.pf, gSm = ct.sm + ot.sm, gPl = ct.pl + ot.pl, gTotal = ct.total + ot.total;
+                      let pfHC = 0, smHC = 0, plHC = 0;
+                      drillDownProjects.forEach(({ projection: p, hours: h }) => {
+                        const seg = p.monthlySegHC?.get(drillDownCol.key) ?? {};
+                        pfHC += p.monthlySegHC ? (seg['40'] ?? 0) + (seg['45'] ?? 0) : h.pf / hpp;
+                        smHC += p.monthlySegHC ? (seg['30'] ?? 0) + (seg['35'] ?? 0) : h.sm / hpp;
+                        plHC += p.monthlySegHC ? (seg['50'] ?? 0) + (seg['55'] ?? 0) : h.pl / hpp;
+                      });
+                      const ot = drillDownOpps.length > 0 ? (oppColumnTotals.get(drillDownCol.key) || { pf: 0, sm: 0, pl: 0, total: 0 }) : { pf: 0, sm: 0, pl: 0, total: 0 };
+                      const gPf = pfHC + ot.pf / hpp, gSm = smHC + ot.sm / hpp, gPl = plHC + ot.pl / hpp;
+                      const gTotal = gPf + gSm + gPl;
                       return (
                         <>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[0].color }}>{(gPf / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[1].color }}>{(gSm / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[2].color }}>{(gPl / hpp).toFixed(1)}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'right' }}>{(gTotal / hpp).toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[0].color }}>{gPf.toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[1].color }}>{gSm.toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right', color: TRADES[2].color }}>{gPl.toFixed(1)}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'right' }}>{gTotal.toFixed(1)}</td>
                         </>
                       );
                     })()}

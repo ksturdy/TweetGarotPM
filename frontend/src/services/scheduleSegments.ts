@@ -9,6 +9,7 @@ export interface ScheduleSegment {
   end_date: string | null;
   contour_type: string;
   weekly_hours: number | null;
+  est_hours: number | null;
 }
 
 export interface SegmentCosts {
