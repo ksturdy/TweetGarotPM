@@ -349,6 +349,10 @@
     transition: transform 0.25s ease;
     z-index: 70;
     box-shadow: none;
+    /* Account for notch/dynamic island pushing the header taller */
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    height: calc(100vh - 64px - env(safe-area-inset-top, 0px));
+    height: calc(100dvh - 64px - env(safe-area-inset-top, 0px));
   }
 
   .sidebar.open {
@@ -363,6 +367,8 @@
 
   .sidebar-content {
     -webkit-overflow-scrolling: touch;
+    /* Keep bottom items above the home indicator */
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
