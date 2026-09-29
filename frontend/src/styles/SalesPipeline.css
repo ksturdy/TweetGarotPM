@@ -1010,7 +1010,7 @@
   }
 
   .sales-charts-grid {
-    display: none;
+    grid-template-columns: 1fr;
   }
 
   .sales-pipeline-board {
