@@ -90,6 +90,10 @@ function sigWords(normalized: string): string[] {
     'former', 'site', 'proposed',
     // Business entity suffixes — ubiquitous across opportunities, not distinctive
     'llc', 'inc', 'corp', 'ltd', 'lp', 'llp', 'dba', 'co',
+    // Generic construction/facility words — appear in thousands of project names, not distinctive
+    'hospital', 'medical', 'center', 'centre', 'building', 'facility', 'facilities',
+    'expansion', 'renovation', 'addition', 'construction', 'project', 'development',
+    'school', 'office', 'campus', 'complex', 'tower', 'plaza', 'park',
   ]);
   return normalized.split(' ').filter(w => w.length >= 3 && !stop.has(w));
 }
@@ -111,7 +115,7 @@ function titlesMatch(leadTitle: string, oppTitle: string): boolean {
   if (setA.size === 0 || setB.size === 0) return false;
   const intersection = [...setA].filter(w => setB.has(w)).length;
   const union = setA.size + setB.size - intersection;
-  return intersection / union >= 0.5;
+  return intersection / union >= 0.55;
 }
 
 function generateSearchName(criteria: SearchCriteria): string {
