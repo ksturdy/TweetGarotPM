@@ -196,6 +196,36 @@
   margin: 0.75rem 1rem;
 }
 
+/* Mobile-only logout button — pinned above the toggle */
+.sidebar-logout-btn {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  background: transparent;
+  color: #ef4444;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.sidebar-logout-btn:hover,
+.sidebar-logout-btn:active {
+  background: #fef2f2;
+}
+
+.sidebar-logout-btn .nav-icon {
+  color: #ef4444;
+}
+
 /* Toggle Button */
 .sidebar-toggle {
   display: flex;
@@ -398,6 +428,10 @@
   .sidebar.collapsed .nav-icon {
     width: 24px;
     height: 24px;
+  }
+
+  .sidebar-logout-btn {
+    display: flex;
   }
 
   /* Larger touch targets on mobile */

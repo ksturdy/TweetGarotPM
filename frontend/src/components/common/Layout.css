@@ -325,7 +325,7 @@
     display: none;
   }
 
-  /* Hide messaging, feedback, notifications and sync on mobile */
+  /* Hide messaging, feedback, notifications, sync, and logout from header on mobile */
   .header-feedback-btn {
     display: none;
   }
@@ -339,6 +339,10 @@
   }
 
   .notification-bell-wrapper {
+    display: none;
+  }
+
+  .user-menu {
     display: none;
   }
 

@@ -22,6 +22,7 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import SyncIcon from '@mui/icons-material/Sync';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LogoutIcon from '@mui/icons-material/Logout';
 import ConstructionIcon from '@mui/icons-material/Construction';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -99,7 +100,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const [expandedSections, setExpandedSections] = useState<string[]>(getInitialExpandedSections);
 
@@ -391,6 +392,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
           onNavigate={() => { setHoveredItem(null); onClose(); }}
         />
       )}
+
+      <button
+        className="sidebar-logout-btn"
+        onClick={() => { logout(); onClose(); }}
+      >
+        <span className="nav-icon"><LogoutIcon /></span>
+        <span className="nav-label">Logout</span>
+      </button>
 
       <button
         className="sidebar-toggle"
