@@ -325,17 +325,21 @@
     display: none;
   }
 
-  .feedback-label {
-    display: none;
-  }
-
-  .vista-sync-text {
-    display: none;
-  }
-
+  /* Hide messaging, feedback, notifications and sync on mobile */
   .header-feedback-btn {
-    padding: 6px 8px;
-    gap: 0;
+    display: none;
+  }
+
+  .vista-sync-indicator {
+    display: none;
+  }
+
+  .chat-button-btn {
+    display: none;
+  }
+
+  .notification-bell-wrapper {
+    display: none;
   }
 
   .company-logo-image {
