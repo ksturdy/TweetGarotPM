@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { teamsApi, Team, TeamMember, TeamDashboard } from '../../services/teams';
 import { projectsApi, BacklogSnapshot } from '../../services/projects';
+import TeamFinancialsTab from '../../components/teams/TeamFinancialsTab';
 import { employeesApi, AssignableEmployee } from '../../services/employees';
 import OpportunityModal from '../../components/opportunities/OpportunityModal';
 import { Opportunity } from '../../services/opportunities';
@@ -48,8 +49,11 @@ const TeamDetailPage: React.FC = () => {
   const { toast, confirm } = useTitanFeedback();
   const teamId = parseInt(id || '0');
 
-  const [activeTab, setActiveTab] = useState<'members' | 'projects' | 'opportunities' | 'customers' | 'estimates'>('members');
-  const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
+  const [activeTab, setActiveTab] = useState<'members' | 'projects' | 'opportunities' | 'customers' | 'estimates' | 'financials' | 'metrics'>('members');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['Open']);
+  const toggleStatus = (s: string) =>
+    setSelectedStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  const statusFilter = selectedStatuses.length === 1 && selectedStatuses[0] === 'Open' ? 'active' : 'all';
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [employeeSearchText, setEmployeeSearchText] = useState('');
@@ -98,12 +102,12 @@ const TeamDetailPage: React.FC = () => {
 
   // Fetch team dashboard metrics (filtered)
   const { data: dashboard } = useQuery({
-    queryKey: ['teams', teamId, 'dashboard', statusFilter],
+    queryKey: ['teams', teamId, 'dashboard', selectedStatuses],
     queryFn: async (): Promise<TeamDashboard> => {
-      const response = await teamsApi.getDashboard(teamId, statusFilter);
+      const response = await teamsApi.getDashboard(teamId, selectedStatuses);
       return response.data.data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && selectedStatuses.length > 0,
   });
 
   // Fetch backlog 6-month snapshot scoped to team members' projects
@@ -349,41 +353,69 @@ const TeamDetailPage: React.FC = () => {
             </svg>
             Edit Team
           </button>
-          {/* Active / All filter toggle */}
-          <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-            <button
-              onClick={() => setStatusFilter('active')}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                background: statusFilter === 'active' ? team.color : 'white',
-                color: statusFilter === 'active' ? 'white' : '#6b7280',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => setStatusFilter('all')}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderLeft: '1px solid #e5e7eb',
-                background: statusFilter === 'all' ? team.color : 'white',
-                color: statusFilter === 'all' ? 'white' : '#6b7280',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              All
-            </button>
-          </div>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
+        {(['members', 'projects', 'opportunities', 'customers', 'estimates', 'financials', 'metrics'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px 8px 0 0',
+              border: 'none',
+              background: activeTab === tab ? team.color : 'transparent',
+              color: activeTab === tab ? 'white' : '#6b7280',
+              fontWeight: activeTab === tab ? 600 : 400,
+              cursor: 'pointer',
+              textTransform: 'capitalize',
+              transition: 'all 0.2s',
+            }}
+          >
+            {tab === 'members' && `Members (${members.length})`}
+            {tab === 'projects' && `Projects (${dashboard?.projects.total || 0})`}
+            {tab === 'opportunities' && `Opportunities (${dashboard?.opportunities.total || 0})`}
+            {tab === 'customers' && `Customers (${dashboard?.customers.total || 0})`}
+            {tab === 'estimates' && `Estimates (${dashboard?.estimates.total || 0})`}
+            {tab === 'financials' && 'Financials'}
+            {tab === 'metrics' && 'Metrics'}
+          </button>
+        ))}
+      </div>
+
+      {/* Status Filter — controls KPI cards and Financials graphs */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+        <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Filter:</span>
+        {(['Open', 'Soft-Closed', 'Hard-Closed'] as const).map(s => {
+          const active = selectedStatuses.includes(s);
+          const colors: Record<string, { bg: string; text: string; border: string }> = {
+            'Open':        { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
+            'Soft-Closed': { bg: '#fef9c3', text: '#a16207', border: '#fde047' },
+            'Hard-Closed': { bg: '#f1f5f9', text: '#475569', border: '#cbd5e1' },
+          };
+          const col = colors[s];
+          return (
+            <button
+              key={s}
+              onClick={() => toggleStatus(s)}
+              style={{
+                padding: '3px 12px',
+                borderRadius: '20px',
+                border: `1px solid ${active ? col.border : '#e2e8f0'}`,
+                background: active ? col.bg : '#f8fafc',
+                color: active ? col.text : '#94a3b8',
+                fontWeight: active ? 600 : 400,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {s}
+            </button>
+          );
+        })}
       </div>
 
       {/* Dashboard KPI Strip */}
@@ -529,33 +561,6 @@ const TeamDetailPage: React.FC = () => {
               )}
             </div>
           </React.Fragment>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
-        {(['members', 'projects', 'opportunities', 'customers', 'estimates'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px 8px 0 0',
-              border: 'none',
-              background: activeTab === tab ? team.color : 'transparent',
-              color: activeTab === tab ? 'white' : '#6b7280',
-              fontWeight: activeTab === tab ? 600 : 400,
-              cursor: 'pointer',
-              textTransform: 'capitalize',
-              transition: 'all 0.2s',
-            }}
-          >
-            {tab === 'members' && `Members (${members.length})`}
-            {tab === 'projects' && `Projects (${dashboard?.projects.total || 0})`}
-            {tab === 'opportunities' && `Opportunities (${dashboard?.opportunities.total || 0})`}
-            {tab === 'customers' && `Customers (${dashboard?.customers.total || 0})`}
-            {tab === 'estimates' && `Estimates (${dashboard?.estimates.total || 0})`}
-          </button>
         ))}
       </div>
 
@@ -1046,6 +1051,20 @@ const TeamDetailPage: React.FC = () => {
               </tbody>
             </table>
           </>
+        )}
+
+        {/* Financials Tab */}
+        {activeTab === 'financials' && (
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem' }}>
+            <TeamFinancialsTab teamId={teamId} teamColor={team.color} selectedStatuses={selectedStatuses} />
+          </div>
+        )}
+
+        {/* Metrics Tab */}
+        {activeTab === 'metrics' && (
+          <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
+            Metrics dashboard coming soon.
+          </div>
         )}
       </div>
 

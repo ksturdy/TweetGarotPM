@@ -622,7 +622,7 @@ class Team {
    * Get team dashboard metrics
    * @param {string} filter - 'active' (default) or 'all'
    */
-  static async getDashboardMetrics(teamId, tenantId, filter = 'active') {
+  static async getDashboardMetrics(teamId, tenantId, statuses = ['Open']) {
     const employeeIds = await this.getMemberEmployeeIds(teamId, tenantId);
     const memberNames = await this.getMemberNames(teamId, tenantId);
 
@@ -636,7 +636,8 @@ class Team {
       };
     }
 
-    const activeOnly = filter === 'active';
+    // activeOnly drives the opp/customer/estimate pipeline filters (unchanged semantics)
+    const activeOnly = statuses.length === 1 && statuses[0] === 'Open';
 
     // Get opportunities metrics (assigned_to references employees)
     // Active = not converted to project (still in pipeline)
@@ -699,7 +700,6 @@ class Team {
     // Get projects metrics (manager_id references employees)
     let projectsResult = { rows: [{ total: 0, active: 0, total_value: 0, total_backlog: 0, total_gross_margin: 0 }] };
     if (employeeIds.length > 0) {
-      const projFilter = activeOnly ? " AND p.status = 'Open'" : '';
       projectsResult = await db.query(`
         SELECT
           COUNT(*) as total,
@@ -709,14 +709,13 @@ class Team {
           COALESCE(SUM(COALESCE(vc.gross_profit_dollars, 0)), 0) as total_gross_margin
         FROM projects p
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
-        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${projFilter}
-      `, [tenantId, employeeIds]);
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = ANY($3)
+      `, [tenantId, employeeIds, statuses]);
     }
 
     // Get cash flow metrics for team projects
     let cashFlowResult = { rows: [{ net_cash_position: 0, positive_count: 0, total_count: 0, total_open_receivables: 0 }] };
     if (employeeIds.length > 0) {
-      const cfFilter = activeOnly ? " AND p.status = 'Open'" : '';
       cashFlowResult = await db.query(`
         SELECT
           COALESCE(SUM(vc.cash_flow), 0) as net_cash_position,
@@ -725,14 +724,13 @@ class Team {
           COALESCE(SUM(vc.open_receivables), 0) as total_open_receivables
         FROM projects p
         LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
-        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${cfFilter}
-      `, [tenantId, employeeIds]);
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = ANY($3)
+      `, [tenantId, employeeIds, statuses]);
     }
 
     // Get buyout metrics for team projects (cost types 3=Subcontracts, 5=MEP Equipment, >= 10% complete)
     let buyoutResult = { rows: [{ total_buyout_remaining: 0, total_committed: 0, total_est_cost: 0, project_count: 0 }] };
     if (employeeIds.length > 0) {
-      const boFilter = activeOnly ? " AND p.status = 'Open'" : '';
       buyoutResult = await db.query(`
         SELECT
           COALESCE(SUM(agg.projected_cost - agg.committed_cost - agg.jtd_cost), 0) as total_buyout_remaining,
@@ -748,7 +746,7 @@ class Team {
             COALESCE(SUM(pc.projected_cost), 0) as projected_cost
           FROM projects p
           JOIN vp_phase_codes pc ON pc.linked_project_id = p.id AND pc.cost_type = ANY(ARRAY[3, 5])
-          WHERE p.tenant_id = $1 AND p.manager_id = ANY($2)${boFilter}
+          WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = ANY($3)
             AND EXISTS (
               SELECT 1 FROM vp_contracts vc
               WHERE vc.linked_project_id = p.id
@@ -761,7 +759,7 @@ class Team {
               OR COALESCE(SUM(pc.committed_cost), 0) != 0
               OR COALESCE(SUM(pc.projected_cost), 0) != 0
         ) agg
-      `, [tenantId, employeeIds]);
+      `, [tenantId, employeeIds, statuses]);
     }
 
     return {

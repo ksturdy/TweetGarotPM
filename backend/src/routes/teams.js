@@ -77,8 +77,10 @@ router.get('/:id/dashboard', async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const filter = req.query.filter || 'active';
-    const metrics = await Team.getDashboardMetrics(req.params.id, req.tenantId, filter);
+    const statuses = req.query.statuses
+      ? String(req.query.statuses).split(',').map(s => s.trim()).filter(Boolean)
+      : ['Open'];
+    const metrics = await Team.getDashboardMetrics(req.params.id, req.tenantId, statuses);
     res.json({ data: metrics });
   } catch (error) {
     console.error('Error fetching team dashboard:', error);
@@ -294,6 +296,160 @@ router.patch('/:id/members/:employeeId/role', authorize('admin', 'manager'), asy
   } catch (error) {
     console.error('Error updating member role:', error);
     res.status(500).json({ error: 'Failed to update member role' });
+  }
+});
+
+// GET /api/teams/:id/financials — revenue breakdowns by market, PM, customer, and year
+router.get('/:id/financials', async (req, res, next) => {
+  try {
+    const db = require('../config/database');
+
+    const team = await Team.getByIdAndTenant(req.params.id, req.tenantId);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const employeeIds = await Team.getMemberEmployeeIds(req.params.id, req.tenantId);
+    if (employeeIds.length === 0) {
+      return res.json({
+        by_market: [], by_manager: [], by_customer: [], by_year: [],
+        summary: { total_projects: 0, total_contract_value: 0, total_backlog: 0, avg_gm_pct: null },
+      });
+    }
+
+    const rawStatuses = req.query.statuses
+      ? String(req.query.statuses).split(',').map(s => s.trim()).filter(Boolean)
+      : ['Open', 'Soft-Closed'];
+
+    const result = await db.query(`
+      WITH project_data AS (
+        SELECT DISTINCT ON (p.id)
+          p.id,
+          COALESCE(p.market, 'Unspecified') AS market,
+          EXTRACT(YEAR FROM COALESCE(p.start_date, p.created_at))::int AS year,
+          COALESCE(e.first_name || ' ' || e.last_name, 'Unknown') AS manager_name,
+          COALESCE(c.name, c.customer_owner, p.client, 'Unknown') AS customer_name,
+          COALESCE(vc.contract_amount, p.contract_value, 0)::numeric AS contract_value,
+          COALESCE(vc.gross_profit_percent, p.gross_margin_percent)::numeric AS gm_pct,
+          (CASE WHEN vc.id IS NOT NULL
+            THEN COALESCE(vc.backlog, 0) + COALESCE(vc.ipd_amount, 0)
+            ELSE COALESCE(p.backlog, 0) END)::numeric AS backlog
+        FROM projects p
+        LEFT JOIN employees e ON p.manager_id = e.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN vp_contracts vc ON vc.linked_project_id = p.id
+        WHERE p.tenant_id = $1 AND p.manager_id = ANY($2) AND p.status = ANY($3)
+        ORDER BY p.id, vc.id DESC NULLS LAST
+      )
+      SELECT
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT market, COUNT(*)::int AS project_count,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value,
+            ROUND(COALESCE(SUM(backlog), 0)) AS backlog,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(gm_pct, 0) * contract_value)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS gm_pct
+          FROM project_data GROUP BY market ORDER BY SUM(contract_value) DESC
+        ) m) AS by_market,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT manager_name, COUNT(*)::int AS project_count,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value,
+            ROUND(COALESCE(SUM(backlog), 0)) AS backlog,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(gm_pct, 0) * contract_value)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS gm_pct
+          FROM project_data GROUP BY manager_name ORDER BY SUM(contract_value) DESC
+        ) m) AS by_manager,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT customer_name, COUNT(*)::int AS project_count,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value,
+            ROUND(COALESCE(SUM(backlog), 0)) AS backlog,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(gm_pct, 0) * contract_value)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS gm_pct
+          FROM project_data GROUP BY customer_name ORDER BY SUM(contract_value) DESC LIMIT 10
+        ) m) AS by_customer,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT year, COUNT(*)::int AS project_count,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value,
+            ROUND(COALESCE(SUM(backlog), 0)) AS backlog,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(gm_pct, 0) * contract_value)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS gm_pct
+          FROM project_data WHERE year IS NOT NULL GROUP BY year ORDER BY year ASC LIMIT 10
+        ) m) AS by_year,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT year, manager_name,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value
+          FROM project_data WHERE year IS NOT NULL
+          GROUP BY year, manager_name ORDER BY year ASC
+        ) m) AS by_year_manager,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT year, market,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS contract_value
+          FROM project_data WHERE year IS NOT NULL
+          GROUP BY year, market ORDER BY year ASC
+        ) m) AS by_year_market,
+
+        (SELECT COALESCE(json_agg(row_to_json(m)), '[]'::json) FROM (
+          SELECT pd.year, pd.customer_name,
+            ROUND(COALESCE(SUM(pd.contract_value), 0)) AS contract_value,
+            CASE WHEN SUM(CASE WHEN pd.gm_pct IS NOT NULL THEN pd.contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(pd.gm_pct, 0) * pd.contract_value)
+                / NULLIF(SUM(CASE WHEN pd.gm_pct IS NOT NULL THEN pd.contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS gm_pct
+          FROM project_data pd
+          INNER JOIN (
+            SELECT customer_name FROM project_data
+            GROUP BY customer_name ORDER BY SUM(contract_value) DESC LIMIT 10
+          ) top ON top.customer_name = pd.customer_name
+          WHERE pd.year IS NOT NULL
+          GROUP BY pd.year, pd.customer_name ORDER BY pd.year ASC
+        ) m) AS by_year_customer,
+
+        (SELECT row_to_json(m) FROM (
+          SELECT COUNT(*)::int AS total_projects,
+            ROUND(COALESCE(SUM(contract_value), 0)) AS total_contract_value,
+            ROUND(COALESCE(SUM(backlog), 0)) AS total_backlog,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END) > 0
+              THEN ROUND((SUM(COALESCE(gm_pct, 0) * contract_value)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL THEN contract_value ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS avg_gm_pct,
+            CASE WHEN SUM(CASE WHEN gm_pct IS NOT NULL AND backlog > 0 THEN backlog ELSE 0 END) > 0
+              THEN ROUND((SUM(CASE WHEN backlog > 0 THEN COALESCE(gm_pct, 0) * backlog ELSE 0 END)
+                / NULLIF(SUM(CASE WHEN gm_pct IS NOT NULL AND backlog > 0 THEN backlog ELSE 0 END), 0)
+                * 100)::numeric, 1)
+              ELSE NULL END AS backlog_gm_pct
+          FROM project_data
+        ) m) AS summary
+    `, [req.tenantId, employeeIds, rawStatuses]);
+
+    const row = result.rows[0] || {};
+    res.json({
+      by_market: row.by_market || [],
+      by_manager: row.by_manager || [],
+      by_customer: row.by_customer || [],
+      by_year: row.by_year || [],
+      by_year_manager: row.by_year_manager || [],
+      by_year_market: row.by_year_market || [],
+      by_year_customer: row.by_year_customer || [],
+      summary: row.summary || { total_projects: 0, total_contract_value: 0, total_backlog: 0, avg_gm_pct: null },
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

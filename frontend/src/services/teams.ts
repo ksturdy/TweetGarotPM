@@ -128,6 +128,30 @@ export interface TeamProject {
   created_at: string;
 }
 
+export interface TeamFinancialRow {
+  project_count: number;
+  contract_value: number;
+  backlog: number;
+  gm_pct: number | null;
+}
+
+export interface TeamFinancials {
+  by_market: Array<TeamFinancialRow & { market: string }>;
+  by_manager: Array<TeamFinancialRow & { manager_name: string }>;
+  by_customer: Array<{ customer_name: string; project_count: number; contract_value: number; backlog: number; gm_pct: number | null }>;
+  by_year: Array<TeamFinancialRow & { year: number }>;
+  by_year_manager: Array<{ year: number; manager_name: string; contract_value: number }>;
+  by_year_market: Array<{ year: number; market: string; contract_value: number }>;
+  by_year_customer: Array<{ year: number; customer_name: string; contract_value: number; gm_pct: number | null }>;
+  summary: {
+    total_projects: number;
+    total_contract_value: number;
+    total_backlog: number;
+    avg_gm_pct: number | null;
+    backlog_gm_pct: number | null;
+  };
+}
+
 export interface TeamInput {
   name: string;
   description?: string;
@@ -172,8 +196,8 @@ export const teamsApi = {
       { role }
     ),
 
-  getDashboard: (id: number, filter: string = 'active') =>
-    api.get<{ data: TeamDashboard }>(`/teams/${id}/dashboard`, { params: { filter } }),
+  getDashboard: (id: number, statuses: string[] = ['Open']) =>
+    api.get<{ data: TeamDashboard }>(`/teams/${id}/dashboard`, { params: { statuses: statuses.join(',') } }),
 
   getOpportunities: (id: number, filter: string = 'active') =>
     api.get<{ data: TeamOpportunity[] }>(`/teams/${id}/opportunities`, { params: { filter } }),
@@ -186,4 +210,7 @@ export const teamsApi = {
 
   getProjects: (id: number, filter: string = 'active') =>
     api.get<{ data: TeamProject[] }>(`/teams/${id}/projects`, { params: { filter } }),
+
+  getFinancials: (id: number, statuses: string[] = ['Open', 'Soft-Closed']) =>
+    api.get<TeamFinancials>(`/teams/${id}/financials`, { params: { statuses: statuses.join(',') } }).then(r => r.data),
 };
