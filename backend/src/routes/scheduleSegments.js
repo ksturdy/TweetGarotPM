@@ -18,10 +18,24 @@ const verifyProject = async (req, res, next) => {
   }
 };
 
-// GET /schedule-segments/bulk?project_ids=1,2,3
+// GET /schedule-segments/bulk?project_ids=1,2,3  (kept for compatibility)
 router.get('/schedule-segments/bulk', authenticate, tenantContext, async (req, res, next) => {
   try {
     const ids = (req.query.project_ids || '').split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+    if (ids.length === 0) return res.json({});
+    const result = await ProjectScheduleSegment.getBulkByProjects(ids, req.tenantId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /schedule-segments/bulk  { project_ids: [1,2,3] }
+// Preferred over GET for large project lists (avoids URL length limits).
+router.post('/schedule-segments/bulk', authenticate, tenantContext, async (req, res, next) => {
+  try {
+    const ids = (Array.isArray(req.body.project_ids) ? req.body.project_ids : [])
+      .map(Number).filter(n => !isNaN(n) && n > 0);
     if (ids.length === 0) return res.json({});
     const result = await ProjectScheduleSegment.getBulkByProjects(ids, req.tenantId);
     res.json(result);

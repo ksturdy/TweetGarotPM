@@ -51,8 +51,8 @@ export interface PhaseDateRange {
 export const scheduleSegmentsService = {
   getBulk: (projectIds: number[]): Promise<Record<number, ScheduleSegment[]>> => {
     if (!projectIds.length) return Promise.resolve({});
-    return api.get<Record<number, ScheduleSegment[]>>(
-      `/schedule-segments/bulk?project_ids=${projectIds.join(',')}`
+    return api.post<Record<number, ScheduleSegment[]>>(
+      `/schedule-segments/bulk`, { project_ids: projectIds }
     ).then((r) => r.data);
   },
 

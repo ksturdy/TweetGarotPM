@@ -338,46 +338,31 @@ const LaborForecast: React.FC = () => {
     queryFn: () => vistaDataService.getShopFieldHours(),
   });
 
-  // Explicitly cost_type projects — the primary path for segment-based distribution.
+  // Collect PM project IDs that need segment data:
+  //   a) Projects explicitly set to cost_type scheduling mode (the primary path)
+  //   b) Projects that have segment bars configured (start_date set) — this covers cases
+  //      like 44484 where scheduling_mode is null but Cost Type schedule bars were set up
   const linkedCostTypeProjectIds = useMemo(() => {
     if (!contracts) return [];
     const seen = new Set<number>();
     const ids: number[] = [];
     for (const c of contracts) {
-      if (c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type' && !seen.has(c.linked_project_id)) {
-        ids.push(c.linked_project_id);
-        seen.add(c.linked_project_id);
+      if (c.linked_project_id && !seen.has(c.linked_project_id)) {
+        const isCostType = c.linked_project_scheduling_mode === 'cost_type';
+        const hasSegments = c.linked_project_has_segments === true;
+        if (isCostType || hasSegments) {
+          ids.push(c.linked_project_id);
+          seen.add(c.linked_project_id);
+        }
       }
     }
     return ids;
   }, [contracts]);
 
-  // Projects linked only via provisional codes — contracts that have no direct project link
-  // but do have provisional phase codes pointing to a PM project (e.g. job 44484 SM Shop).
-  const linkedProvProjectIds = useMemo(() => {
-    if (!contracts) return [];
-    const directIds = new Set(linkedCostTypeProjectIds);
-    const seen = new Set<number>();
-    const ids: number[] = [];
-    for (const c of contracts) {
-      const provId = (c as any).provisional_linked_project_id as number | null | undefined;
-      if (provId && !directIds.has(provId) && !seen.has(provId)) {
-        ids.push(provId);
-        seen.add(provId);
-      }
-    }
-    return ids;
-  }, [contracts, linkedCostTypeProjectIds]);
-
-  const allSegmentProjectIds = useMemo(
-    () => [...linkedCostTypeProjectIds, ...linkedProvProjectIds],
-    [linkedCostTypeProjectIds, linkedProvProjectIds]
-  );
-
   const { data: bulkSegments } = useQuery({
-    queryKey: ['bulkSegments', allSegmentProjectIds],
-    queryFn: () => scheduleSegmentsService.getBulk(allSegmentProjectIds),
-    enabled: allSegmentProjectIds.length > 0,
+    queryKey: ['bulkSegments', linkedCostTypeProjectIds],
+    queryFn: () => scheduleSegmentsService.getBulk(linkedCostTypeProjectIds),
+    enabled: linkedCostTypeProjectIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -775,12 +760,11 @@ const LaborForecast: React.FC = () => {
       const primaryProjId = (contract.linked_project_id && contract.linked_project_scheduling_mode === 'cost_type')
         ? contract.linked_project_id : null;
 
-      // FALLBACK: project resolved from provisional codes — no direct link, no mode flag,
-      // but has provisional phase codes pointing at a PM project with segment dates.
-      const provProjId = primaryProjId ? null
-        : ((contract as any).provisional_linked_project_id as number | null) ?? null;
+      // FALLBACK: any directly linked project (e.g. 44484 where scheduling_mode is null
+      // but provisional phase codes have segment est_hours configured)
+      const linkedProjId = primaryProjId ? null : (contract.linked_project_id ?? null);
 
-      const resolvedProjId = primaryProjId ?? provProjId;
+      const resolvedProjId = primaryProjId ?? linkedProjId;
       const projSegData = (resolvedProjId && bulkSegments)
         ? (bulkSegments[resolvedProjId] ?? null)
         : null;
@@ -2670,9 +2654,15 @@ const LaborForecast: React.FC = () => {
                       plShopHC  += seg['55'] ?? 0;
                     } else {
                       const h = getHoursForColumn(p.monthlyHours, col);
-                      pfFieldHC += h.pf / hpp;
-                      smFieldHC += h.sm / hpp;
-                      plFieldHC += h.pl / hpp;
+                      if (locationFilter === 'shop') {
+                        pfShopHC += h.pf / hpp;
+                        smShopHC += h.sm / hpp;
+                        plShopHC += h.pl / hpp;
+                      } else {
+                        pfFieldHC += h.pf / hpp;
+                        smFieldHC += h.sm / hpp;
+                        plFieldHC += h.pl / hpp;
+                      }
                     }
                   });
                   if (!tradeFilter.includes('pf')) { pfFieldHC = 0; pfShopHC = 0; }

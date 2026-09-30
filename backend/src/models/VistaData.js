@@ -185,6 +185,12 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         p.scheduling_mode as linked_project_scheduling_mode,
+        EXISTS (
+          SELECT 1 FROM project_schedule_segments pss
+          WHERE pss.project_id = vc.linked_project_id
+            AND pss.tenant_id = vc.tenant_id
+            AND pss.start_date IS NOT NULL
+        ) AS linked_project_has_segments,
         prov_p.id as provisional_linked_project_id,
         prov_p.scheduling_mode as provisional_linked_project_scheduling_mode,
         e.first_name || ' ' || e.last_name as linked_employee_name,
