@@ -93,13 +93,12 @@ const fmtK = (v: number | null | undefined) => {
 };
 const fmtHrs = (v: number | null | undefined) => v ? Math.round(v).toLocaleString() : '—';
 
-type RemHrsMode = 'est-rate' | 'jtd-rate' | 'rem-cost';
+type RemHrsMode = 'est-rate' | 'jtd-rate';
 
 function calcRemHrs(costs: SegmentCosts | undefined, mode: RemHrsMode): number | null {
   const projCost = safeN(costs?.projected_cost);
   const jtdCost  = safeN(costs?.jtd_cost);
   const remCost  = projCost - jtdCost;
-  if (mode === 'rem-cost') return remCost;
   const estCost = safeN(costs?.est_cost);
   const estHrs  = safeN(costs?.est_hours);
   const jtdHrs  = safeN(costs?.jtd_hours);
@@ -615,18 +614,17 @@ const GanttLeftRow: React.FC<{
         )}
         <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace', flexShrink: 0 }}>{def.key.toUpperCase()}</span>
       </div>
-      {/* Rem Hrs / Rem $ */}
+      {/* Rem Hrs */}
       <div style={{ ...cell, width: colWidths.estHrs, justifyContent: 'center', fontSize: '0.65rem' }}>
-        {(() => {
-          if (remainingMode !== 'rem-cost' && !def.isLabor) return '—';
-          const val = calcRemHrs(costs, remainingMode);
-          if (val === null) return '—';
-          return remainingMode === 'rem-cost' ? fmtCompact(Math.max(0, val)) : fmtHrs(Math.max(0, val));
-        })()}
+        {def.isLabor ? (() => { const v = calcRemHrs(costs, remainingMode); return v != null ? fmtHrs(Math.max(0, v)) : '—'; })() : '—'}
       </div>
-      {/* Est $ */}
+      {/* Rem $ */}
       <div style={{ ...cell, width: colWidths.estCost, justifyContent: 'center' }}>
-        {fmtCompact(costs?.est_cost)}
+        {costs?.projected_cost != null
+          ? <span style={{ fontWeight: 600, color: safeN(costs.projected_cost) - safeN(costs.jtd_cost) < 0 ? '#dc2626' : '#1e293b' }}>
+              {fmtCompact(safeN(costs.projected_cost) - safeN(costs.jtd_cost))}
+            </span>
+          : '—'}
       </div>
       {/* Start */}
       <div style={{ ...cell, width: colWidths.start, justifyContent: 'center', padding: '0 2px' }}>
@@ -1213,7 +1211,6 @@ const CostTypeSchedule: React.FC<Props> = ({
             {([
               { value: 'est-rate' as const, label: 'Est Rate', title: '(Proj Cost − JTD Cost) ÷ Estimated labor rate — use early in job when rate is still settling' },
               { value: 'jtd-rate' as const, label: 'JTD Rate', title: '(Proj Cost − JTD Cost) ÷ JTD labor rate — use once rate is stable' },
-              { value: 'rem-cost' as const, label: 'Rem $',    title: 'Show remaining cost (Proj Cost − JTD Cost) instead of hours' },
             ]).map((opt, i) => (
               <button key={opt.value} title={opt.title} onClick={() => setRemainingMode(opt.value)}
                 style={{
@@ -1228,9 +1225,7 @@ const CostTypeSchedule: React.FC<Props> = ({
             ))}
           </div>
           <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-            {remainingMode === 'est-rate' ? '(Proj − JTD) ÷ Est Rate' :
-             remainingMode === 'jtd-rate' ? '(Proj − JTD) ÷ JTD Rate' :
-             'Proj Cost − JTD Cost'}
+            {remainingMode === 'est-rate' ? '(Proj − JTD) ÷ Est Rate' : '(Proj − JTD) ÷ JTD Rate'}
           </span>
         </div>
       )}
@@ -1246,8 +1241,8 @@ const CostTypeSchedule: React.FC<Props> = ({
               <div style={{ ...hdrCell, flex: 1, minWidth: colWidths.label, padding: '0 0.5rem', justifyContent: 'flex-start', borderLeft: '3px solid transparent' }}>
                 Cost Type{resizeHandle('label')}
               </div>
-              <div style={{ ...hdrCell, width: colWidths.estHrs }}>{remainingMode === 'rem-cost' ? 'Rem $' : 'Rem Hrs'}{resizeHandle('estHrs')}</div>
-              <div style={{ ...hdrCell, width: colWidths.estCost }}>Est ${resizeHandle('estCost')}</div>
+              <div style={{ ...hdrCell, width: colWidths.estHrs }}>Rem Hrs{resizeHandle('estHrs')}</div>
+              <div style={{ ...hdrCell, width: colWidths.estCost }}>Rem ${resizeHandle('estCost')}</div>
               <div style={{ ...hdrCell, width: colWidths.start }}>Start{resizeHandle('start')}</div>
               <div style={{ ...hdrCell, width: colWidths.end }}>End{resizeHandle('end')}</div>
               <div style={{ ...hdrCell, width: colWidths.dur }}>Dur{resizeHandle('dur')}</div>
