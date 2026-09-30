@@ -102,6 +102,8 @@ export interface VPContract {
   linked_project_name?: string;
   linked_project_number?: string;
   linked_project_scheduling_mode?: 'summary' | 'cost_type' | 'phase' | null;
+  provisional_linked_project_id?: number | null;
+  provisional_linked_project_scheduling_mode?: 'summary' | 'cost_type' | 'phase' | null;
   linked_employee_name?: string;
   linked_employee_email?: string | null;
   linked_customer_name?: string;

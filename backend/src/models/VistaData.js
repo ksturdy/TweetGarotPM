@@ -185,6 +185,8 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         p.scheduling_mode as linked_project_scheduling_mode,
+        prov_p.id as provisional_linked_project_id,
+        prov_p.scheduling_mode as provisional_linked_project_scheduling_mode,
         e.first_name || ' ' || e.last_name as linked_employee_name,
         COALESCE(c.name, c.customer_owner) as linked_customer_name,
         c.customer_facility as linked_customer_facility,
@@ -193,6 +195,17 @@ const VistaData = {
         d.department_number as linked_department_number
       FROM vp_contracts vc
       LEFT JOIN projects p ON vc.linked_project_id = p.id
+      LEFT JOIN LATERAL (
+        SELECT vpc.linked_project_id AS prov_project_id
+        FROM vp_phase_codes vpc
+        WHERE vpc.tenant_id = vc.tenant_id
+          AND vpc.contract = vc.contract_number
+          AND vpc.is_provisional = TRUE
+          AND vpc.linked_project_id IS NOT NULL
+          AND vc.linked_project_id IS NULL
+        LIMIT 1
+      ) prov ON TRUE
+      LEFT JOIN projects prov_p ON prov.prov_project_id = prov_p.id
       LEFT JOIN employees e ON vc.linked_employee_id = e.id
       LEFT JOIN customers c ON vc.linked_customer_id = c.id
       LEFT JOIN departments d ON vc.linked_department_id = d.id

@@ -670,17 +670,13 @@ const PhaseSchedule = {
   },
 
   async deleteProvisional(id, tenantId) {
-    const refs = await db.query(
-      `SELECT COUNT(*)::int AS n
-       FROM phase_schedule_items
+    // Remove any references from phase_schedule_items before deleting
+    await db.query(
+      `UPDATE phase_schedule_items
+       SET phase_code_ids = array_remove(phase_code_ids, $2)
        WHERE tenant_id = $1 AND $2 = ANY(phase_code_ids)`,
       [tenantId, id]
     );
-    if (refs.rows[0].n > 0) {
-      const err = new Error('Provisional code is referenced by schedule items; remove it from those rows first.');
-      err.code = 'PROVISIONAL_IN_USE';
-      throw err;
-    }
     const result = await db.query(
       `DELETE FROM vp_phase_codes
        WHERE id = $1 AND tenant_id = $2
