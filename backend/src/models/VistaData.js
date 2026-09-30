@@ -185,6 +185,8 @@ const VistaData = {
         p.name as linked_project_name,
         p.number as linked_project_number,
         p.scheduling_mode as linked_project_scheduling_mode,
+        p.start_date as linked_project_start_date,
+        p.end_date as linked_project_end_date,
         EXISTS (
           SELECT 1 FROM project_schedule_segments pss
           WHERE pss.project_id = vc.linked_project_id

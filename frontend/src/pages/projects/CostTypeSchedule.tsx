@@ -60,7 +60,7 @@ const hoursPerPersonPerMonth = (s: ShiftSetting) => weeklyHours(s) * (52 / 12);
 const ROW_H = 28;
 const GROUP_H = 22;
 
-const GANTT_COL_DEFAULTS = { label: 220, estHrs: 62, estCost: 78, start: 90, end: 90, dur: 48, contour: 116 };
+const GANTT_COL_DEFAULTS = { label: 220, estHrs: 62, estCost: 78, rate: 54, start: 90, end: 90, dur: 48, contour: 116 };
 type GanttColKey = keyof typeof GANTT_COL_DEFAULTS;
 const LEFT_PANEL_DEFAULT = Object.values(GANTT_COL_DEFAULTS).reduce((a, b) => a + b, 0);
 
@@ -95,6 +95,15 @@ const fmtHrs = (v: number | null | undefined) => v ? Math.round(v).toLocaleStrin
 
 type RemHrsMode = 'est-rate' | 'jtd-rate';
 
+function calcRate(costs: SegmentCosts | undefined, mode: RemHrsMode): number | null {
+  const estCost = safeN(costs?.est_cost);
+  const estHrs  = safeN(costs?.est_hours);
+  const jtdCost = safeN(costs?.jtd_cost);
+  const jtdHrs  = safeN(costs?.jtd_hours);
+  if (mode === 'est-rate') return estCost > 0 && estHrs > 0 ? estCost / estHrs : null;
+  return jtdCost > 0 && jtdHrs > 0 ? jtdCost / jtdHrs : null;
+}
+
 function calcRemHrs(costs: SegmentCosts | undefined, mode: RemHrsMode): number | null {
   const projCost = safeN(costs?.projected_cost);
   const jtdCost  = safeN(costs?.jtd_cost);
@@ -117,6 +126,18 @@ const calcDur = (start: string | null, end: string | null): string => {
   const months = Math.round(days / 30.44);
   return months >= 2 ? `${months}mo` : `${days}d`;
 };
+
+function parseDurToDays(s: string): number | null {
+  const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*(d|w|mo?|y)$/i);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  const u = m[2].toLowerCase();
+  if (u === 'd') return Math.round(n);
+  if (u === 'w') return Math.round(n * 7);
+  if (u === 'm' || u === 'mo') return Math.round(n * 30.44);
+  if (u === 'y') return Math.round(n * 365.25);
+  return null;
+}
 
 const toIso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -169,11 +190,11 @@ function useRowEdit(
 ) {
   const [localStart,   setLocalStart]   = useState(() => toInput(seg?.start_date));
   const [localEnd,     setLocalEnd]     = useState(() => toInput(seg?.end_date));
-  const [localContour, setLocalContour] = useState(() => seg?.contour_type || 'flat');
+  const [localContour, setLocalContour] = useState(() => seg?.contour_type || 'bell');
 
   useEffect(() => { setLocalStart(toInput(seg?.start_date)); }, [seg?.start_date]);
   useEffect(() => { setLocalEnd(toInput(seg?.end_date)); }, [seg?.end_date]);
-  useEffect(() => { setLocalContour(seg?.contour_type || 'flat'); }, [seg?.contour_type]);
+  useEffect(() => { setLocalContour(seg?.contour_type || 'bell'); }, [seg?.contour_type]);
 
   const handleBlur = useCallback(() => {
     const ns = localStart || null, ne = localEnd || null;
@@ -596,12 +617,23 @@ const GanttLeftRow: React.FC<{
   colWidths: typeof GANTT_COL_DEFAULTS;
   hasProvisional?: boolean;
   remainingMode: RemHrsMode;
+  aligned?: boolean;
+  alignedStart?: string;
+  alignedEnd?: string;
+  alignedContour?: ContourType;
+  onExitAlign?: () => void;
   onSave: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
-}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, hasProvisional, remainingMode, onSave }) => {
+}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, hasProvisional, remainingMode, aligned, alignedStart, alignedEnd, alignedContour, onExitAlign, onSave }) => {
   const { localStart, localEnd, localContour, setLocalStart, setLocalEnd, handleBlur, handleContour } = useRowEdit(seg, def.key, onSave);
 
   const cell: React.CSSProperties = { borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', height: '100%', fontSize: '0.7rem', color: '#1e293b', flexShrink: 0, overflow: 'hidden' };
   const inputSt: React.CSSProperties = { width: '100%', padding: '0 0.25rem', border: 'none', fontSize: '0.7rem', fontFamily: 'inherit', color: '#1e293b', background: 'transparent', outline: 'none', boxSizing: 'border-box', height: '100%' };
+
+  // Transparent overlay that intercepts interaction when aligned, prompting exit.
+  const exitOverlay = aligned && onExitAlign
+    ? <div style={{ position: 'absolute', inset: 0, cursor: 'pointer', zIndex: 1 }}
+        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onExitAlign(); }} />
+    : null;
 
   return (
     <div style={{ height: ROW_H, borderBottom: '1px solid #cbd5e1', display: 'flex', alignItems: 'stretch', background: rowBg, opacity: isActive ? 1 : 0.5 }}>
@@ -626,29 +658,42 @@ const GanttLeftRow: React.FC<{
             </span>
           : '—'}
       </div>
+      {/* Rate */}
+      <div style={{ ...cell, width: colWidths.rate, justifyContent: 'center', fontSize: '0.65rem' }}>
+        {def.isLabor ? (() => { const r = calcRate(costs, remainingMode); return r != null ? `$${Math.round(r)}` : '—'; })() : '—'}
+      </div>
       {/* Start */}
-      <div style={{ ...cell, width: colWidths.start, justifyContent: 'center', padding: '0 2px' }}>
-        <input type="date" value={localStart} onChange={e => setLocalStart(e.target.value)} onBlur={handleBlur}
-          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: localStart ? '#1e293b' : '#94a3b8' }} />
+      <div style={{ ...cell, width: colWidths.start, justifyContent: 'center', padding: '0 2px', position: 'relative' }}>
+        <input type="date" value={aligned ? (alignedStart ?? '') : localStart} min={toIso(new Date())}
+          onChange={aligned ? undefined : e => setLocalStart(e.target.value)}
+          onBlur={aligned ? undefined : handleBlur}
+          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: (aligned ? alignedStart : localStart) ? '#1e293b' : '#94a3b8' }} />
+        {exitOverlay}
       </div>
       {/* End */}
-      <div style={{ ...cell, width: colWidths.end, justifyContent: 'center', padding: '0 2px' }}>
-        <input type="date" value={localEnd} onChange={e => setLocalEnd(e.target.value)} onBlur={handleBlur}
-          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: localEnd ? '#1e293b' : '#94a3b8' }} />
+      <div style={{ ...cell, width: colWidths.end, justifyContent: 'center', padding: '0 2px', position: 'relative' }}>
+        <input type="date" value={aligned ? (alignedEnd ?? '') : localEnd}
+          onChange={aligned ? undefined : e => setLocalEnd(e.target.value)}
+          onBlur={aligned ? undefined : handleBlur}
+          style={{ ...inputSt, textAlign: 'center', cursor: 'pointer', color: (aligned ? alignedEnd : localEnd) ? '#1e293b' : '#94a3b8' }} />
+        {exitOverlay}
       </div>
       {/* Dur */}
-      <div style={{ ...cell, width: colWidths.dur, justifyContent: 'center', fontSize: '0.65rem', color: '#64748b' }}>
-        {calcDur(localStart || null, localEnd || null)}
+      <div style={{ ...cell, width: colWidths.dur, justifyContent: 'center', fontSize: '0.65rem', color: '#64748b', position: 'relative' }}>
+        {aligned ? calcDur(alignedStart || null, alignedEnd || null) : calcDur(localStart || null, localEnd || null)}
+        {exitOverlay}
       </div>
       {/* Contour */}
-      <div style={{ width: colWidths.contour, flexShrink: 0, display: 'flex', alignItems: 'center', height: '100%' }}>
+      <div style={{ width: colWidths.contour, flexShrink: 0, display: 'flex', alignItems: 'center', height: '100%', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 0.2rem', width: '100%' }}>
-          <ContourVisual contour={localContour as ContourType} />
-          <select value={localContour} onChange={e => handleContour(e.target.value)}
+          <ContourVisual contour={aligned ? (alignedContour ?? 'bell') : localContour as ContourType} />
+          <select value={aligned ? (alignedContour ?? 'bell') : localContour}
+            onChange={aligned ? undefined : e => handleContour(e.target.value)}
             style={{ ...inputSt, cursor: 'pointer', flex: 1 }}>
             {contourOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+        {exitOverlay}
       </div>
     </div>
   );
@@ -700,7 +745,7 @@ const TableRow: React.FC<{
         </div>
       </td>
       <td style={tdSt({ padding: '0 0.25rem', background: COL_GROUP.sched.hdr + '55' })}>
-        <input type="date" value={localStart} onChange={e => setLocalStart(e.target.value)} onBlur={handleBlur}
+        <input type="date" value={localStart} min={toIso(new Date())} onChange={e => setLocalStart(e.target.value)} onBlur={handleBlur}
           style={{ padding: '0.15rem 0.25rem', border: '1px solid #cbd5e1', borderRadius: 3, fontSize: '0.72rem', color: '#1e293b', background: '#fff', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
       </td>
       <td style={tdSt({ padding: '0 0.25rem', background: COL_GROUP.sched.hdr + '55' })}>
@@ -752,8 +797,40 @@ const CostTypeSchedule: React.FC<Props> = ({
   projectId, segments, activeKeys, onSegmentUpdate, onInitialize, initPending, project,
 }) => {
   const queryClient = useQueryClient();
+  const { confirm } = useTitanFeedback();
   const [viewMode, setViewMode] = useState<'gantt' | 'table' | 'manpower'>('gantt');
   const [showProvisional, setShowProvisional] = useState(false);
+
+  // ── Align Phases ──────────────────────────────────────────────────────────
+  const [alignPhases, setAlignPhases] = useState(() =>
+    localStorage.getItem(`alignPhases-${projectId}`) !== 'false'
+  );
+  const [alignedStart,   setAlignedStart]   = useState('');
+  const [alignedEnd,     setAlignedEnd]     = useState('');
+  const [alignedContour, setAlignedContour] = useState<ContourType>('bell');
+  const [alignInitialized, setAlignInitialized] = useState(false);
+  const [masterDurInput, setMasterDurInput] = useState('');
+  const [masterDurEditing, setMasterDurEditing] = useState(false);
+
+  useEffect(() => {
+    if (!masterDurEditing) setMasterDurInput(calcDur(alignedStart || null, alignedEnd || null));
+  }, [alignedStart, alignedEnd, masterDurEditing]);
+
+  useEffect(() => {
+    if (alignInitialized) return;
+    const effStart = toInput(project?.effective_start_date ?? project?.start_date);
+    const effEnd   = toInput(project?.effective_end_date   ?? project?.end_date);
+    const firstSeg = segments.find(s => activeKeys.includes(s.segment_key) && s.start_date && s.end_date);
+    const start    = effStart || toInput(firstSeg?.start_date)           || '';
+    const end      = effEnd   || toInput(firstSeg?.end_date)             || '';
+    const contour  = (firstSeg?.contour_type as ContourType | undefined) || 'bell';
+    if (start || end) {
+      setAlignedStart(start);
+      setAlignedEnd(end);
+      setAlignedContour(contour);
+      setAlignInitialized(true);
+    }
+  }, [project, segments, activeKeys, alignInitialized]);
 
   // ── Shift settings ────────────────────────────────────────────────────────
   const shiftKey = `costTypeSchedule_shifts_${projectId}`;
@@ -833,9 +910,32 @@ const CostTypeSchedule: React.FC<Props> = ({
   const [barDragOffset,   setBarDragOffset]   = useState<{ segKey: string; deltaX: number } | null>(null);
   const [barResizeOffset, setBarResizeOffset] = useState<{ segKey: string; edge: 'left' | 'right'; deltaX: number } | null>(null);
 
-  const xToDateRef  = useRef<(x: number) => Date>(() => new Date());
-  const onSaveRef   = useRef(onSegmentUpdate);
-  onSaveRef.current = onSegmentUpdate;
+  const xToDateRef       = useRef<(x: number) => Date>(() => new Date());
+  const onSaveRef        = useRef(onSegmentUpdate);
+  onSaveRef.current      = onSegmentUpdate;
+
+  // Called from individual bar onMouseDown when alignPhases is on — prompt to exit.
+  const exitAlignRef = useRef<() => void>(() => {});
+  exitAlignRef.current = () => {
+    confirm({
+      title: 'Exit Aligned Mode',
+      message: 'This segment will be adjusted separately. All segments will keep their current dates until you re-enable Aligned Mode.',
+      confirmText: 'Exit Aligned Mode',
+    }).then(ok => {
+      if (ok) {
+        setAlignPhases(false);
+        localStorage.setItem(`alignPhases-${projectId}`, 'false');
+      }
+    });
+  };
+  const masterDragSave   = useRef<(start: string, end: string) => void>(() => {});
+  masterDragSave.current = (start: string, end: string) => {
+    setAlignedStart(start);
+    setAlignedEnd(end);
+    activeKeys.forEach(key => {
+      onSaveRef.current(key, { start_date: start, end_date: end, contour_type: alignedContour });
+    });
+  };
 
   // ── Mouse handlers ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -869,7 +969,8 @@ const CostTypeSchedule: React.FC<Props> = ({
         const d = barDragRef.current;
         const newStart = xToDateRef.current(d.originalBarLeft + (e.clientX - d.startMouseX));
         const newEnd   = new Date(newStart.getTime() + d.durationDays * 86400000);
-        onSaveRef.current(d.segKey, { start_date: toIso(newStart), end_date: toIso(newEnd) });
+        if (d.segKey === '__master__') masterDragSave.current(toIso(newStart), toIso(newEnd));
+        else onSaveRef.current(d.segKey, { start_date: toIso(newStart), end_date: toIso(newEnd) });
         dragOccurred.current = true;
       }
       if (barResizeRef.current?.dragStarted) {
@@ -877,12 +978,16 @@ const CostTypeSchedule: React.FC<Props> = ({
         const deltaX = e.clientX - r.startMouseX;
         if (r.edge === 'left') {
           const newStart = xToDateRef.current(r.originalBarLeft + deltaX);
-          if (newStart < r.originalEndDate)
-            onSaveRef.current(r.segKey, { start_date: toIso(newStart), end_date: toIso(r.originalEndDate) });
+          if (newStart < r.originalEndDate) {
+            if (r.segKey === '__master__') masterDragSave.current(toIso(newStart), toIso(r.originalEndDate));
+            else onSaveRef.current(r.segKey, { start_date: toIso(newStart), end_date: toIso(r.originalEndDate) });
+          }
         } else {
           const newEnd = xToDateRef.current(r.originalBarLeft + r.originalBarWidth + deltaX);
-          if (newEnd > r.originalStartDate)
-            onSaveRef.current(r.segKey, { start_date: toIso(r.originalStartDate), end_date: toIso(newEnd) });
+          if (newEnd > r.originalStartDate) {
+            if (r.segKey === '__master__') masterDragSave.current(toIso(r.originalStartDate), toIso(newEnd));
+            else onSaveRef.current(r.segKey, { start_date: toIso(r.originalStartDate), end_date: toIso(newEnd) });
+          }
         }
         dragOccurred.current = true;
       }
@@ -914,6 +1019,41 @@ const CostTypeSchedule: React.FC<Props> = ({
   const segmentMap = new Map(segments.map(s => [s.segment_key, s]));
   const costsMap   = new Map(costs.map(c => [c.segment_key, c]));
   const hasAnyDates = segments.some(s => s.start_date || s.end_date);
+
+  const saveAlignedToAll = useCallback((start: string, end: string, contour?: ContourType) => {
+    const ct = contour ?? alignedContour;
+    activeKeys.forEach(key => onSegmentUpdate(key, { start_date: start || null, end_date: end || null, contour_type: ct }));
+  }, [activeKeys, alignedContour, onSegmentUpdate]);
+
+  const handleAlignedContour = (ct: ContourType) => {
+    setAlignedContour(ct);
+    activeKeys.forEach(key => onSegmentUpdate(key, { start_date: alignedStart || null, end_date: alignedEnd || null, contour_type: ct }));
+  };
+
+  const handleAlignToggle = async () => {
+    const next = !alignPhases;
+    if (next) {
+      const hasDiff = activeKeys.some(key => {
+        const seg = segmentMap.get(key);
+        return (
+          toInput(seg?.start_date) !== alignedStart ||
+          toInput(seg?.end_date)   !== alignedEnd   ||
+          (seg?.contour_type || 'bell') !== alignedContour
+        );
+      });
+      if (hasDiff) {
+        const ok = await confirm({
+          title: 'Enable Aligned Mode',
+          message: 'All segments will be reset to the master start date, end date, and contour. Any individual adjustments will be lost.',
+          confirmText: 'Enable Aligned Mode',
+        });
+        if (!ok) return;
+      }
+    }
+    setAlignPhases(next);
+    localStorage.setItem(`alignPhases-${projectId}`, String(next));
+    if (next && (alignedStart || alignedEnd)) saveAlignedToAll(alignedStart, alignedEnd, alignedContour);
+  };
 
   const totalEst = costs.reduce((s, c) => s + safeN(c.est_cost), 0);
   const totalJtd = costs.reduce((s, c) => s + safeN(c.jtd_cost), 0);
@@ -959,6 +1099,11 @@ const CostTypeSchedule: React.FC<Props> = ({
   const todayIso = toIso(new Date());
   const clampStart = (s: string | null | undefined) =>
     s && s < todayIso ? todayIso : (s ?? null);
+  // When aligned, all segments share the master dates and contour — use them immediately
+  // without waiting for server roundtrip so charts/bars update as the user types.
+  const effStart   = (seg: ScheduleSegment | undefined) => alignPhases && alignedStart ? alignedStart : (seg?.start_date ?? null);
+  const effEnd     = (seg: ScheduleSegment | undefined) => alignPhases && alignedEnd   ? alignedEnd   : (seg?.end_date   ?? null);
+  const effContour = (seg: ScheduleSegment | undefined) => alignPhases ? alignedContour : ((seg?.contour_type as ContourType | undefined) ?? 'bell');
 
   // Precompute monthly remaining-cost distribution per active segment
   const segMonthlyRem = new Map<string, number[]>();
@@ -969,13 +1114,12 @@ const CostTypeSchedule: React.FC<Props> = ({
     const rem = safeN(c?.projected_cost) - safeN(c?.jtd_cost);
     segMonthlyRem.set(def.key,
       rem > 0
-        ? distributeMonthly(rem, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        ? distributeMonthly(rem, clampStart(effStart(seg)), effEnd(seg), effContour(seg), allMonths)
         : allMonths.map(() => 0)
     );
   });
 
-  // Manpower datasets: hours ÷ hrs-per-person-per-month
-  // Uses original (unclamped) start date so the planned-labor curve reflects the full schedule window.
+  // Labor Resources chart: uses remaining hours (same source as Manpower grid) so chart matches grid.
   const laborDatasets = SEGMENT_DEFINITIONS
     .filter(d => d.isLabor && activeKeys.includes(d.key))
     .map(def => {
@@ -983,8 +1127,9 @@ const CostTypeSchedule: React.FC<Props> = ({
       const c        = costsMap.get(def.key);
       const shift    = shiftSettings[def.key] ?? SHIFT_DEFAULTS[def.key] ?? { hoursPerDay: 8, daysPerWeek: 5 };
       const capacity = hoursPerPersonPerMonth(shift);
-      const hours    = c?.est_hours
-        ? distributeMonthly(c.est_hours, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+      const remHrs   = calcRemHrs(c, remainingMode);
+      const hours    = remHrs != null && remHrs > 0
+        ? distributeMonthly(remHrs, clampStart(effStart(seg)), effEnd(seg), effContour(seg), allMonths)
         : allMonths.map(() => 0);
       const data = hours.map(h => capacity > 0 ? Math.round((h / capacity) * 10) / 10 : 0);
       return { label: def.label, data, color: LABOR_CHART_COLORS[def.key] ?? '#6b7280' };
@@ -1005,7 +1150,7 @@ const CostTypeSchedule: React.FC<Props> = ({
     const remHrs = calcRemHrs(c, remainingMode);
     segMonthlyRemHrs.set(def.key,
       remHrs != null && remHrs > 0
-        ? distributeMonthly(remHrs, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        ? distributeMonthly(remHrs, clampStart(effStart(seg)), effEnd(seg), effContour(seg), allMonths)
         : allMonths.map(() => 0)
     );
   });
@@ -1086,6 +1231,19 @@ const CostTypeSchedule: React.FC<Props> = ({
             style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#1e293b' }}>
             {initPending ? 'Initializing…' : hasAnyDates ? 'Fill Missing from Project Dates' : 'Initialize from Project Dates'}
           </button>
+          <button
+            onClick={handleAlignToggle}
+            title={alignPhases ? 'All segments share the same dates — click to edit individually' : 'Click to lock all segments to the same start and end date'}
+            style={{
+              padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer',
+              border: `1px solid ${alignPhases ? '#1d4ed8' : '#e2e8f0'}`,
+              borderRadius: 6,
+              background: alignPhases ? '#eff6ff' : 'white',
+              color: alignPhases ? '#1d4ed8' : '#64748b',
+              fontWeight: alignPhases ? 600 : 400,
+            }}>
+            {alignPhases ? '⊟ Aligned' : '⊞ Align Phases'}
+          </button>
           <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
             <button style={viewBtn(viewMode === 'gantt')} onClick={() => setViewMode('gantt')}>Gantt</button>
             <button style={{ ...viewBtn(viewMode === 'table'), borderLeft: '1px solid #e2e8f0' }} onClick={() => setViewMode('table')}>$ Cost</button>
@@ -1137,7 +1295,7 @@ const CostTypeSchedule: React.FC<Props> = ({
           {laborDatasets.length > 0 && (
             <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '0.875rem' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Labor Resources by Month
+                Remaining Labor Resources by Month
               </div>
               <div style={{ height: 200, position: 'relative' }}>
                 <Line
@@ -1267,11 +1425,68 @@ const CostTypeSchedule: React.FC<Props> = ({
               </div>
               <div style={{ ...hdrCell, width: colWidths.estHrs }}>Rem Hrs{resizeHandle('estHrs')}</div>
               <div style={{ ...hdrCell, width: colWidths.estCost }}>Rem ${resizeHandle('estCost')}</div>
+              <div style={{ ...hdrCell, width: colWidths.rate }}>{remainingMode === 'est-rate' ? 'Est $/hr' : 'JTD $/hr'}{resizeHandle('rate')}</div>
               <div style={{ ...hdrCell, width: colWidths.start }}>Start{resizeHandle('start')}</div>
               <div style={{ ...hdrCell, width: colWidths.end }}>End{resizeHandle('end')}</div>
               <div style={{ ...hdrCell, width: colWidths.dur }}>Dur{resizeHandle('dur')}</div>
               <div style={{ ...hdrCell, width: colWidths.contour, borderRight: 'none' }}>Contour</div>
             </div>
+
+            {/* Aligned master row */}
+            {alignPhases && (() => {
+              const masterCell: React.CSSProperties = { borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', height: '100%', fontSize: '0.7rem', flexShrink: 0, overflow: 'hidden' };
+              const masterInput: React.CSSProperties = { width: '100%', padding: '0 0.25rem', border: 'none', fontSize: '0.7rem', fontFamily: 'inherit', color: '#1e3a5f', background: 'transparent', outline: 'none', boxSizing: 'border-box' as const, height: '100%' };
+              return (
+                <div style={{ height: ROW_H, borderBottom: '2px solid #1d4ed8', display: 'flex', alignItems: 'stretch', background: '#dbeafe' }}>
+                  <div style={{ ...masterCell, flex: 1, minWidth: colWidths.label, padding: '0 0.5rem', gap: 6, borderLeft: '3px solid #1d4ed8', fontWeight: 700, color: '#1d4ed8', fontSize: '0.68rem', letterSpacing: '0.04em' }}>
+                    ALL SEGMENTS
+                  </div>
+                  <div style={{ ...masterCell, width: colWidths.estHrs }} />
+                  <div style={{ ...masterCell, width: colWidths.estCost }} />
+                  <div style={{ ...masterCell, width: colWidths.rate }} />
+                  <div style={{ ...masterCell, width: colWidths.start, justifyContent: 'center', padding: '0 2px' }}>
+                    <input type="date" value={alignedStart} min={toIso(new Date())}
+                      onChange={e => setAlignedStart(e.target.value)}
+                      onBlur={() => saveAlignedToAll(alignedStart, alignedEnd)}
+                      style={{ ...masterInput, textAlign: 'center', cursor: 'pointer', color: alignedStart ? '#1e3a5f' : '#94a3b8' }} />
+                  </div>
+                  <div style={{ ...masterCell, width: colWidths.end, justifyContent: 'center', padding: '0 2px' }}>
+                    <input type="date" value={alignedEnd}
+                      onChange={e => setAlignedEnd(e.target.value)}
+                      onBlur={() => saveAlignedToAll(alignedStart, alignedEnd)}
+                      style={{ ...masterInput, textAlign: 'center', cursor: 'pointer', color: alignedEnd ? '#1e3a5f' : '#94a3b8' }} />
+                  </div>
+                  <div style={{ ...masterCell, width: colWidths.dur, justifyContent: 'center' }}>
+                    <input
+                      value={masterDurInput}
+                      placeholder="—"
+                      onFocus={() => setMasterDurEditing(true)}
+                      onChange={e => setMasterDurInput(e.target.value)}
+                      onBlur={() => {
+                        setMasterDurEditing(false);
+                        if (!alignedStart) return;
+                        const days = parseDurToDays(masterDurInput);
+                        if (!days || days <= 0) { setMasterDurInput(calcDur(alignedStart || null, alignedEnd || null)); return; }
+                        const newEnd = toIso(new Date(new Date(alignedStart).getTime() + days * 86400000));
+                        setAlignedEnd(newEnd);
+                        saveAlignedToAll(alignedStart, newEnd);
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      style={{ ...masterInput, textAlign: 'center', cursor: 'text', color: '#1d4ed8', fontWeight: 600, width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ ...masterCell, width: colWidths.contour, borderRight: 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 0.2rem', width: '100%' }}>
+                      <ContourVisual contour={alignedContour} />
+                      <select value={alignedContour} onChange={e => handleAlignedContour(e.target.value as ContourType)}
+                        style={{ ...masterInput, cursor: 'pointer', flex: 1 }}>
+                        {contourOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Rows */}
             {rowItems.map(item => {
@@ -1293,6 +1508,8 @@ const CostTypeSchedule: React.FC<Props> = ({
                   isActive={activeKeys.includes(def.key)} rowBg={idx % 2 === 0 ? '#fff' : '#f8fafc'}
                   color={SEGMENT_COLOR[def.key] ?? '#6b7280'} colWidths={colWidths} onSave={onSegmentUpdate}
                   hasProvisional={provisionalSegKeys.has(def.key)} remainingMode={remainingMode}
+                  aligned={alignPhases} alignedStart={alignedStart} alignedEnd={alignedEnd} alignedContour={alignedContour}
+                  onExitAlign={alignPhases ? () => exitAlignRef.current() : undefined}
                 />
               );
             })}
@@ -1318,6 +1535,68 @@ const CostTypeSchedule: React.FC<Props> = ({
                 ))}
               </div>
 
+              {/* Aligned master row — draggable/resizable, mirrors to all segments */}
+              {alignPhases && (() => {
+                const masterStartDate = alignedStart ? new Date(alignedStart) : null;
+                const masterEndDate   = alignedEnd   ? new Date(alignedEnd)   : null;
+                const mBarLeft  = masterStartDate && firstMonth ? dateToX(masterStartDate, firstMonth, colWidth) + 2 : 0;
+                const mBarWidth = masterEndDate && masterStartDate && firstMonth
+                  ? Math.max(0, dateToX(masterEndDate, firstMonth, colWidth) + colWidth / new Date(masterEndDate.getFullYear(), masterEndDate.getMonth() + 1, 0).getDate() - mBarLeft)
+                  : 0;
+                const isMDragging  = barDragOffset?.segKey   === '__master__';
+                const isMResizing  = barResizeOffset?.segKey === '__master__';
+                let adjMLeft  = mBarLeft  + (isMDragging ? barDragOffset!.deltaX : 0);
+                let adjMWidth = mBarWidth;
+                if (isMResizing) {
+                  if (barResizeOffset!.edge === 'left')  { adjMLeft = mBarLeft + barResizeOffset!.deltaX; adjMWidth = Math.max(8, mBarWidth - barResizeOffset!.deltaX); }
+                  else { adjMWidth = Math.max(8, mBarWidth + barResizeOffset!.deltaX); }
+                }
+                return (
+                  <div style={{ height: ROW_H, position: 'relative', borderBottom: '2px solid #1d4ed8', background: '#dbeafe' }}>
+                    {allMonths.map((_, i) => (
+                      <div key={i} style={{ position: 'absolute', left: i * colWidth, top: 0, bottom: 0, width: colWidth, borderRight: '1px solid #bfdbfe' }} />
+                    ))}
+                    {mBarWidth > 0 && (
+                      <div style={{
+                        position: 'absolute', left: adjMLeft, top: 4, height: ROW_H - 8, width: adjMWidth,
+                        backgroundColor: '#1d4ed840', border: '2px solid #1d4ed8', borderRadius: 4,
+                        display: 'flex', alignItems: 'center', paddingLeft: 6, paddingRight: 6, overflow: 'hidden',
+                        cursor: isMDragging ? 'grabbing' : 'grab', zIndex: isMDragging || isMResizing ? 10 : 1,
+                      }}
+                        onMouseDown={e => {
+                          if (e.button !== 0 || !masterStartDate || !masterEndDate) return;
+                          e.stopPropagation();
+                          barDragRef.current = {
+                            segKey: '__master__', startMouseX: e.clientX, originalBarLeft: mBarLeft,
+                            originalStartDate: masterStartDate, originalEndDate: masterEndDate,
+                            durationDays: Math.round((masterEndDate.getTime() - masterStartDate.getTime()) / 86400000),
+                            dragStarted: false,
+                          };
+                        }}
+                        onMouseEnter={e => { if (!barDragRef.current && !barResizeRef.current) (e.currentTarget as HTMLElement).style.backgroundColor = '#1d4ed860'; }}
+                        onMouseLeave={e => { if (!barDragRef.current && !barResizeRef.current) (e.currentTarget as HTMLElement).style.backgroundColor = '#1d4ed840'; }}
+                      >
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'w-resize', zIndex: 2 }}
+                          onMouseDown={e => {
+                            if (e.button !== 0 || !masterStartDate || !masterEndDate) return;
+                            e.stopPropagation(); e.preventDefault();
+                            barResizeRef.current = { segKey: '__master__', edge: 'left', startMouseX: e.clientX, originalBarLeft: mBarLeft, originalBarWidth: mBarWidth, originalStartDate: masterStartDate, originalEndDate: masterEndDate, dragStarted: false };
+                          }} />
+                        <span style={{ fontSize: '0.65rem', color: '#1d4ed8', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, pointerEvents: 'none' }}>
+                          ALL SEGMENTS
+                        </span>
+                        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'e-resize', zIndex: 2 }}
+                          onMouseDown={e => {
+                            if (e.button !== 0 || !masterStartDate || !masterEndDate) return;
+                            e.stopPropagation(); e.preventDefault();
+                            barResizeRef.current = { segKey: '__master__', edge: 'right', startMouseX: e.clientX, originalBarLeft: mBarLeft, originalBarWidth: mBarWidth, originalStartDate: masterStartDate, originalEndDate: masterEndDate, dragStarted: false };
+                          }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Bar rows */}
               {rowItems.map(item => {
                 if (item.type === 'group') return (
@@ -1337,8 +1616,12 @@ const CostTypeSchedule: React.FC<Props> = ({
                 const rowBg      = idx % 2 === 0 ? '#fff' : '#f8fafc';
                 const isActive   = activeKeys.includes(def.key);
 
-                const startDate = seg?.start_date ? new Date(seg.start_date.slice(0, 10)) : null;
-                const endDate   = seg?.end_date   ? new Date(seg.end_date.slice(0, 10))   : null;
+                const startDate = alignPhases && alignedStart
+                  ? new Date(alignedStart)
+                  : (seg?.start_date ? new Date(seg.start_date.slice(0, 10)) : null);
+                const endDate = alignPhases && alignedEnd
+                  ? new Date(alignedEnd)
+                  : (seg?.end_date ? new Date(seg.end_date.slice(0, 10)) : null);
 
                 const today = new Date(); today.setHours(0, 0, 0, 0);
                 const visualStart = startDate && startDate < today ? today : startDate;
@@ -1376,6 +1659,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                       }}
                         onMouseDown={e => {
                           if (e.button !== 0 || !visualStart || !endDate) return;
+                          if (alignPhases) { e.stopPropagation(); exitAlignRef.current(); return; }
                           e.stopPropagation();
                           barDragRef.current = {
                             segKey: def.key, startMouseX: e.clientX, originalBarLeft: barLeft,
@@ -1391,6 +1675,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'w-resize', zIndex: 2 }}
                           onMouseDown={e => {
                             if (e.button !== 0 || !visualStart || !endDate) return;
+                            if (alignPhases) { e.stopPropagation(); e.preventDefault(); exitAlignRef.current(); return; }
                             e.stopPropagation(); e.preventDefault();
                             barResizeRef.current = { segKey: def.key, edge: 'left', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: visualStart, originalEndDate: endDate, dragStarted: false };
                           }} />
@@ -1401,6 +1686,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'e-resize', zIndex: 2 }}
                           onMouseDown={e => {
                             if (e.button !== 0 || !visualStart || !endDate) return;
+                            if (alignPhases) { e.stopPropagation(); e.preventDefault(); exitAlignRef.current(); return; }
                             e.stopPropagation(); e.preventDefault();
                             barResizeRef.current = { segKey: def.key, edge: 'right', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: visualStart, originalEndDate: endDate, dragStarted: false };
                           }} />

@@ -719,15 +719,20 @@ const LaborForecast: React.FC = () => {
       // Skip contracts with no remaining labor hours
       if (totalRemainingHours <= 0) continue;
 
-      // Start offset (months from now until work begins; 0 = current month)
-      const startOffset = adjustedStartMonths[contract.id] ?? 0;
+      // Start offset: user override → linked project start date → current month
+      const projStartOff = dateToMonthOffset(contract.linked_project_start_date);
+      const defaultStartOff = projStartOff !== null ? Math.max(0, projStartOff) : 0;
+      const startOffset = adjustedStartMonths[contract.id] ?? defaultStartOff;
 
-      // Calculate end offset and duration
+      // End offset: user override → linked project end date → backlog formula
       const userAdjustedEnd = adjustedEndMonths[contract.id];
+      const projEndOff = dateToMonthOffset(contract.linked_project_end_date);
       let endOffset: number;
 
       if (userAdjustedEnd !== undefined) {
         endOffset = Math.max(startOffset + 1, Math.min(37, userAdjustedEnd + 1));
+      } else if (projEndOff !== null) {
+        endOffset = Math.max(startOffset + 1, Math.min(37, projEndOff + 1));
       } else if (backlog > 0) {
         const totalDuration = getDurationForValue(contractValue);
         const pctComplete = projectedRevenue > 0 ? earnedRevenue / projectedRevenue : 0;
@@ -821,16 +826,17 @@ const LaborForecast: React.FC = () => {
           if (rem <= 0) return;
           const fieldSegKey = TRADE_FIELD_SEG[trade.key];
           const shopSegKey  = TRADE_SHOP_SEG[trade.key];
-          // Read est_hours from the schedule segment — same source as CostTypeSchedule
+          // Use est_hours from segments only to determine field/shop split ratio.
+          // Apply that ratio to actual remaining hours so the chart matches the Manpower grid.
           const estField = projectSegs.find(s => s.segment_key === fieldSegKey)?.est_hours ?? 0;
           const estShop  = projectSegs.find(s => s.segment_key === shopSegKey)?.est_hours  ?? 0;
-          // If segment est_hours are both 0 (stale bulkSegments cache) but rem > 0,
-          // fall back to rem for single-location filters so hours still appear on the chart.
-          // 'both' is excluded because rem already combines shop+field, which would double-count.
           const totalSeg = estField + estShop;
+          const fieldRatio = totalSeg > 0 ? estField / totalSeg : 0.5;
+          const shopRatio  = totalSeg > 0 ? estShop  / totalSeg : 0.5;
+          // If no segment est_hours, fall back to rem for single-location filters.
           const useFallback = totalSeg === 0 && rem > 0 && locationFilter !== 'both';
-          const fieldHours = locationFilter !== 'shop'  ? (useFallback ? rem : estField) : 0;
-          const shopHours  = locationFilter !== 'field' ? (useFallback ? rem : estShop)  : 0;
+          const fieldHours = locationFilter !== 'shop'  ? (useFallback ? rem : rem * fieldRatio) : 0;
+          const shopHours  = locationFilter !== 'field' ? (useFallback ? rem : rem * shopRatio)  : 0;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, fieldSegKey);
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  shopSegKey);
         });

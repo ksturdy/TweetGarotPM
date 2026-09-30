@@ -102,56 +102,35 @@ export const getDefaultContour = (pctComplete: number): ContourType => {
   }
 };
 
-// SVG polyline points for contour visualization
-// y=16 = zero activity (bottom), y=2 = peak (top), y=8 = flat/average
-export const getContourPoints = (contour: ContourType): string => {
-  switch (contour) {
-    case 'flat':
-      return '0,8 24,8';
-    case 'front':
-      return '0,16 6,3 24,16';
-    case 'back':
-      return '0,16 18,3 24,16';
-    case 'bell':
-      return '0,16 12,2 24,16';
-    case 'turtle':
-      return '0,16 3,7 8,3 16,3 21,7 24,16';
-    case 'double':
-      return '0,16 6,3 12,16 18,3 24,16';
-    case 'early':
-      return '0,16 5,2 14,11 24,16';
-    case 'late':
-      return '0,16 10,11 19,2 24,16';
-    case 'scurve':
-      return '0,16 8,10 12,2 16,10 24,16';
-    case 'rampup':
-      return '0,16 14,3 24,16';
-    case 'rampdown':
-      return '0,16 10,3 24,16';
-    case 'gradual':
-      return '0,16 6,12 12,4 18,12 24,16';
-    default:
-      return '0,8 24,8';
-  }
-};
-
-// Mini SVG visualization of contour shape
+// Mini SVG visualization — computed from actual multipliers so it matches the real distribution.
 export const ContourVisual: React.FC<{ contour: ContourType }> = ({ contour }) => {
-  const points = getContourPoints(contour);
+  const N = 22;
+  const W = 34, H = 14, pad = 1.5;
+  const mults = getContourMultipliers(N, contour);
+  const maxM = Math.max(...mults, 0.001);
+
+  const pts = mults.map((m, i) => ({
+    x: (i / (N - 1)) * W,
+    y: H - pad - (m / maxM) * (H - 2 * pad),
+  }));
+
+  // Smooth cubic bezier path using midpoint control points (catmull-rom style).
+  let curvePath = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i - 1], c = pts[i];
+    const mx = ((p.x + c.x) / 2).toFixed(1);
+    curvePath += ` C ${mx},${p.y.toFixed(1)} ${mx},${c.y.toFixed(1)} ${c.x.toFixed(1)},${c.y.toFixed(1)}`;
+  }
+
+  const areaPath = `${curvePath} L${W},${H} L0,${H} Z`;
 
   return React.createElement('svg', {
     width: 36,
-    height: 22,
-    viewBox: '0 0 24 16',
-    style: { verticalAlign: 'middle', flexShrink: 0 }
+    height: 18,
+    viewBox: `0 0 ${W} ${H}`,
+    style: { verticalAlign: 'middle', flexShrink: 0, display: 'block' },
   },
-    React.createElement('polyline', {
-      points,
-      fill: 'none',
-      stroke: '#2563eb',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round'
-    })
+    React.createElement('path', { d: areaPath, fill: '#bfdbfe', stroke: 'none' }),
+    React.createElement('path', { d: curvePath, fill: 'none', stroke: '#2563eb', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }),
   );
 };
