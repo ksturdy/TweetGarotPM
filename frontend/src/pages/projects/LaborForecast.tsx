@@ -338,12 +338,14 @@ const LaborForecast: React.FC = () => {
     queryFn: () => vistaDataService.getShopFieldHours(),
   });
 
-  const linkedCostTypeProjectIds = useMemo(() => {
+  // Fetch segment data for all linked non-phase projects so cost_type distribution
+  // works even when the project's scheduling_mode hasn't been explicitly set to 'cost_type'.
+  const linkedNonPhaseProjectIds = useMemo(() => {
     if (!contracts) return [];
     const seen = new Set<number>();
     const ids: number[] = [];
     for (const c of contracts) {
-      if (c.linked_project_id && c.linked_project_scheduling_mode === 'cost_type' && !seen.has(c.linked_project_id)) {
+      if (c.linked_project_id && c.linked_project_scheduling_mode !== 'phase' && !seen.has(c.linked_project_id)) {
         ids.push(c.linked_project_id);
         seen.add(c.linked_project_id);
       }
@@ -352,11 +354,14 @@ const LaborForecast: React.FC = () => {
   }, [contracts]);
 
   const { data: bulkSegments } = useQuery({
-    queryKey: ['bulkSegments', linkedCostTypeProjectIds],
-    queryFn: () => scheduleSegmentsService.getBulk(linkedCostTypeProjectIds),
-    enabled: linkedCostTypeProjectIds.length > 0,
+    queryKey: ['bulkSegments', linkedNonPhaseProjectIds],
+    queryFn: () => scheduleSegmentsService.getBulk(linkedNonPhaseProjectIds),
+    enabled: linkedNonPhaseProjectIds.length > 0,
     staleTime: 30 * 1000,
   });
+
+  // Keep a narrowed alias for the old cost_type-only list (still used in the ProjectedRevenue path)
+  const linkedCostTypeProjectIds = useMemo(() => linkedNonPhaseProjectIds, [linkedNonPhaseProjectIds]);
 
   // Opportunity data (lazy-loaded when overlay is enabled)
   const { data: opportunitiesWithEstimates } = useQuery({
@@ -742,11 +747,22 @@ const LaborForecast: React.FC = () => {
       const monthlyHours = new Map<string, TradeMonthlyHours>();
 
       // Cost-type mode: each trade's field and shop hours have independent segment windows.
+      // Use cost_type distribution if:
+      //   a) The project is explicitly set to cost_type scheduling mode, OR
+      //   b) The project has at least one labor segment with dates AND est_hours configured —
+      //      i.e. the PM is using the Cost Type schedule without having set the mode flag.
+      const LABOR_COST_TYPE_KEYS = new Set(['30', '35', '40', '45', '50', '55', '70']);
+      const projSegData = (contract.linked_project_id && bulkSegments)
+        ? (bulkSegments[contract.linked_project_id] ?? null)
+        : null;
+      const hasConfiguredSegments = projSegData?.some(
+        s => LABOR_COST_TYPE_KEYS.has(s.segment_key) && s.start_date && (s.est_hours ?? 0) > 0
+      ) ?? false;
       const projectSegs = (
         contract.linked_project_id &&
-        contract.linked_project_scheduling_mode === 'cost_type' &&
-        bulkSegments
-      ) ? (bulkSegments[contract.linked_project_id] ?? null) : null;
+        bulkSegments &&
+        (contract.linked_project_scheduling_mode === 'cost_type' || hasConfiguredSegments)
+      ) ? projSegData : null;
 
       if (projectSegs) {
         const TRADE_FIELD_SEG: Record<string, string> = { pf: '40', sm: '30', pl: '50' };
