@@ -592,7 +592,7 @@ const GanttLeftRow: React.FC<{
         <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
         <span style={{ fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{def.label}</span>
         {hasProvisional && (
-          <span style={{ display: 'inline-block', padding: '0.05rem 0.3rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: 3, fontSize: '0.55rem', fontWeight: 700, flexShrink: 0, letterSpacing: '0.02em' }}>Prov</span>
+          <span title="Provisional — manually entered, not yet from Vista" style={{ padding: '0.05rem 0.35rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '3px', fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>PROV</span>
         )}
         <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace', flexShrink: 0 }}>{def.key.toUpperCase()}</span>
       </div>
@@ -668,7 +668,7 @@ const TableRow: React.FC<{
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
               <span style={{ fontSize: '0.78rem', fontWeight: isActive ? 600 : 400, color: isActive ? '#1e293b' : '#64748b' }}>{def.label}</span>
               {hasProvisional && (
-                <span style={{ display: 'inline-block', padding: '0.05rem 0.3rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: 3, fontSize: '0.55rem', fontWeight: 700, letterSpacing: '0.02em' }}>Prov</span>
+                <span title="Provisional — manually entered, not yet from Vista" style={{ padding: '0.05rem 0.35rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: '3px', fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>PROV</span>
               )}
             </div>
             <div style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace' }}>{def.key.toUpperCase()}</div>
@@ -1025,8 +1025,9 @@ const CostTypeSchedule: React.FC<Props> = ({
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button onClick={() => setShowProvisional(true)}
-            style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#854d0e' }}>
-            Provisional Codes
+            title="Manually enter phase codes when Vista isn't set up yet"
+            style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #fde68a', borderRadius: 6, backgroundColor: '#fefce8', cursor: 'pointer', color: '#854d0e' }}>
+            ✎ Manual Codes
           </button>
           <button onClick={onInitialize} disabled={initPending}
             style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontFamily: 'inherit', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#1e293b' }}>
