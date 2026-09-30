@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { vistaDataService, PhaseCodeDetailRow } from '../../services/vistaData';
 import { projectsApi } from '../../services/projects';
+import { itemCommentsApi } from '../../services/itemComments';
+import ItemCommentFlyout from '../../components/common/ItemCommentFlyout';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 
 const COST_TYPE_LABELS: Record<number, string> = {
   1: 'Labor',
@@ -71,6 +74,9 @@ const CostDrillIn: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [selectedPrefixes, setSelectedPrefixes] = useState<Set<string>>(new Set());
+  const [flyoutAnchor, setFlyoutAnchor] = useState<HTMLElement | null>(null);
+  const [flyoutRow, setFlyoutRow] = useState<PhaseCodeDetailRow | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const main = document.querySelector('main') as HTMLElement | null;
@@ -116,6 +122,18 @@ const CostDrillIn: React.FC = () => {
     }),
     enabled: !!costType,
   });
+
+  const { data: commentCountsRaw } = useQuery({
+    queryKey: ['item-comment-counts', Number(projectId), 'phase_cost'],
+    queryFn: () => itemCommentsApi.getCounts(Number(projectId), 'phase_cost').then(r => r.data),
+    staleTime: 30000,
+    enabled: !!projectId,
+  });
+  const countsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    (commentCountsRaw || []).forEach(c => { map[c.entity_key] = parseInt(c.count, 10); });
+    return map;
+  }, [commentCountsRaw]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -209,6 +227,20 @@ const CostDrillIn: React.FC = () => {
     }
     return filtered;
   }, [rows, search, sortKey, sortDir, isLabor, selectedPrefixes]);
+
+  // Deep-link: scroll to and highlight a specific phase row if URL has a hash like #phase-70-101-001
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash || !processedRows.length) return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.transition = 'background-color 0.4s';
+    el.style.backgroundColor = '#fef9c3';
+    const t1 = setTimeout(() => { el.style.backgroundColor = ''; }, 2500);
+    const t2 = setTimeout(() => { el.style.transition = ''; }, 3000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [processedRows.length]);
 
   // Compute totals from filtered rows
   const totals = processedRows.reduce(
@@ -366,6 +398,7 @@ const CostDrillIn: React.FC = () => {
                 {isLabor && <SortTh sortKey="remaining_hours" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Rem Hrs</SortTh>}
                 <SortTh sortKey="variance" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>Variance</SortTh>
                 <SortTh sortKey="percent_complete" currentSort={sortKey} sortDir={sortDir} onSort={handleSort}>% Comp</SortTh>
+                <th style={{ padding: '0.4rem 0.4rem', width: 36 }} />
               </tr>
             </thead>
             <tbody>
@@ -379,8 +412,12 @@ const CostDrillIn: React.FC = () => {
                 const remainingSpend = Number(row.projected_cost || 0) - Number(row.committed_cost || 0) - jtdCost;
                 const jtdRate = jtdHrs > 0 && jtdCost > 0 ? jtdCost / jtdHrs : 0;
                 const remainingHours = jtdRate > 0 ? remainingSpend / jtdRate : 0;
+                const entityKey = `${row.phase}:${row.job}`;
+                const commentCount = countsMap[entityKey] ?? 0;
+                const rowPhaseId = `phase-${row.phase.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const isOpen = flyoutRow?.phase === row.phase && flyoutRow?.job === row.job;
                 return (
-                  <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <tr key={row.id} id={rowPhaseId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <Td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#1e293b' }}>{row.phase}</Td>
                     <Td style={{ minWidth: '220px', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.phase_description || '-'}</Td>
                     {!jobs || jobs.length !== 1 && <Td>{row.job}</Td>}
@@ -410,6 +447,37 @@ const CostDrillIn: React.FC = () => {
                     <Td align="right">
                       {Number(row.projected_cost) > 0 ? `${(jtdCost / Number(row.projected_cost) * 100).toFixed(1)}%` : '-'}
                     </Td>
+                    <td style={{ padding: '0 2px', width: 36, textAlign: 'center' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isOpen) {
+                            setFlyoutAnchor(null);
+                            setFlyoutRow(null);
+                          } else {
+                            setFlyoutAnchor(e.currentTarget);
+                            setFlyoutRow(row);
+                          }
+                        }}
+                        title="Comments"
+                        style={{
+                          background: isOpen ? '#fff3e0' : 'none',
+                          border: isOpen ? '1px solid #e65c00' : 'none',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          color: commentCount > 0 ? '#e65c00' : '#94a3b8',
+                          padding: '2px 4px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          fontSize: 11,
+                          fontWeight: 600,
+                        }}
+                      >
+                        <ChatBubbleOutlineIcon style={{ fontSize: 13 }} />
+                        {commentCount > 0 && <span>{commentCount}</span>}
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -443,11 +511,28 @@ const CostDrillIn: React.FC = () => {
                   {fmt(totals.est_cost - totals.projected_cost)}
                 </Td>
                 <Td />
+                <Td />
               </tr>
             </tfoot>
           </table>
         )}
       </div>
+
+      {flyoutRow && flyoutAnchor && (
+        <ItemCommentFlyout
+          projectId={Number(projectId)}
+          entityType="phase_cost"
+          entityKey={`${flyoutRow.phase}:${flyoutRow.job}`}
+          link={`/projects/${projectId}/financials/cost-detail?cost_type=${costType}${trade ? `&trade=${trade}` : ''}#phase-${flyoutRow.phase.replace(/[^a-zA-Z0-9]/g, '-')}`}
+          title={flyoutRow.phase}
+          rowLabel={`${flyoutRow.phase} — ${flyoutRow.phase_description || title}`}
+          anchorEl={flyoutAnchor}
+          onClose={() => { setFlyoutAnchor(null); setFlyoutRow(null); }}
+          onCountChange={() => {
+            queryClient.invalidateQueries({ queryKey: ['item-comment-counts', Number(projectId), 'phase_cost'] });
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -145,6 +145,7 @@ const tradeShowRoutes = require('./routes/tradeShows');
 const projectPhotoRoutes = require('./routes/projectPhotos');
 const marketingMediaRoutes = require('./routes/marketingMedia');
 const preJobChecklistRoutes = require('./routes/preJobChecklist');
+const itemCommentRoutes = require('./routes/itemComments');
 
 const app = express();
 const server = http.createServer(app);
@@ -226,6 +227,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects', projectSnapshotRoutes);
 app.use('/api/projects', projectionNoteRoutes);
+app.use('/api/projects', itemCommentRoutes);
 app.use('/api/projects', projectGoalRoutes);
 app.use('/api/rfis', rfiRoutes);
 app.use('/api/rfi-actions', rfiActionRoutes);

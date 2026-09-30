@@ -11,6 +11,9 @@ import { format, addMonths, differenceInMonths, parseISO, startOfMonth } from 'd
 import { useTitanFeedback } from '../../context/TitanFeedbackContext';
 import ProjectionNotesDrawer from '../../components/projects/ProjectionNotesDrawer';
 import ContractProjectionStrip from '../../components/projects/ContractProjectionStrip';
+import { itemCommentsApi } from '../../services/itemComments';
+import ItemCommentFlyout from '../../components/common/ItemCommentFlyout';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 
 const fmt = (value: number | string | null | undefined): string => {
   if (value === null || value === undefined || value === '') return '-';
@@ -215,6 +218,8 @@ const ProjectFinancials: React.FC = () => {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
   const [laborForecastExpanded, setLaborForecastExpanded] = useState(true);
+  const [ctFlyoutAnchor, setCtFlyoutAnchor] = useState<HTMLElement | null>(null);
+  const [ctFlyoutCostType, setCtFlyoutCostType] = useState<number | null>(null);
   const projRevScrollRef = useRef<HTMLDivElement>(null);
   const laborFcScrollRef = useRef<HTMLDivElement>(null);
   const syncFromProjRev = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -229,6 +234,18 @@ const ProjectFinancials: React.FC = () => {
     queryFn: () => projectionNotesApi.counts(Number(projectId)).then(r => r.data),
     enabled: !!projectId,
   });
+
+  const { data: ctCommentCountsRaw } = useQuery({
+    queryKey: ['item-comment-counts', Number(projectId), 'cost_type'],
+    queryFn: () => itemCommentsApi.getCounts(Number(projectId), 'cost_type').then(r => r.data),
+    staleTime: 30000,
+    enabled: !!projectId,
+  });
+  const ctCountsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    (ctCommentCountsRaw || []).forEach(c => { map[c.entity_key] = parseInt(c.count, 10); });
+    return map;
+  }, [ctCommentCountsRaw]);
 
   const totalNoteCount = noteCounts.reduce((s, c) => s + c.count, 0);
   const openHomeworkCount = noteCounts.reduce((s, c) => s + (c.open_homework || 0), 0);
@@ -1056,6 +1073,7 @@ const ProjectFinancials: React.FC = () => {
                     <th style={thStyle}>Variance</th>
                     <th style={thStyle}>Rem Spend</th>
                     <th style={thStyle}>Change Since Last Projection</th>
+                    <th style={{ ...thStyle, width: 36, padding: '0.35rem 0.25rem' }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -1064,9 +1082,13 @@ const ProjectFinancials: React.FC = () => {
                     const projVariance = row.est_cost - row.projected;
                     const remSpend = row.projected - row.committed - row.jtd_cost;
                     const changeFromLastProj = row.change_from_last_projection || 0;
+                    const ctEntityKey = `cost_type:${row.costType}`;
+                    const ctCommentCount = ctCountsMap[ctEntityKey] ?? 0;
+                    const ctIsOpen = ctFlyoutCostType === row.costType;
                     return (
                       <tr
                         key={row.costType}
+                        id={`cost-type-${row.costType}`}
                         onClick={() => drillIn(row.costType)}
                         style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8fafc'; }}
@@ -1102,6 +1124,37 @@ const ProjectFinancials: React.FC = () => {
                         <td style={{ ...tdStyle, color: getVarianceColor(projVariance), fontWeight: 500 }}>{fmt(projVariance)}</td>
                         <td style={{ ...tdStyle, fontWeight: 500, color: remSpend > 0 ? '#3b82f6' : remSpend < 0 ? '#ef4444' : undefined }}>{fmt(remSpend)}</td>
                         <td style={{ ...tdStyle, fontWeight: 500, color: changeFromLastProj > 0 ? '#ef4444' : changeFromLastProj < 0 ? '#10b981' : undefined }}>{fmt(changeFromLastProj)}</td>
+                        <td style={{ padding: '0 2px', width: 36, textAlign: 'center', borderBottom: '1px solid #f1f5f9' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (ctIsOpen) {
+                                setCtFlyoutAnchor(null);
+                                setCtFlyoutCostType(null);
+                              } else {
+                                setCtFlyoutAnchor(e.currentTarget);
+                                setCtFlyoutCostType(row.costType);
+                              }
+                            }}
+                            title="Comments"
+                            style={{
+                              background: ctIsOpen ? '#fff3e0' : 'none',
+                              border: ctIsOpen ? '1px solid #e65c00' : 'none',
+                              borderRadius: 4,
+                              cursor: 'pointer',
+                              color: ctCommentCount > 0 ? '#e65c00' : '#94a3b8',
+                              padding: '2px 4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 2,
+                              fontSize: 11,
+                              fontWeight: 600,
+                            }}
+                          >
+                            <ChatBubbleOutlineIcon style={{ fontSize: 13 }} />
+                            {ctCommentCount > 0 && <span>{ctCommentCount}</span>}
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1124,6 +1177,7 @@ const ProjectFinancials: React.FC = () => {
                     {(() => { const totalChange = totals.change_from_last_projection; return (
                       <td style={{ ...tfStyle, color: totalChange > 0 ? '#ef4444' : totalChange < 0 ? '#10b981' : undefined }}>{fmt(totalChange)}</td>
                     ); })()}
+                    <td style={{ ...tfStyle, padding: '0' }} />
                   </tr>
                 </tfoot>
               </table>
@@ -1350,6 +1404,22 @@ const ProjectFinancials: React.FC = () => {
         open={notesDrawerOpen}
         onClose={() => setNotesDrawerOpen(false)}
       />
+
+      {ctFlyoutCostType !== null && ctFlyoutAnchor && (
+        <ItemCommentFlyout
+          projectId={Number(projectId)}
+          entityType="cost_type"
+          entityKey={`cost_type:${ctFlyoutCostType}`}
+          link={`/projects/${projectId}/financials#cost-type-${ctFlyoutCostType}`}
+          title={`Cost Type ${ctFlyoutCostType}`}
+          rowLabel={`${['', 'Labor', 'Material', 'Subcontracts', 'Rentals', 'MEP Equipment', 'General Conditions'][ctFlyoutCostType] || `Cost Type ${ctFlyoutCostType}`}`}
+          anchorEl={ctFlyoutAnchor}
+          onClose={() => { setCtFlyoutAnchor(null); setCtFlyoutCostType(null); }}
+          onCountChange={() => {
+            queryClient.invalidateQueries({ queryKey: ['item-comment-counts', Number(projectId), 'cost_type'] });
+          }}
+        />
+      )}
     </div>
   );
 };
