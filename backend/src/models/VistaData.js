@@ -3410,30 +3410,58 @@ const VistaData = {
   async getShopFieldHoursByContract(tenantId) {
     const result = await db.query(
       `SELECT
-        vc.contract_number,
-        CASE
-          WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '35-%' THEN 'sm'
-          WHEN pc.phase LIKE '40-%' OR pc.phase LIKE '45-%' THEN 'pf'
-          WHEN pc.phase LIKE '50-%' OR pc.phase LIKE '55-%' THEN 'pl'
-        END AS trade,
-        CASE
-          WHEN pc.phase LIKE '30-%' OR pc.phase LIKE '40-%' OR pc.phase LIKE '50-%' THEN 'field'
-          WHEN pc.phase LIKE '35-%' OR pc.phase LIKE '45-%' OR pc.phase LIKE '55-%' THEN 'shop'
-        END AS location,
-        COALESCE(SUM(pc.est_hours), 0) AS est_hours,
-        COALESCE(SUM(pc.jtd_hours), 0) AS jtd_hours,
-        COALESCE(SUM(pc.est_cost), 0) AS est_cost,
-        COALESCE(SUM(pc.jtd_cost), 0) AS jtd_cost,
-        COALESCE(SUM(pc.projected_cost), 0) AS projected_cost
-      FROM vp_phase_codes pc
-      JOIN vp_contracts vc ON pc.contract = vc.contract_number AND pc.tenant_id = vc.tenant_id
-      WHERE pc.tenant_id = $1
-        AND pc.cost_type = 1
-        AND (pc.phase LIKE '30-%' OR pc.phase LIKE '35-%'
-          OR pc.phase LIKE '40-%' OR pc.phase LIKE '45-%'
-          OR pc.phase LIKE '50-%' OR pc.phase LIKE '55-%')
-      GROUP BY vc.contract_number, trade, location
-      ORDER BY vc.contract_number`,
+        contract_number,
+        trade,
+        location,
+        COALESCE(SUM(est_hours), 0)      AS est_hours,
+        COALESCE(SUM(jtd_hours), 0)      AS jtd_hours,
+        COALESCE(SUM(est_cost), 0)       AS est_cost,
+        COALESCE(SUM(jtd_cost), 0)       AS jtd_cost,
+        COALESCE(SUM(projected_cost), 0) AS projected_cost
+      FROM (
+        -- Real Vista phase codes: join directly via contract field
+        SELECT
+          vc.contract_number,
+          CASE WHEN LEFT(pc.phase,2) IN ('30','35') THEN 'sm'
+               WHEN LEFT(pc.phase,2) IN ('40','45') THEN 'pf'
+               WHEN LEFT(pc.phase,2) IN ('50','55') THEN 'pl' END AS trade,
+          CASE WHEN LEFT(pc.phase,2) IN ('30','40','50') THEN 'field'
+               WHEN LEFT(pc.phase,2) IN ('35','45','55') THEN 'shop' END AS location,
+          pc.est_hours, pc.jtd_hours, pc.est_cost, pc.jtd_cost, pc.projected_cost
+        FROM vp_phase_codes pc
+        JOIN vp_contracts vc ON pc.contract = vc.contract_number AND pc.tenant_id = vc.tenant_id
+        WHERE pc.tenant_id = $1
+          AND pc.cost_type = 1
+          AND LEFT(pc.phase,2) IN ('30','35','40','45','50','55')
+
+        UNION ALL
+
+        -- Provisional phase codes: resolve contract via linked project when no direct contract match
+        SELECT
+          (SELECT vc2.contract_number FROM vp_contracts vc2
+           WHERE vc2.tenant_id = pc.tenant_id AND vc2.linked_project_id = pc.linked_project_id
+           ORDER BY vc2.contract_number LIMIT 1) AS contract_number,
+          CASE WHEN LEFT(pc.phase,2) IN ('30','35') THEN 'sm'
+               WHEN LEFT(pc.phase,2) IN ('40','45') THEN 'pf'
+               WHEN LEFT(pc.phase,2) IN ('50','55') THEN 'pl' END AS trade,
+          CASE WHEN LEFT(pc.phase,2) IN ('30','40','50') THEN 'field'
+               WHEN LEFT(pc.phase,2) IN ('35','45','55') THEN 'shop' END AS location,
+          pc.est_hours, pc.jtd_hours, pc.est_cost, pc.jtd_cost, pc.projected_cost
+        FROM vp_phase_codes pc
+        WHERE pc.tenant_id = $1
+          AND pc.is_provisional = TRUE
+          AND pc.reconciled_at IS NULL
+          AND pc.cost_type = 1
+          AND LEFT(pc.phase,2) IN ('30','35','40','45','50','55')
+          AND pc.linked_project_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM vp_contracts vc3
+            WHERE vc3.contract_number = pc.contract AND vc3.tenant_id = pc.tenant_id
+          )
+      ) sub
+      WHERE trade IS NOT NULL AND location IS NOT NULL AND contract_number IS NOT NULL
+      GROUP BY contract_number, trade, location
+      ORDER BY contract_number`,
       [tenantId]
     );
     return result.rows;
