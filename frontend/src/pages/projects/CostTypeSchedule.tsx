@@ -206,6 +206,7 @@ const CostTypeProvisionalsModal: React.FC<{
     queryClient.invalidateQueries({ queryKey: ['provisionalPhaseCodes', projectId] });
     queryClient.invalidateQueries({ queryKey: ['schedule-segment-costs', projectId] });
     queryClient.invalidateQueries({ queryKey: ['vpShopFieldHours'] });
+    queryClient.invalidateQueries({ queryKey: ['bulkSegments'] });
   };
 
   const [form, setForm] = useState<ProvisionalPhaseCodeInput>({
@@ -576,8 +577,9 @@ const GanttLeftRow: React.FC<{
   rowBg: string;
   color: string;
   colWidths: typeof GANTT_COL_DEFAULTS;
+  hasProvisional?: boolean;
   onSave: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
-}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, onSave }) => {
+}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, hasProvisional, onSave }) => {
   const { localStart, localEnd, localContour, setLocalStart, setLocalEnd, handleBlur, handleContour } = useRowEdit(seg, def.key, onSave);
 
   const cell: React.CSSProperties = { borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', height: '100%', fontSize: '0.7rem', color: '#1e293b', flexShrink: 0, overflow: 'hidden' };
@@ -589,6 +591,9 @@ const GanttLeftRow: React.FC<{
       <div style={{ ...cell, flex: 1, minWidth: colWidths.label, padding: '0 0.4rem', gap: 6, borderLeft: `3px solid ${def.isLabor ? '#3b82f6' : '#10b981'}` }}>
         <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
         <span style={{ fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{def.label}</span>
+        {hasProvisional && (
+          <span style={{ display: 'inline-block', padding: '0.05rem 0.3rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: 3, fontSize: '0.55rem', fontWeight: 700, flexShrink: 0, letterSpacing: '0.02em' }}>Prov</span>
+        )}
         <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace', flexShrink: 0 }}>{def.key.toUpperCase()}</span>
       </div>
       {/* Est Hrs */}
@@ -637,8 +642,9 @@ const TableRow: React.FC<{
   rowBg: string;
   color: string;
   allMonths: Date[];
+  hasProvisional?: boolean;
   onSave: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
-}> = ({ def, seg, costs, isActive, rowBg, color, allMonths, onSave }) => {
+}> = ({ def, seg, costs, isActive, rowBg, color, allMonths, hasProvisional, onSave }) => {
   const { localStart, localEnd, localContour, setLocalStart, setLocalEnd, handleBlur, handleContour } = useRowEdit(seg, def.key, onSave);
   const remaining = (costs?.projected_cost ?? 0) - (costs?.jtd_cost ?? 0);
   const monthly = distributeMonthly(remaining > 0 ? remaining : null, localStart || null, localEnd || null, localContour, allMonths);
@@ -659,7 +665,12 @@ const TableRow: React.FC<{
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: '0.78rem', fontWeight: isActive ? 600 : 400, color: isActive ? '#1e293b' : '#64748b' }}>{def.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: isActive ? 600 : 400, color: isActive ? '#1e293b' : '#64748b' }}>{def.label}</span>
+              {hasProvisional && (
+                <span style={{ display: 'inline-block', padding: '0.05rem 0.3rem', backgroundColor: '#fef9c3', color: '#854d0e', borderRadius: 3, fontSize: '0.55rem', fontWeight: 700, letterSpacing: '0.02em' }}>Prov</span>
+              )}
+            </div>
             <div style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace' }}>{def.key.toUpperCase()}</div>
           </div>
         </div>
@@ -865,6 +876,14 @@ const CostTypeSchedule: React.FC<Props> = ({
     queryKey: ['schedule-segment-costs', projectId],
     queryFn: () => scheduleSegmentsService.getCosts(projectId),
   });
+
+  const { data: provisionalCodes = [] } = useQuery({
+    queryKey: ['provisionalPhaseCodes', projectId],
+    queryFn: () => phaseScheduleApi.listProvisional(projectId).then(r => r.data),
+  });
+  const provisionalSegKeys = new Set(
+    provisionalCodes.map(c => segmentForCode(c.cost_type, c.phase)).filter(k => k !== 'other')
+  );
 
   const segmentMap = new Map(segments.map(s => [s.segment_key, s]));
   const costsMap   = new Map(costs.map(c => [c.segment_key, c]));
@@ -1191,6 +1210,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                   def={def} seg={segmentMap.get(def.key)} costs={costsMap.get(def.key)}
                   isActive={activeKeys.includes(def.key)} rowBg={idx % 2 === 0 ? '#fff' : '#f8fafc'}
                   color={SEGMENT_COLOR[def.key] ?? '#6b7280'} colWidths={colWidths} onSave={onSegmentUpdate}
+                  hasProvisional={provisionalSegKeys.has(def.key)}
                 />
               );
             })}
@@ -1363,6 +1383,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                       <TableRow def={def} seg={segmentMap.get(def.key)} costs={costsMap.get(def.key)}
                         isActive={activeKeys.includes(def.key)} rowBg={rowBg}
                         color={SEGMENT_COLOR[def.key] ?? '#6b7280'} allMonths={allMonths} onSave={onSegmentUpdate}
+                        hasProvisional={provisionalSegKeys.has(def.key)}
                       />
                     </React.Fragment>
                   );
@@ -1418,6 +1439,7 @@ const CostTypeSchedule: React.FC<Props> = ({
             setShowProvisional(false);
             queryClient.invalidateQueries({ queryKey: ['schedule-segment-costs', projectId] });
             queryClient.invalidateQueries({ queryKey: ['vpShopFieldHours'] });
+            queryClient.invalidateQueries({ queryKey: ['bulkSegments'] });
           }}
         />
       )}

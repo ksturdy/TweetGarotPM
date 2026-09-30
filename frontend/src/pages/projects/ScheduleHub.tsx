@@ -236,6 +236,7 @@ const ScheduleHub: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schedule-segments', pid] });
       queryClient.invalidateQueries({ queryKey: ['schedule-segment-costs', pid] });
+      queryClient.invalidateQueries({ queryKey: ['bulkSegments'] });
     },
     onError: () => toast.error('Failed to save'),
   });

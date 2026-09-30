@@ -355,7 +355,7 @@ const LaborForecast: React.FC = () => {
     queryKey: ['bulkSegments', linkedCostTypeProjectIds],
     queryFn: () => scheduleSegmentsService.getBulk(linkedCostTypeProjectIds),
     enabled: linkedCostTypeProjectIds.length > 0,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   // Opportunity data (lazy-loaded when overlay is enabled)
@@ -797,8 +797,13 @@ const LaborForecast: React.FC = () => {
           // Read est_hours from the schedule segment — same source as CostTypeSchedule
           const estField = projectSegs.find(s => s.segment_key === fieldSegKey)?.est_hours ?? 0;
           const estShop  = projectSegs.find(s => s.segment_key === shopSegKey)?.est_hours  ?? 0;
-          const fieldHours = locationFilter !== 'shop'  ? estField : 0;
-          const shopHours  = locationFilter !== 'field' ? estShop  : 0;
+          // If segment est_hours are both 0 (stale bulkSegments cache) but rem > 0,
+          // fall back to rem for single-location filters so hours still appear on the chart.
+          // 'both' is excluded because rem already combines shop+field, which would double-count.
+          const totalSeg = estField + estShop;
+          const useFallback = totalSeg === 0 && rem > 0 && locationFilter !== 'both';
+          const fieldHours = locationFilter !== 'shop'  ? (useFallback ? rem : estField) : 0;
+          const shopHours  = locationFilter !== 'field' ? (useFallback ? rem : estShop)  : 0;
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', fieldHours, fieldSegKey);
           distributeSegHours(trade.key as 'pf' | 'sm' | 'pl', shopHours,  shopSegKey);
         });
