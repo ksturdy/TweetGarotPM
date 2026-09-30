@@ -93,6 +93,24 @@ const fmtK = (v: number | null | undefined) => {
 };
 const fmtHrs = (v: number | null | undefined) => v ? Math.round(v).toLocaleString() : '—';
 
+type RemHrsMode = 'est-rate' | 'jtd-rate' | 'rem-cost';
+
+function calcRemHrs(costs: SegmentCosts | undefined, mode: RemHrsMode): number | null {
+  const projCost = safeN(costs?.projected_cost);
+  const jtdCost  = safeN(costs?.jtd_cost);
+  const remCost  = projCost - jtdCost;
+  if (mode === 'rem-cost') return remCost;
+  const estCost = safeN(costs?.est_cost);
+  const estHrs  = safeN(costs?.est_hours);
+  const jtdHrs  = safeN(costs?.jtd_hours);
+  if (mode === 'est-rate') {
+    if (estCost <= 0 || estHrs <= 0) return null;
+    return remCost / (estCost / estHrs);
+  }
+  if (jtdCost <= 0 || jtdHrs <= 0) return null;
+  return remCost / (jtdCost / jtdHrs);
+}
+
 const calcDur = (start: string | null, end: string | null): string => {
   if (!start || !end) return '—';
   const days = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
@@ -578,8 +596,9 @@ const GanttLeftRow: React.FC<{
   color: string;
   colWidths: typeof GANTT_COL_DEFAULTS;
   hasProvisional?: boolean;
+  remainingMode: RemHrsMode;
   onSave: (key: string, data: { start_date: string | null; end_date: string | null; contour_type?: string }) => void;
-}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, hasProvisional, onSave }) => {
+}> = ({ def, seg, costs, isActive, rowBg, color, colWidths, hasProvisional, remainingMode, onSave }) => {
   const { localStart, localEnd, localContour, setLocalStart, setLocalEnd, handleBlur, handleContour } = useRowEdit(seg, def.key, onSave);
 
   const cell: React.CSSProperties = { borderRight: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', height: '100%', fontSize: '0.7rem', color: '#1e293b', flexShrink: 0, overflow: 'hidden' };
@@ -596,9 +615,14 @@ const GanttLeftRow: React.FC<{
         )}
         <span style={{ fontSize: '0.6rem', color: '#94a3b8', fontFamily: 'monospace', flexShrink: 0 }}>{def.key.toUpperCase()}</span>
       </div>
-      {/* Est Hrs */}
+      {/* Rem Hrs / Rem $ */}
       <div style={{ ...cell, width: colWidths.estHrs, justifyContent: 'center', fontSize: '0.65rem' }}>
-        {def.isLabor ? fmtHrs(costs?.est_hours) : '—'}
+        {(() => {
+          if (remainingMode !== 'rem-cost' && !def.isLabor) return '—';
+          const val = calcRemHrs(costs, remainingMode);
+          if (val === null) return '—';
+          return remainingMode === 'rem-cost' ? fmtCompact(Math.max(0, val)) : fmtHrs(Math.max(0, val));
+        })()}
       </div>
       {/* Est $ */}
       <div style={{ ...cell, width: colWidths.estCost, justifyContent: 'center' }}>
@@ -647,7 +671,9 @@ const TableRow: React.FC<{
 }> = ({ def, seg, costs, isActive, rowBg, color, allMonths, hasProvisional, onSave }) => {
   const { localStart, localEnd, localContour, setLocalStart, setLocalEnd, handleBlur, handleContour } = useRowEdit(seg, def.key, onSave);
   const remaining = (costs?.projected_cost ?? 0) - (costs?.jtd_cost ?? 0);
-  const monthly = distributeMonthly(remaining > 0 ? remaining : null, localStart || null, localEnd || null, localContour, allMonths);
+  const todayStr = toIso(new Date());
+  const effectiveStart = (localStart && localStart < todayStr) ? todayStr : (localStart || null);
+  const monthly = distributeMonthly(remaining > 0 ? remaining : null, effectiveStart, localEnd || null, localContour, allMonths);
 
   const thSt = (bg: string, extra: React.CSSProperties = {}): React.CSSProperties => ({
     height: 28, padding: '0.15rem 0.3rem', fontSize: '0.68rem', fontWeight: 600, color: '#1e293b',
@@ -782,6 +808,8 @@ const CostTypeSchedule: React.FC<Props> = ({
       return next;
     });
   }, [projectId]);
+
+  const [remainingMode, setRemainingMode] = useState<RemHrsMode>('est-rate');
 
   // ── Column widths ─────────────────────────────────────────────────────────
   const [colWidths, setColWidths] = useState<typeof GANTT_COL_DEFAULTS>(() => {
@@ -930,6 +958,10 @@ const CostTypeSchedule: React.FC<Props> = ({
     m.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
   );
 
+  const todayIso = toIso(new Date());
+  const clampStart = (s: string | null | undefined) =>
+    s && s < todayIso ? todayIso : (s ?? null);
+
   // Precompute monthly remaining-cost distribution per active segment
   const segMonthlyRem = new Map<string, number[]>();
   SEGMENT_DEFINITIONS.forEach(def => {
@@ -939,7 +971,7 @@ const CostTypeSchedule: React.FC<Props> = ({
     const rem = safeN(c?.projected_cost) - safeN(c?.jtd_cost);
     segMonthlyRem.set(def.key,
       rem > 0
-        ? distributeMonthly(rem, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        ? distributeMonthly(rem, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
         : allMonths.map(() => 0)
     );
   });
@@ -953,7 +985,7 @@ const CostTypeSchedule: React.FC<Props> = ({
       const shift    = shiftSettings[def.key] ?? SHIFT_DEFAULTS[def.key] ?? { hoursPerDay: 8, daysPerWeek: 5 };
       const capacity = hoursPerPersonPerMonth(shift);
       const hours    = c?.est_hours
-        ? distributeMonthly(c.est_hours, seg?.start_date ?? null, seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
+        ? distributeMonthly(c.est_hours, clampStart(seg?.start_date), seg?.end_date ?? null, seg?.contour_type ?? 'flat', allMonths)
         : allMonths.map(() => 0);
       const data = hours.map(h => capacity > 0 ? Math.round((h / capacity) * 10) / 10 : 0);
       return { label: def.label, data, color: LABOR_CHART_COLORS[def.key] ?? '#6b7280' };
@@ -1173,6 +1205,36 @@ const CostTypeSchedule: React.FC<Props> = ({
         </div>
       )}
 
+      {/* ── Remaining hours method toggle ─────────────────────────────────── */}
+      {viewMode === 'gantt' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Labor Hrs:</span>
+          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+            {([
+              { value: 'est-rate' as const, label: 'Est Rate', title: '(Proj Cost − JTD Cost) ÷ Estimated labor rate — use early in job when rate is still settling' },
+              { value: 'jtd-rate' as const, label: 'JTD Rate', title: '(Proj Cost − JTD Cost) ÷ JTD labor rate — use once rate is stable' },
+              { value: 'rem-cost' as const, label: 'Rem $',    title: 'Show remaining cost (Proj Cost − JTD Cost) instead of hours' },
+            ]).map((opt, i) => (
+              <button key={opt.value} title={opt.title} onClick={() => setRemainingMode(opt.value)}
+                style={{
+                  padding: '0.3rem 0.65rem', fontSize: '0.72rem', cursor: 'pointer',
+                  border: 'none', borderLeft: i > 0 ? '1px solid #e2e8f0' : 'none',
+                  background: remainingMode === opt.value ? '#6366f1' : '#fff',
+                  color: remainingMode === opt.value ? '#fff' : '#64748b',
+                  fontFamily: 'inherit', fontWeight: remainingMode === opt.value ? 600 : 400,
+                }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+            {remainingMode === 'est-rate' ? '(Proj − JTD) ÷ Est Rate' :
+             remainingMode === 'jtd-rate' ? '(Proj − JTD) ÷ JTD Rate' :
+             'Proj Cost − JTD Cost'}
+          </span>
+        </div>
+      )}
+
       {/* ── GANTT VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'gantt' && (
         <div style={{ display: 'flex', overflow: 'hidden', border: '1px solid #94a3b8', borderRadius: 6 }}>
@@ -1184,7 +1246,7 @@ const CostTypeSchedule: React.FC<Props> = ({
               <div style={{ ...hdrCell, flex: 1, minWidth: colWidths.label, padding: '0 0.5rem', justifyContent: 'flex-start', borderLeft: '3px solid transparent' }}>
                 Cost Type{resizeHandle('label')}
               </div>
-              <div style={{ ...hdrCell, width: colWidths.estHrs }}>Est Hrs{resizeHandle('estHrs')}</div>
+              <div style={{ ...hdrCell, width: colWidths.estHrs }}>{remainingMode === 'rem-cost' ? 'Rem $' : 'Rem Hrs'}{resizeHandle('estHrs')}</div>
               <div style={{ ...hdrCell, width: colWidths.estCost }}>Est ${resizeHandle('estCost')}</div>
               <div style={{ ...hdrCell, width: colWidths.start }}>Start{resizeHandle('start')}</div>
               <div style={{ ...hdrCell, width: colWidths.end }}>End{resizeHandle('end')}</div>
@@ -1211,7 +1273,7 @@ const CostTypeSchedule: React.FC<Props> = ({
                   def={def} seg={segmentMap.get(def.key)} costs={costsMap.get(def.key)}
                   isActive={activeKeys.includes(def.key)} rowBg={idx % 2 === 0 ? '#fff' : '#f8fafc'}
                   color={SEGMENT_COLOR[def.key] ?? '#6b7280'} colWidths={colWidths} onSave={onSegmentUpdate}
-                  hasProvisional={provisionalSegKeys.has(def.key)}
+                  hasProvisional={provisionalSegKeys.has(def.key)} remainingMode={remainingMode}
                 />
               );
             })}
@@ -1259,11 +1321,14 @@ const CostTypeSchedule: React.FC<Props> = ({
                 const startDate = seg?.start_date ? new Date(seg.start_date.slice(0, 10)) : null;
                 const endDate   = seg?.end_date   ? new Date(seg.end_date.slice(0, 10))   : null;
 
+                const today = new Date(); today.setHours(0, 0, 0, 0);
+                const visualStart = startDate && startDate < today ? today : startDate;
+
                 let barLeft = 0, barWidth = 0;
-                if (startDate && endDate && firstMonth) {
-                  barLeft  = dateToX(startDate, firstMonth, colWidth) + 2;
+                if (visualStart && endDate && firstMonth) {
+                  barLeft  = dateToX(visualStart, firstMonth, colWidth) + 2;
                   const eDays = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate();
-                  barWidth = dateToX(endDate, firstMonth, colWidth) + colWidth / eDays - barLeft;
+                  barWidth = Math.max(0, dateToX(endDate, firstMonth, colWidth) + colWidth / eDays - barLeft);
                 }
 
                 const isDragging = barDragOffset?.segKey === def.key;
@@ -1291,12 +1356,12 @@ const CostTypeSchedule: React.FC<Props> = ({
                         zIndex: isDragging || isResizing ? 10 : 1,
                       }}
                         onMouseDown={e => {
-                          if (e.button !== 0 || !startDate || !endDate) return;
+                          if (e.button !== 0 || !visualStart || !endDate) return;
                           e.stopPropagation();
                           barDragRef.current = {
                             segKey: def.key, startMouseX: e.clientX, originalBarLeft: barLeft,
-                            originalStartDate: startDate, originalEndDate: endDate,
-                            durationDays: Math.round((endDate.getTime() - startDate.getTime()) / 86400000),
+                            originalStartDate: visualStart, originalEndDate: endDate,
+                            durationDays: Math.round((endDate.getTime() - visualStart.getTime()) / 86400000),
                             dragStarted: false,
                           };
                         }}
@@ -1306,9 +1371,9 @@ const CostTypeSchedule: React.FC<Props> = ({
                         {/* Left resize handle */}
                         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, cursor: 'w-resize', zIndex: 2 }}
                           onMouseDown={e => {
-                            if (e.button !== 0 || !startDate || !endDate) return;
+                            if (e.button !== 0 || !visualStart || !endDate) return;
                             e.stopPropagation(); e.preventDefault();
-                            barResizeRef.current = { segKey: def.key, edge: 'left', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: startDate, originalEndDate: endDate, dragStarted: false };
+                            barResizeRef.current = { segKey: def.key, edge: 'left', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: visualStart, originalEndDate: endDate, dragStarted: false };
                           }} />
                         <span style={{ fontSize: '0.65rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, pointerEvents: 'none' }}>
                           {def.label}
@@ -1316,9 +1381,9 @@ const CostTypeSchedule: React.FC<Props> = ({
                         {/* Right resize handle */}
                         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 6, cursor: 'e-resize', zIndex: 2 }}
                           onMouseDown={e => {
-                            if (e.button !== 0 || !startDate || !endDate) return;
+                            if (e.button !== 0 || !visualStart || !endDate) return;
                             e.stopPropagation(); e.preventDefault();
-                            barResizeRef.current = { segKey: def.key, edge: 'right', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: startDate, originalEndDate: endDate, dragStarted: false };
+                            barResizeRef.current = { segKey: def.key, edge: 'right', startMouseX: e.clientX, originalBarLeft: barLeft, originalBarWidth: barWidth, originalStartDate: visualStart, originalEndDate: endDate, dragStarted: false };
                           }} />
                       </div>
                     )}
