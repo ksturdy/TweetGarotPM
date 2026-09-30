@@ -596,7 +596,8 @@ const ProjectedRevenue: React.FC = () => {
 
       const schedMode = contract.linked_project_scheduling_mode;
       const linkedProjId = contract.linked_project_id as number | undefined;
-      const isLocked = schedMode === 'cost_type' || schedMode === 'phase';
+      const isAligned = linkedProjId != null && localStorage.getItem(`alignPhases-${linkedProjId}`) === 'true';
+      const isLocked = schedMode === 'phase' || (schedMode === 'cost_type' && !isAligned);
 
       // Determine revenue window from scheduling mode
       let startOffset: number;
@@ -1484,7 +1485,9 @@ const ProjectedRevenue: React.FC = () => {
                 </td>
                 {(() => {
                   const schedMode = p.contract.linked_project_scheduling_mode;
-                  const locked = !!schedMode && schedMode !== 'summary';
+                  const rowLinkedProjId = p.contract.linked_project_id as number | undefined;
+                  const rowIsAligned = rowLinkedProjId != null && localStorage.getItem(`alignPhases-${rowLinkedProjId}`) === 'true';
+                  const locked = schedMode === 'phase' || (schedMode === 'cost_type' && !rowIsAligned);
                   const lockLabel = schedMode === 'cost_type' ? 'Cost Type' : schedMode === 'phase' ? 'Phase' : '';
                   const lockedTitle = locked ? `Dates controlled by ${lockLabel} scheduling — edit on the project's Schedule tab` : undefined;
                   return (
@@ -1503,6 +1506,17 @@ const ProjectedRevenue: React.FC = () => {
                                 const newEnd = newStart + 1;
                                 setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: newEnd }));
                                 saveProjectionOverride(p.contract.id, { user_adjusted_start_months: newStart, user_adjusted_end_months: newEnd });
+                              }
+                              if (schedMode === 'cost_type' && rowIsAligned && rowLinkedProjId != null) {
+                                const segs: ScheduleSegment[] = segmentsByProject?.[rowLinkedProjId] ?? [];
+                                const newStartDate = monthOffsetToDateString(newStart);
+                                segs.forEach(seg => {
+                                  scheduleSegmentsService.updateSegment(rowLinkedProjId, seg.segment_key, {
+                                    start_date: newStartDate, end_date: seg.end_date, contour_type: seg.contour_type || 'bell',
+                                  });
+                                });
+                                queryClient.invalidateQueries({ queryKey: ['schedule-segments', rowLinkedProjId] });
+                                queryClient.invalidateQueries({ queryKey: ['scheduleSegments', 'bulkRevenue'] });
                               }
                             }}
                             style={{
@@ -1533,6 +1547,17 @@ const ProjectedRevenue: React.FC = () => {
                               const newEndMonths = parseInt(e.target.value);
                               setAdjustedEndMonths(prev => ({ ...prev, [p.contract.id]: newEndMonths }));
                               saveProjectionOverride(p.contract.id, { user_adjusted_end_months: newEndMonths });
+                              if (schedMode === 'cost_type' && rowIsAligned && rowLinkedProjId != null) {
+                                const segs: ScheduleSegment[] = segmentsByProject?.[rowLinkedProjId] ?? [];
+                                const newEndDate = monthOffsetToDateString(newEndMonths);
+                                segs.forEach(seg => {
+                                  scheduleSegmentsService.updateSegment(rowLinkedProjId, seg.segment_key, {
+                                    start_date: seg.start_date, end_date: newEndDate, contour_type: seg.contour_type || 'bell',
+                                  });
+                                });
+                                queryClient.invalidateQueries({ queryKey: ['schedule-segments', rowLinkedProjId] });
+                                queryClient.invalidateQueries({ queryKey: ['scheduleSegments', 'bulkRevenue'] });
+                              }
                             }}
                             style={{
                               padding: '0.15rem 0.25rem',
@@ -1566,6 +1591,16 @@ const ProjectedRevenue: React.FC = () => {
                                 const newContour = e.target.value as ContourType;
                                 setSelectedContours(prev => ({ ...prev, [p.contract.id]: newContour }));
                                 saveProjectionOverride(p.contract.id, { user_selected_contour: newContour });
+                                if (schedMode === 'cost_type' && rowIsAligned && rowLinkedProjId != null) {
+                                  const segs: ScheduleSegment[] = segmentsByProject?.[rowLinkedProjId] ?? [];
+                                  segs.forEach(seg => {
+                                    scheduleSegmentsService.updateSegment(rowLinkedProjId, seg.segment_key, {
+                                      start_date: seg.start_date, end_date: seg.end_date, contour_type: newContour,
+                                    });
+                                  });
+                                  queryClient.invalidateQueries({ queryKey: ['schedule-segments', rowLinkedProjId] });
+                                  queryClient.invalidateQueries({ queryKey: ['scheduleSegments', 'bulkRevenue'] });
+                                }
                               }}
                               style={{
                                 padding: '0.15rem 0.25rem',

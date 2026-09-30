@@ -816,6 +816,12 @@ const CostTypeSchedule: React.FC<Props> = ({
     if (!masterDurEditing) setMasterDurInput(calcDur(alignedStart || null, alignedEnd || null));
   }, [alignedStart, alignedEnd, masterDurEditing]);
 
+  // Write alignPhases to localStorage whenever it changes so the Revenue grid
+  // can read the correct locked/unlocked state for this project.
+  useEffect(() => {
+    localStorage.setItem(`alignPhases-${projectId}`, String(alignPhases));
+  }, [projectId, alignPhases]);
+
   useEffect(() => {
     if (alignInitialized) return;
     const effStart = toInput(project?.effective_start_date ?? project?.start_date);
